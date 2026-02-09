@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import pytest
+from starlette.testclient import TestClient
+
+from app.db import get_session
+from app.main import app
+from tests.conftest import db_session
+
+
+@pytest.fixture
+def client(db_session):
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_get_db
+
+    with TestClient(app) as client:
+        yield client
+
+    app.dependency_overrides.clear()
+
+
+def test_user_deployment_flow(client):
+    user = client.post("/users", json={"email": "user@example.com"})
+    assert user.status_code == 201
+    user_id = user.json()["id"]
+
+    product = client.post(
+        "/products", json={"name": "nextcloud", "description": "Nextcloud app"}
+    )
+    assert product.status_code == 201
+    product_id = product.json()["id"]
+
+    template = client.post(
+        f"/products/{product_id}/templates", json={"docker_image_url": "nextcloud:latest"}
+    )
+    assert template.status_code == 201
+    template_id = template.json()["id"]
+
+    deployment = client.post(
+        f"/users/{user_id}/deployments",
+        json={"template_id": template_id, "domainname": "cloud.example.com"},
+    )
+    assert deployment.status_code == 201
+    deployment_id = deployment.json()["id"]
+
+    listed = client.get(f"/users/{user_id}/deployments")
+    assert listed.status_code == 200
+    assert [d["id"] for d in listed.json()] == [deployment_id]
+
+    fetched = client.get(f"/users/{user_id}/deployments/{deployment_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["domainname"] == "cloud.example.com"

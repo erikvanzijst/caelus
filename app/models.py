@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlmodel import Field, SQLModel, Relationship
+from sqlalchemy import UniqueConstraint
 
 
 class UserBase(SQLModel):
@@ -33,9 +34,10 @@ class ProductBase(SQLModel):
 
 
 class ProductORM(ProductBase, table=True):
+    __table_args__ = (UniqueConstraint("name", "deleted", name="uq_product_name_deleted"),)
     __tablename__ = "product"
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True, unique=True)  # TODO: make unique together with `deleted`
+    name: str = Field(index=True)  # unique together with `deleted`
     template_id: Optional[int] = Field(
         default=None, foreign_key="product_template_version.id", index=True
     )
@@ -85,6 +87,15 @@ class DeploymentBase(SQLModel):
 
 
 class DeploymentORM(DeploymentBase, table=True):
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "domainname",
+            "template_id",
+            "deleted",
+            name="uq_deployment_user_domain_template_deleted",
+        ),
+    )
     __tablename__ = "deployment"
     # TODO: Create compound unique constraint on (user_id, domainname, template_id, deleted)
     id: Optional[int] = Field(default=None, primary_key=True)

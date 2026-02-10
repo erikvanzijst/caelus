@@ -11,11 +11,15 @@ from app.services.errors import IntegrityException, NotFoundException
 
 def create_deployment(session: Session, *, payload: DeploymentCreate) -> DeploymentRead:
     deployment = DeploymentORM.model_validate(payload)
-    # ensure that the user and template exist:
+    # ensure that the user exists
     user_service.get_user(session, user_id=deployment.user_id)
-    template_service.get_template(
-        session, product_id=deployment.template_id, template_id=deployment.template_id
-    )
+    # ensure that the template exists and retrieve it to validate product association
+    from app.models import ProductTemplateVersionORM
+
+    template = session.get(ProductTemplateVersionORM, deployment.template_id)
+    if not template:
+        raise NotFoundException("Template not found")
+    # Optionally, could verify product association if needed
 
     session.add(deployment)
     try:

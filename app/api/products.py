@@ -39,6 +39,7 @@ def create_template(
     payload.product_id = product_id
     return template_service.create_template(session, payload)
 
+# TODO: delete product endpoint
 
 @router.get("/{product_id}/templates", response_model=list[ProductTemplateVersionRead])
 def list_templates(product_id: int, session: Session = Depends(get_session)) -> list[ProductTemplateVersionRead]:
@@ -50,3 +51,5 @@ def get_template(
     product_id: int, template_id: int, session: Session = Depends(get_session)
 ) -> ProductTemplateVersionRead:
     return template_service.get_template(session, product_id=product_id, template_id=template_id)
+
+# TODO: delete template

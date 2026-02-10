@@ -3,56 +3,45 @@ from __future__ import annotations
 import typer
 
 from app.db import session_scope
+from app.models import UserCreate, DeploymentCreate, ProductTemplateVersionCreate, ProductCreate
 from app.services import deployments as deployment_service
 from app.services import products as product_service
 from app.services import templates as template_service
 from app.services import users as user_service
 from app.services.errors import NotFoundError
 
-app = typer.Typer(help="Caelus CLI")
+app = typer.Typer(help="Caelus CLI", pretty_exceptions_show_locals=False)
 
 
 @app.command("create-user")
 def create_user(email: str) -> None:
-    from sqlalchemy.exc import IntegrityError
-    from app.models import User
-    from sqlmodel import select
-
     with session_scope() as session:
-        try:
-            user = user_service.create_user(session, email=email)
-        except IntegrityError:
-            # User already exists, fetch existing
-            existing = session.exec(select(User).where(User.email == email)).first()
-            user = existing
-        typer.echo(f"Created user {user.id} ({user.email})")
+        user = user_service.create_user(session, UserCreate(email=email))
+        typer.echo(f"Created user: {user}")
+        typer.echo(user)
 
 
 @app.command("delete-user")
 def delete_user(user_id: int) -> None:
     with session_scope() as session:
-        try:
-            user_service.delete_user(session, user_id=user_id)
-        except NotFoundError:
-            # If user not found, consider it already deleted
-            pass
-        typer.echo(f"Deleted user {user_id}")
+        user = user_service.delete_user(session, user_id=user_id)
+        typer.echo(f"Deleted user: {user}")
 
 
 @app.command("list-users")
 def list_users() -> None:
     with session_scope() as session:
         for user in user_service.list_users(session):
-            typer.echo(f"{user.id} {user.email} {user.created_at}")
+            typer.echo(user)
 
 
 @app.command("create-product")
 def create_product(name: str, description: str, template: str = "") -> None:
     with session_scope() as session:
         product = product_service.create_product(
-            session, name=name, description=description, template=template or None
+            session, payload=ProductCreate(name=name, description=description, template=template or None)
         )
-        typer.echo(f"Created product {product.id} ({product.name})")
+        typer.echo(f"Created product {product}")
 
 
 @app.command("list-products")
@@ -67,7 +56,7 @@ def create_template(product_id: int, docker_image_url: str = "") -> None:
     with session_scope() as session:
         try:
             template = template_service.create_template(
-                session, product_id=product_id, docker_image_url=docker_image_url or None
+                session, ProductTemplateVersionCreate(product_id=product_id, docker_image_url=docker_image_url or None)
             )
         except NotFoundError:
             raise typer.Exit(code=1)
@@ -78,9 +67,7 @@ def create_template(product_id: int, docker_image_url: str = "") -> None:
 def list_templates(product_id: int) -> None:
     with session_scope() as session:
         for template in template_service.list_templates(session, product_id=product_id):
-            typer.echo(
-                f"{template.id} product={template.product_id} image={template.docker_image_url}"
-            )
+            typer.echo(template)
 
 
 @app.command("create-deployment")
@@ -88,20 +75,18 @@ def create_deployment(user_id: int, template_id: int, domainname: str) -> None:
     with session_scope() as session:
         try:
             deployment = deployment_service.create_deployment(
-                session, user_id=user_id, template_id=template_id, domainname=domainname
+                session, payload=DeploymentCreate(user_id=user_id, template_id=template_id, domainname=domainname)
             )
         except NotFoundError:
             raise typer.Exit(code=1)
-        typer.echo(f"Created deployment {deployment.id} for {domainname}")
+        typer.echo(f"Created deployment: {deployment}")
 
 
 @app.command("list-deployments")
 def list_deployments(user_id: int) -> None:
     with session_scope() as session:
         for deployment in deployment_service.list_deployments(session, user_id=user_id):
-            typer.echo(
-                f"{deployment.id} user={deployment.user_id} template={deployment.template_id} {deployment.domainname}"
-            )
+            typer.echo(deployment)
 
 
 if __name__ == "__main__":

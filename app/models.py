@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Relationship
 
 
 class UserBase(SQLModel):
@@ -14,6 +14,7 @@ class UserORM(UserBase, table=True):
     __tablename__ = "user"
     id: Optional[int] = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    # deployments: list["DeploymentORM"] = Relationship(back_populates="user")
 
 
 class UserCreate(UserBase):
@@ -25,19 +26,19 @@ class UserRead(UserBase):
     created_at: datetime
 
 
-
 class ProductBase(SQLModel):
     name: str
-    description: str
-    template_id: Optional[int]
-
+    description: str = None
+    template_id: Optional[int] = None
 
 
 class ProductORM(ProductBase, table=True):
     __tablename__ = "product"
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)  # TODO: make unique together with `deleted`
-    template_id: Optional[int] = Field(default=None, foreign_key="product_template_version.id", index=True)
+    template_id: Optional[int] = Field(
+        default=None, foreign_key="product_template_version.id", index=True
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     # templates: Mapped[list["ProductTemplateVersionORM"]] = Relationship(back_populates="product")
     deleted: bool = Field(default=False)
@@ -69,7 +70,7 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
 
 
 class ProductTemplateVersionCreate(ProductTemplateVersionBase):
-    pass
+    product_id: Optional[int] = None
 
 
 class ProductTemplateVersionRead(ProductTemplateVersionBase):
@@ -80,7 +81,7 @@ class ProductTemplateVersionRead(ProductTemplateVersionBase):
 class DeploymentBase(SQLModel):
     template_id: int
     domainname: str
-    user_id: int
+    user_id: Optional[int] = Field(default=None)
 
 
 class DeploymentORM(DeploymentBase, table=True):
@@ -88,6 +89,7 @@ class DeploymentORM(DeploymentBase, table=True):
     # TODO: Create compound unique constraint on (user_id, domainname, template_id, deleted)
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
+    # user: UserORM = Relationship(back_populates="deployments")
     template_id: int = Field(foreign_key="product_template_version.id", index=True)
     domainname: str = Field(index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
@@ -96,6 +98,7 @@ class DeploymentORM(DeploymentBase, table=True):
 
 class DeploymentCreate(DeploymentBase):
     pass
+
 
 class DeploymentRead(DeploymentBase):
     id: int

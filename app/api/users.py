@@ -38,6 +38,7 @@ def get_user(user_id: int, session: Session = Depends(get_session)) -> UserRead:
 def create_deployment(
     user_id: int, payload: DeploymentCreate, session: Session = Depends(get_session)
 ) -> DeploymentRead:
+    payload.user_id = user_id
     return deployment_service.create_deployment(session, payload=payload)
 
 
@@ -46,13 +47,8 @@ def list_deployments(user_id: int, session: Session = Depends(get_session)):
     return deployment_service.list_deployments(session, user_id=user_id)
 
 
-# @router.get("/{user_id}/deployments/{deployment_id}", response_model=DeploymentRead)
-# def get_deployment(
-#     user_id: int, deployment_id: int, session: Session = Depends(get_session)
-# ) -> Deployment:
-#     try:
-#         return deployment_service.get_deployment(
-#             session, user_id=user_id, deployment_id=deployment_id
-#         )
-#     except NotFoundError as exc:
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+@router.get("/{user_id}/deployments/{deployment_id}", response_model=DeploymentRead)
+def get_deployment(
+    user_id: int, deployment_id: int, session: Session = Depends(get_session)
+) -> DeploymentRead:
+    return deployment_service.get_deployment(session, user_id=user_id, deployment_id=deployment_id)

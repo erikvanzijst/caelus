@@ -72,7 +72,7 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "sqlmodel", specifier = ">=0.0.21" },
-    { name = "typer", specifier = ">=0.12" },
+    { name = "typer", extras = ["all"], specifier = ">=0.21.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27" },
 ]
 

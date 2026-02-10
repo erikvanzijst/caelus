@@ -20,13 +20,24 @@ def client(db_session):
 
     app.dependency_overrides.clear()
 
+def test_product(client):
+    product = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app"})
+    assert product.status_code == 201
+
+    conflict = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app"})
+    assert conflict.status_code == 409
+
+    # TODO: uncomment once delete endpoint is implemented
+    # resp = client.delete(f"/products/{product.json()['id']}")
+    # assert resp.status_code == 201
+
 
 def test_user_deployment_flow(client):
     user = client.post("/users", json={"email": "user@example.com"})
     assert user.status_code == 201
     user_id = user.json()["id"]
 
-    product = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app", "template": "1"})
+    product = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app"})
     assert product.status_code == 201
     product_id = product.json()["id"]
 

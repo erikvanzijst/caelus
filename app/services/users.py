@@ -29,11 +29,10 @@ def get_user(session: Session, *, user_id: int) -> UserRead:
     return UserRead.model_validate(user)
 
 
-def delete_user(session: Session, *, user_id: int) -> None:
+def delete_user(session: Session, *, user_id: int) -> UserRead:
     user = session.get(UserORM, user_id)
     if not user:
         raise NotFoundException("User not found")
     session.delete(user)
     session.commit()
-    # No need to verify deletion; operation successful.
-    return None
+    return UserRead.model_validate(user)

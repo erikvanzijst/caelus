@@ -15,17 +15,35 @@ def create_product(session: Session, payload: ProductCreate) -> ProductRead:
         session.refresh(product)
         return ProductRead.model_validate(product)
     except IntegrityError as exc:
-        raise IntegrityException(f"A product with this name already exists: {product.name}") from exc
+        raise IntegrityException(
+            f"A product with this name already exists: {product.name}"
+        ) from exc
 
 
 def list_products(session: Session) -> list[ProductRead]:
-    return list(session.exec(select(ProductORM)).all()) # TODO: filter out deleted products
+    # Return products that are not soft‑deleted
+    products = session.exec(
+        select(ProductORM).where(ProductORM.deleted == False)  # noqa: E712
+    ).all()
+    return [ProductRead.model_validate(p) for p in products]
 
 
 def get_product(session: Session, product_id: int) -> ProductRead:
     product = session.get(ProductORM, product_id)
-    if not product:
+    if not product or product.deleted:
         raise NotFoundException("Product not found")
     return ProductRead.model_validate(product)
 
-# TODO: delete product endpoint
+
+def delete_product(session: Session, *, product_id: int) -> ProductRead:
+    """Soft‑delete a product by setting its ``deleted`` flag.
+
+    Raises NotFoundException if the product does not exist.
+    """
+    product = session.get(ProductORM, product_id)
+    if not product:
+        raise NotFoundException("Product not found")
+    product.deleted = True
+    session.add(product)
+    session.commit()
+    return ProductRead.model_validate(product)

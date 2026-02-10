@@ -36,19 +36,27 @@ def list_users() -> None:
 
 
 @app.command("create-product")
-def create_product(name: str, description: str, template: str = "") -> None:
+def create_product(name: str, description: str, template_id: int = None) -> None:
     with session_scope() as session:
         product = product_service.create_product(
-            session, payload=ProductCreate(name=name, description=description, template=template or None)
+            session,
+            payload=ProductCreate(name=name, description=description, template_id=template_id),
         )
         typer.echo(f"Created product {product}")
+
+
+@app.command("delete-product")
+def delete_product(product_id: int) -> None:
+    with session_scope() as session:
+        product = product_service.delete_product(session, product_id=product_id)
+        typer.echo(f"Deleted product {product.id}")
 
 
 @app.command("list-products")
 def list_products() -> None:
     with session_scope() as session:
         for product in product_service.list_products(session):
-            typer.echo(f"{product.id} {product.name} deleted={product.deleted}")
+            typer.echo(f"{product.id} {product.name}")
 
 
 @app.command("create-template")
@@ -56,7 +64,10 @@ def create_template(product_id: int, docker_image_url: str = "") -> None:
     with session_scope() as session:
         try:
             template = template_service.create_template(
-                session, ProductTemplateVersionCreate(product_id=product_id, docker_image_url=docker_image_url or None)
+                session,
+                ProductTemplateVersionCreate(
+                    product_id=product_id, docker_image_url=docker_image_url or None
+                ),
             )
         except NotFoundError:
             raise typer.Exit(code=1)
@@ -70,12 +81,24 @@ def list_templates(product_id: int) -> None:
             typer.echo(template)
 
 
+@app.command("delete-template")
+def delete_template(product_id: int, template_id: int) -> None:
+    with session_scope() as session:
+        template = template_service.delete_template(
+            session, product_id=product_id, template_id=template_id
+        )
+        typer.echo(f"Deleted template {template.id}")
+
+
 @app.command("create-deployment")
 def create_deployment(user_id: int, template_id: int, domainname: str) -> None:
     with session_scope() as session:
         try:
             deployment = deployment_service.create_deployment(
-                session, payload=DeploymentCreate(user_id=user_id, template_id=template_id, domainname=domainname)
+                session,
+                payload=DeploymentCreate(
+                    user_id=user_id, template_id=template_id, domainname=domainname
+                ),
             )
         except NotFoundError:
             raise typer.Exit(code=1)

@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, status
 from sqlmodel import Session
 
 from app.db import get_session
-from app.models import ProductRead, ProductCreate, ProductTemplateVersionRead, ProductTemplateVersionCreate
+from app.models import (
+    ProductRead,
+    ProductCreate,
+    ProductTemplateVersionRead,
+    ProductTemplateVersionCreate,
+)
 from app.services import products as product_service, templates as template_service
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -25,7 +30,6 @@ def get_product(product_id: int, session: Session = Depends(get_session)) -> Pro
     return product_service.get_product(session, product_id=product_id)
 
 
-
 @router.post(
     "/{product_id}/templates",
     response_model=ProductTemplateVersionRead,
@@ -39,10 +43,18 @@ def create_template(
     payload.product_id = product_id
     return template_service.create_template(session, payload)
 
-# TODO: delete product endpoint
+
+@router.delete("/{product_id}", status_code=204)
+def delete_product_endpoint(
+    product_id: int, session: Session = Depends(get_session)
+) -> None:
+    product_service.delete_product(session, product_id=product_id)
+
 
 @router.get("/{product_id}/templates", response_model=list[ProductTemplateVersionRead])
-def list_templates(product_id: int, session: Session = Depends(get_session)) -> list[ProductTemplateVersionRead]:
+def list_templates(
+    product_id: int, session: Session = Depends(get_session)
+) -> list[ProductTemplateVersionRead]:
     return template_service.list_templates(session, product_id=product_id)
 
 
@@ -52,4 +64,9 @@ def get_template(
 ) -> ProductTemplateVersionRead:
     return template_service.get_template(session, product_id=product_id, template_id=template_id)
 
-# TODO: delete template
+
+@router.delete("/{product_id}/templates/{template_id}", status_code=204)
+def delete_template_endpoint(
+    product_id: int, template_id: int, session: Session = Depends(get_session)
+) -> None:
+    template_service.delete_template(session, product_id=product_id, template_id=template_id)

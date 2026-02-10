@@ -36,7 +36,7 @@ def list_users() -> None:
 
 
 @app.command("create-product")
-def create_product(name: str, description: str, template_id: int = None) -> None:
+def create_product(name: str, description: str, template_id: int | None = None) -> None:
     with session_scope() as session:
         product = product_service.create_product(
             session,
@@ -110,6 +110,18 @@ def list_deployments(user_id: int) -> None:
     with session_scope() as session:
         for deployment in deployment_service.list_deployments(session, user_id=user_id):
             typer.echo(deployment)
+
+
+@app.command("delete-deployment")
+def delete_deployment(user_id: int, deployment_id: int) -> None:
+    with session_scope() as session:
+        try:
+            deployment = deployment_service.delete_deployment(
+                session, user_id=user_id, deployment_id=deployment_id
+            )
+        except NotFoundError:
+            raise typer.Exit(code=1)
+        typer.echo(f"Deleted deployment {deployment.id}")
 
 
 if __name__ == "__main__":

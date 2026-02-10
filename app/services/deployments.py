@@ -46,7 +46,7 @@ def get_deployment(session: Session, *, user_id: int, deployment_id: int) -> Dep
     return DeploymentRead.model_validate(deployment)
 
 
-def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> None:
+def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> DeploymentRead:
     """Mark a deployment as deleted.
 
     Retrieves the deployment ensuring it belongs to the given user. If not found,
@@ -59,3 +59,4 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
     deployment.deleted = True
     session.add(deployment)
     session.commit()
+    return DeploymentRead.model_validate(deployment)

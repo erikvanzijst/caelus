@@ -59,7 +59,3 @@ def delete_deployment_endpoint(
     user_id: int, deployment_id: int, session: Session = Depends(get_session)
 ) -> None:
     deployment_service.delete_deployment(session, user_id=user_id, deployment_id=deployment_id)
-    # No content returned; FastAPI will return 204 automatically
-
-
-# TODO: delete deployment endpoint

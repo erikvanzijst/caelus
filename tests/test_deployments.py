@@ -1,6 +1,3 @@
-import pytest
-
-
 def test_delete_deployment_flow(client, db_session):
     # Setup: create user, product, template, deployment
     user_resp = client.post("/users", json={"email": "deldep@example.com"})

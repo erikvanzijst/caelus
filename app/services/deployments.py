@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.models import DeploymentRead, DeploymentCreate, DeploymentORM, ProductTemplateVersionORM
@@ -35,6 +36,8 @@ def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
     # Return deployments for the user that are not marked as deleted
     deployments = session.exec(
         select(DeploymentORM)
+        .options(selectinload(DeploymentORM.user),
+                 selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product))
         .where(DeploymentORM.user_id == user_id, DeploymentORM.deleted == False)  # noqa: E712
     ).all()
     # Convert ORM objects to read models
@@ -42,8 +45,12 @@ def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
 
 
 def get_deployment(session: Session, *, user_id: int, deployment_id: int) -> DeploymentRead:
-    deployment = session.exec(select(DeploymentORM).where(DeploymentORM.deleted == False,
-                                                          DeploymentORM.id == deployment_id)).one_or_none()
+    deployment = (session
+                  .exec(select(DeploymentORM)
+                        .options(selectinload(DeploymentORM.user),
+                                 selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product))
+                        .where(DeploymentORM.deleted == False, DeploymentORM.id == deployment_id))
+                  .one_or_none())
     if not deployment:
         raise NotFoundException("Deployment not found")
     return DeploymentRead.model_validate(deployment)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.models import ProductRead, ProductORM, ProductCreate
@@ -29,8 +30,10 @@ def list_products(session: Session) -> list[ProductRead]:
 
 
 def get_product(session: Session, product_id: int) -> ProductRead:
-    product = session.get(ProductORM, product_id)
-    if not product or product.deleted:
+    if not (product := session.exec(
+            select(ProductORM)
+                    .where(ProductORM.id == product_id, ProductORM.deleted == False))
+            .one_or_none()):
         raise NotFoundException("Product not found")
     return ProductRead.model_validate(product)
 
@@ -40,8 +43,7 @@ def delete_product(session: Session, *, product_id: int) -> ProductRead:
 
     Raises NotFoundException if the product does not exist.
     """
-    product = session.get(ProductORM, product_id)
-    if not product:
+    if not (product := session.get(ProductORM, product_id)):
         raise NotFoundException("Product not found")
     product.deleted = True
     session.add(product)

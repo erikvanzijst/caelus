@@ -2,36 +2,35 @@ from __future__ import annotations
 
 from sqlmodel import Session, select
 
-from app.models import Product, ProductTemplateVersion
-from app.services.errors import NotFoundError
+from app.models import ProductTemplateVersionORM, ProductTemplateVersionRead, ProductTemplateVersionCreate
+from app.services.errors import NotFoundException
+from app.services.products import get_product
 
 
-def create_template(
-    session: Session, *, product_id: int, docker_image_url: str | None
-) -> ProductTemplateVersion:
-    product = session.get(Product, product_id)
-    if not product:
-        raise NotFoundError("Product not found")
+def create_template(session: Session, payload: ProductTemplateVersionCreate) -> ProductTemplateVersionORM:
+    template = ProductTemplateVersionORM.model_validate(payload)
+    # verify that the product exists:
+    get_product(session, template.product_id)
 
-    template = ProductTemplateVersion(product_id=product_id, docker_image_url=docker_image_url)
     session.add(template)
     session.commit()
     session.refresh(template)
     return template
 
 
-def list_templates(session: Session, *, product_id: int) -> list[ProductTemplateVersion]:
+def list_templates(session: Session, product_id: int) -> list[ProductTemplateVersionRead]:
+    # TODO: filter out deleted templates
     return list(
         session.exec(
-            select(ProductTemplateVersion).where(ProductTemplateVersion.product_id == product_id)
+            select(ProductTemplateVersionORM).where(ProductTemplateVersionORM.product_id == product_id)
         ).all()
     )
 
 
-def get_template(
-    session: Session, *, product_id: int, template_id: int
-) -> ProductTemplateVersion:
-    template = session.get(ProductTemplateVersion, template_id)
+def get_template(session: Session, *, product_id: int, template_id: int) -> ProductTemplateVersionRead:
+    template = session.get(ProductTemplateVersionORM, template_id)
     if not template or template.product_id != product_id:
-        raise NotFoundError("Template not found")
-    return template
+        raise NotFoundException("Template not found")
+    return ProductTemplateVersionRead.model_validate(template)
+
+# TODO: delete template

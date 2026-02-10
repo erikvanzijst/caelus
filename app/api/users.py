@@ -1,34 +1,33 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlmodel import Session
 
 from app.db import get_session
-from app.models import Deployment, User
-from app.schemas import DeploymentCreate, DeploymentRead, UserCreate, UserRead
-from app.services import deployments as deployment_service
-from app.services import users as user_service
-from app.services.errors import NotFoundError
+from app.models import UserRead, UserCreate, DeploymentRead, DeploymentCreate
+from app.services import users as user_service, deployments as deployment_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, session: Session = Depends(get_session)) -> User:
-    return user_service.create_user(session, email=payload.email)
+def create_user(payload: UserCreate, session: Session = Depends(get_session)) -> UserRead:
+    return user_service.create_user(session, payload)
 
 
 @router.get("", response_model=list[UserRead])
-def list_users(session: Session = Depends(get_session)) -> list[User]:
+def list_users(session: Session = Depends(get_session)) -> list[UserRead]:
     return user_service.list_users(session)
 
 
+@router.delete("/{user_id}", status_code=204)
+def delete_user_endpoint(user_id: int, session: Session = Depends(get_session)) -> None:
+    user_service.delete_user(session, user_id=user_id)
+
+
 @router.get("/{user_id}", response_model=UserRead)
-def get_user(user_id: int, session: Session = Depends(get_session)) -> User:
-    try:
-        return user_service.get_user(session, user_id=user_id)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+def get_user(user_id: int, session: Session = Depends(get_session)) -> UserRead:
+    return user_service.get_user(session, user_id=user_id)
 
 
 @router.post(
@@ -38,30 +37,22 @@ def get_user(user_id: int, session: Session = Depends(get_session)) -> User:
 )
 def create_deployment(
     user_id: int, payload: DeploymentCreate, session: Session = Depends(get_session)
-) -> Deployment:
-    try:
-        return deployment_service.create_deployment(
-            session,
-            user_id=user_id,
-            template_id=payload.template_id,
-            domainname=payload.domainname,
-        )
-    except NotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+) -> DeploymentRead:
+    return deployment_service.create_deployment(session, payload=payload)
 
 
 @router.get("/{user_id}/deployments", response_model=list[DeploymentRead])
-def list_deployments(user_id: int, session: Session = Depends(get_session)) -> list[Deployment]:
+def list_deployments(user_id: int, session: Session = Depends(get_session)):
     return deployment_service.list_deployments(session, user_id=user_id)
 
 
-@router.get("/{user_id}/deployments/{deployment_id}", response_model=DeploymentRead)
-def get_deployment(
-    user_id: int, deployment_id: int, session: Session = Depends(get_session)
-) -> Deployment:
-    try:
-        return deployment_service.get_deployment(
-            session, user_id=user_id, deployment_id=deployment_id
-        )
-    except NotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+# @router.get("/{user_id}/deployments/{deployment_id}", response_model=DeploymentRead)
+# def get_deployment(
+#     user_id: int, deployment_id: int, session: Session = Depends(get_session)
+# ) -> Deployment:
+#     try:
+#         return deployment_service.get_deployment(
+#             session, user_id=user_id, deployment_id=deployment_id
+#         )
+#     except NotFoundError as exc:
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

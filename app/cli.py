@@ -14,9 +14,29 @@ app = typer.Typer(help="Caelus CLI")
 
 @app.command("create-user")
 def create_user(email: str) -> None:
+    from sqlalchemy.exc import IntegrityError
+    from app.models import User
+    from sqlmodel import select
+
     with session_scope() as session:
-        user = user_service.create_user(session, email=email)
+        try:
+            user = user_service.create_user(session, email=email)
+        except IntegrityError:
+            # User already exists, fetch existing
+            existing = session.exec(select(User).where(User.email == email)).first()
+            user = existing
         typer.echo(f"Created user {user.id} ({user.email})")
+
+
+@app.command("delete-user")
+def delete_user(user_id: int) -> None:
+    with session_scope() as session:
+        try:
+            user_service.delete_user(session, user_id=user_id)
+        except NotFoundError:
+            # If user not found, consider it already deleted
+            pass
+        typer.echo(f"Deleted user {user_id}")
 
 
 @app.command("list-users")
@@ -58,7 +78,9 @@ def create_template(product_id: int, docker_image_url: str = "") -> None:
 def list_templates(product_id: int) -> None:
     with session_scope() as session:
         for template in template_service.list_templates(session, product_id=product_id):
-            typer.echo(f"{template.id} product={template.product_id} image={template.docker_image_url}")
+            typer.echo(
+                f"{template.id} product={template.product_id} image={template.docker_image_url}"
+            )
 
 
 @app.command("create-deployment")

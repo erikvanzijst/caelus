@@ -26,9 +26,7 @@ def test_user_deployment_flow(client):
     assert user.status_code == 201
     user_id = user.json()["id"]
 
-    product = client.post(
-        "/products", json={"name": "nextcloud", "description": "Nextcloud app"}
-    )
+    product = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app", "template": "1"})
     assert product.status_code == 201
     product_id = product.json()["id"]
 
@@ -52,3 +50,16 @@ def test_user_deployment_flow(client):
     fetched = client.get(f"/users/{user_id}/deployments/{deployment_id}")
     assert fetched.status_code == 200
     assert fetched.json()["domainname"] == "cloud.example.com"
+
+
+def test_user_delete_flow(client):
+    # Create a user
+    user = client.post("/users", json={"email": "del@example.com"})
+    assert user.status_code == 201
+    user_id = user.json()["id"]
+    # Delete the user
+    delete_resp = client.delete(f"/users/{user_id}")
+    assert delete_resp.status_code == 204
+    # Verify user is gone
+    get_resp = client.get(f"/users/{user_id}")
+    assert get_resp.status_code == 404

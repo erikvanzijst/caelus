@@ -1,40 +1,42 @@
 from __future__ import annotations
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app.models import Deployment, ProductTemplateVersion, User
+from app.models import DeploymentRead, DeploymentCreate, DeploymentORM
 from app.provisioner import provisioner
-from app.services.errors import NotFoundError
+from app.services import users as user_service, templates as template_service
+from app.services.errors import IntegrityException, NotFoundException
 
 
-def create_deployment(
-    session: Session, *, user_id: int, template_id: int, domainname: str
-) -> Deployment:
-    user = session.get(User, user_id)
-    if not user:
-        raise NotFoundError("User not found")
+def create_deployment(session: Session, *, payload: DeploymentCreate) -> DeploymentRead:
+    deployment = DeploymentORM.model_validate(payload)
+    # ensure that the user and template exist:
+    user_service.get_user(session, user_id=deployment.user_id)
+    template_service.get_template(session, product_id=deployment.template_id, template_id=deployment.template_id)
 
-    template = session.get(ProductTemplateVersion, template_id)
-    if not template:
-        raise NotFoundError("Template not found")
-
-    deployment = Deployment(user_id=user_id, template_id=template_id, domainname=domainname)
     session.add(deployment)
-    session.commit()
-    session.refresh(deployment)
+    try:
+        session.commit()
+        session.refresh(deployment)
 
-    provisioner.provision(deployment_id=deployment.id)
-    return deployment
+        provisioner.provision(deployment_id=deployment.id)
+        return DeploymentRead.model_validate(deployment)
+    except IntegrityError as exc:
+        raise IntegrityException(f"Deployment already exists") from exc
 
 
-def list_deployments(session: Session, *, user_id: int) -> list[Deployment]:
+def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
+    # TODO: filter out deleted deployments and convert to list[DeploymentRead]
     return list(
-        session.exec(select(Deployment).where(Deployment.user_id == user_id)).all()
+        session.exec(select(DeploymentORM).where(DeploymentORM.user_id == user_id)).all()
     )
 
 
-def get_deployment(session: Session, *, user_id: int, deployment_id: int) -> Deployment:
-    deployment = session.get(Deployment, deployment_id)
+def get_deployment(session: Session, *, user_id: int, deployment_id: int) -> DeploymentRead:
+    deployment = session.get(DeploymentORM, deployment_id)
     if not deployment or deployment.user_id != user_id:
-        raise NotFoundError("Deployment not found")
-    return deployment
+        raise NotFoundException("Deployment not found")
+    return DeploymentRead.model_validate(deployment)
+
+# TODO: delete deployment

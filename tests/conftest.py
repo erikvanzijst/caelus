@@ -30,7 +30,12 @@ def db_session():
 def cli_runner(tmp_path, monkeypatch):
     project_root = Path(__file__).resolve().parents[1]
     sys.path.append(str(project_root))
-    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+    # Use a temporary file-based SQLite DB for isolation
+    db_path = tmp_path / "test_cli.db"
+    # Ensure a clean DB file
+    if db_path.exists():
+        db_path.unlink()
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
 
     import app.db as db
 

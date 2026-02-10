@@ -1,0 +1,15 @@
+{
+    "name": "Caelus Dev Container",
+    "dockerComposeFile": ["../docker-compose.yml"],
+    "service": "app",
+    "workspaceFolder": "/workspace",
+    "extensions": [
+        "ms-python.python",
+        "ms-azuretools.vscode-docker"
+    ],
+    "postCreateCommand": "bash -c \"until pg_isready -h db -p 5432; do echo waiting for db; sleep 1; done && uv sync && uv run python -c 'import app.db; app.db.init_db()'\"",
+    "settings": {
+        "python.defaultInterpreterPath": "/root/.local/bin/python"
+    },
+    "forwardPorts": [8000]
+}

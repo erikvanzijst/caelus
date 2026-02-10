@@ -13,7 +13,9 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     deployment = DeploymentORM.model_validate(payload)
     # ensure that the user and template exist:
     user_service.get_user(session, user_id=deployment.user_id)
-    template_service.get_template(session, product_id=deployment.template_id, template_id=deployment.template_id)
+    template_service.get_template(
+        session, product_id=deployment.template_id, template_id=deployment.template_id
+    )
 
     session.add(deployment)
     try:
@@ -27,10 +29,14 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
 
 
 def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
-    # TODO: filter out deleted deployments and convert to list[DeploymentRead]
-    return list(
-        session.exec(select(DeploymentORM).where(DeploymentORM.user_id == user_id)).all()
-    )
+    # Return deployments for the user that are not marked as deleted
+    deployments = session.exec(
+        select(DeploymentORM)
+        .where(DeploymentORM.user_id == user_id)
+        .where(DeploymentORM.deleted == False)  # noqa: E712
+    ).all()
+    # Convert ORM objects to read models
+    return [DeploymentRead.model_validate(d) for d in deployments]
 
 
 def get_deployment(session: Session, *, user_id: int, deployment_id: int) -> DeploymentRead:
@@ -39,4 +45,17 @@ def get_deployment(session: Session, *, user_id: int, deployment_id: int) -> Dep
         raise NotFoundException("Deployment not found")
     return DeploymentRead.model_validate(deployment)
 
-# TODO: delete deployment
+
+def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> None:
+    """Mark a deployment as deleted.
+
+    Retrieves the deployment ensuring it belongs to the given user. If not found,
+    raises NotFoundException. Otherwise sets the ``deleted`` flag to ``True`` and
+    commits the transaction.
+    """
+    deployment = session.get(DeploymentORM, deployment_id)
+    if not deployment or deployment.user_id != user_id:
+        raise NotFoundException("Deployment not found")
+    deployment.deleted = True
+    session.add(deployment)
+    session.commit()

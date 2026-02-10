@@ -1,15 +1,14 @@
-from __future__ import annotations
-
-import importlib
-import sys
-from pathlib import Path
-
 import pytest
-from sqlalchemy import create_engine, StaticPool
+import sys
+import importlib
+from pathlib import Path
+from starlette.testclient import TestClient
+from app.db import get_session, init_db
+from app.main import app
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 from typer.testing import CliRunner
-
-from app.db import init_db
 
 
 @pytest.fixture
@@ -20,10 +19,20 @@ def db_session():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-
     init_db(engine)
     with Session(engine) as session:
         yield session
+
+
+@pytest.fixture
+def client(db_session):
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_get_db
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture()

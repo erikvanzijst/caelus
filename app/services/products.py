@@ -27,3 +27,5 @@ def get_product(session: Session, product_id: int) -> ProductRead:
     if not product:
         raise NotFoundException("Product not found")
     return ProductRead.model_validate(product)
+
+# TODO: delete product endpoint

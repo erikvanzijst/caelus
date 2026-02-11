@@ -4,6 +4,12 @@
 - Run API: `uvicorn app.main:app --host 0.0.0.0 --reload`
 - Run CLI (uv-managed venv): `uv run python -m app.cli --help`
 
+
+## Database migrations
+- To create a new migration: `uv run alembic revision --autogenerate -m <name>`
+- Run migrations: `uv run alembic upgrade head`
+
+
 ## API Endpoints
 
 - `POST /products` – Create a new product.

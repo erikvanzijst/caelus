@@ -45,6 +45,20 @@ def create_product(name: str, description: str, template_id: int | None = None) 
         typer.echo(f"Created product {product}")
 
 
+@app.command("update-product")
+def update_product(product_id: int, template_id: int) -> None:
+    """Update a product's template_id."""
+    with session_scope() as session:
+        try:
+            product = product_service.update_product_template(
+                session, product_id=product_id, template_id=template_id
+            )
+        except NotFoundError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(f"Updated product {product.id} template_id to {product.template_id}")
+
+
 @app.command("delete-product")
 def delete_product(product_id: int) -> None:
     with session_scope() as session:

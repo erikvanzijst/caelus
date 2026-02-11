@@ -36,18 +36,26 @@ class ProductORM(ProductBase, table=True):
     __tablename__ = "product"
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
-    template_id: Optional[int] = Field(default=None, foreign_key="product_template_version.id", index=True)
+    template_id: Optional[int] = Field(
+        default=None, foreign_key="product_template_version.id", index=True
+    )
     template: "ProductTemplateVersionORM" = Relationship(
-        back_populates="products", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"})
+        back_populates="products", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"}
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     templates: list["ProductTemplateVersionORM"] = Relationship(
         back_populates="product",
-        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"})
+        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"},
+    )
     deleted: bool = Field(default=False)
 
 
 class ProductCreate(ProductBase):
     pass
+
+
+class ProductUpdate(SQLModel):
+    template_id: Optional[int] = None
 
 
 class ProductRead(ProductBase):
@@ -68,13 +76,15 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     product_id: int = Field(foreign_key="product.id", index=True)
     product: ProductORM = Relationship(
         back_populates="templates",
-        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"})
+        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"},
+    )
     products: list["ProductORM"] = Relationship(
-        back_populates="template",
-        sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"})
+        back_populates="template", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"}
+    )
     deployments: list["DeploymentORM"] = Relationship(
         back_populates="template",
-        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.template_id"})
+        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.template_id"},
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     deleted: bool = Field(default=False)
 
@@ -111,7 +121,9 @@ class DeploymentORM(DeploymentBase, table=True):
     user: UserORM = Relationship(back_populates="deployments")
     template_id: int = Field(foreign_key="product_template_version.id", index=True)
     template: ProductTemplateVersionORM = Relationship(
-        back_populates="deployments", sa_relationship_kwargs={"foreign_keys": "DeploymentORM.template_id"})
+        back_populates="deployments",
+        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.template_id"},
+    )
     domainname: str = Field(index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     deleted: bool = Field(default=False)

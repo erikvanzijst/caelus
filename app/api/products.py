@@ -9,7 +9,9 @@ from app.models import (
     ProductCreate,
     ProductTemplateVersionRead,
     ProductTemplateVersionCreate,
+    ProductUpdate,
 )
+from fastapi import HTTPException
 from app.services import products as product_service, templates as template_service
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -30,6 +32,17 @@ def get_product(product_id: int, session: Session = Depends(get_session)) -> Pro
     return product_service.get_product(session, product_id=product_id)
 
 
+@router.put("/{product_id}", response_model=ProductRead)
+def update_product(
+    product_id: int, payload: ProductUpdate, session: Session = Depends(get_session)
+) -> ProductRead:
+    if payload.template_id is None:
+        raise HTTPException(status_code=400, detail="template_id required")
+    return product_service.update_product_template(
+        session, product_id=product_id, template_id=payload.template_id
+    )
+
+
 @router.post(
     "/{product_id}/templates",
     response_model=ProductTemplateVersionRead,
@@ -45,9 +58,7 @@ def create_template(
 
 
 @router.delete("/{product_id}", status_code=204)
-def delete_product_endpoint(
-    product_id: int, session: Session = Depends(get_session)
-) -> None:
+def delete_product_endpoint(product_id: int, session: Session = Depends(get_session)) -> None:
     product_service.delete_product(session, product_id=product_id)
 
 

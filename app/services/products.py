@@ -53,3 +53,40 @@ def delete_product(session: Session, *, product_id: int) -> ProductRead:
     product.deleted = True
     session.commit()
     return ProductRead.model_validate(product)
+
+
+def update_product_template(session: Session, *, product_id: int, template_id: int) -> ProductRead:
+    """Update a product's template_id.
+
+    Validates that the product exists and that the template belongs to the product.
+    Raises NotFoundException if either is missing.
+    """
+    # Ensure product exists and is not deleted
+    product = session.exec(
+        select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted == False)  # noqa: E712
+    ).one_or_none()
+    if not product:
+        raise NotFoundException("Product not found")
+    # Validate template belongs to product using template service
+    from app.services import templates as template_service
+
+    # This will raise NotFoundException if not valid
+    template_service.get_template(session, product_id=product_id, template_id=template_id)
+    product.template_id = template_id
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+    return ProductRead.model_validate(product)
+    """Soft‑delete a product by setting its ``deleted`` flag.
+
+    Raises NotFoundException if the product does not exist.
+    """
+    # Retrieve the product that is not already deleted
+    product = session.exec(
+        select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted == False)  # noqa: E712
+    ).one_or_none()
+    if not product:
+        raise NotFoundException("Product not found")
+    product.deleted = True
+    session.commit()
+    return ProductRead.model_validate(product)

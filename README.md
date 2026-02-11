@@ -13,6 +13,7 @@ Cloud provisioning tool with FastAPI + SQLModel + Alembic and a Typer CLI.
 - `POST /products` – Create a new product.
 - `GET /products` – List all products.
 - `GET /products/{product_id}` – Retrieve a product.
+- `UPDATE /products/{product_id}` – Modify a product.
 - `DELETE /products/{product_id}` – Delete a product.
 - `POST /products/{product_id}/templates` – Create a template version for a product.
 - `GET /products/{product_id}/templates` – List template versions for a product.

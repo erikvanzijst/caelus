@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, UniqueConstraint
 
 
 class UserBase(SQLModel):
@@ -45,7 +45,11 @@ class ProductORM(ProductBase, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     templates: list["ProductTemplateVersionORM"] = Relationship(
         back_populates="product",
-        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"},
+        sa_relationship_kwargs={
+            "foreign_keys": "ProductTemplateVersionORM.product_id",
+            "cascade": "all, delete-orphan",
+            "passive_deletes": True,
+        },
     )
     deleted: bool = Field(default=False)
 
@@ -73,7 +77,14 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     docker_image_url: Optional[str] = Field(default=None)
-    product_id: int = Field(foreign_key="product.id", index=True)
+    product_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("product.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
     product: ProductORM = Relationship(
         back_populates="templates",
         sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"},
@@ -83,7 +94,11 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     )
     deployments: list["DeploymentORM"] = Relationship(
         back_populates="template",
-        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.template_id"},
+        sa_relationship_kwargs={
+            "foreign_keys": "DeploymentORM.template_id",
+            "cascade": "all, delete-orphan",
+            "passive_deletes": True,
+        },
     )
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     deleted: bool = Field(default=False)
@@ -119,7 +134,14 @@ class DeploymentORM(DeploymentBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
     user: UserORM = Relationship(back_populates="deployments")
-    template_id: int = Field(foreign_key="product_template_version.id", index=True)
+    template_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("product_template_version.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
     template: ProductTemplateVersionORM = Relationship(
         back_populates="deployments",
         sa_relationship_kwargs={"foreign_keys": "DeploymentORM.template_id"},

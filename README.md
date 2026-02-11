@@ -2,10 +2,11 @@
 
 Cloud provisioning tool with FastAPI + SQLModel + Alembic and a Typer CLI.
 
-## Local dev
-- Set `DATABASE_URL` (defaults to sqlite `./caelus.db`).
-- Run API: `uvicorn app.main:app --reload`
-- Run CLI (uv-managed venv): `uv run python -m app.cli --help`
+## Repo layout
+
+This a monorepo with two packages:
+- `api/`: the FastAPI app
+- `ui/`: the React app
 
 ## Devcontainer
 A [devcontainer](https://containers.dev/) is provided for sandboxed development:
@@ -15,9 +16,14 @@ A [devcontainer](https://containers.dev/) is provided for sandboxed development:
 - Run a command in the devcontainer: `./dev run uv run pytest -s`
 - Shut down the devcontainer: `./dev down`
 
+# API
+
+## Local dev
+- Run API: `uvicorn app.main:app --host 0.0.0.0 --reload`
+- Run CLI (uv-managed venv): `uv run python -m app.cli --help`
+
 ## API Endpoints
 
-### /products
 - `POST /products` – Create a new product.
 - `GET /products` – List all products.
 - `GET /products/{product_id}` – Retrieve a product.
@@ -39,4 +45,12 @@ A [devcontainer](https://containers.dev/) is provided for sandboxed development:
 - `DELETE /users/{user_id}/deployments/{deployment_id}` – Delete a deployment.
 
 ## CLI ↔ REST parity
-The Typer CLI (`python -m app.cli …`) mirrors the functionality of the REST API. Any operation available via an HTTP endpoint can be performed with the equivalent CLI command, and vice‑versa. This ensures both interfaces stay in lockstep.
+
+The Typer CLI (`python -m app.cli …`) mirrors the functionality of the REST
+API. Any operation available via an HTTP endpoint can be performed with the
+equivalent CLI command, and vice‑versa. This ensures both interfaces stay in
+lockstep.
+
+# UI
+
+The application has a React frontend located under `ui/`.

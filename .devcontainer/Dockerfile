@@ -17,8 +17,5 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN curl -fsSL https://opencode.ai/install | bash
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync && rm pyproject.toml uv.lock
-
 EXPOSE 8000
 CMD bash

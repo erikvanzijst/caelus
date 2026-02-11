@@ -2,13 +2,15 @@ import pytest
 import sys
 import importlib
 from pathlib import Path
+
 from starlette.testclient import TestClient
-from app.db import get_session, init_db
-from app.main import app
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 from typer.testing import CliRunner
+
+from app.db import get_session, init_db
+from app.main import app
 
 
 @pytest.fixture

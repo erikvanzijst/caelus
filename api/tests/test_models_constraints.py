@@ -1,6 +1,6 @@
 import pytest
 
-from app.services import users, products, templates, deployments
+from app.services import templates, deployments, products, users
 from app.services.errors import IntegrityException
 from tests.conftest import db_session
 

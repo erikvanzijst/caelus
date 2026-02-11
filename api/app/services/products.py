@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.models import ProductRead, ProductORM, ProductCreate

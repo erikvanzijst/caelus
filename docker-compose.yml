@@ -8,8 +8,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=sqlite:////workspace/caelus.db
+      - DATABASE_URL=sqlite:////workspace/api/caelus.db
     volumes:
       - .:/workspace
-    # Use the same user as in Dockerfile (root by default)
-    # If you later switch to a non‑root user, adjust accordingly

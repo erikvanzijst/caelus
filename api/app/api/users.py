@@ -5,7 +5,7 @@ from sqlmodel import Session
 
 from app.db import get_session
 from app.models import UserRead, UserCreate, DeploymentRead, DeploymentCreate
-from app.services import users as user_service, deployments as deployment_service
+from app.services import deployments as deployment_service, users as user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 

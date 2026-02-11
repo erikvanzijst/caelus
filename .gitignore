@@ -20,44 +20,13 @@ pytest.xml
 # Virtualenv
 .venv/
 venv/
-.envcaelus master  ✗ git status
-On branch master
-Changes to be committed:
-  (use "git restore --staged <file>..." to unstage)
-        new file:   .gitignore
-        new file:   AGENTS.md
-        new file:   alembic/__pycache__/env.cpython-311.pyc
-        new file:   alembic/versions/__pycache__/0d0b77620526_init.cpython-311.pyc
-        new file:   app/__pycache__/__init__.cpython-311.pyc
-        new file:   app/__pycache__/cli.cpython-311.pyc
-        new file:   app/__pycache__/db.cpython-311.pyc
-        new file:   app/__pycache__/deps.cpython-311.pyc
-        new file:   app/__pycache__/main.cpython-311.pyc
-        new file:   app/__pycache__/models.cpython-311.pyc
-        new file:   app/__pycache__/provisioner.cpython-311.pyc
-        new file:   app/__pycache__/schemas.cpython-311.pyc
-        new file:   app/api/__pycache__/__init__.cpython-311.pyc
-        new file:   app/api/__pycache__/products.cpython-311.pyc
-        new file:   app/api/__pycache__/users.cpython-311.pyc
-        new file:   app/services/__pycache__/deployments.cpython-311.pyc
-        new file:   app/services/__pycache__/errors.cpython-311.pyc
-        new file:   app/services/__pycache__/products.cpython-311.pyc
-        new file:   app/services/__pycache__/templates.cpython-311.pyc
-        new file:   app/services/__pycache__/users.cpython-311.pyc
-
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-        modified:   .gitignore
-
+.env
 .env.*
 
 # SQLite
 *.db
 *.sqlite3
 
-# Alembic
-alembic/versions/__pycache__/
 
 # IDE
 .idea/

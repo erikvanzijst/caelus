@@ -4,17 +4,21 @@
     "../docker-compose.yml"
   ],
   "service": "app",
+  "remoteUser": "vscode",
   "overrideCommand": true,
   "workspaceFolder": "/workspace",
-  "postCreateCommand": "uv sync && uv run alembic upgrade head && echo Database initialized.",
-  //  "settings": {
-  //    "python.defaultInterpreterPath": "/root/.local/bin/python"
-  //  },
+  "postCreateCommand": "cd api && uv sync && uv run alembic upgrade head && echo Database initialized.",
   "forwardPorts": [
     8000
   ],
+  "containerEnv": {
+    "OPENAI_BASE_URL": "https://ai.deprutser.be/v1",
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
+    "SSH_AUTH_SOCK": "/ssh-agent"
+  },
   "mounts": [
     "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.config/git,target=/home/vscode/.config/git,type=bind,consistency=cached",
     "source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind"
   ]
 }

@@ -4,10 +4,8 @@ import typer
 
 from app.db import session_scope
 from app.models import UserCreate, DeploymentCreate, ProductTemplateVersionCreate, ProductCreate
-from app.services import deployments as deployment_service
-from app.services import products as product_service
-from app.services import templates as template_service
-from app.services import users as user_service
+from app.services import templates as template_service, deployments as deployment_service, \
+    products as product_service, users as user_service
 from app.services.errors import NotFoundError
 
 app = typer.Typer(help="Caelus CLI", pretty_exceptions_show_locals=False)

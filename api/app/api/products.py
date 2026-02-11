@@ -12,7 +12,7 @@ from app.models import (
     ProductUpdate,
 )
 from fastapi import HTTPException
-from app.services import products as product_service, templates as template_service
+from app.services import templates as template_service, products as product_service
 
 router = APIRouter(prefix="/products", tags=["products"])
 

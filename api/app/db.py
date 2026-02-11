@@ -27,7 +27,6 @@ engine = create_engine(
 
 def init_db(engine) -> None:
     # Ensure models are imported before creating tables.
-    import app.models  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
 

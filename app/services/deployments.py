@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 from app.models import DeploymentRead, DeploymentCreate, DeploymentORM, ProductTemplateVersionORM
 from app.provisioner import provisioner
 from typing import cast
-from app.services import users as user_service, templates as template_service
+from app.services import users as user_service
 from app.services.errors import IntegrityException, NotFoundException
 
 
@@ -63,8 +63,13 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
     raises NotFoundException. Otherwise, sets the ``deleted`` flag to ``True`` and
     commits the transaction.
     """
-    deployment = session.exec(select(DeploymentORM).where(DeploymentORM.id == deployment_id,
-                                                          DeploymentORM.deleted == False)).one_or_none()
+    deployment = (
+        session.exec(
+            select(DeploymentORM)
+            .options(selectinload(DeploymentORM.user),
+                     selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product))
+            .where(DeploymentORM.id == deployment_id, DeploymentORM.deleted == False))
+        .one_or_none())
     if not deployment:
         raise NotFoundException("Deployment not found")
     deployment.deleted = True

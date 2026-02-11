@@ -24,17 +24,6 @@ def db_session():
         yield session
 
 
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_session] = override_get_db
-    with TestClient(app) as client:
-        yield client
-    app.dependency_overrides.clear()
-
-
 @pytest.fixture()
 def cli_runner(tmp_path, monkeypatch):
     project_root = Path(__file__).resolve().parents[1]
@@ -56,3 +45,16 @@ def cli_runner(tmp_path, monkeypatch):
     importlib.reload(cli)
 
     return CliRunner(), cli.app
+
+
+@pytest.fixture
+def client(db_session):
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_get_db
+
+    with TestClient(app) as client:
+        yield client
+
+    app.dependency_overrides.clear()

@@ -30,10 +30,11 @@ def list_products(session: Session) -> list[ProductRead]:
 
 
 def get_product(session: Session, product_id: int) -> ProductRead:
-    if not (product := session.exec(
-            select(ProductORM)
-                    .where(ProductORM.id == product_id, ProductORM.deleted == False))
-            .one_or_none()):
+    if not (
+        product := session.exec(
+            select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted == False)
+        ).one_or_none()
+    ):
         raise NotFoundException("Product not found")
     return ProductRead.model_validate(product)
 
@@ -43,9 +44,12 @@ def delete_product(session: Session, *, product_id: int) -> ProductRead:
 
     Raises NotFoundException if the product does not exist.
     """
-    if not (product := session.get(ProductORM, product_id)):
+    # Retrieve the product that is not already deleted
+    product = session.exec(
+        select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted == False)  # noqa: E712
+    ).one_or_none()
+    if not product:
         raise NotFoundException("Product not found")
     product.deleted = True
-    session.add(product)
     session.commit()
     return ProductRead.model_validate(product)

@@ -27,7 +27,7 @@ class UserRead(UserBase):
 
 class ProductBase(SQLModel):
     name: str
-    description: str = None
+    description: str | None = None
     template_id: Optional[int] = None
 
 

@@ -1,6 +1,8 @@
 import pytest
+
 from app.services import users, products, templates, deployments
-from app.services.errors import IntegrityException, NotFoundException
+from app.services.errors import IntegrityException
+from tests.conftest import db_session
 
 
 def test_product_name_unique_constraint(db_session):

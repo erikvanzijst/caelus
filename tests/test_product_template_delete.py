@@ -1,20 +1,4 @@
-import pytest
-from starlette.testclient import TestClient
-from app.main import app
-from tests.conftest import db_session
-
-
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        yield db_session
-
-    from app.db import get_session
-
-    app.dependency_overrides[get_session] = override_get_db
-    with TestClient(app) as client:
-        yield client
-    app.dependency_overrides.clear()
+from tests.conftest import client
 
 
 def test_delete_product_flow(client):

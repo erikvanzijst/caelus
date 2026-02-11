@@ -1,24 +1,5 @@
-from __future__ import annotations
+from tests.conftest import client
 
-import pytest
-from starlette.testclient import TestClient
-
-from app.db import get_session
-from app.main import app
-from tests.conftest import db_session
-
-
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_session] = override_get_db
-
-    with TestClient(app) as client:
-        yield client
-
-    app.dependency_overrides.clear()
 
 def test_product(client):
     product = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app"})
@@ -27,9 +8,13 @@ def test_product(client):
     conflict = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app"})
     assert conflict.status_code == 409
 
-    # TODO: uncomment once delete endpoint is implemented
-    # resp = client.delete(f"/products/{product.json()['id']}")
-    # assert resp.status_code == 201
+
+def test_product_deletion(client):
+    product = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app"})
+    assert product.status_code == 201
+
+    resp = client.delete(f"/products/{product.json()['id']}")
+    assert resp.status_code == 204
 
 
 def test_user_deployment_flow(client):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import users, products
 from app.api.utils import register_exception_handlers
@@ -10,6 +11,13 @@ app = FastAPI(
     title="Caelus Deploy",
     description="FastAPI service for provisioning user-owned webapp instances on cloud infrastructure",
     version="0.1.0",
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 from fastapi.responses import RedirectResponse

@@ -1,32 +1,24 @@
-FROM python:3.11-slim
+FROM mcr.microsoft.com/devcontainers/python:3.13-trixie
 
-# Set up work directory
+RUN apt-get update -y && \
+    apt-get install -y nodejs npm neovim btop httpie sqlite3 curl wget jq yq && \
+    apt-get clean
+RUN mkdir /workspace && chown vscode:vscode /workspace
+
+USER vscode
 WORKDIR /workspace
+RUN mkdir -p ~/.local/bin ~/.ssh
+RUN chmod 700 ~/.ssh
+RUN ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-curl \
-     build-essential \
-     libpq-dev \
-     postgresql-client \
-     && rm -rf /var/lib/apt/lists/*
-
-# Install uv (Python package manager)
+ENV PATH=/home/vscode/.local/bin:$PATH
+ENV COLORTERM=truecolor
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin:${PATH}"
+RUN curl -fsSL https://claude.ai/install.sh | bash
+RUN curl -fsSL https://opencode.ai/install | bash
 
-# Copy only dependency files first for caching
 COPY pyproject.toml uv.lock ./
+RUN uv sync && rm pyproject.toml uv.lock
 
-# Install Python dependencies (including the project in editable mode)
-RUN uv sync --no-dev
-
-# Copy the rest of the source code
-COPY . .
-
-# Expose FastAPI default port
 EXPOSE 8000
-
-# Default command to run the application
-COPY entrypoint.sh /entrypoint.sh
-CMD ["/entrypoint.sh"]
+CMD bash

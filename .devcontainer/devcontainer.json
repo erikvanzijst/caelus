@@ -1,15 +1,20 @@
 {
-    "name": "Caelus Dev Container",
-    "dockerComposeFile": ["../docker-compose.yml"],
-    "service": "app",
-    "workspaceFolder": "/workspace",
-    "extensions": [
-        "ms-python.python",
-        "ms-azuretools.vscode-docker"
-    ],
-    "postCreateCommand": "bash -c \"until pg_isready -h db -p 5432; do echo waiting for db; sleep 1; done && uv sync && uv run python -c 'import app.db; app.db.init_db()'\"",
-    "settings": {
-        "python.defaultInterpreterPath": "/root/.local/bin/python"
-    },
-    "forwardPorts": [8000]
+  "name": "caelus",
+  "dockerComposeFile": [
+    "../docker-compose.yml"
+  ],
+  "service": "app",
+  "overrideCommand": true,
+  "workspaceFolder": "/workspace",
+  "postCreateCommand": "uv sync && uv run alembic upgrade head && echo Database initialized.",
+  //  "settings": {
+  //    "python.defaultInterpreterPath": "/root/.local/bin/python"
+  //  },
+  "forwardPorts": [
+    8000
+  ],
+  "mounts": [
+    "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind,consistency=cached",
+    "source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind"
+  ]
 }

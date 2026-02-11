@@ -7,6 +7,14 @@ Cloud provisioning tool with FastAPI + SQLModel + Alembic and a Typer CLI.
 - Run API: `uvicorn app.main:app --reload`
 - Run CLI (uv-managed venv): `uv run python -m app.cli --help`
 
+## Devcontainer
+A [devcontainer](https://containers.dev/) is provided for sandboxed development:
+- Create the devcontainer: `./dev build`
+- Start the devcontainer in the background: `./dev up`
+- Open a shell in the devcontainer: `./dev sh`
+- Run a command in the devcontainer: `./dev run uv run pytest -s`
+- Shut down the devcontainer: `./dev down`
+
 ## API Endpoints
 
 ### /products

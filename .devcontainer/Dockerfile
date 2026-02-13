@@ -10,15 +10,36 @@ COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=buildxbin /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 
 RUN apt-get update -y && \
-    apt-get install -y nodejs npm neovim btop httpie sqlite3 curl wget jq yq && \
-    apt-get clean
+    apt-get install -y --no-install-recommends \
+      nodejs \
+      npm \
+      neovim \
+      btop \
+      httpie \
+      sqlite3 \
+      curl \
+      wget \
+      jq \
+      yq \
+      ca-certificates \
+      gnupg && \
+    install -m 0755 -d /etc/apt/keyrings && \
+    wget -qO- https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
+    chmod a+r /etc/apt/keyrings/google-chrome.gpg && \
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
+    apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+      google-chrome-stable \
+      fonts-liberation \
+      libu2f-udev && \
+    rm -rf /var/lib/apt/lists/*
 RUN groupadd -f docker && usermod -aG docker vscode
 RUN npm i -g @openai/codex
 RUN mkdir /workspace && chown vscode:vscode /workspace
 
 USER vscode
 WORKDIR /workspace
-RUN mkdir -p ~/.local/bin ~/.ssh ~/venvs
+RUN mkdir -p ~/.local/bin ~/.ssh ~/venv
 RUN chmod 700 ~/.ssh
 RUN ssh-keyscan github.com >> ~/.ssh/known_hosts
 

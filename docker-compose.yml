@@ -5,6 +5,13 @@ services:
     build:
       context: .
       dockerfile: .devcontainer/Dockerfile
+    # Allow Chrome sandboxing:
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+    shm_size: "1gb"
     ports:
       - "8000:8000"
       - "5173:5173"

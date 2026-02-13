@@ -1,8 +1,17 @@
+FROM docker:cli AS dockercli
+FROM docker/buildx-bin AS buildxbin
+FROM bitnami/kubectl AS kubectl
 FROM mcr.microsoft.com/devcontainers/python:3.13-trixie
+
+# Copy kubectl binary from the bitnami/kubectl image
+COPY --from=kubectl /opt/bitnami/kubectl/bin/kubectl /usr/local/bin/kubectl
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=buildxbin /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 
 RUN apt-get update -y && \
     apt-get install -y nodejs npm neovim btop httpie sqlite3 curl wget jq yq && \
     apt-get clean
+RUN groupadd -f docker && usermod -aG docker vscode
 RUN npm i -g @openai/codex
 RUN mkdir /workspace && chown vscode:vscode /workspace
 
@@ -15,6 +24,7 @@ RUN ssh-keyscan github.com >> ~/.ssh/known_hosts
 ENV PATH=/home/vscode/.local/bin:$PATH
 ENV COLORTERM=truecolor
 ENV UV_PROJECT_ENVIRONMENT="/home/vscode/venv"
+ENV DOCKER_BUILDKIT=1
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN curl -fsSL https://opencode.ai/install | bash

@@ -7,6 +7,7 @@ services:
       dockerfile: .devcontainer/Dockerfile
     ports:
       - "8000:8000"
+      - "5173:5173"
     environment:
       - DATABASE_URL=sqlite:////workspace/api/caelus.db
     volumes:

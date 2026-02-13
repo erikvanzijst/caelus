@@ -1,4 +1,5 @@
 from __future__ import annotations
+from datetime import datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
@@ -29,28 +30,32 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
         provisioner.provision(deployment_id=cast(int, deployment.id))  # type: ignore
         return DeploymentRead.model_validate(deployment)
     except IntegrityError as exc:
-        raise IntegrityException(f"Deployment already exists") from exc
+        raise IntegrityException("Deployment already exists") from exc
 
 
 def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
     # Return deployments for the user that are not marked as deleted
     deployments = session.exec(
         select(DeploymentORM)
-        .options(selectinload(DeploymentORM.user),
-                 selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product))
-        .where(DeploymentORM.user_id == user_id, DeploymentORM.deleted == False)  # noqa: E712
+        .options(
+            selectinload(DeploymentORM.user),
+            selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product),
+        )
+        .where(DeploymentORM.user_id == user_id, DeploymentORM.deleted_at == None)  # noqa: E712
     ).all()
     # Convert ORM objects to read models
     return [DeploymentRead.model_validate(d) for d in deployments]
 
 
 def get_deployment(session: Session, *, user_id: int, deployment_id: int) -> DeploymentRead:
-    deployment = (session
-                  .exec(select(DeploymentORM)
-                        .options(selectinload(DeploymentORM.user),
-                                 selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product))
-                        .where(DeploymentORM.deleted == False, DeploymentORM.id == deployment_id))
-                  .one_or_none())
+    deployment = session.exec(
+        select(DeploymentORM)
+        .options(
+            selectinload(DeploymentORM.user),
+            selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product),
+        )
+        .where(DeploymentORM.deleted_at == None, DeploymentORM.id == deployment_id)
+    ).one_or_none()
     if not deployment:
         raise NotFoundException("Deployment not found")
     return DeploymentRead.model_validate(deployment)
@@ -63,16 +68,17 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
     raises NotFoundException. Otherwise, sets the ``deleted`` flag to ``True`` and
     commits the transaction.
     """
-    deployment = (
-        session.exec(
-            select(DeploymentORM)
-            .options(selectinload(DeploymentORM.user),
-                     selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product))
-            .where(DeploymentORM.id == deployment_id, DeploymentORM.deleted == False))
-        .one_or_none())
+    deployment = session.exec(
+        select(DeploymentORM)
+        .options(
+            selectinload(DeploymentORM.user),
+            selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product),
+        )
+        .where(DeploymentORM.id == deployment_id, DeploymentORM.deleted_at == None)
+    ).one_or_none()
     if not deployment:
         raise NotFoundException("Deployment not found")
-    deployment.deleted = True
+    deployment.deleted_at = datetime.utcnow()
     session.add(deployment)
     session.commit()
     return DeploymentRead.model_validate(deployment)

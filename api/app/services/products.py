@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -23,7 +25,7 @@ def create_product(session: Session, payload: ProductCreate) -> ProductRead:
 def list_products(session: Session) -> list[ProductRead]:
     # Return products that are not soft‑deleted
     products = session.exec(
-        select(ProductORM).where(ProductORM.deleted == False)  # noqa: E712
+        select(ProductORM).where(ProductORM.deleted_at == None)  # noqa: E712
     ).all()
     return [ProductRead.model_validate(p) for p in products]
 
@@ -31,7 +33,7 @@ def list_products(session: Session) -> list[ProductRead]:
 def get_product(session: Session, product_id: int) -> ProductRead:
     if not (
         product := session.exec(
-            select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted == False)
+            select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted_at == None)
         ).one_or_none()
     ):
         raise NotFoundException("Product not found")
@@ -45,11 +47,11 @@ def delete_product(session: Session, *, product_id: int) -> ProductRead:
     """
     # Retrieve the product that is not already deleted
     product = session.exec(
-        select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted == False)  # noqa: E712
+        select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted_at == None)  # noqa: E712
     ).one_or_none()
     if not product:
         raise NotFoundException("Product not found")
-    product.deleted = True
+    product.deleted_at = datetime.utcnow()
     session.commit()
     return ProductRead.model_validate(product)
 
@@ -62,7 +64,7 @@ def update_product_template(session: Session, *, product_id: int, template_id: i
     """
     # Ensure product exists and is not deleted
     product = session.exec(
-        select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted == False)  # noqa: E712
+        select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted_at == None)  # noqa: E712
     ).one_or_none()
     if not product:
         raise NotFoundException("Product not found")
@@ -82,10 +84,10 @@ def update_product_template(session: Session, *, product_id: int, template_id: i
     """
     # Retrieve the product that is not already deleted
     product = session.exec(
-        select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted == False)  # noqa: E712
+        select(ProductORM).where(ProductORM.id == product_id, ProductORM.deleted_at == None)  # noqa: E712
     ).one_or_none()
     if not product:
         raise NotFoundException("Product not found")
-    product.deleted = True
+    product.deleted_at = datetime.utcnow()
     session.commit()
     return ProductRead.model_validate(product)

@@ -16,7 +16,6 @@ def create_user(email: str) -> None:
     with session_scope() as session:
         user = user_service.create_user(session, UserCreate(email=email))
         typer.echo(f"Created user: {user}")
-        typer.echo(user)
 
 
 @app.command("delete-user")

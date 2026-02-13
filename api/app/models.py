@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import Column, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, Index
 
 
 class UserBase(SQLModel):
@@ -11,9 +11,18 @@ class UserBase(SQLModel):
 
 class UserORM(UserBase, table=True):
     __tablename__ = "user"
+    __table_args__ = (
+        Index(
+            "uq_user_active",
+            "email",
+            unique=True,
+            sqlite_where=Column("deleted_at").is_(None),
+        ),
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     deployments: list["DeploymentORM"] = Relationship(back_populates="user")
+    deleted_at: Optional[datetime] = Field(default=None)
 
 
 class UserCreate(UserBase):
@@ -32,8 +41,16 @@ class ProductBase(SQLModel):
 
 
 class ProductORM(ProductBase, table=True):
-    __table_args__ = (UniqueConstraint("name", "deleted", name="uq_product_name_deleted"),)
     __tablename__ = "product"
+    __table_args__ = (
+        Index(
+            "uq_product_name_active",
+            "name",
+            unique=True,
+            sqlite_where=Column("deleted_at").is_(None),
+        ),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
     template_id: Optional[int] = Field(
@@ -51,7 +68,7 @@ class ProductORM(ProductBase, table=True):
             "passive_deletes": True,
         },
     )
-    deleted: bool = Field(default=False)
+    deleted_at: Optional[datetime] = Field(default=None)
 
 
 class ProductCreate(ProductBase):
@@ -74,6 +91,14 @@ class ProductTemplateVersionBase(SQLModel):
 
 class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     __tablename__ = "product_template_version"
+    __table_args__ = (
+        Index(
+            "uq_producttemplate_active",
+            "docker_image_url", "product_id",
+            unique=True,
+            sqlite_where=Column("deleted_at").is_(None),
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     docker_image_url: Optional[str] = Field(default=None)
@@ -101,7 +126,7 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
         },
     )
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    deleted: bool = Field(default=False)
+    deleted_at: Optional[datetime] = Field(default=None)
 
 
 class ProductTemplateVersionCreate(ProductTemplateVersionBase):
@@ -121,16 +146,15 @@ class DeploymentBase(SQLModel):
 
 
 class DeploymentORM(DeploymentBase, table=True):
+    __tablename__ = "deployment"
     __table_args__ = (
-        UniqueConstraint(
-            "user_id",
-            "domainname",
-            "template_id",
-            "deleted",
-            name="uq_deployment_user_domain_template_deleted",
+        Index(
+            "uq_deployment_active",
+            "user_id", "domainname", "template_id",
+            unique=True,
+            sqlite_where=Column("deleted_at").is_(None),
         ),
     )
-    __tablename__ = "deployment"
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
     user: UserORM = Relationship(back_populates="deployments")
@@ -148,7 +172,7 @@ class DeploymentORM(DeploymentBase, table=True):
     )
     domainname: str = Field(index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    deleted: bool = Field(default=False)
+    deleted_at: Optional[datetime] = Field(default=None)
 
 
 class DeploymentCreate(DeploymentBase):

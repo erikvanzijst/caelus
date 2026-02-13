@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime
 
 from app.services import templates, deployments, products, users
 from app.services.errors import IntegrityException
@@ -6,6 +7,12 @@ from tests.conftest import db_session
 
 
 def test_product_name_unique_constraint(db_session):
+    def delete_product(prod: products.ProductORM):
+        orm = db_session.get(products.ProductORM, prod.id)
+        orm.deleted_at = datetime.utcnow()
+        db_session.add(orm)
+        db_session.commit()
+
     # Create first product
     p1 = products.create_product(
         db_session, payload=products.ProductCreate(name="testprod", description="desc")
@@ -15,19 +22,19 @@ def test_product_name_unique_constraint(db_session):
         products.create_product(
             db_session, payload=products.ProductCreate(name="testprod", description="another")
         )
+
     # rollback the failed transaction
     db_session.rollback()
     # Mark first product as deleted manually
-    orm = db_session.get(products.ProductORM, p1.id)
-    orm.deleted = True
-    db_session.add(orm)
-    db_session.commit()
+    delete_product(p1)
 
     # Now creating a product with same name should succeed
     p2 = products.create_product(
         db_session, payload=products.ProductCreate(name="testprod", description="new")
     )
     assert p2.id != p1.id
+    # deletion should still work (the partial index should allow duplicate deleted name entries)
+    delete_product(p2)
 
 
 def test_deployment_unique_constraint(db_session):

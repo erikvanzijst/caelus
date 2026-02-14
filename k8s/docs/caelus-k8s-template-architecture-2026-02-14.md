@@ -27,13 +27,13 @@ Both approaches satisfy per-instance namespace isolation, immutable template ver
 8. Data durability: PVC persistence across chart upgrades.
 9. Domain mutability: domain is mutable config, not identity.
 10. DB is source of truth: Kubernetes is continuously reconciled from DB desired state.
-11. Leverage ecosystem artifacts: Helm/OCI first; optionally Compose conversion only as onboarding tooling.
+11. Leverage ecosystem artifacts: Helm/OCI only in V1 (no raw manifests/Kustomize).
 
 ---
 
 ## State of the art (relevant to Caelus)
 
-### Why Helm as template payload
+### Why Helm as template payload (V1 scope)
 
 Helm remains the most practical packaging format for multi-resource Kubernetes apps. It supports:
 
@@ -68,7 +68,7 @@ Current model (`docker_image_url`) is not enough. Evolve `ProductTemplateVersion
 - `id` (immutable primary key)
 - `product_id`
 - `version_label` (admin-facing label, e.g. `nextcloud-29.0.4`)
-- `package_type` (`helm-chart` initially)
+- `package_type` (`helm-chart` only in V1)
 - `chart_ref` (OCI URL or repo/chart)
 - `chart_version` (optional if using digest)
 - `chart_digest` (strongly preferred for immutability)
@@ -78,7 +78,7 @@ Current model (`docker_image_url`) is not enough. Evolve `ProductTemplateVersion
 - `capabilities`:
   - `supports_domain_change` (bool)
   - `supports_inplace_upgrade` (bool)
-  - `requires_admin_upgrade` (bool)
+  - `requires_admin_upgrade` (bool, default `true` in V1)
   - `requires_maintenance_mode` (bool)
 - `health_checks` (readiness selectors/timeouts)
 - `created_at`, `deleted_at`
@@ -172,11 +172,11 @@ Convergence loop:
 4. Delete namespace.
 5. If namespace stuck in `Terminating`, surface blocking finalizers explicitly; only allow force-finalize as privileged admin runbook.
 
-PVC behavior is controlled by StorageClass reclaim policy and chart uninstall behavior. For normal instance deletion, volumes are expected to be deleted with namespace unless explicit retention policy is configured.
+V1 deletion policy is hard delete of Kubernetes resources for the instance (release, namespace, and namespaced objects). PVC reclaim semantics still depend on StorageClass policy, so platform policy should ensure V1 behavior matches expected hard deletion outcomes.
 
 ## Upgrade flow
 
-Trigger: admin or user requests upgrade `deployment.desired_template_id = new_template_id`.
+Trigger: admin requests upgrade `deployment.desired_template_id = new_template_id` in V1. User-triggered upgrades are deferred, but capability flags keep the door open for enabling them later.
 
 Steps:
 
@@ -200,7 +200,7 @@ Admin flow for new product version:
 4. Attach operational metadata (health checks, upgrade policy).
 5. Publish immutable `ProductTemplateVersion`.
 
-Optional helper tooling can import from existing chart defaults and produce an admin draft; publication freezes the record.
+Optional helper tooling can import from existing chart defaults and produce an admin draft; publication freezes the record. V1 onboarding accepts Helm charts only.
 
 ## Strengths
 
@@ -373,8 +373,8 @@ Adopt Approach B only if you explicitly want to outsource Helm reconciliation/re
 - Explicit StorageClass and backup/restore expectations per product.
 
 5. Deletion policy:
-- Default delete everything with namespace.
-- Optional retention tier for paid plans (retain PVC snapshot before delete).
+- V1 default is hard delete of all instance Kubernetes resources.
+- Data-retention tiers can be added later as a product/plan feature.
 
 6. Drift policy:
 - What fields are user-mutable in-cluster (ideally none).
@@ -408,13 +408,13 @@ Adopt Approach B only if you explicitly want to outsource Helm reconciliation/re
 
 ---
 
-## Clarifying questions for next iteration
+## V1 decisions confirmed
 
-1. Do you want to support only Helm-based templates in V1, or also raw manifest bundles/Kustomize from day one?
-2. For user-initiated upgrades, do you want a per-product policy switch (`admin-only`, `user-allowed`, `user-allowed-with-guardrails`)?
-3. On deletion, should default behavior be hard delete (namespace + PVC gone) or soft-retain data for a grace period?
-4. Do you expect one shared ingress controller/cert-manager stack, or must templates be able to bring their own ingress/cert resources?
-5. Is cross-cluster deployment in scope soon, or can we optimize design for a single cluster first?
+1. Template format: Helm-only.
+2. Upgrade initiator policy: admin-only (with forward-compatible model for later user-initiated upgrades).
+3. Deletion policy: hard deletion of Kubernetes resources for the instance.
+4. Platform assumptions: shared cluster ingress/TLS/load-balancing stack provided centrally.
+5. Target topology: single cluster for V1.
 
 ---
 

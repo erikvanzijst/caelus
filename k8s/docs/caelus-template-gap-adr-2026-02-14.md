@@ -81,8 +81,11 @@ Rationale:
 1. Immutable Helm-backed `ProductTemplateVersion` using OCI digest.
 2. Deployment identity fields (`deployment_uid`, `namespace_name`, `release_name`) independent of domain.
 3. Reconciliation loop with per-deployment queue and retries.
-4. Explicit upgrade endpoint/CLI command with policy checks.
+4. Explicit admin-only upgrade endpoint/CLI command with policy checks.
 5. Status model persisted in DB and shown in API/UI.
+6. Hard deletion of instance Kubernetes resources on delete.
+7. Assume shared cluster ingress/TLS/load-balancing stack.
+8. Single-cluster operation in V1.
 
 ## Migration path to Option B later
 
@@ -102,6 +105,14 @@ If operational burden grows, introduce Flux as a reconciliation backend while pr
 
 3. Unsafe upgrades for certain apps.
 - Mitigation: per-template capability flags; enforce admin-only upgrades where needed.
+
+## Confirmed inputs (2026-02-14)
+
+1. Template format is Helm-only for simplicity.
+2. Upgrades are admin-only in V1; design remains forward-compatible for user-driven upgrades.
+3. V1 deletion is hard delete of Kubernetes resources.
+4. Ingress/TLS/load-balancing are centralized cluster concerns.
+5. V1 target is a single Kubernetes cluster.
 
 ## References
 

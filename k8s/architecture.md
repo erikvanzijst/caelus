@@ -394,7 +394,7 @@ service:
 
 ingress:
   enabled: true
-  className: nginx
+  className: traefik
   annotations: {}
   host: ""
 
@@ -677,3 +677,61 @@ Keep these system-managed and non-editable by users:
 - Multi-cluster scheduling
 - Non-Helm templates
 - Built-in cert-manager/ingress provisioning (cluster provides these)
+
+---
+
+## 6. Manual Validation Checklist (hello-static)
+
+Use this checklist to validate a new chart/template manually before wiring it into automated reconciliation.
+
+1. Cluster connectivity:
+
+```bash
+export KUBECONFIG=/workspace/k8s/kubeconfigs/dev-k3s.yaml
+kubectl config current-context
+kubectl get nodes -o wide
+```
+
+2. Create test namespace:
+
+```bash
+kubectl create namespace hello-manual
+kubectl get ns hello-manual
+```
+
+3. Install chart:
+
+```bash
+helm upgrade --install hello-manual ./k8s/hello-static-chart \
+  --namespace hello-manual \
+  --set ingress.enabled=true \
+  --set ingress.className=traefik \
+  --set ingress.host=hello.app.deprutser.be \
+  --set user.message="Hello from manual deploy"
+```
+
+4. Verify resources:
+
+```bash
+kubectl -n hello-manual get pods,deploy,svc,ingress,pvc
+kubectl -n hello-manual rollout status deploy/hello-manual-hello-static --timeout=120s
+```
+
+5. Verify HTTP response through ingress:
+
+```bash
+curl -ik https://hello.app.deprutser.be
+```
+
+Expected body:
+
+```html
+<html><body><h1>Hello from manual deploy</h1></body></html>
+```
+
+6. Cleanup:
+
+```bash
+helm uninstall hello-manual -n hello-manual
+kubectl delete namespace hello-manual
+```

@@ -2,12 +2,14 @@ FROM docker:cli AS dockercli
 FROM docker/buildx-bin AS buildxbin
 FROM bitnami/kubectl AS kubectl
 FROM derailed/k9s AS k9s
+FROM d3fk/helm:latest AS helm
 FROM mcr.microsoft.com/devcontainers/python:3.13-trixie
 
 COPY --from=k9s /bin/k9s /usr/local/bin/k9s
 COPY --from=kubectl /opt/bitnami/kubectl/bin/kubectl /usr/local/bin/kubectl
 COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=buildxbin /buildx /usr/libexec/docker/cli-plugins/docker-buildx
+COPY --from=helm /helm /usr/local/bin/helm
 
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \

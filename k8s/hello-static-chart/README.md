@@ -16,6 +16,7 @@ Demo Helm chart for Caelus architecture work.
 ```bash
 helm template demo ./k8s/hello-static-chart \
   --set ingress.enabled=true \
+  --set ingress.className=traefik \
   --set ingress.host=hello.example.com \
   --set user.message="Hello from values"
 ```

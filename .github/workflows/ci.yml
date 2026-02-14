@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build and run dev container tests
+        uses: devcontainers/ci@v0.3
+        with:
+          # Image name for caching; not pushed
+          imageName: ghcr.io/${{ github.repository }}-devcontainer
+          push: never
+          # Command to install dependencies and run tests inside container
+          runCmd: |
+            cd api
+            uv sync
+            uv run alembic upgrade head
+            uv run pytest -q

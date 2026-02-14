@@ -24,4 +24,4 @@ jobs:
             cd api
             uv sync
             uv run alembic upgrade head
-            uv run pytest -q
+            uv run pytest -s

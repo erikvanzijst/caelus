@@ -35,11 +35,43 @@ Per deployment, it ensures:
 
 Use immutable identity fields, never domain name, for Kubernetes naming:
 
-- `deployment.deployment_uid` (UUID, immutable)
-- `deployment.namespace_name` (e.g. `c-<uid8>`)
-- `deployment.release_name` (e.g. `app-<uid8>`)
+- `deployment.deployment_uid` (immutable slug id, not a UUID)
+- `deployment.namespace_name` (same value as `deployment_uid` in V1)
+- `deployment.release_name` (defaults to same value as `deployment_uid` in V1)
 
 `deployment.domainname` is mutable config injected into Helm values.
+
+### 1.2.1 Naming contract
+
+Requested format for `deployment_uid`:
+
+`{product_slug}-{user_slug}-{suffix6}`
+
+Where:
+
+1. `product_slug`: product name slugified to lowercase `[a-z0-9-]`.
+2. `user_slug`: user email slugified to lowercase `[a-z0-9-]` (replace non-alnum with `-`).
+3. `suffix6`: six random base36 chars (`[0-9a-z]{6}`) for uniqueness.
+
+Kubernetes DNS-label constraints require:
+
+- max length 63
+- charset `[a-z0-9-]`
+- must start/end with alphanumeric
+
+So generation must enforce:
+
+1. Build base: `{product_slug}-{user_slug}`.
+2. Reserve 7 chars for `-{suffix6}`.
+3. Truncate base to at most 56 chars.
+4. Trim leading/trailing `-` after truncation.
+5. If base is empty after trimming, fallback to `dep`.
+6. Final value: `{base}-{suffix6}`.
+
+V1 rule:
+
+- `namespace_name = deployment_uid`
+- `release_name = deployment_uid`
 
 ## 1.3 Reconciler pseudocode
 
@@ -143,8 +175,12 @@ build_desired_state(dep):
     raise FatalError("unsupported package_type")
 
   # Ensure immutable identity fields exist
-  namespace_name = dep.namespace_name or generate_namespace(dep.deployment_uid)
-  release_name   = dep.release_name or generate_release(dep.deployment_uid)
+  deployment_uid = dep.deployment_uid or generate_deployment_uid(
+    product_name = dep.template.product.name,
+    user_email   = dep.user.email
+  )
+  namespace_name = dep.namespace_name or deployment_uid
+  release_name   = dep.release_name or deployment_uid
 
   # Build values in deterministic precedence
   # 1) template defaults
@@ -159,7 +195,7 @@ build_desired_state(dep):
     },
     "caelus": {
       "deploymentId": dep.id,
-      "deploymentUid": dep.deployment_uid,
+      "deploymentUid": deployment_uid,
       "namespace": namespace_name
     }
   }
@@ -554,7 +590,9 @@ The full demo chart is committed at `k8s/hello-static-chart/`.
 2. API transaction:
    - validates user exists
    - validates template exists and is active
-   - allocates immutable `deployment_uid`, `namespace_name`, `release_name`
+   - allocates immutable `deployment_uid` using `{product_slug}-{user_slug}-{suffix6}` contract
+   - sets `namespace_name = deployment_uid`
+   - sets `release_name = deployment_uid`
    - sets `desired_template_id = template_id`, `status = pending`
    - inserts deployment row
    - enqueues reconcile job (`reason=create`)

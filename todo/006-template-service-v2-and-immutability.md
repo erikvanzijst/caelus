@@ -4,7 +4,7 @@
 Implement full template lifecycle rules for Helm metadata, schema/default values, and immutable version records.
 
 ## Depends On
-`005-sqlmodel-models-and-read-write-schemas.md`
+`002-sqlmodel-models-and-read-write-schemas.md`
 
 ## Scope
 Update `api/app/services/templates.py`:

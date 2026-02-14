@@ -4,8 +4,8 @@
 Implement queue operations in `api/app/services/reconcile_jobs.py` using DB transactions and `SKIP LOCKED` semantics.
 
 ## Depends On
-`004-alembic-reconcile-job-table.md`
-`005-sqlmodel-models-and-read-write-schemas.md`
+`005-alembic-reconcile-job-table.md`
+`002-sqlmodel-models-and-read-write-schemas.md`
 
 ## Scope
 Create service with methods:

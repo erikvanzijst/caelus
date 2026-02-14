@@ -1,10 +1,11 @@
-# Issue 004: Alembic Migration For Reconcile Job Queue Table
+# Issue 005: Alembic Migration For Reconcile Job Queue Table
 
 ## Goal
 Create Postgres-backed queue table for worker orchestration with retry metadata.
 
 ## Depends On
 `001-foundation-decisions-and-contracts.md`
+`002-sqlmodel-models-and-read-write-schemas.md`
 
 ## Scope
 Create table `deployment_reconcile_job` with fields:
@@ -19,6 +20,11 @@ Create table `deployment_reconcile_job` with fields:
 9. `last_error` (text nullable).
 10. `created_at` (datetime non-null).
 11. `updated_at` (datetime non-null).
+
+Migration authoring flow:
+1. First add ORM model for reconcile job table (Issue 002).
+2. Generate baseline migration with `alembic revision --autogenerate`.
+3. Manually tune indexes/constraints for Postgres and SQLite compatibility.
 
 ## Indexes
 1. `(status, run_after, id)` for dequeue.

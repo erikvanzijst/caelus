@@ -48,3 +48,6 @@ None.
 
 ## Notes For Next Agent
 Use this issue to prevent drift in status/reason vocabulary before migrations and services are implemented.
+
+Execution order note:
+Run issues in numeric order. ORM/schema modeling is Issue 002, followed by Alembic migrations in Issues 003/004/005.

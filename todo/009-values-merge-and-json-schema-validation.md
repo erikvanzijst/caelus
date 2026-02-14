@@ -4,7 +4,7 @@
 Build reusable utilities for scoped value merge and schema validation used by API and reconciler.
 
 ## Depends On
-`005-sqlmodel-models-and-read-write-schemas.md`
+`002-sqlmodel-models-and-read-write-schemas.md`
 
 ## Scope
 Create module, e.g. `api/app/services/template_values.py`, with functions:

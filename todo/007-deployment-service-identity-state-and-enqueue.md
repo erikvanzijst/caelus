@@ -4,7 +4,7 @@
 Update deployment service so create/update/delete operations drive reconciliation through queue jobs.
 
 ## Depends On
-`005-sqlmodel-models-and-read-write-schemas.md`
+`002-sqlmodel-models-and-read-write-schemas.md`
 `006-template-service-v2-and-immutability.md`
 
 ## Scope

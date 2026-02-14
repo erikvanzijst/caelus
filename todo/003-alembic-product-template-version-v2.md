@@ -1,10 +1,11 @@
-# Issue 002: Alembic Migration For ProductTemplateVersion V2 Fields
+# Issue 003: Alembic Migration For ProductTemplateVersion V2 Fields
 
 ## Goal
 Expand `product_template_version` from `docker_image_url`-only to immutable Helm template metadata plus schema/default values.
 
 ## Depends On
 `001-foundation-decisions-and-contracts.md`
+`002-sqlmodel-models-and-read-write-schemas.md`
 
 ## Scope
 Add a new Alembic migration after current head with columns on `product_template_version`:
@@ -17,6 +18,11 @@ Add a new Alembic migration after current head with columns on `product_template
 7. `values_schema_json` (JSON/text type compatible with sqlite+postgres).
 8. `capabilities_json` (JSON/text, optional in V1).
 9. `health_timeout_sec` (int, nullable with default fallback in code).
+
+Migration authoring flow:
+1. First update ORM models (Issue 002).
+2. Generate baseline migration with `alembic revision --autogenerate`.
+3. Manually adjust migration for sqlite/postgres compatibility and backfill logic.
 
 ## Migration Details
 1. Keep existing `docker_image_url` for backward compatibility during rollout.
@@ -31,7 +37,7 @@ Add a new Alembic migration after current head with columns on `product_template
 ## Acceptance Criteria
 1. Alembic upgrade/downgrade works cleanly.
 2. `pytest` migrations tests or equivalent smoke checks pass for sqlite test DB.
-3. New columns appear in SQLModel metadata after model updates (Issue 005).
+3. Migration output is aligned with ORM model definitions from Issue 002.
 
 ## Test Requirements
 1. Add migration test verifying new columns exist.

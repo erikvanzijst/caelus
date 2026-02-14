@@ -1,10 +1,11 @@
-# Issue 003: Alembic Migration For Deployment V2 Fields
+# Issue 004: Alembic Migration For Deployment V2 Fields
 
 ## Goal
 Add identity, desired/applied template tracking, status, and user values storage for reconciliation.
 
 ## Depends On
 `001-foundation-decisions-and-contracts.md`
+`002-sqlmodel-models-and-read-write-schemas.md`
 
 ## Scope
 Add migration columns to `deployment`:
@@ -21,6 +22,11 @@ Add migration columns to `deployment`:
 
 Also add to `user`:
 1. `is_admin` (boolean, non-null, default `false`).
+
+Migration authoring flow:
+1. First update ORM models (Issue 002).
+2. Generate baseline migration with `alembic revision --autogenerate`.
+3. Manually adjust migration for sqlite/postgres differences, backfill, and constraints.
 
 ## Backfill Rules
 1. `deployment_uid` generated with naming helper:

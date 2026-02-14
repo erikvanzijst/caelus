@@ -38,3 +38,16 @@ The Typer CLI (`python -m app.cli …`) mirrors the functionality of the REST
 API. Any operation available via an HTTP endpoint can be performed with the
 equivalent CLI command, and vice‑versa. This ensures both interfaces stay in
 lockstep.
+
+## V1 Reconciliation Constraints
+
+1. Templates are Helm-only (`package_type=helm-chart`).
+2. Database is the source of truth for desired deployment state.
+3. Reconciliation queue is DB-backed (Postgres path uses `FOR UPDATE SKIP LOCKED`).
+4. User-editable template values are scoped under `values.user.*`.
+5. Admin-only upgrade policy is enforced via `user.is_admin`.
+6. Deployment identity naming contract:
+   - `deployment_uid = {product_slug}-{user_slug}-{suffix6}`
+   - DNS label-safe (`[a-z0-9-]`, max 63 chars)
+   - `namespace_name = deployment_uid`
+   - `release_name = deployment_uid`

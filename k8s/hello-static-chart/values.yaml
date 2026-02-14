@@ -1,0 +1,23 @@
+image:
+  repository: nginx
+  tag: "1.27"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  host: ""
+
+storage:
+  size: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+
+user:
+  message: "Hello from Caelus"

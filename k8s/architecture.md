@@ -88,10 +88,10 @@ reconcile_apply(dep, desired):
   ensure_namespace(desired.namespace_name)
 
   chart = resolve_chart(desired.template.chart_ref, desired.template.chart_version, desired.template.chart_digest)
-  values = merge_values(
-    desired.template.default_values,
-    dep.user_values,
-    system_overrides(dep)  # domain, namespace, ingressClass, etc.
+  values = merge_values_scoped(
+    defaults         = desired.template.default_values,
+    user_scope_delta = dep.user_values_json,    # merged only under values.user
+    system_overrides = system_overrides(dep)    # domain, namespace, ingressClass, etc.
   )
   validate_against_schema(values, desired.template.values_schema)
 
@@ -129,14 +129,123 @@ reconcile_delete(dep):
   set_last_reconcile(dep.id, now)
 ```
 
-## 1.4 Reconciliation semantics
+## 1.4 `build_desired_state()` pseudocode
+
+```text
+build_desired_state(dep):
+  # dep contains desired_template_id, domainname, user_values, identity fields
+  tmpl = get_template(dep.desired_template_id)
+  if tmpl is null or tmpl.deleted_at is not null:
+    raise FatalError("desired template missing")
+
+  # V1 scope guardrails
+  if tmpl.package_type != "helm-chart":
+    raise FatalError("unsupported package_type")
+
+  # Ensure immutable identity fields exist
+  namespace_name = dep.namespace_name or generate_namespace(dep.deployment_uid)
+  release_name   = dep.release_name or generate_release(dep.deployment_uid)
+
+  # Build values in deterministic precedence
+  # 1) template defaults
+  # 2) user-provided values under "user" scope only
+  # 3) system overrides
+  defaults = tmpl.default_values_json or {}
+  uservals = dep.user_values_json or {}
+  sysvals  = {
+    "ingress": {
+      "host": dep.domainname,
+      "className": platform_ingress_class
+    },
+    "caelus": {
+      "deploymentId": dep.id,
+      "deploymentUid": dep.deployment_uid,
+      "namespace": namespace_name
+    }
+  }
+
+  # Merge only into defaults.user to clearly isolate user-editable values
+  merged = deep_copy(defaults)
+  merged["user"] = deep_merge(defaults.get("user", {}), uservals)
+  merged = deep_merge(merged, sysvals)
+
+  # Validate final values against immutable template schema
+  validate_json_schema(merged, tmpl.values_schema_json)
+
+  return DesiredState(
+    deployment_id      = dep.id,
+    namespace_name     = namespace_name,
+    release_name       = release_name,
+    chart_ref          = tmpl.chart_ref,
+    chart_version      = tmpl.chart_version,
+    chart_digest       = tmpl.chart_digest,
+    values             = merged,
+    health_timeout_sec = tmpl.health_timeout_sec or 600
+  )
+```
+
+## 1.5 Command/service decomposition (CLI + worker share same functions)
+
+To avoid monolithic worker code, split reconciliation into service functions in `api/app/services/` and expose operator-style admin commands in `api/app/cli.py`.
+
+Recommended modules:
+
+- `api/app/services/reconcile_jobs.py`
+  - `enqueue_job(...)`
+  - `list_jobs(...)`
+  - `claim_next_job(...)`
+  - `mark_job_done(...)`
+  - `requeue_job(...)`
+  - `mark_job_failed(...)`
+- `api/app/services/reconcile.py`
+  - `build_desired_state(...)`
+  - `reconcile_deployment(...)`
+  - `reconcile_apply(...)`
+  - `reconcile_delete(...)`
+  - `run_worker_once(...)`
+  - `run_drift_scan(...)`
+
+Recommended CLI commands (examples):
+
+- `reconcile <deployment_id>`
+- `enqueue-reconcile <deployment_id> --reason <reason>`
+- `list-reconcile-jobs [--status queued|running|failed]`
+- `run-worker-once`
+- `run-worker-loop --concurrency 4 --poll-seconds 2`
+- `requeue-job <job_id>`
+- `fail-job <job_id> --error \"...\"`
+- `scan-drift`
+
+Command naming convention: use `kebab-case` for all CLI commands to match existing Typer style.
+
+Worker loop then becomes a thin orchestrator:
+
+```text
+run_worker_loop():
+  while true:
+    job = reconcile_jobs.claim_next_job(session)
+    if no job:
+      sleep(poll_interval)
+      continue
+    try:
+      reconcile.reconcile_deployment(session, deployment_id=job.deployment_id)
+      reconcile_jobs.mark_job_done(session, job.id)
+    except RetryableError as e:
+      reconcile_jobs.requeue_job(session, job.id, e.message)
+    except FatalError as e:
+      reconcile_jobs.mark_job_failed(session, job.id, e.message)
+```
+
+This gives parity between automation and manual admin replay in terminal.
+
+## 1.6 Reconciliation semantics
 
 - Idempotent: every reconcile can be rerun safely.
 - Per-instance isolation: one failed deployment does not block others.
 - Bounded retries: exponential backoff with max delay.
 - Drift correction: periodic requeue + event-triggered requeue.
 
-## 1.5 Status model (deployment table)
+## 1.7 Status model (deployment table)
 
 Recommended statuses:
 
@@ -224,11 +333,26 @@ Start with Postgres queue. Revisit external broker only if:
 - strict cross-service event contracts are required
 - multi-cluster orchestration is introduced
 
+## 2.5 Runtime topology (API vs worker)
+
+Deploy reconciliation runtime as a separate Kubernetes Deployment (same image/codebase as API, different command/entrypoint).
+
+Recommended:
+
+- `caelus-api` Deployment: serves REST API/CLI-facing behavior
+- `caelus-worker` Deployment: runs `run-worker-loop`
+
+Optional:
+
+- `caelus-drift-scan` CronJob: periodically runs `scan-drift` and exits
+
+This keeps long-running reconciliation independent from request-serving API pods.
+
 ---
 
 ## 3. Example App from Scratch (Hello World)
 
-Goal: deploy an app where nginx serves a static HTML file from a PVC; HTML content comes from Helm value `message`.
+Goal: deploy an app where nginx serves a static HTML file from a PVC; HTML content comes from Helm value `user.message`.
 
 ## 3.1 Chart structure
 
@@ -236,7 +360,9 @@ Goal: deploy an app where nginx serves a static HTML file from a PVC; HTML conte
 hello-static/
   Chart.yaml
   values.yaml
+  values.schema.json
   templates/
+    _helpers.tpl
     pvc.yaml
     deployment.yaml
     service.yaml
@@ -271,7 +397,6 @@ ingress:
   className: nginx
   annotations: {}
   host: ""
-  tls: false
 
 storage:
   size: 1Gi
@@ -279,8 +404,17 @@ storage:
     - ReadWriteOnce
   storageClassName: ""
 
-message: "Hello from Caelus"
+user:
+  message: "Hello from Caelus"
 ```
+
+### `values.schema.json`
+
+`values.schema.json` defines which values are valid and is used by:
+
+- Helm at render/upgrade time
+- Caelus API validation
+- UI form generation (see dynamic values section below)
 
 ### `templates/pvc.yaml`
 
@@ -326,7 +460,7 @@ spec:
         - -c
         - |
           cat > /data/index.html <<'HTML'
-          <html><body><h1>{{ .Values.message }}</h1></body></html>
+          <html><body><h1>{{ .Values.user.message }}</h1></body></html>
           HTML
         volumeMounts:
         - name: data
@@ -389,7 +523,7 @@ spec:
 {{- end }}
 ```
 
-Note: include `_helpers.tpl` in a real chart for `hello-static.name` and `hello-static.fullname` helpers.
+The full demo chart is committed at `k8s/hello-static-chart/`.
 
 ## 3.2 Admin registration flow in Caelus
 
@@ -403,7 +537,7 @@ Note: include `_helpers.tpl` in a real chart for `hello-static.name` and `hello-
    - `chart_version = "0.1.0"`
    - `chart_digest = "sha256:..."` (preferred)
    - `default_values_json` from chart defaults
-   - `values_schema_json` including `message` as configurable string
+   - `values_schema_json` including `user.message` as configurable string
    - `capabilities_json` with `requires_admin_upgrade=true`
 
 3. Admin marks product canonical template (`product.template_id = <new_template_id>`).
@@ -415,7 +549,7 @@ Note: include `_helpers.tpl` in a real chart for `hello-static.name` and `hello-
    - payload includes:
      - `template_id` (canonical template)
      - `domainname` (e.g., `hello.userdomain.example`)
-     - optional `user_values = { "message": "Hello Alice" }`
+     - optional `user_values = { "message": "Hello Alice" }` (this maps to `values.user`)
 
 2. API transaction:
    - validates user exists
@@ -430,7 +564,7 @@ Note: include `_helpers.tpl` in a real chart for `hello-static.name` and `hello-
    - creates namespace (if missing)
    - merges values:
      - template defaults
-     - user overrides (`message`)
+     - user-scope overrides (`user.message`)
      - system overrides (`ingress.host = domainname`, namespace-specific labels)
    - runs Helm install/upgrade
    - waits for health
@@ -457,7 +591,56 @@ Note: include `_helpers.tpl` in a real chart for `hello-static.name` and `hello-
 - Drift:
   - if someone edits/deletes Deployment manually, periodic drift reconcile reruns Helm and restores expected state
 
-## 3.5 Delete flow (V1 hard delete)
+## 3.5 Dynamic application values and UI integration
+
+Application-specific values (example: `user.message`) are modeled as user-overridable fields constrained by template schema.
+
+Data model split:
+
+- `ProductTemplateVersion.values_schema_json`: immutable full JSON schema for chart values
+- `ProductTemplateVersion.default_values_json`: immutable default values
+- `Deployment.user_values_json`: per-instance overrides entered by user/admin
+
+### 3.5.1 User-overridable fields under `user` scope
+
+V1 decision: user-editable fields are only those declared under `values.user` in `values_schema_json`.
+
+Practical extraction algorithm:
+
+1. Read `values_schema_json.properties.user`.
+2. If missing, user input is disabled for that template (valid and expected for templates with no dynamic user values).
+3. Include leaf fields with simple input semantics:
+   - `type` in `{string, integer, number, boolean}`
+   - or explicit `enum`
+4. Exclude fields marked `readOnly: true` if present.
+5. For arrays/objects under `user`:
+   - include only when schema is bounded and can be rendered safely in UI
+   - otherwise hide in V1
+6. UI uses schema metadata (`title`, `description`, `default`, `enum`, `minimum`, `maximum`, `pattern`) to render controls.
+
+This gives a clear ownership boundary without introducing a second schema field in V1.
+
+### 3.5.2 Validation path
+
+Recommended flow:
+
+1. Admin publishes template with full `values_schema_json`.
+2. UI fetches template metadata before rendering deployment form.
+3. API/UI derive editable fields from `values_schema_json.properties.user`.
+4. User submits `user_values_json`.
+5. API validates `user_values_json` against the `user` subschema.
+6. Reconciler merges `user_values_json` into `default_values_json.user`, applies system overrides, and validates final merged payload against full `values_schema_json`.
+
+For `hello-static`, expose:
+
+- `user.message` (string, editable)
+
+Keep these system-managed and non-editable by users:
+
+- `ingress.host` (derived from deployment domain)
+- platform/internal labels and namespace metadata
+
+## 3.6 Delete flow (V1 hard delete)
 
 1. User/admin deletes deployment (soft delete in DB via `deleted_at`).
 2. API enqueues `reason=delete`.
@@ -478,6 +661,13 @@ Note: include `_helpers.tpl` in a real chart for `hello-static.name` and `hello-
 5. Add periodic drift scanner.
 6. Add deployment status API fields for UI visibility.
 7. Add integration test with kind/k3s: create, update, delete lifecycle.
+
+---
+
+## Clarifying decisions applied
+
+1. `values_schema_json.properties.user` is optional.
+2. Templates without user-editable fields omit `user` entirely; UI shows no dynamic input fields.
 
 ---
 

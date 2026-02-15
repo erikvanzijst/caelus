@@ -107,9 +107,8 @@ def create_deployment(user_id: int, template_id: int, domainname: str) -> None:
         try:
             deployment = deployment_service.create_deployment(
                 session,
-                payload=DeploymentCreate(
-                    user_id=user_id, template_id=template_id, domainname=domainname
-                ),
+                user_id=user_id,
+                payload=DeploymentCreate(template_id=template_id, domainname=domainname),
             )
         except NotFoundError:
             raise typer.Exit(code=1)

@@ -10,16 +10,36 @@ from app.provisioner import provisioner
 from typing import cast
 from app.services import users as user_service
 from app.services.errors import IntegrityException, NotFoundException
+from app.services.reconcile_naming import generate_deployment_uid
 
 
-def create_deployment(session: Session, *, payload: DeploymentCreate) -> DeploymentRead:
-    deployment = DeploymentORM.model_validate(payload)
+def create_deployment(session: Session, *, user_id: int, payload: DeploymentCreate) -> DeploymentRead:
     # ensure that the user exists
-    user_service.get_user(session, user_id=deployment.user_id)
+    user = user_service.get_user(session, user_id=user_id)
     # ensure that the template exists and retrieve it to validate product association
-    if not session.get(ProductTemplateVersionORM, deployment.template_id):
+    template = session.get(ProductTemplateVersionORM, payload.template_id)
+    if not template:
         raise NotFoundException("Template not found")
-    # Optionally, could verify product association if needed
+
+    product_name = template.product.name if template.product else "product"
+    deployment_uid = generate_deployment_uid(
+        product_name=product_name,
+        user_email=user.email,
+    )
+
+    deployment_payload = payload.model_dump(by_alias=False)
+    deployment_payload.update(
+        {
+            "user_id": user_id,
+            "desired_template_id": payload.template_id,
+            "deployment_uid": deployment_uid,
+            "namespace_name": deployment_uid,
+            "release_name": deployment_uid,
+            "status": "pending",
+            "generation": 1,
+        }
+    )
+    deployment = DeploymentORM.model_validate(deployment_payload)
 
     session.add(deployment)
     try:

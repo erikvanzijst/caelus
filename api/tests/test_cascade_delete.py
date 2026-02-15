@@ -29,7 +29,11 @@ def test_product_delete_cascades_templates_and_deployments(db_session):
     deployment = DeploymentORM(
         user_id=user.id,
         template_id=template.id,
+        desired_template_id=template.id,
         domainname="demo.example.com",
+        deployment_uid="demo-cascade-example-com-000001",
+        namespace_name="demo-cascade-example-com-000001",
+        release_name="demo-cascade-example-com-000001",
     )
     db_session.add(deployment)
     db_session.commit()

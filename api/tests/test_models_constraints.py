@@ -53,16 +53,18 @@ def test_deployment_unique_constraint(db_session):
     # Create first deployment
     dep1 = deployments.create_deployment(
         db_session,
+        user_id=user.id,
         payload=deployments.DeploymentCreate(
-            user_id=user.id, template_id=template.id, domainname="example.com"
+            template_id=template.id, domainname="example.com"
         ),
     )
     # Attempt duplicate deployment
     with pytest.raises(IntegrityException):
         deployments.create_deployment(
             db_session,
+            user_id=user.id,
             payload=deployments.DeploymentCreate(
-                user_id=user.id, template_id=template.id, domainname="example.com"
+                template_id=template.id, domainname="example.com"
             ),
         )
     # rollback the failed transaction
@@ -73,8 +75,9 @@ def test_deployment_unique_constraint(db_session):
     # Now creating same deployment should succeed
     dep2 = deployments.create_deployment(
         db_session,
+        user_id=user.id,
         payload=deployments.DeploymentCreate(
-            user_id=user.id, template_id=template.id, domainname="example.com"
+            template_id=template.id, domainname="example.com"
         ),
     )
     assert dep2.id != dep1.id

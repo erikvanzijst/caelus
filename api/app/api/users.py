@@ -38,8 +38,7 @@ def get_user(user_id: int, session: Session = Depends(get_session)) -> UserRead:
 def create_deployment(
     user_id: int, payload: DeploymentCreate, session: Session = Depends(get_session)
 ) -> DeploymentRead:
-    payload.user_id = user_id
-    return deployment_service.create_deployment(session, payload=payload)
+    return deployment_service.create_deployment(session, user_id=user_id, payload=payload)
 
 
 @router.get("/{user_id}/deployments", response_model=list[DeploymentRead])

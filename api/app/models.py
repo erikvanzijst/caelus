@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, Any
 
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import Column, ForeignKey, Integer, Index, JSON
+from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String
 
 
 class UserBase(SQLModel):
@@ -193,6 +193,18 @@ class DeploymentORM(DeploymentBase, table=True):
             unique=True,
             sqlite_where=Column("deleted_at").is_(None),
         ),
+        Index(
+            "uq_deployment_uid_active",
+            "deployment_uid",
+            unique=True,
+            sqlite_where=Column("deleted_at").is_(None),
+        ),
+        Index(
+            "uq_namespace_name_active",
+            "namespace_name",
+            unique=True,
+            sqlite_where=Column("deleted_at").is_(None),
+        ),
     )
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
@@ -209,12 +221,11 @@ class DeploymentORM(DeploymentBase, table=True):
         back_populates="deployments",
         sa_relationship_kwargs={"foreign_keys": "DeploymentORM.template_id"},
     )
-    desired_template_id: Optional[int] = Field(
-        default=None,
+    desired_template_id: int = Field(
         sa_column=Column(
             Integer,
             ForeignKey("product_template_version.id"),
-            nullable=True,
+            nullable=False,
             index=True,
         ),
     )
@@ -234,15 +245,21 @@ class DeploymentORM(DeploymentBase, table=True):
         sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id"},
     )
     domainname: str = Field(index=True)
-    deployment_uid: Optional[str] = Field(default=None, index=True)
-    namespace_name: Optional[str] = Field(default=None, index=True)
-    release_name: Optional[str] = Field(default=None, index=True)
+    deployment_uid: str = Field(
+        sa_column=Column(String(), nullable=False, index=True),
+    )
+    namespace_name: str = Field(
+        sa_column=Column(String(), nullable=False, index=True),
+    )
+    release_name: str = Field(
+        sa_column=Column(String(), nullable=False, index=True),
+    )
     user_values_json: Optional[dict[str, Any]] = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
-    status: str = Field(default="pending", nullable=False)
+    status: str = Field(default="pending", nullable=False, index=True)
     generation: int = Field(default=1, nullable=False)
-    last_error: Optional[str] = Field(default=None)
+    last_error: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
     last_reconcile_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     deleted_at: Optional[datetime] = Field(default=None)
@@ -255,8 +272,12 @@ class DeploymentORM(DeploymentBase, table=True):
     )
 
 
-class DeploymentCreate(DeploymentBase):
-    pass
+class DeploymentCreate(SQLModel):
+    template_id: int
+    domainname: str
+    user_values_json: Optional[dict[str, Any]] = Field(default=None, alias="user_values")
+
+    model_config = {"populate_by_name": True}
 
 
 class DeploymentUpdate(SQLModel):

@@ -9,7 +9,7 @@ from app.api.utils import register_exception_handlers
 
 app = FastAPI(
     title="Caelus Deploy",
-    description="FastAPI service for provisioning user-owned webapp instances on cloud infrastructure",
+    description="Service for provisioning user-owned webapp instances on cloud infrastructure",
     version="0.1.0",
 )
 app.add_middleware(

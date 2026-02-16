@@ -1,14 +1,14 @@
 # Issue 008: Reconcile Job Service Implementation
 
 ## Goal
-Implement queue operations in `api/app/services/reconcile_jobs.py` using DB transactions and `SKIP LOCKED` semantics.
+Implement queue operations in `api/app/services/jobs.py` using DB transactions and `SKIP LOCKED` semantics.
 
 ## Depends On
 `005-alembic-reconcile-job-table.md`
 `002-sqlmodel-models-and-read-write-schemas.md`
 
 ## Scope
-Create service with methods:
+Create a new service with methods:
 1. `enqueue_job(session, deployment_id, reason, run_after=None)`.
 2. `list_jobs(session, status=None, deployment_id=None, limit=...)`.
 3. `claim_next_job(session, worker_id)`.

@@ -36,8 +36,6 @@ Per deployment, it ensures:
 Use immutable identity fields, never domain name, for Kubernetes naming:
 
 - `deployment.deployment_uid` (immutable slug id, not a UUID)
-- `deployment.namespace_name` (same value as `deployment_uid` in V1)
-- `deployment.release_name` (defaults to same value as `deployment_uid` in V1)
 
 `deployment.domainname` is mutable config injected into Helm values.
 
@@ -71,7 +69,6 @@ So generation must enforce:
 V1 rule:
 
 - `namespace_name = deployment_uid`
-- `release_name = deployment_uid`
 
 ## 1.3 Reconciler pseudocode
 
@@ -170,17 +167,12 @@ build_desired_state(dep):
   if tmpl is null or tmpl.deleted_at is not null:
     raise FatalError("desired template missing")
 
-  # V1 scope guardrails
-  if tmpl.package_type != "helm-chart":
-    raise FatalError("unsupported package_type")
-
   # Ensure immutable identity fields exist
   deployment_uid = dep.deployment_uid or generate_deployment_uid(
     product_name = dep.template.product.name,
     user_email   = dep.user.email
   )
   namespace_name = dep.namespace_name or deployment_uid
-  release_name   = dep.release_name or deployment_uid
 
   # Build values in deterministic precedence
   # 1) template defaults
@@ -211,7 +203,6 @@ build_desired_state(dep):
   return DesiredState(
     deployment_id      = dep.id,
     namespace_name     = namespace_name,
-    release_name       = release_name,
     chart_ref          = tmpl.chart_ref,
     chart_version      = tmpl.chart_version,
     chart_digest       = tmpl.chart_digest,
@@ -226,14 +217,14 @@ To avoid monolithic worker code, split reconciliation into service functions in 
 
 Recommended modules:
 
-- `api/app/services/reconcile_jobs.py`
+- `api/app/services/jobs.py`
   - `enqueue_job(...)`
   - `list_jobs(...)`
   - `claim_next_job(...)`
   - `mark_job_done(...)`
   - `requeue_job(...)`
   - `mark_job_failed(...)`
-- `api/app/services/reconcile.py`
+- `api/app/services/reconciler.py`
   - `build_desired_state(...)`
   - `reconcile_deployment(...)`
   - `reconcile_apply(...)`

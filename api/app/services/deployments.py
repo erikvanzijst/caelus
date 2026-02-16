@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
+from typing import cast
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
@@ -7,39 +8,23 @@ from sqlmodel import Session, select
 
 from app.models import DeploymentRead, DeploymentCreate, DeploymentORM, ProductTemplateVersionORM
 from app.provisioner import provisioner
-from typing import cast
 from app.services import users as user_service
 from app.services.errors import IntegrityException, NotFoundException
 from app.services.reconcile_naming import generate_deployment_uid
 
 
-def create_deployment(session: Session, *, user_id: int, payload: DeploymentCreate) -> DeploymentRead:
+def create_deployment(session: Session, *, payload: DeploymentCreate) -> DeploymentRead:
     # ensure that the user exists
-    user = user_service.get_user(session, user_id=user_id)
+    user = user_service.get_user(session, user_id=payload.user_id)
     # ensure that the template exists and retrieve it to validate product association
-    template = session.get(ProductTemplateVersionORM, payload.template_id)
+    template = session.get(ProductTemplateVersionORM, payload.desired_template_id)
     if not template:
         raise NotFoundException("Template not found")
-
-    product_name = template.product.name if template.product else "product"
     deployment_uid = generate_deployment_uid(
-        product_name=product_name,
-        user_email=user.email,
-    )
+        product_name=template.product.name,
+        user_email=user.email)
+    deployment: DeploymentORM = DeploymentORM.model_validate(dict(deployment_uid=deployment_uid, **payload.model_dump()))
 
-    deployment_payload = payload.model_dump(by_alias=False)
-    deployment_payload.update(
-        {
-            "user_id": user_id,
-            "desired_template_id": payload.template_id,
-            "deployment_uid": deployment_uid,
-            "namespace_name": deployment_uid,
-            "release_name": deployment_uid,
-            "status": "pending",
-            "generation": 1,
-        }
-    )
-    deployment = DeploymentORM.model_validate(deployment_payload)
 
     session.add(deployment)
     try:
@@ -59,7 +44,8 @@ def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
         select(DeploymentORM)
         .options(
             selectinload(DeploymentORM.user),
-            selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product),
+            selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
+            selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
         )
         .where(DeploymentORM.user_id == user_id, DeploymentORM.deleted_at == None)  # noqa: E712
     ).all()
@@ -72,7 +58,8 @@ def get_deployment(session: Session, *, user_id: int, deployment_id: int) -> Dep
         select(DeploymentORM)
         .options(
             selectinload(DeploymentORM.user),
-            selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product),
+            selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
+            selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
         )
         .where(DeploymentORM.deleted_at == None, DeploymentORM.id == deployment_id)
     ).one_or_none()
@@ -92,7 +79,8 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
         select(DeploymentORM)
         .options(
             selectinload(DeploymentORM.user),
-            selectinload(DeploymentORM.template).selectinload(ProductTemplateVersionORM.product),
+            selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
+            selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
         )
         .where(DeploymentORM.id == deployment_id, DeploymentORM.deleted_at == None)
     ).one_or_none()

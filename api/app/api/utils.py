@@ -1,3 +1,4 @@
+from pydantic import ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -14,3 +15,4 @@ def _exception_handler(request: Request, exc: Exception):
 
 def register_exception_handlers(app):
     app.exception_handler(CaelusException)(_exception_handler)
+    # app.exception_handler(ValidationError)(_exception_handler)

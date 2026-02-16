@@ -12,13 +12,13 @@ def test_delete_deployment_flow(client):
     prod_id = prod_resp.json()["id"]
     # create template
     tmpl_resp = client.post(
-        f"/products/{prod_id}/templates", json={"docker_image_url": "img:latest"}
+        f"/products/{prod_id}/templates", json={"chart_ref": "registry.home:80/nextcloud/", "chart_version": "1.0.0"}
     )
     assert tmpl_resp.status_code == 201
     tmpl_id = tmpl_resp.json()["id"]
     # create deployment
     dep_resp = client.post(
-        f"/users/{user_id}/deployments", json={"template_id": tmpl_id, "domainname": "example.com"}
+        f"/users/{user_id}/deployments", json={"desired_template_id": tmpl_id, "domainname": "example.com"}
     )
     assert dep_resp.status_code == 201
     dep_id = dep_resp.json()["id"]

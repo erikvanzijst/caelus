@@ -33,14 +33,14 @@ def get_product(product_id: int, session: Session = Depends(get_session)) -> Pro
 
 
 @router.put("/{product_id}", response_model=ProductRead)
-def update_product(
-    product_id: int, payload: ProductUpdate, session: Session = Depends(get_session)
-) -> ProductRead:
-    if payload.template_id is None:
-        raise HTTPException(status_code=400, detail="template_id required")
-    return product_service.update_product_template(
-        session, product_id=product_id, template_id=payload.template_id
-    )
+def update_product(product_id: int, product: ProductUpdate, session: Session = Depends(get_session)) -> ProductRead:
+    product.id = product_id
+    return product_service.update_product(session, product=product)
+
+
+@router.delete("/{product_id}", status_code=204)
+def delete_product_endpoint(product_id: int, session: Session = Depends(get_session)) -> None:
+    product_service.delete_product(session, product_id=product_id)
 
 
 @router.post(
@@ -48,18 +48,9 @@ def update_product(
     response_model=ProductTemplateVersionRead,
     status_code=status.HTTP_201_CREATED,
 )
-def create_template(
-    product_id: int,
-    payload: ProductTemplateVersionCreate,
-    session: Session = Depends(get_session),
-):
+def create_template(product_id: int, payload: ProductTemplateVersionCreate, session: Session = Depends(get_session)):
     payload.product_id = product_id
     return template_service.create_template(session, payload)
-
-
-@router.delete("/{product_id}", status_code=204)
-def delete_product_endpoint(product_id: int, session: Session = Depends(get_session)) -> None:
-    product_service.delete_product(session, product_id=product_id)
 
 
 @router.get("/{product_id}/templates", response_model=list[ProductTemplateVersionRead])

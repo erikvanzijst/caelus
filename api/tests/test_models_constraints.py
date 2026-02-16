@@ -47,24 +47,21 @@ def test_deployment_unique_constraint(db_session):
     template = templates.create_template(
         db_session,
         payload=templates.ProductTemplateVersionCreate(
-            product_id=product.id, docker_image_url="docker.io/img"
-        ),
+            product_id=product.id, chart_ref="registry.home:80/nextcloud/", chart_version="1.0.0")
     )
     # Create first deployment
     dep1 = deployments.create_deployment(
         db_session,
-        user_id=user.id,
         payload=deployments.DeploymentCreate(
-            template_id=template.id, domainname="example.com"
+            user_id=user.id,desired_template_id=template.id, domainname="example.com"
         ),
     )
     # Attempt duplicate deployment
     with pytest.raises(IntegrityException):
         deployments.create_deployment(
             db_session,
-            user_id=user.id,
             payload=deployments.DeploymentCreate(
-                template_id=template.id, domainname="example.com"
+                user_id=user.id, desired_template_id=template.id, domainname="example.com"
             ),
         )
     # rollback the failed transaction
@@ -75,9 +72,8 @@ def test_deployment_unique_constraint(db_session):
     # Now creating same deployment should succeed
     dep2 = deployments.create_deployment(
         db_session,
-        user_id=user.id,
         payload=deployments.DeploymentCreate(
-            template_id=template.id, domainname="example.com"
+            user_id=user.id,desired_template_id=template.id, domainname="example.com"
         ),
     )
     assert dep2.id != dep1.id

@@ -6,8 +6,7 @@ from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String
 
 
 class UserBase(SQLModel):
-    email: str = Field(index=True, unique=True)
-    is_admin: bool = Field(default=False, nullable=False)
+    email: str
 
 
 class UserORM(UserBase, table=True):
@@ -21,6 +20,8 @@ class UserORM(UserBase, table=True):
         ),
     )
     id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(nullable=False, unique=False)
+    is_admin: bool = Field(default=False, nullable=False)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     deployments: list["DeploymentORM"] = Relationship(back_populates="user")
     deleted_at: Optional[datetime] = Field(default=None)
@@ -32,6 +33,7 @@ class UserCreate(UserBase):
 
 class UserRead(UserBase):
     id: int
+    is_admin: bool
     created_at: datetime
 
 
@@ -53,21 +55,15 @@ class ProductORM(ProductBase, table=True):
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True)
-    template_id: Optional[int] = Field(
-        default=None, foreign_key="product_template_version.id", index=True
-    )
+    name: str = Field()
+    # The product's canonical template used for new deployments:
+    template_id: Optional[int] = Field(default=None, foreign_key="product_template_version.id", index=True)
     template: "ProductTemplateVersionORM" = Relationship(
-        back_populates="products", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"}
-    )
+        back_populates="products", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"})
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     templates: list["ProductTemplateVersionORM"] = Relationship(
         back_populates="product",
-        sa_relationship_kwargs={
-            "foreign_keys": "ProductTemplateVersionORM.product_id",
-            "cascade": "all, delete-orphan",
-            "passive_deletes": True,
-        },
+        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"},
     )
     deleted_at: Optional[datetime] = Field(default=None)
 
@@ -77,26 +73,29 @@ class ProductCreate(ProductBase):
 
 
 class ProductUpdate(SQLModel):
+    id: Optional[int] = None
     template_id: Optional[int] = None
+    description: str | None = None
 
 
-class ProductRead(ProductBase):
+class ProductReadBase(ProductBase):
     id: int
     created_at: datetime
 
 
+class ProductRead(ProductReadBase):
+    template: Optional['ProductTemplateVersionRead']
+
+
 class ProductTemplateVersionBase(SQLModel):
-    docker_image_url: Optional[str]
     product_id: int
-    version_label: Optional[str] = None
-    package_type: str = Field(default="helm-chart")
-    chart_ref: Optional[str] = None
-    chart_version: Optional[str] = None
+    chart_ref: str = None
+    chart_version: str = None
     chart_digest: Optional[str] = None
+    version_label: Optional[str] = None
     default_values_json: Optional[dict[str, Any]] = None
     values_schema_json: Optional[dict[str, Any]] = None
     capabilities_json: Optional[dict[str, Any]] = None
-    health_timeout_sec: Optional[int] = None
 
 
 class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
@@ -104,52 +103,27 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     __table_args__ = (
         Index(
             "uq_producttemplate_active",
-            "docker_image_url", "product_id",
+            "chart_ref", "chart_version", "product_id",
             unique=True,
             sqlite_where=Column("deleted_at").is_(None),
         ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    docker_image_url: Optional[str] = Field(default=None)
     version_label: Optional[str] = Field(default=None)
-    package_type: str = Field(default="helm-chart", nullable=False)
-    chart_ref: Optional[str] = Field(default=None)
-    chart_version: Optional[str] = Field(default=None)
-    chart_digest: Optional[str] = Field(default=None)
-    default_values_json: Optional[dict[str, Any]] = Field(
-        default=None, sa_column=Column(JSON, nullable=True)
-    )
-    values_schema_json: Optional[dict[str, Any]] = Field(
-        default=None, sa_column=Column(JSON, nullable=True)
-    )
-    capabilities_json: Optional[dict[str, Any]] = Field(
-        default=None, sa_column=Column(JSON, nullable=True)
-    )
+    chart_ref: str
+    chart_version: str
+    default_values_json: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    values_schema_json: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    capabilities_json: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
     health_timeout_sec: Optional[int] = Field(default=None)
-    product_id: int = Field(
-        sa_column=Column(
-            Integer,
-            ForeignKey("product.id", ondelete="CASCADE"),
-            nullable=False,
-            index=True,
-        )
-    )
-    product: ProductORM = Relationship(
-        back_populates="templates",
-        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"},
-    )
-    products: list["ProductORM"] = Relationship(
-        back_populates="template", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"}
-    )
-    deployments: list["DeploymentORM"] = Relationship(
-        back_populates="template",
-        sa_relationship_kwargs={
-            "foreign_keys": "DeploymentORM.template_id",
-            "cascade": "all, delete-orphan",
-            "passive_deletes": True,
-        },
-    )
+    product_id: int = Field(sa_column=Column(Integer, ForeignKey("product.id"), nullable=False, index=True))
+    product: ProductORM = Relationship(back_populates="templates",
+                                       sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"})
+    products: list["ProductORM"] = Relationship(back_populates="template",
+                                                sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"})
+    deployments: list["DeploymentORM"] = Relationship(back_populates="applied_template",
+                                                      sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id"})
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     deleted_at: Optional[datetime] = Field(default=None)
 
@@ -161,27 +135,14 @@ class ProductTemplateVersionCreate(ProductTemplateVersionBase):
 class ProductTemplateVersionRead(ProductTemplateVersionBase):
     id: Optional[int]
     created_at: datetime
-    product: ProductRead
+    product: ProductReadBase
 
 
 class DeploymentBase(SQLModel):
-    template_id: int
+    desired_template_id: int
     domainname: str
-    user_values_json: Optional[dict[str, Any]] = Field(
-        default=None, alias="user_values"
-    )
-    user_id: Optional[int] = Field(default=None)
-    deployment_uid: Optional[str] = None
-    namespace_name: Optional[str] = None
-    release_name: Optional[str] = None
-    desired_template_id: Optional[int] = None
-    applied_template_id: Optional[int] = None
-    status: str = Field(default="pending")
-    generation: int = Field(default=1)
-    last_error: Optional[str] = None
-    last_reconcile_at: Optional[datetime] = None
-
-    model_config = {"populate_by_name": True}
+    user_id: int
+    user_values_json: Optional[dict[str, Any]] = Field(default=None)
 
 
 class DeploymentORM(DeploymentBase, table=True):
@@ -189,38 +150,20 @@ class DeploymentORM(DeploymentBase, table=True):
     __table_args__ = (
         Index(
             "uq_deployment_active",
-            "user_id", "domainname", "template_id",
+            "user_id", "domainname", "desired_template_id",
             unique=True,
             sqlite_where=Column("deleted_at").is_(None),
         ),
         Index(
-            "uq_deployment_uid_active",
-            "deployment_uid",
-            unique=True,
-            sqlite_where=Column("deleted_at").is_(None),
-        ),
-        Index(
-            "uq_namespace_name_active",
-            "namespace_name",
+            "uq_domainname_active",
+            "domainname",
             unique=True,
             sqlite_where=Column("deleted_at").is_(None),
         ),
     )
+
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
-    user: UserORM = Relationship(back_populates="deployments")
-    template_id: int = Field(
-        sa_column=Column(
-            Integer,
-            ForeignKey("product_template_version.id", ondelete="CASCADE"),
-            nullable=False,
-            index=True,
-        )
-    )
-    template: ProductTemplateVersionORM = Relationship(
-        back_populates="deployments",
-        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.template_id"},
-    )
     desired_template_id: int = Field(
         sa_column=Column(
             Integer,
@@ -238,64 +181,43 @@ class DeploymentORM(DeploymentBase, table=True):
             index=True,
         ),
     )
-    desired_template: Optional[ProductTemplateVersionORM] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.desired_template_id"},
-    )
-    applied_template: Optional[ProductTemplateVersionORM] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id"},
-    )
     domainname: str = Field(index=True)
-    deployment_uid: str = Field(
-        sa_column=Column(String(), nullable=False, index=True),
-    )
-    namespace_name: str = Field(
-        sa_column=Column(String(), nullable=False, index=True),
-    )
-    release_name: str = Field(
-        sa_column=Column(String(), nullable=False, index=True),
-    )
-    user_values_json: Optional[dict[str, Any]] = Field(
-        default=None, sa_column=Column(JSON, nullable=True)
-    )
+    deployment_uid: str = Field(sa_column=Column(String(), nullable=False, index=True))
+    user_values_json: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
     status: str = Field(default="pending", nullable=False, index=True)
     generation: int = Field(default=1, nullable=False)
     last_error: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
     last_reconcile_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     deleted_at: Optional[datetime] = Field(default=None)
-    reconcile_jobs: list["DeploymentReconcileJobORM"] = Relationship(
-        back_populates="deployment",
-        sa_relationship_kwargs={
-            "cascade": "all, delete-orphan",
-            "passive_deletes": True,
-        },
-    )
+    reconcile_jobs: list["DeploymentReconcileJobORM"] = Relationship(back_populates="deployment")
+    user: UserORM = Relationship(back_populates="deployments")
+    desired_template: Optional[ProductTemplateVersionORM] = Relationship(sa_relationship_kwargs={"foreign_keys": "DeploymentORM.desired_template_id"})
+    applied_template: Optional[ProductTemplateVersionORM] = Relationship(sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id"})
 
 
-class DeploymentCreate(SQLModel):
-    template_id: int
-    domainname: str
-    user_values_json: Optional[dict[str, Any]] = Field(default=None, alias="user_values")
-
-    model_config = {"populate_by_name": True}
+class DeploymentCreate(DeploymentBase):
+    user_values_json: Optional[dict[str, Any]] = Field(default=None)
+    user_id: Optional[int] = None
 
 
-class DeploymentUpdate(SQLModel):
+class DeploymentUpdate(DeploymentBase):
     domainname: Optional[str] = None
-    user_values_json: Optional[dict[str, Any]] = Field(default=None, alias="user_values")
-
-    model_config = {"populate_by_name": True}
-
-
-class DeploymentUpgrade(SQLModel):
-    template_id: int
+    desired_template_id: Optional[int] = Field(default=None)
+    user_values_json: Optional[dict[str, Any]] = Field(default=None)
 
 
 class DeploymentRead(DeploymentBase):
     id: int
     created_at: datetime
     user: UserRead
-    template: ProductTemplateVersionRead
+    desired_template: ProductTemplateVersionRead
+    applied_template: Optional[ProductTemplateVersionRead]
+    deployment_uid: Optional[str] = None
+    status: str = Field(default="pending")
+    generation: int = Field(default=1)
+    last_error: Optional[str] = None
+    last_reconcile_at: Optional[datetime] = None
 
 
 class DeploymentReconcileJobBase(SQLModel):

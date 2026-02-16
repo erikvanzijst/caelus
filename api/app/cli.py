@@ -71,14 +71,12 @@ def list_products() -> None:
 
 
 @app.command("create-template")
-def create_template(product_id: int, docker_image_url: str = "") -> None:
+def create_template(product_id: int, chart_ref: str, chart_version: str) -> None:
     with session_scope() as session:
         try:
             template = template_service.create_template(
                 session,
-                ProductTemplateVersionCreate(
-                    product_id=product_id, docker_image_url=docker_image_url or None
-                ),
+                ProductTemplateVersionCreate(product_id=product_id, chart_ref=chart_ref, chart_version=chart_version)
             )
         except NotFoundError:
             raise typer.Exit(code=1)

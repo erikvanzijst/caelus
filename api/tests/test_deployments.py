@@ -14,14 +14,14 @@ def test_delete_deployment_flow(client, db_session):
     product_id = product_resp.json()["id"]
 
     template_resp = client.post(
-        f"/products/{product_id}/templates", json={"docker_image_url": "nextcloud:latest"}
+        f"/products/{product_id}/templates", json={"chart_ref": "registry.home:80/nextcloud/", "chart_version": "1.0.0"}
     )
     assert template_resp.status_code == 201
     template_id = template_resp.json()["id"]
 
     deployment_resp = client.post(
         f"/users/{user_id}/deployments",
-        json={"template_id": template_id, "domainname": "cloud.example.com"},
+        json={"desired_template_id": template_id, "domainname": "cloud.example.com"},
     )
     assert deployment_resp.status_code == 201
     deployment_id = deployment_resp.json()["id"]

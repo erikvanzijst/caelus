@@ -19,20 +19,22 @@ def create_user(session: Session, payload: UserCreate) -> UserRead:
 
 
 def list_users(session: Session) -> list[UserRead]:
-    return list(session.exec(select(UserORM)).all())
+    return list(session.exec(select(UserORM).where(UserORM.deleted_at == None)).all())
 
 
 def get_user(session: Session, *, user_id: int) -> UserRead:
-    user = session.get(UserORM, user_id)
+    user = session.exec(select(UserORM).where(UserORM.id == user_id, UserORM.deleted_at == None)).one_or_none()
     if not user:
         raise NotFoundException("User not found")
     return UserRead.model_validate(user)
 
 
 def delete_user(session: Session, *, user_id: int) -> UserRead:
-    user = session.get(UserORM, user_id)
+    user = session.exec(select(UserORM).where(UserORM.id == user_id, UserORM.deleted_at == None)).one_or_none()
     if not user:
         raise NotFoundException("User not found")
-    session.delete(user)
+    user.deleted_at = user.created_at
+    session.add(user)
     session.commit()
+    session.refresh(user)
     return UserRead.model_validate(user)

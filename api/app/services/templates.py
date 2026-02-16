@@ -14,9 +14,7 @@ from app.services.errors import NotFoundException, IntegrityException
 from app.services.products import get_product
 
 
-def create_template(
-    session: Session, payload: ProductTemplateVersionCreate
-) -> ProductTemplateVersionORM:
+def create_template(session: Session, payload: ProductTemplateVersionCreate) -> ProductTemplateVersionORM:
     template = ProductTemplateVersionORM.model_validate(payload)
     # verify that the product exists:
     get_product(session, template.product_id)
@@ -40,9 +38,7 @@ def list_templates(session: Session, product_id: int) -> list[ProductTemplateVer
     return [ProductTemplateVersionRead.model_validate(t) for t in templates]
 
 
-def get_template(
-    session: Session, *, product_id: int, template_id: int
-) -> ProductTemplateVersionRead:
+def get_template(session: Session, *, product_id: int, template_id: int) -> ProductTemplateVersionRead:
     template = session.get(ProductTemplateVersionORM, template_id)
     if not template or template.product_id != product_id or template.deleted_at:
         raise NotFoundException("Template not found")

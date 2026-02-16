@@ -27,14 +27,14 @@ def test_user_deployment_flow(client):
     product_id = product.json()["id"]
 
     template = client.post(
-        f"/products/{product_id}/templates", json={"docker_image_url": "nextcloud:latest"}
+        f"/products/{product_id}/templates", json={"chart_ref": "registry.home:80/nextcloud/", "chart_version": "1.0.0"}
     )
     assert template.status_code == 201
     template_id = template.json()["id"]
 
     deployment = client.post(
         f"/users/{user_id}/deployments",
-        json={"template_id": template_id, "domainname": "cloud.example.com"},
+        json={"desired_template_id": template_id, "domainname": "cloud.example.com"},
     )
     assert deployment.status_code == 201
     deployment_id = deployment.json()["id"]

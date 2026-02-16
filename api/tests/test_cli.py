@@ -458,3 +458,40 @@ def test_cli_create_deployment_not_found_returns_stable_error(cli_runner):
     assert missing_user_res.exit_code == 1
     assert "Error: User not found" in missing_user_res.output
     assert "Traceback" not in missing_user_res.output
+
+
+def test_cli_duplicate_create_commands_return_stable_errors(cli_runner):
+    runner, app = cli_runner
+
+    user_first = runner.invoke(app, ["create-user", "dup@example.com"])
+    assert user_first.exit_code == 0
+    user_dup = runner.invoke(app, ["create-user", "dup@example.com"])
+    assert user_dup.exit_code == 1
+    assert "Error: Email already in use: dup@example.com" in user_dup.output
+    assert "Traceback" not in user_dup.output
+
+    prod_first = runner.invoke(app, ["create-product", "dup-product", "desc"])
+    assert prod_first.exit_code == 0
+    prod_dup = runner.invoke(app, ["create-product", "dup-product", "desc"])
+    assert prod_dup.exit_code == 1
+    assert "Error: A product with this name already exists: dup-product" in prod_dup.output
+    assert "Traceback" not in prod_dup.output
+
+
+def test_cli_missing_delete_commands_return_stable_errors(cli_runner):
+    runner, app = cli_runner
+
+    delete_user_res = runner.invoke(app, ["delete-user", "999999"])
+    assert delete_user_res.exit_code == 1
+    assert "Error: User not found" in delete_user_res.output
+    assert "Traceback" not in delete_user_res.output
+
+    delete_product_res = runner.invoke(app, ["delete-product", "999999"])
+    assert delete_product_res.exit_code == 1
+    assert "Error: Product not found" in delete_product_res.output
+    assert "Traceback" not in delete_product_res.output
+
+    delete_template_res = runner.invoke(app, ["delete-template", "1", "999999"])
+    assert delete_template_res.exit_code == 1
+    assert "Error: Template not found" in delete_template_res.output
+    assert "Traceback" not in delete_template_res.output

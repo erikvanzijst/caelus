@@ -13,9 +13,9 @@ from app.models import (
     ProductCreate,
     ProductUpdate,
 )
-from app.services import templates as template_service, deployments as deployment_service, \
-    products as product_service, users as user_service
-from app.services.errors import NotFoundError
+from app.services import (templates as template_service, deployments as deployment_service,
+                          products as product_service, users as user_service)
+from app.services.errors import CaelusException
 
 app = typer.Typer(help="Caelus CLI", pretty_exceptions_show_locals=False)
 
@@ -55,17 +55,28 @@ def _parse_json_object_input(
     return None
 
 
+def _exit_for_domain_error(exc: CaelusException) -> None:
+    typer.echo(f"Error: {exc}", err=True)
+    raise typer.Exit(code=1)
+
+
 @app.command("create-user")
 def create_user(email: str) -> None:
     with session_scope() as session:
-        user = user_service.create_user(session, UserCreate(email=email))
+        try:
+            user = user_service.create_user(session, UserCreate(email=email))
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(f"Created user: {user}")
 
 
 @app.command("delete-user")
 def delete_user(user_id: int) -> None:
     with session_scope() as session:
-        user = user_service.delete_user(session, user_id=user_id)
+        try:
+            user = user_service.delete_user(session, user_id=user_id)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(f"Deleted user: {user}")
 
 
@@ -81,19 +92,21 @@ def get_user(user_id: int) -> None:
     with session_scope() as session:
         try:
             user = user_service.get_user(session, user_id=user_id)
-        except NotFoundError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(user)
 
 
 @app.command("create-product")
 def create_product(name: str, description: str, template_id: int | None = None) -> None:
     with session_scope() as session:
-        product = product_service.create_product(
-            session,
-            payload=ProductCreate(name=name, description=description, template_id=template_id),
-        )
+        try:
+            product = product_service.create_product(
+                session,
+                payload=ProductCreate(name=name, description=description, template_id=template_id),
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(f"Created product {product}")
 
 
@@ -115,9 +128,8 @@ def update_product(
                     description=description,
                 ),
             )
-        except NotFoundError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(
             f"Updated product {product.id} template_id={product.template_id} description={product.description}"
         )
@@ -126,7 +138,10 @@ def update_product(
 @app.command("delete-product")
 def delete_product(product_id: int) -> None:
     with session_scope() as session:
-        product = product_service.delete_product(session, product_id=product_id)
+        try:
+            product = product_service.delete_product(session, product_id=product_id)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(f"Deleted product {product.id}")
 
 
@@ -142,9 +157,8 @@ def get_product(product_id: int) -> None:
     with session_scope() as session:
         try:
             product = product_service.get_product(session, product_id=product_id)
-        except NotFoundError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(product)
 
 
@@ -229,9 +243,8 @@ def create_template(
                     capabilities_json=parsed_capabilities,
                 ),
             )
-        except NotFoundError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(f"Created template {template.id} for product {product_id}")
 
 
@@ -251,18 +264,20 @@ def get_template(product_id: int, template_id: int) -> None:
                 product_id=product_id,
                 template_id=template_id,
             )
-        except NotFoundError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(template)
 
 
 @app.command("delete-template")
 def delete_template(product_id: int, template_id: int) -> None:
     with session_scope() as session:
-        template = template_service.delete_template(
-            session, product_id=product_id, template_id=template_id
-        )
+        try:
+            template = template_service.delete_template(
+                session, product_id=product_id, template_id=template_id
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(f"Deleted template {template.id}")
 
 
@@ -305,9 +320,8 @@ def create_deployment(
                     user_values_json=parsed_user_values,
                 ),
             )
-        except NotFoundError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(f"Created deployment: {deployment}")
 
 
@@ -327,9 +341,8 @@ def get_deployment(user_id: int, deployment_id: int) -> None:
                 user_id=user_id,
                 deployment_id=deployment_id,
             )
-        except NotFoundError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(deployment)
 
 
@@ -340,8 +353,8 @@ def delete_deployment(user_id: int, deployment_id: int) -> None:
             deployment = deployment_service.delete_deployment(
                 session, user_id=user_id, deployment_id=deployment_id
             )
-        except NotFoundError:
-            raise typer.Exit(code=1)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
         typer.echo(f"Deleted deployment {deployment.id}")
 
 

@@ -155,15 +155,24 @@ def delete_template(product_id: int, template_id: int) -> None:
 
 
 @app.command("create-deployment")
-def create_deployment(user_id: int, template_id: int, domainname: str) -> None:
+def create_deployment(
+    *,
+    user_id: int = typer.Option(..., "--user-id"),
+    desired_template_id: int = typer.Option(..., "--desired-template-id"),
+    domainname: str = typer.Option(..., "--domainname"),
+) -> None:
     with session_scope() as session:
         try:
             deployment = deployment_service.create_deployment(
                 session,
-                user_id=user_id,
-                payload=DeploymentCreate(template_id=template_id, domainname=domainname),
+                payload=DeploymentCreate(
+                    user_id=user_id,
+                    desired_template_id=desired_template_id,
+                    domainname=domainname,
+                ),
             )
-        except NotFoundError:
+        except NotFoundError as e:
+            typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(code=1)
         typer.echo(f"Created deployment: {deployment}")
 

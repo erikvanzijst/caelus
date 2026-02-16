@@ -217,3 +217,53 @@ def test_cli_get_deployment_command(cli_runner):
     assert missing_dep_res.exit_code == 1
     assert "Error: Deployment not found" in missing_dep_res.output
     assert "Traceback" not in missing_dep_res.output
+
+
+def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
+    runner, app = cli_runner
+
+    user_res = runner.invoke(app, ["create-user", "newdep@example.com"])
+    assert user_res.exit_code == 0
+
+    product_res = runner.invoke(app, ["create-product", "dep-cli-product", "dep product desc"])
+    assert product_res.exit_code == 0
+
+    template_res = runner.invoke(app, ["create-template", "1", "registry.home:80/deploy/", "1.0.0"])
+    assert template_res.exit_code == 0
+    template_id = _get_template_id_from_create_output(template_res.output)
+
+    create_dep_res = runner.invoke(
+        app,
+        [
+            "create-deployment",
+            "--user-id",
+            "1",
+            "--desired-template-id",
+            str(template_id),
+            "--domainname",
+            "cli-audit.example.test",
+        ],
+    )
+    assert create_dep_res.exit_code == 0
+    assert "Created deployment:" in create_dep_res.output
+    assert "cli-audit.example.test" in create_dep_res.output
+
+
+def test_cli_create_deployment_not_found_returns_stable_error(cli_runner):
+    runner, app = cli_runner
+
+    missing_user_res = runner.invoke(
+        app,
+        [
+            "create-deployment",
+            "--user-id",
+            "99999",
+            "--desired-template-id",
+            "1",
+            "--domainname",
+            "missing-user.example.test",
+        ],
+    )
+    assert missing_user_res.exit_code == 1
+    assert "Error: User not found" in missing_user_res.output
+    assert "Traceback" not in missing_user_res.output

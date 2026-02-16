@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 
 from app.db import session_scope
+from app.models import DeploymentORM, DeploymentReconcileJobORM
 from app.services import templates as template_service
+from sqlmodel import select
 
 
 def _get_product_id_from_list_output(output: str) -> int:
@@ -57,6 +59,21 @@ def _get_template_from_services(product_id: int, template_id: int):
             product_id=product_id,
             template_id=template_id,
         )
+
+
+def _get_deployment_by_domain(domainname: str):
+    with session_scope() as session:
+        return session.exec(select(DeploymentORM).where(DeploymentORM.domainname == domainname)).one_or_none()
+
+
+def _get_job_reasons_for_deployment(deployment_id: int) -> list[str]:
+    with session_scope() as session:
+        jobs = session.exec(
+            select(DeploymentReconcileJobORM)
+            .where(DeploymentReconcileJobORM.deployment_id == deployment_id)
+            .order_by(DeploymentReconcileJobORM.id)
+        ).all()
+        return [job.reason for job in jobs]
 
 
 def test_cli_user_flow(cli_runner):
@@ -522,6 +539,88 @@ def test_cli_create_deployment_not_found_returns_stable_error(cli_runner):
     assert missing_user_res.exit_code == 1
     assert "Error: User not found" in missing_user_res.output
     assert "Traceback" not in missing_user_res.output
+
+
+def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
+    runner, app = cli_runner
+
+    user_res = runner.invoke(app, ["create-user", "upgradecli@example.com"])
+    assert user_res.exit_code == 0
+
+    product_res = runner.invoke(app, ["create-product", "upgrade-cli-product", "desc"])
+    assert product_res.exit_code == 0
+
+    tmpl1_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            "1",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "1.0.0",
+        ],
+    )
+    assert tmpl1_res.exit_code == 0
+    tmpl1_id = _get_template_id_from_create_output(tmpl1_res.output)
+
+    tmpl2_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            "1",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "2.0.0",
+        ],
+    )
+    assert tmpl2_res.exit_code == 0
+    tmpl2_id = _get_template_id_from_create_output(tmpl2_res.output)
+
+    domain = "upgrade-cli.example.test"
+    create_dep_res = runner.invoke(
+        app,
+        [
+            "create-deployment",
+            "--user-id",
+            "1",
+            "--desired-template-id",
+            str(tmpl1_id),
+            "--domainname",
+            domain,
+        ],
+    )
+    assert create_dep_res.exit_code == 0
+
+    deployment = _get_deployment_by_domain(domain)
+    assert deployment is not None
+    dep_id = deployment.id
+    assert dep_id is not None
+
+    upgrade_res = runner.invoke(
+        app,
+        [
+            "update-deployment",
+            "--user-id",
+            "1",
+            "--deployment-id",
+            str(dep_id),
+            "--desired-template-id",
+            str(tmpl2_id),
+        ],
+    )
+    assert upgrade_res.exit_code == 0
+    assert f"Upgraded deployment {dep_id}" in upgrade_res.output
+
+    delete_res = runner.invoke(app, ["delete-deployment", "1", str(dep_id)])
+    assert delete_res.exit_code == 0
+    assert f"Deleted deployment {dep_id}" in delete_res.output
+
+    reasons = _get_job_reasons_for_deployment(dep_id)
+    assert reasons == ["create", "update", "delete"]
 
 
 def test_cli_duplicate_create_commands_return_stable_errors(cli_runner):

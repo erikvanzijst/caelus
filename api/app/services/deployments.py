@@ -1,16 +1,56 @@
 from __future__ import annotations
 from datetime import datetime
-from typing import cast
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
-from app.models import DeploymentRead, DeploymentCreate, DeploymentORM, ProductTemplateVersionORM
-from app.provisioner import provisioner
+from app.models import (
+    DeploymentCreate,
+    DeploymentORM,
+    DeploymentRead,
+    DeploymentReconcileJobORM,
+    ProductTemplateVersionORM, DeploymentUpdate,
+)
 from app.services import users as user_service
 from app.services.errors import IntegrityException, NotFoundException
+from app.services.reconcile_constants import (
+    DEPLOYMENT_STATUS_DELETING,
+    DEPLOYMENT_STATUS_PENDING,
+    DEPLOYMENT_STATUS_UPGRADING,
+    JOB_REASON_CREATE,
+    JOB_REASON_DELETE,
+    JOB_REASON_UPDATE,
+)
 from app.services.reconcile_naming import generate_deployment_uid
+
+
+def _enqueue_reconcile_job(session: Session, *, deployment_id: int, reason: str) -> None:
+    session.add(DeploymentReconcileJobORM(deployment_id=deployment_id, reason=reason))
+
+
+def _get_active_deployment_orm(
+    session: Session,
+    *,
+    user_id: int,
+    deployment_id: int,
+) -> DeploymentORM:
+    deployment = session.exec(
+        select(DeploymentORM)
+        .options(
+            selectinload(DeploymentORM.user),
+            selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
+            selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
+        )
+        .where(
+            DeploymentORM.deleted_at == None,  # noqa: E712
+            DeploymentORM.user_id == user_id,
+            DeploymentORM.id == deployment_id,
+        )
+    ).one_or_none()
+    if not deployment:
+        raise NotFoundException("Deployment not found")
+    return deployment
 
 
 def create_deployment(session: Session, *, payload: DeploymentCreate) -> DeploymentRead:
@@ -20,19 +60,21 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     template = session.get(ProductTemplateVersionORM, payload.desired_template_id)
     if not template:
         raise NotFoundException("Template not found")
-    deployment_uid = generate_deployment_uid(
-        product_name=template.product.name,
-        user_email=user.email)
-    deployment: DeploymentORM = DeploymentORM.model_validate(dict(deployment_uid=deployment_uid, **payload.model_dump()))
-
-
+    deployment_uid = generate_deployment_uid(product_name=template.product.name, user_email=user.email)
+    deployment: DeploymentORM = DeploymentORM.model_validate(
+        dict(
+            deployment_uid=deployment_uid,
+            status=DEPLOYMENT_STATUS_PENDING,
+            **payload.model_dump(),
+        )
+    )
     session.add(deployment)
     try:
+        session.flush()
+        assert deployment.id is not None, "Deployment ID should not be None after flush"
+        _enqueue_reconcile_job(session, deployment_id=deployment.id, reason=JOB_REASON_CREATE)
         session.commit()
         session.refresh(deployment)
-        # Ensure deployment.id is set
-        assert deployment.id is not None, "Deployment ID should not be None after commit"
-        provisioner.provision(deployment_id=cast(int, deployment.id))  # type: ignore
         return DeploymentRead.model_validate(deployment)
     except IntegrityError as exc:
         raise IntegrityException("Deployment already exists") from exc
@@ -54,17 +96,7 @@ def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
 
 
 def get_deployment(session: Session, *, user_id: int, deployment_id: int) -> DeploymentRead:
-    deployment = session.exec(
-        select(DeploymentORM)
-        .options(
-            selectinload(DeploymentORM.user),
-            selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
-            selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
-        )
-        .where(DeploymentORM.deleted_at == None, DeploymentORM.id == deployment_id)
-    ).one_or_none()
-    if not deployment:
-        raise NotFoundException("Deployment not found")
+    deployment = _get_active_deployment_orm(session, user_id=user_id, deployment_id=deployment_id)
     return DeploymentRead.model_validate(deployment)
 
 
@@ -75,18 +107,38 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
     raises NotFoundException. Otherwise, sets the ``deleted`` flag to ``True`` and
     commits the transaction.
     """
-    deployment = session.exec(
-        select(DeploymentORM)
-        .options(
-            selectinload(DeploymentORM.user),
-            selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
-            selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
-        )
-        .where(DeploymentORM.id == deployment_id, DeploymentORM.deleted_at == None)
-    ).one_or_none()
-    if not deployment:
-        raise NotFoundException("Deployment not found")
+    deployment = _get_active_deployment_orm(session, user_id=user_id, deployment_id=deployment_id)
+    deployment.status = DEPLOYMENT_STATUS_DELETING
+    deployment.generation += 1
+    deployment.last_error = None
+
+    # TODO: this makes the deployment invisible to the user --
+    #  should probably only toggle the flag after the instance has been deleted successfully:
     deployment.deleted_at = datetime.utcnow()
     session.add(deployment)
+    _enqueue_reconcile_job(session, deployment_id=deployment_id, reason=JOB_REASON_DELETE)
     session.commit()
+    return DeploymentRead.model_validate(deployment)
+
+
+def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentRead:
+    deployment = _get_active_deployment_orm(session, user_id=update.user_id, deployment_id=update.id)
+    if update.desired_template_id <= deployment.desired_template_id:
+        raise IntegrityException("Can only upgrade to newer versions, not downgrade")
+
+    if not (target_template := session.get(ProductTemplateVersionORM, update.desired_template_id)):
+        raise NotFoundException("Template not found")
+
+    current_template = session.get(ProductTemplateVersionORM, deployment.desired_template_id)
+    if current_template and target_template.product_id != current_template.product_id:
+        raise IntegrityException("Upgrade template must belong to the same product")
+
+    deployment.desired_template_id = update.desired_template_id
+    deployment.status = DEPLOYMENT_STATUS_UPGRADING
+    deployment.generation += 1
+    deployment.last_error = None
+    session.add(deployment)
+    _enqueue_reconcile_job(session, deployment_id=update.id, reason=JOB_REASON_UPDATE)
+    session.commit()
+    session.refresh(deployment)
     return DeploymentRead.model_validate(deployment)

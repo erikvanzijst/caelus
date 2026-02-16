@@ -11,8 +11,6 @@ Update deployment service so create/update/delete operations drive reconciliatio
 Update `api/app/services/deployments.py`:
 1. On create:
    - generate `deployment_uid` as `{product_slug}-{user_slug}-{suffix6}` with DNS-label truncation rules.
-   - set `namespace_name = deployment_uid`.
-   - set `release_name = deployment_uid`.
    - set `desired_template_id` from requested/canonical template.
    - set status `pending`.
    - enqueue reconcile job (`reason=create`).
@@ -25,8 +23,10 @@ Update `api/app/services/deployments.py`:
    - enqueue `reason=delete`.
 4. Add service method for admin upgrade request:
    - set `desired_template_id` to new template.
-   - enforce admin-only policy via `user.is_admin == true`.
    - enqueue `reason=update`.
+   - add cli command `upgrade-deployment`.
+   - add api endpoint `PUT /users/{uid}/deployments/{deployment_uid}`.
+   - enforce upgrade-only path by only allowing desired_template_id to increase, never decrease.
 
 ## Additional Requirements
 1. Remove direct `provisioner.provision(...)` call from create path.

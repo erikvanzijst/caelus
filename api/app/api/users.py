@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, status
 from sqlmodel import Session
 
 from app.db import get_session
-from app.models import UserRead, UserCreate, DeploymentRead, DeploymentCreate
+from app.models import (
+    DeploymentCreate,
+    DeploymentRead,
+    UserCreate,
+    UserRead, DeploymentUpdate,
+)
 from app.services import deployments as deployment_service, users as user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -48,14 +53,22 @@ def list_deployments(user_id: int, session: Session = Depends(get_session)):
 
 
 @router.get("/{user_id}/deployments/{deployment_id}", response_model=DeploymentRead)
-def get_deployment(
-    user_id: int, deployment_id: int, session: Session = Depends(get_session)
-) -> DeploymentRead:
+def get_deployment(user_id: int, deployment_id: int, session: Session = Depends(get_session)) -> DeploymentRead:
     return deployment_service.get_deployment(session, user_id=user_id, deployment_id=deployment_id)
 
 
+@router.put("/{user_id}/deployments/{deployment_id}", response_model=DeploymentRead)
+def update_deployment(
+    user_id: int,
+    deployment_id: int,
+    deployment: DeploymentUpdate,
+    session: Session = Depends(get_session),
+) -> DeploymentRead:
+    deployment.user_id = user_id
+    deployment.id = deployment_id
+    return deployment_service.update_deployment(session, deployment)
+
+
 @router.delete("/{user_id}/deployments/{deployment_id}", status_code=204)
-def delete_deployment_endpoint(
-    user_id: int, deployment_id: int, session: Session = Depends(get_session)
-) -> None:
+def delete_deployment_endpoint(user_id: int, deployment_id: int, session: Session = Depends(get_session)) -> None:
     deployment_service.delete_deployment(session, user_id=user_id, deployment_id=deployment_id)

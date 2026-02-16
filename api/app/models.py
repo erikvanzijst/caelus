@@ -202,6 +202,8 @@ class DeploymentCreate(DeploymentBase):
 
 
 class DeploymentUpdate(DeploymentBase):
+    id: Optional[int] = None
+    user_id: Optional[int] = None
     domainname: Optional[str] = None
     desired_template_id: Optional[int] = Field(default=None)
     user_values_json: Optional[dict[str, Any]] = Field(default=None)

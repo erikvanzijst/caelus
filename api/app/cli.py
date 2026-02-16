@@ -11,7 +11,7 @@ from app.models import (
     DeploymentCreate,
     ProductTemplateVersionCreate,
     ProductCreate,
-    ProductUpdate,
+    ProductUpdate, DeploymentUpdate,
 )
 from app.services import (templates as template_service, deployments as deployment_service,
                           products as product_service, users as user_service)
@@ -355,6 +355,24 @@ def delete_deployment(user_id: int, deployment_id: int) -> None:
         except CaelusException as e:
             _exit_for_domain_error(e)
         typer.echo(f"Deleted deployment {deployment.id}")
+
+
+@app.command("update-deployment")
+def update_deployment(
+    *,
+    user_id: int = typer.Option(..., "--user-id"),
+    deployment_id: int = typer.Option(..., "--deployment-id"),
+    desired_template_id: int = typer.Option(..., "--desired-template-id"),
+) -> None:
+    with session_scope() as session:
+        try:
+            deployment = deployment_service.update_deployment(
+                session,
+                update=DeploymentUpdate(user_id=user_id, id=deployment_id, desired_template_id=desired_template_id)
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        typer.echo(f"Upgraded deployment {deployment.id} to desired_template_id={deployment.desired_template_id}")
 
 
 if __name__ == "__main__":

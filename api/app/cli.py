@@ -3,7 +3,13 @@ from __future__ import annotations
 import typer
 
 from app.db import session_scope
-from app.models import UserCreate, DeploymentCreate, ProductTemplateVersionCreate, ProductCreate
+from app.models import (
+    UserCreate,
+    DeploymentCreate,
+    ProductTemplateVersionCreate,
+    ProductCreate,
+    ProductUpdate,
+)
 from app.services import templates as template_service, deployments as deployment_service, \
     products as product_service, users as user_service
 from app.services.errors import NotFoundError
@@ -43,17 +49,29 @@ def create_product(name: str, description: str, template_id: int | None = None) 
 
 
 @app.command("update-product")
-def update_product(product_id: int, template_id: int) -> None:
-    """Update a product's template_id."""
+def update_product(
+    product_id: int,
+    *,
+    template_id: int | None = typer.Option(None, "--template-id"),
+    description: str | None = typer.Option(None, "--description"),
+) -> None:
+    """Update a product's template_id and/or description."""
     with session_scope() as session:
         try:
-            product = product_service.update_product_template(
-                session, product_id=product_id, template_id=template_id
+            product = product_service.update_product(
+                session,
+                product=ProductUpdate(
+                    id=product_id,
+                    template_id=template_id,
+                    description=description,
+                ),
             )
         except NotFoundError as e:
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(code=1)
-        typer.echo(f"Updated product {product.id} template_id to {product.template_id}")
+        typer.echo(
+            f"Updated product {product.id} template_id={product.template_id} description={product.description}"
+        )
 
 
 @app.command("delete-product")

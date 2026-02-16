@@ -164,10 +164,9 @@ def get_product(product_id: int) -> None:
 
 @app.command("create-template")
 def create_template(
-    product_id: int,
-    chart_ref: str,
-    chart_version: str,
-    *,
+    product_id: int = typer.Option(..., "--product-id", help="Product ID to associate with the template."),
+    chart_ref: str = typer.Option(..., "--chart-ref", help="Chart reference (e.g. 'oci://example/chart')."),
+    chart_version: str = typer.Option(..., "--chart-version", help="Chart version (e.g. '1.2.3')."),
     chart_digest: str | None = typer.Option(
         None, "--chart-digest", help="Optional immutable digest for the chart artifact."
     ),

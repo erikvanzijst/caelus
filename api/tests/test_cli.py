@@ -35,7 +35,7 @@ def _seed_deployment_via_services() -> tuple[int, int]:
             session,
             ProductTemplateVersionCreate(
                 product_id=product.id,
-                chart_ref="registry.home:80/dep/",
+                chart_ref="oci://example/chart",
                 chart_version="1.0.0",
             ),
         )
@@ -121,7 +121,7 @@ def test_cli_update_product_supports_template_and_description(cli_runner):
     assert list_res.exit_code == 0
     prod_id = _get_product_id_from_list_output(list_res.output)
 
-    template_res = runner.invoke(app, ["create-template", str(prod_id), "registry.home:80/nextcloud/", "1.0.0"])
+    template_res = runner.invoke(app, ["create-template", "--product-id",  str(prod_id), "--chart-ref", "oci://example/chart", "--chart-version", "1.0.0"])
     assert template_res.exit_code == 0
     template_id = _get_template_id_from_create_output(template_res.output)
 
@@ -148,8 +148,11 @@ def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
         app,
         [
             "create-template",
+            "--product-id",
             "1",
-            "registry.home:80/rich/",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
             "2.1.0",
             "--chart-digest",
             "sha256:abc123",
@@ -184,8 +187,11 @@ def test_cli_create_template_invalid_json_returns_stable_error(cli_runner):
         app,
         [
             "create-template",
+            "--product-id",
             "1",
-            "registry.home:80/invalid/",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
             "1.0.0",
             "--default-values-json",
             "{not-json}",
@@ -209,8 +215,11 @@ def test_cli_create_template_rejects_both_json_and_file_for_same_field(cli_runne
         app,
         [
             "create-template",
+            "--product-id",
             "1",
-            "registry.home:80/both/",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
             "1.0.0",
             "--default-values-json",
             "{\"message\":\"from-inline\"}",
@@ -251,7 +260,18 @@ def test_cli_update_product_template_validation_returns_stable_error(cli_runner)
     prod_a_id = ids_by_name["prod-a"]
     prod_b_id = ids_by_name["prod-b"]
 
-    template_res = runner.invoke(app, ["create-template", str(prod_b_id), "registry.home:80/other/", "2.0.0"])
+    template_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            str(prod_b_id),
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "2.0.0",
+        ],
+    )
     assert template_res.exit_code == 0
     template_id = _get_template_id_from_create_output(template_res.output)
 
@@ -287,13 +307,24 @@ def test_cli_get_product_and_template_commands(cli_runner):
     assert get_prod_res.exit_code == 0
     assert "get-prod" in get_prod_res.output
 
-    template_res = runner.invoke(app, ["create-template", "1", "registry.home:80/get/", "1.0.0"])
+    template_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            "1",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "1.0.0",
+        ],
+    )
     assert template_res.exit_code == 0
     template_id = _get_template_id_from_create_output(template_res.output)
 
     get_tmpl_res = runner.invoke(app, ["get-template", "1", str(template_id)])
     assert get_tmpl_res.exit_code == 0
-    assert "registry.home:80/get/" in get_tmpl_res.output
+    assert "oci://example/chart" in get_tmpl_res.output
 
     missing_product_res = runner.invoke(app, ["get-product", "99999"])
     assert missing_product_res.exit_code == 1
@@ -330,7 +361,18 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
     product_res = runner.invoke(app, ["create-product", "dep-cli-product", "dep product desc"])
     assert product_res.exit_code == 0
 
-    template_res = runner.invoke(app, ["create-template", "1", "registry.home:80/deploy/", "1.0.0"])
+    template_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            "1",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "1.0.0",
+        ],
+    )
     assert template_res.exit_code == 0
     template_id = _get_template_id_from_create_output(template_res.output)
 
@@ -360,7 +402,18 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
     product_res = runner.invoke(app, ["create-product", "dep-json-product", "dep json desc"])
     assert product_res.exit_code == 0
 
-    template_res = runner.invoke(app, ["create-template", "1", "registry.home:80/deploy-json/", "1.0.0"])
+    template_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            "1",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "1.0.0",
+        ],
+    )
     assert template_res.exit_code == 0
     template_id = _get_template_id_from_create_output(template_res.output)
 
@@ -392,7 +445,18 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
     product_res = runner.invoke(app, ["create-product", "dep-file-product", "dep file desc"])
     assert product_res.exit_code == 0
 
-    template_res = runner.invoke(app, ["create-template", "1", "registry.home:80/deploy-file/", "1.0.0"])
+    template_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            "1",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "1.0.0",
+        ],
+    )
     assert template_res.exit_code == 0
     template_id = _get_template_id_from_create_output(template_res.output)
 

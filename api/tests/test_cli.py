@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 
+from app.db import session_scope
+from app.services import templates as template_service
+
 
 def _get_product_id_from_list_output(output: str) -> int:
     lines = [ln for ln in output.strip().splitlines() if ln]
@@ -45,6 +48,15 @@ def _seed_deployment_via_services() -> tuple[int, int]:
             ),
         )
         return user.id, deployment.id
+
+
+def _get_template_from_services(product_id: int, template_id: int):
+    with session_scope() as session:
+        return template_service.get_template(
+            session,
+            product_id=product_id,
+            template_id=template_id,
+        )
 
 
 def test_cli_user_flow(cli_runner):
@@ -121,6 +133,94 @@ def test_cli_update_product_supports_template_and_description(cli_runner):
     assert "Updated product" in update_res.output
     assert f"template_id={template_id}" in update_res.output
     assert "description=new description" in update_res.output
+
+
+def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
+    runner, app = cli_runner
+
+    create_res = runner.invoke(app, ["create-product", "template-rich", "desc"])
+    assert create_res.exit_code == 0
+
+    values_schema_file = tmp_path / "values-schema.json"
+    values_schema_file.write_text(json.dumps({"type": "object", "properties": {"message": {"type": "string"}}}))
+
+    template_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "1",
+            "registry.home:80/rich/",
+            "2.1.0",
+            "--chart-digest",
+            "sha256:abc123",
+            "--version-label",
+            "stable-2.1.0",
+            "--default-values-json",
+            "{\"message\":\"hello\"}",
+            "--values-schema-file",
+            str(values_schema_file),
+            "--capabilities-json",
+            "{\"requires_admin_upgrade\":true}",
+        ],
+    )
+    assert template_res.exit_code == 0
+    template_id = _get_template_id_from_create_output(template_res.output)
+
+    template = _get_template_from_services(1, template_id)
+    assert template.chart_digest == "sha256:abc123"
+    assert template.version_label == "stable-2.1.0"
+    assert template.default_values_json == {"message": "hello"}
+    assert template.values_schema_json == {"type": "object", "properties": {"message": {"type": "string"}}}
+    assert template.capabilities_json == {"requires_admin_upgrade": True}
+
+
+def test_cli_create_template_invalid_json_returns_stable_error(cli_runner):
+    runner, app = cli_runner
+
+    create_res = runner.invoke(app, ["create-product", "template-invalid-json", "desc"])
+    assert create_res.exit_code == 0
+
+    result = runner.invoke(
+        app,
+        [
+            "create-template",
+            "1",
+            "registry.home:80/invalid/",
+            "1.0.0",
+            "--default-values-json",
+            "{not-json}",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Error: Invalid JSON for --default-values-json" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_cli_create_template_rejects_both_json_and_file_for_same_field(cli_runner, tmp_path):
+    runner, app = cli_runner
+
+    create_res = runner.invoke(app, ["create-product", "template-both-inputs", "desc"])
+    assert create_res.exit_code == 0
+
+    default_values_file = tmp_path / "default-values.json"
+    default_values_file.write_text(json.dumps({"message": "from-file"}))
+
+    result = runner.invoke(
+        app,
+        [
+            "create-template",
+            "1",
+            "registry.home:80/both/",
+            "1.0.0",
+            "--default-values-json",
+            "{\"message\":\"from-inline\"}",
+            "--default-values-file",
+            str(default_values_file),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Error: Provide only one of --default-values-json or --default-values-file" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_cli_update_product_not_found_returns_stable_error(cli_runner):

@@ -31,6 +31,7 @@ def cli_runner(tmp_path, monkeypatch):
     project_root = Path(__file__).resolve().parents[1]
     sys.path.append(str(project_root))
     # Use a temporary file-based SQLite DB for isolation
+    # TODO: Refactor this to use sqlite:///:memory:
     db_path = tmp_path / "test_cli.db"
     # Ensure a clean DB file
     if db_path.exists():

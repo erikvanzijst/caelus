@@ -20,34 +20,36 @@ from app.services.errors import NotFoundError
 app = typer.Typer(help="Caelus CLI", pretty_exceptions_show_locals=False)
 
 
-def _parse_user_values(
+def _parse_json_object_input(
     *,
-    user_values_json: str | None,
-    user_values_file: Path | None,
+    json_text: str | None,
+    json_file: Path | None,
+    json_option_name: str,
+    file_option_name: str,
 ) -> dict | None:
-    if user_values_json is not None and user_values_file is not None:
-        raise ValueError("Provide only one of --user-values-json or --user-values-file")
+    if json_text is not None and json_file is not None:
+        raise ValueError(f"Provide only one of {json_option_name} or {file_option_name}")
 
-    if user_values_json is not None:
+    if json_text is not None:
         try:
-            parsed = json.loads(user_values_json)
+            parsed = json.loads(json_text)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON for --user-values-json: {exc.msg}") from exc
+            raise ValueError(f"Invalid JSON for {json_option_name}: {exc.msg}") from exc
         if not isinstance(parsed, dict):
-            raise ValueError("--user-values-json must decode to a JSON object")
+            raise ValueError(f"{json_option_name} must decode to a JSON object")
         return parsed
 
-    if user_values_file is not None:
+    if json_file is not None:
         try:
-            content = user_values_file.read_text()
+            content = json_file.read_text()
         except OSError as exc:
-            raise ValueError(f"Unable to read --user-values-file: {exc}") from exc
+            raise ValueError(f"Unable to read {file_option_name}: {exc}") from exc
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON in --user-values-file: {exc.msg}") from exc
+            raise ValueError(f"Invalid JSON in {file_option_name}: {exc.msg}") from exc
         if not isinstance(parsed, dict):
-            raise ValueError("--user-values-file must contain a JSON object")
+            raise ValueError(f"{file_option_name} must contain a JSON object")
         return parsed
 
     return None
@@ -147,14 +149,88 @@ def get_product(product_id: int) -> None:
 
 
 @app.command("create-template")
-def create_template(product_id: int, chart_ref: str, chart_version: str) -> None:
+def create_template(
+    product_id: int,
+    chart_ref: str,
+    chart_version: str,
+    *,
+    chart_digest: str | None = typer.Option(
+        None, "--chart-digest", help="Optional immutable digest for the chart artifact."
+    ),
+    version_label: str | None = typer.Option(
+        None, "--version-label", help="Optional human-readable version label."
+    ),
+    default_values_json: str | None = typer.Option(
+        None,
+        "--default-values-json",
+        help="JSON object string for template default values.",
+    ),
+    default_values_file: Path | None = typer.Option(
+        None,
+        "--default-values-file",
+        help="Path to JSON file containing template default values object.",
+    ),
+    values_schema_json: str | None = typer.Option(
+        None,
+        "--values-schema-json",
+        help="JSON object string for template values schema.",
+    ),
+    values_schema_file: Path | None = typer.Option(
+        None,
+        "--values-schema-file",
+        help="Path to JSON file containing template values schema object.",
+    ),
+    capabilities_json: str | None = typer.Option(
+        None,
+        "--capabilities-json",
+        help="JSON object string for template capabilities.",
+    ),
+    capabilities_file: Path | None = typer.Option(
+        None,
+        "--capabilities-file",
+        help="Path to JSON file containing template capabilities object.",
+    ),
+) -> None:
+    try:
+        parsed_default_values = _parse_json_object_input(
+            json_text=default_values_json,
+            json_file=default_values_file,
+            json_option_name="--default-values-json",
+            file_option_name="--default-values-file",
+        )
+        parsed_values_schema = _parse_json_object_input(
+            json_text=values_schema_json,
+            json_file=values_schema_file,
+            json_option_name="--values-schema-json",
+            file_option_name="--values-schema-file",
+        )
+        parsed_capabilities = _parse_json_object_input(
+            json_text=capabilities_json,
+            json_file=capabilities_file,
+            json_option_name="--capabilities-json",
+            file_option_name="--capabilities-file",
+        )
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
     with session_scope() as session:
         try:
             template = template_service.create_template(
                 session,
-                ProductTemplateVersionCreate(product_id=product_id, chart_ref=chart_ref, chart_version=chart_version)
+                ProductTemplateVersionCreate(
+                    product_id=product_id,
+                    chart_ref=chart_ref,
+                    chart_version=chart_version,
+                    chart_digest=chart_digest,
+                    version_label=version_label,
+                    default_values_json=parsed_default_values,
+                    values_schema_json=parsed_values_schema,
+                    capabilities_json=parsed_capabilities,
+                ),
             )
-        except NotFoundError:
+        except NotFoundError as e:
+            typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(code=1)
         typer.echo(f"Created template {template.id} for product {product_id}")
 
@@ -208,9 +284,11 @@ def create_deployment(
     ),
 ) -> None:
     try:
-        parsed_user_values = _parse_user_values(
-            user_values_json=user_values_json,
-            user_values_file=user_values_file,
+        parsed_user_values = _parse_json_object_input(
+            json_text=user_values_json,
+            json_file=user_values_file,
+            json_option_name="--user-values-json",
+            file_option_name="--user-values-file",
         )
     except ValueError as e:
         typer.echo(f"Error: {e}", err=True)

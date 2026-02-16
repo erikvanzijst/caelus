@@ -15,6 +15,36 @@ def _get_template_id_from_create_output(output: str) -> int:
     return int(parts[2])
 
 
+def _seed_deployment_via_services() -> tuple[int, int]:
+    from app.db import session_scope
+    from app.models import UserCreate, ProductCreate, ProductTemplateVersionCreate, DeploymentCreate
+    from app.services import users as user_service, products as product_service, templates as template_service, \
+        deployments as deployment_service
+
+    with session_scope() as session:
+        user = user_service.create_user(session, UserCreate(email="getdep@example.com"))
+        product = product_service.create_product(
+            session, payload=ProductCreate(name="dep-product", description="dep desc")
+        )
+        template = template_service.create_template(
+            session,
+            ProductTemplateVersionCreate(
+                product_id=product.id,
+                chart_ref="registry.home:80/dep/",
+                chart_version="1.0.0",
+            ),
+        )
+        deployment = deployment_service.create_deployment(
+            session,
+            payload=DeploymentCreate(
+                user_id=user.id,
+                desired_template_id=template.id,
+                domainname="dep.example.com",
+            ),
+        )
+        return user.id, deployment.id
+
+
 def test_cli_user_flow(cli_runner):
     runner, app = cli_runner
 
@@ -127,3 +157,63 @@ def test_cli_update_product_template_validation_returns_stable_error(cli_runner)
     assert update_res.exit_code == 1
     assert "Error: Template not found" in update_res.output
     assert "Traceback" not in update_res.output
+
+
+def test_cli_get_user_command(cli_runner):
+    runner, app = cli_runner
+
+    create_res = runner.invoke(app, ["create-user", "getuser@example.com"])
+    assert create_res.exit_code == 0
+
+    get_res = runner.invoke(app, ["get-user", "1"])
+    assert get_res.exit_code == 0
+    assert "getuser@example.com" in get_res.output
+
+    miss_res = runner.invoke(app, ["get-user", "99999"])
+    assert miss_res.exit_code == 1
+    assert "Error: User not found" in miss_res.output
+    assert "Traceback" not in miss_res.output
+
+
+def test_cli_get_product_and_template_commands(cli_runner):
+    runner, app = cli_runner
+
+    create_res = runner.invoke(app, ["create-product", "get-prod", "desc"])
+    assert create_res.exit_code == 0
+
+    get_prod_res = runner.invoke(app, ["get-product", "1"])
+    assert get_prod_res.exit_code == 0
+    assert "get-prod" in get_prod_res.output
+
+    template_res = runner.invoke(app, ["create-template", "1", "registry.home:80/get/", "1.0.0"])
+    assert template_res.exit_code == 0
+    template_id = _get_template_id_from_create_output(template_res.output)
+
+    get_tmpl_res = runner.invoke(app, ["get-template", "1", str(template_id)])
+    assert get_tmpl_res.exit_code == 0
+    assert "registry.home:80/get/" in get_tmpl_res.output
+
+    missing_product_res = runner.invoke(app, ["get-product", "99999"])
+    assert missing_product_res.exit_code == 1
+    assert "Error: Product not found" in missing_product_res.output
+    assert "Traceback" not in missing_product_res.output
+
+    missing_template_res = runner.invoke(app, ["get-template", "1", "99999"])
+    assert missing_template_res.exit_code == 1
+    assert "Error: Template not found" in missing_template_res.output
+    assert "Traceback" not in missing_template_res.output
+
+
+def test_cli_get_deployment_command(cli_runner):
+    runner, app = cli_runner
+
+    user_id, deployment_id = _seed_deployment_via_services()
+
+    get_dep_res = runner.invoke(app, ["get-deployment", str(user_id), str(deployment_id)])
+    assert get_dep_res.exit_code == 0
+    assert "dep.example.com" in get_dep_res.output
+
+    missing_dep_res = runner.invoke(app, ["get-deployment", str(user_id), "99999"])
+    assert missing_dep_res.exit_code == 1
+    assert "Error: Deployment not found" in missing_dep_res.output
+    assert "Traceback" not in missing_dep_res.output

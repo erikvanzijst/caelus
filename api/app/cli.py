@@ -38,6 +38,17 @@ def list_users() -> None:
             typer.echo(user)
 
 
+@app.command("get-user")
+def get_user(user_id: int) -> None:
+    with session_scope() as session:
+        try:
+            user = user_service.get_user(session, user_id=user_id)
+        except NotFoundError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(user)
+
+
 @app.command("create-product")
 def create_product(name: str, description: str, template_id: int | None = None) -> None:
     with session_scope() as session:
@@ -88,6 +99,17 @@ def list_products() -> None:
             typer.echo(f"{product.id} {product.name}")
 
 
+@app.command("get-product")
+def get_product(product_id: int) -> None:
+    with session_scope() as session:
+        try:
+            product = product_service.get_product(session, product_id=product_id)
+        except NotFoundError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(product)
+
+
 @app.command("create-template")
 def create_template(product_id: int, chart_ref: str, chart_version: str) -> None:
     with session_scope() as session:
@@ -106,6 +128,21 @@ def list_templates(product_id: int) -> None:
     with session_scope() as session:
         for template in template_service.list_templates(session, product_id=product_id):
             typer.echo(template)
+
+
+@app.command("get-template")
+def get_template(product_id: int, template_id: int) -> None:
+    with session_scope() as session:
+        try:
+            template = template_service.get_template(
+                session,
+                product_id=product_id,
+                template_id=template_id,
+            )
+        except NotFoundError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(template)
 
 
 @app.command("delete-template")
@@ -136,6 +173,21 @@ def list_deployments(user_id: int) -> None:
     with session_scope() as session:
         for deployment in deployment_service.list_deployments(session, user_id=user_id):
             typer.echo(deployment)
+
+
+@app.command("get-deployment")
+def get_deployment(user_id: int, deployment_id: int) -> None:
+    with session_scope() as session:
+        try:
+            deployment = deployment_service.get_deployment(
+                session,
+                user_id=user_id,
+                deployment_id=deployment_id,
+            )
+        except NotFoundError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(deployment)
 
 
 @app.command("delete-deployment")

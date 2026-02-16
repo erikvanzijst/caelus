@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 
 def _get_product_id_from_list_output(output: str) -> int:
     lines = [ln for ln in output.strip().splitlines() if ln]
@@ -247,6 +249,95 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
     assert create_dep_res.exit_code == 0
     assert "Created deployment:" in create_dep_res.output
     assert "cli-audit.example.test" in create_dep_res.output
+
+
+def test_cli_create_deployment_accepts_user_values_json(cli_runner):
+    runner, app = cli_runner
+
+    user_res = runner.invoke(app, ["create-user", "depjson@example.com"])
+    assert user_res.exit_code == 0
+
+    product_res = runner.invoke(app, ["create-product", "dep-json-product", "dep json desc"])
+    assert product_res.exit_code == 0
+
+    template_res = runner.invoke(app, ["create-template", "1", "registry.home:80/deploy-json/", "1.0.0"])
+    assert template_res.exit_code == 0
+    template_id = _get_template_id_from_create_output(template_res.output)
+
+    create_dep_res = runner.invoke(
+        app,
+        [
+            "create-deployment",
+            "--user-id",
+            "1",
+            "--desired-template-id",
+            str(template_id),
+            "--domainname",
+            "cli-json.example.test",
+            "--user-values-json",
+            "{\"message\":\"hi\"}",
+        ],
+    )
+    assert create_dep_res.exit_code == 0
+    assert "Created deployment:" in create_dep_res.output
+    assert "cli-json.example.test" in create_dep_res.output
+
+
+def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
+    runner, app = cli_runner
+
+    user_res = runner.invoke(app, ["create-user", "depfile@example.com"])
+    assert user_res.exit_code == 0
+
+    product_res = runner.invoke(app, ["create-product", "dep-file-product", "dep file desc"])
+    assert product_res.exit_code == 0
+
+    template_res = runner.invoke(app, ["create-template", "1", "registry.home:80/deploy-file/", "1.0.0"])
+    assert template_res.exit_code == 0
+    template_id = _get_template_id_from_create_output(template_res.output)
+
+    values_file = tmp_path / "user-values.json"
+    values_file.write_text(json.dumps({"replicas": 2, "feature": {"enabled": True}}))
+
+    create_dep_res = runner.invoke(
+        app,
+        [
+            "create-deployment",
+            "--user-id",
+            "1",
+            "--desired-template-id",
+            str(template_id),
+            "--domainname",
+            "cli-file.example.test",
+            "--user-values-file",
+            str(values_file),
+        ],
+    )
+    assert create_dep_res.exit_code == 0
+    assert "Created deployment:" in create_dep_res.output
+    assert "cli-file.example.test" in create_dep_res.output
+
+
+def test_cli_create_deployment_user_values_invalid_json_returns_stable_error(cli_runner):
+    runner, app = cli_runner
+
+    result = runner.invoke(
+        app,
+        [
+            "create-deployment",
+            "--user-id",
+            "1",
+            "--desired-template-id",
+            "1",
+            "--domainname",
+            "bad-json.example.test",
+            "--user-values-json",
+            "{not-json}",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Error: Invalid JSON for --user-values-json" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_cli_create_deployment_not_found_returns_stable_error(cli_runner):

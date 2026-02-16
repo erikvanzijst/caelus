@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import typer
 
 from app.db import session_scope
@@ -15,6 +18,39 @@ from app.services import templates as template_service, deployments as deploymen
 from app.services.errors import NotFoundError
 
 app = typer.Typer(help="Caelus CLI", pretty_exceptions_show_locals=False)
+
+
+def _parse_user_values(
+    *,
+    user_values_json: str | None,
+    user_values_file: Path | None,
+) -> dict | None:
+    if user_values_json is not None and user_values_file is not None:
+        raise ValueError("Provide only one of --user-values-json or --user-values-file")
+
+    if user_values_json is not None:
+        try:
+            parsed = json.loads(user_values_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON for --user-values-json: {exc.msg}") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("--user-values-json must decode to a JSON object")
+        return parsed
+
+    if user_values_file is not None:
+        try:
+            content = user_values_file.read_text()
+        except OSError as exc:
+            raise ValueError(f"Unable to read --user-values-file: {exc}") from exc
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON in --user-values-file: {exc.msg}") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("--user-values-file must contain a JSON object")
+        return parsed
+
+    return None
 
 
 @app.command("create-user")
@@ -160,7 +196,26 @@ def create_deployment(
     user_id: int = typer.Option(..., "--user-id"),
     desired_template_id: int = typer.Option(..., "--desired-template-id"),
     domainname: str = typer.Option(..., "--domainname"),
+    user_values_json: str | None = typer.Option(
+        None,
+        "--user-values-json",
+        help="JSON object string for deployment user values, e.g. '{\"key\":\"value\"}'.",
+    ),
+    user_values_file: Path | None = typer.Option(
+        None,
+        "--user-values-file",
+        help="Path to a JSON file containing a JSON object for deployment user values.",
+    ),
 ) -> None:
+    try:
+        parsed_user_values = _parse_user_values(
+            user_values_json=user_values_json,
+            user_values_file=user_values_file,
+        )
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
     with session_scope() as session:
         try:
             deployment = deployment_service.create_deployment(
@@ -169,6 +224,7 @@ def create_deployment(
                     user_id=user_id,
                     desired_template_id=desired_template_id,
                     domainname=domainname,
+                    user_values_json=parsed_user_values,
                 ),
             )
         except NotFoundError as e:

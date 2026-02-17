@@ -235,6 +235,15 @@ class DeploymentReconcileJobBase(SQLModel):
 
 class DeploymentReconcileJobORM(DeploymentReconcileJobBase, table=True):
     __tablename__ = "deployment_reconcile_job"
+    __table_args__ = (
+        Index(
+            "uq_open_reconcile_job_per_deployment",
+            "deployment_id",
+            unique=True,
+            sqlite_where=Column("status").in_(("queued", "running")),
+            postgresql_where=Column("status").in_(("queued", "running")),
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     deployment_id: int = Field(

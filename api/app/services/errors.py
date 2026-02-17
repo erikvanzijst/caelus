@@ -6,6 +6,10 @@ class IntegrityException(CaelusException):
     pass
 
 
+class DeploymentInProgressException(CaelusException):
+    pass
+
+
 class NotFoundException(CaelusException):
     # Alias for compatibility with older code
     pass

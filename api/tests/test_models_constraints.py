@@ -1,7 +1,9 @@
 import pytest
 from datetime import datetime
 
-from app.services import templates, deployments, products, users
+from app.services import templates, deployments, products, users, jobs
+from sqlmodel import select
+from app.models import DeploymentReconcileJobORM
 from app.services.errors import IntegrityException
 from tests.conftest import db_session
 
@@ -66,6 +68,13 @@ def test_deployment_unique_constraint(db_session):
         )
     # rollback the failed transaction
     db_session.rollback()
+    create_job = db_session.exec(
+        select(DeploymentReconcileJobORM).where(
+            DeploymentReconcileJobORM.deployment_id == dep1.id,
+            DeploymentReconcileJobORM.reason == "create",
+        )
+    ).one()
+    jobs.mark_job_done(db_session, job_id=create_job.id)
     # Delete first deployment via service
     deployments.delete_deployment(db_session, user_id=user.id, deployment_id=dep1.id)
 

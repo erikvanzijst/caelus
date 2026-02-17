@@ -9,11 +9,11 @@ from app.models import (
     DeploymentCreate,
     DeploymentORM,
     DeploymentRead,
-    DeploymentReconcileJobORM,
     ProductTemplateVersionORM, DeploymentUpdate,
 )
+from app.services import jobs as jobs_service
 from app.services import users as user_service
-from app.services.errors import IntegrityException, NotFoundException
+from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETING,
     DEPLOYMENT_STATUS_PENDING,
@@ -26,7 +26,7 @@ from app.services.reconcile_naming import generate_deployment_uid
 
 
 def _enqueue_reconcile_job(session: Session, *, deployment_id: int, reason: str) -> None:
-    session.add(DeploymentReconcileJobORM(deployment_id=deployment_id, reason=reason))
+    jobs_service.enqueue_job(session, deployment_id=deployment_id, reason=reason)
 
 
 def _get_active_deployment_orm(
@@ -76,7 +76,11 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
         session.commit()
         session.refresh(deployment)
         return DeploymentRead.model_validate(deployment)
+    except DeploymentInProgressException:
+        session.rollback()
+        raise
     except IntegrityError as exc:
+        session.rollback()
         raise IntegrityException("Deployment already exists") from exc
 
 
@@ -116,8 +120,12 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
     #  should probably only toggle the flag after the instance has been deleted successfully:
     deployment.deleted_at = datetime.utcnow()
     session.add(deployment)
-    _enqueue_reconcile_job(session, deployment_id=deployment_id, reason=JOB_REASON_DELETE)
-    session.commit()
+    try:
+        _enqueue_reconcile_job(session, deployment_id=deployment_id, reason=JOB_REASON_DELETE)
+        session.commit()
+    except DeploymentInProgressException:
+        session.rollback()
+        raise
     return DeploymentRead.model_validate(deployment)
 
 
@@ -138,7 +146,11 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
     deployment.generation += 1
     deployment.last_error = None
     session.add(deployment)
-    _enqueue_reconcile_job(session, deployment_id=update.id, reason=JOB_REASON_UPDATE)
-    session.commit()
+    try:
+        _enqueue_reconcile_job(session, deployment_id=update.id, reason=JOB_REASON_UPDATE)
+        session.commit()
+    except DeploymentInProgressException:
+        session.rollback()
+        raise
     session.refresh(deployment)
     return DeploymentRead.model_validate(deployment)

@@ -4,8 +4,8 @@ import pytest
 from sqlmodel import select
 
 from app.models import DeploymentReconcileJobORM
-from app.services import deployments, products, templates, users
-from app.services.errors import IntegrityException
+from app.services import deployments, jobs, products, templates, users
+from app.services.errors import DeploymentInProgressException, IntegrityException
 
 
 def _setup_user_and_templates(db_session):
@@ -65,6 +65,12 @@ def test_delete_deployment_sets_state_and_enqueues_delete_job(db_session):
         ),
     )
 
+    create_job = db_session.exec(
+        select(DeploymentReconcileJobORM)
+        .where(DeploymentReconcileJobORM.deployment_id == dep.id, DeploymentReconcileJobORM.reason == "create")
+    ).one()
+    jobs.mark_job_done(db_session, job_id=create_job.id)
+
     deleted = deployments.delete_deployment(db_session, user_id=user.id, deployment_id=dep.id)
     assert deleted.status == "deleting"
     assert deleted.generation == 2
@@ -72,12 +78,12 @@ def test_delete_deployment_sets_state_and_enqueues_delete_job(db_session):
     assert deleted_orm is not None
     assert deleted_orm.deleted_at is not None
 
-    jobs = db_session.exec(
+    queued_jobs = db_session.exec(
         select(DeploymentReconcileJobORM)
         .where(DeploymentReconcileJobORM.deployment_id == dep.id)
         .order_by(DeploymentReconcileJobORM.id)
     ).all()
-    assert [j.reason for j in jobs] == ["create", "delete"]
+    assert [j.reason for j in queued_jobs] == ["create", "delete"]
 
 
 def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
@@ -91,6 +97,12 @@ def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
         ),
     )
 
+    create_job = db_session.exec(
+        select(DeploymentReconcileJobORM)
+        .where(DeploymentReconcileJobORM.deployment_id == dep.id, DeploymentReconcileJobORM.reason == "create")
+    ).one()
+    jobs.mark_job_done(db_session, job_id=create_job.id)
+
     upgraded = deployments.update_deployment(
         db_session,
         update=deployments.DeploymentUpdate(id=dep.id, user_id=user.id, desired_template_id=template_v2.id)
@@ -99,15 +111,43 @@ def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
     assert upgraded.generation == 2
     assert upgraded.desired_template_id == template_v2.id
 
-    jobs = db_session.exec(
+    queued_jobs = db_session.exec(
         select(DeploymentReconcileJobORM)
         .where(DeploymentReconcileJobORM.deployment_id == dep.id)
         .order_by(DeploymentReconcileJobORM.id)
     ).all()
-    assert [j.reason for j in jobs] == ["create", "update"]
+    assert [j.reason for j in queued_jobs] == ["create", "update"]
 
     with pytest.raises(IntegrityException):
         deployments.update_deployment(
             db_session,
             deployments.DeploymentUpdate(id=dep.id, user_id=user.id, desired_template_id=template_v1.id)
         )
+
+
+def test_update_rolls_back_when_open_job_exists(db_session):
+    user, template_v1, template_v2 = _setup_user_and_templates(db_session)
+    dep = deployments.create_deployment(
+        db_session,
+        payload=deployments.DeploymentCreate(
+            user_id=user.id,
+            desired_template_id=template_v1.id,
+            domainname="queue-rollback.example.test",
+        ),
+    )
+
+    with pytest.raises(DeploymentInProgressException):
+        deployments.update_deployment(
+            db_session,
+            update=deployments.DeploymentUpdate(
+                id=dep.id,
+                user_id=user.id,
+                desired_template_id=template_v2.id,
+            ),
+        )
+
+    current = db_session.get(deployments.DeploymentORM, dep.id)
+    assert current is not None
+    assert current.desired_template_id == template_v1.id
+    assert current.status == "pending"
+    assert current.generation == 1

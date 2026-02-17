@@ -1,7 +1,11 @@
+from sqlmodel import select
+
+from app.models import DeploymentReconcileJobORM
+from app.services import jobs
 from tests.conftest import client
 
 
-def test_delete_deployment_flow(client):
+def test_delete_deployment_flow(client, db_session):
     # create user
     user_resp = client.post("/users", json={"email": "deldep@example.com"})
     assert user_resp.status_code == 201
@@ -22,6 +26,13 @@ def test_delete_deployment_flow(client):
     )
     assert dep_resp.status_code == 201
     dep_id = dep_resp.json()["id"]
+    create_job = db_session.exec(
+        select(DeploymentReconcileJobORM).where(
+            DeploymentReconcileJobORM.deployment_id == dep_id,
+            DeploymentReconcileJobORM.reason == "create",
+        )
+    ).one()
+    jobs.mark_job_done(db_session, job_id=create_job.id)
     # delete deployment
     del_resp = client.delete(f"/users/{user_id}/deployments/{dep_id}")
     assert del_resp.status_code == 204

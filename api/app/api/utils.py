@@ -2,10 +2,16 @@ from pydantic import ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from app.services.errors import CaelusException, IntegrityException, NotFoundException
+from app.services.errors import (
+    CaelusException,
+    DeploymentInProgressException,
+    IntegrityException,
+    NotFoundException,
+)
 
 ERROR_STATUS = {
     IntegrityException: 409,
+    DeploymentInProgressException: 409,
     NotFoundException: 404
 }
 

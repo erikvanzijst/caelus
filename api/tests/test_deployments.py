@@ -2,6 +2,7 @@ from tests.conftest import client, db_session
 from sqlmodel import select
 
 from app.models import DeploymentORM, DeploymentReconcileJobORM
+from app.services import jobs
 
 
 def test_delete_deployment_flow(client, db_session):
@@ -37,6 +38,7 @@ def test_delete_deployment_flow(client, db_session):
         )
     ).all()
     assert len(create_jobs) == 1
+    jobs.mark_job_done(db_session, job_id=create_jobs[0].id)
 
     # Delete the deployment
     del_resp = client.delete(f"/users/{user_id}/deployments/{deployment_id}")
@@ -90,6 +92,13 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
     )
     assert dep_resp.status_code == 201
     dep_id = dep_resp.json()["id"]
+    create_job = db_session.exec(
+        select(DeploymentReconcileJobORM).where(
+            DeploymentReconcileJobORM.deployment_id == dep_id,
+            DeploymentReconcileJobORM.reason == "create",
+        )
+    ).one()
+    jobs.mark_job_done(db_session, job_id=create_job.id)
 
     upgrade_resp = client.put(
         f"/users/{user_id}/deployments/{dep_id}",

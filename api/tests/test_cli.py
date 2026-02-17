@@ -4,7 +4,7 @@ import json
 
 from app.db import session_scope
 from app.models import DeploymentORM, DeploymentReconcileJobORM
-from app.services import templates as template_service
+from app.services import jobs as jobs_service, templates as template_service
 from sqlmodel import select
 
 
@@ -74,6 +74,20 @@ def _get_job_reasons_for_deployment(deployment_id: int) -> list[str]:
             .order_by(DeploymentReconcileJobORM.id)
         ).all()
         return [job.reason for job in jobs]
+
+
+def _mark_first_open_job_done(deployment_id: int) -> None:
+    with session_scope() as session:
+        job = session.exec(
+            select(DeploymentReconcileJobORM)
+            .where(
+                DeploymentReconcileJobORM.deployment_id == deployment_id,
+                DeploymentReconcileJobORM.status.in_(("queued", "running")),
+            )
+            .order_by(DeploymentReconcileJobORM.id)
+        ).first()
+        assert job is not None
+        jobs_service.mark_job_done(session, job_id=job.id)
 
 
 def test_cli_user_flow(cli_runner):
@@ -599,6 +613,7 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
     assert deployment is not None
     dep_id = deployment.id
     assert dep_id is not None
+    _mark_first_open_job_done(dep_id)
 
     upgrade_res = runner.invoke(
         app,
@@ -614,6 +629,7 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
     )
     assert upgrade_res.exit_code == 0
     assert f"Upgraded deployment {dep_id}" in upgrade_res.output
+    _mark_first_open_job_done(dep_id)
 
     delete_res = runner.invoke(app, ["delete-deployment", "1", str(dep_id)])
     assert delete_res.exit_code == 0

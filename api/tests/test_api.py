@@ -48,6 +48,50 @@ def test_user_deployment_flow(client):
     assert fetched.json()["domainname"] == "cloud.example.com"
 
 
+def test_user_deployment_flow_with_user_values(client):
+    user = client.post("/users", json={"email": "user-values@example.com"})
+    assert user.status_code == 201
+    user_id = user.json()["id"]
+
+    product = client.post("/products", json={"name": "nextcloud-values", "description": "Nextcloud app"})
+    assert product.status_code == 201
+    product_id = product.json()["id"]
+
+    template = client.post(
+        f"/products/{product_id}/templates",
+        json={
+            "chart_ref": "oci://example/chart",
+            "chart_version": "1.0.0",
+            "values_schema_json": {
+                "type": "object",
+                "properties": {
+                    "user": {
+                        "type": "object",
+                        "properties": {"message": {"type": "string"}},
+                        "required": ["message"],
+                        "additionalProperties": False,
+                    }
+                },
+                "required": ["user"],
+                "additionalProperties": False,
+            },
+        },
+    )
+    assert template.status_code == 201
+    template_id = template.json()["id"]
+
+    deployment = client.post(
+        f"/users/{user_id}/deployments",
+        json={
+            "desired_template_id": template_id,
+            "domainname": "values.example.com",
+            "user_values_json": {"message": "hi"},
+        },
+    )
+    assert deployment.status_code == 201
+    assert deployment.json()["user_values_json"] == {"message": "hi"}
+
+
 def test_user_delete_flow(client):
     # Create a user
     user = client.post("/users", json={"email": "del@example.com"})

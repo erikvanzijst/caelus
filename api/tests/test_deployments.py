@@ -116,3 +116,70 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
         )
     ).all()
     assert len(update_jobs) == 1
+
+
+def test_create_deployment_rejects_user_values_when_user_scope_schema_missing(client):
+    user_resp = client.post("/users", json={"email": "noscope@example.com"})
+    assert user_resp.status_code == 201
+    user_id = user_resp.json()["id"]
+
+    product_resp = client.post("/products", json={"name": "noscope-prod", "description": "desc"})
+    assert product_resp.status_code == 201
+    product_id = product_resp.json()["id"]
+
+    tmpl_resp = client.post(
+        f"/products/{product_id}/templates",
+        json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": {"type": "object"}},
+    )
+    assert tmpl_resp.status_code == 201
+    tmpl_id = tmpl_resp.json()["id"]
+
+    dep_resp = client.post(
+        f"/users/{user_id}/deployments",
+        json={
+            "desired_template_id": tmpl_id,
+            "domainname": "noscope.example.test",
+            "user_values_json": {"message": "hello"},
+        },
+    )
+    assert dep_resp.status_code == 409
+    assert "properties.user" in dep_resp.json()["detail"]
+
+
+def test_create_deployment_rejects_unknown_user_keys_against_schema(client):
+    user_resp = client.post("/users", json={"email": "unknownkeys@example.com"})
+    assert user_resp.status_code == 201
+    user_id = user_resp.json()["id"]
+
+    product_resp = client.post("/products", json={"name": "unknownkeys-prod", "description": "desc"})
+    assert product_resp.status_code == 201
+    product_id = product_resp.json()["id"]
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "user": {
+                "type": "object",
+                "properties": {"message": {"type": "string"}},
+                "additionalProperties": False,
+            }
+        },
+        "additionalProperties": False,
+    }
+    tmpl_resp = client.post(
+        f"/products/{product_id}/templates",
+        json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": schema},
+    )
+    assert tmpl_resp.status_code == 201
+    tmpl_id = tmpl_resp.json()["id"]
+
+    dep_resp = client.post(
+        f"/users/{user_id}/deployments",
+        json={
+            "desired_template_id": tmpl_id,
+            "domainname": "unknownkeys.example.test",
+            "user_values_json": {"message": "hello", "extra": True},
+        },
+    )
+    assert dep_resp.status_code == 409
+    assert "invalid" in dep_resp.json()["detail"]

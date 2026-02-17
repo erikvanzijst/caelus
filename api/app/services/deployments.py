@@ -12,6 +12,7 @@ from app.models import (
     ProductTemplateVersionORM, DeploymentUpdate,
 )
 from app.services import jobs as jobs_service
+from app.services import template_values
 from app.services import users as user_service
 from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException
 from app.services.reconcile_constants import (
@@ -53,6 +54,16 @@ def _get_active_deployment_orm(
     return deployment
 
 
+def _validate_user_values(template: ProductTemplateVersionORM, user_values_json: dict | None) -> None:
+    template_values.validate_user_values(user_values_json, template.values_schema_json)
+    merged_values = template_values.merge_values_scoped(
+        template.default_values_json,
+        user_values_json,
+        system_overrides={},
+    )
+    template_values.validate_merged_values(merged_values, template.values_schema_json)
+
+
 def create_deployment(session: Session, *, payload: DeploymentCreate) -> DeploymentRead:
     # ensure that the user exists
     user = user_service.get_user(session, user_id=payload.user_id)
@@ -60,6 +71,10 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     template = session.get(ProductTemplateVersionORM, payload.desired_template_id)
     if not template:
         raise NotFoundException("Template not found")
+
+    # Pre-flight the user-provided values against the template's schema:
+    _validate_user_values(template, payload.user_values_json)
+
     deployment_uid = generate_deployment_uid(product_name=template.product.name, user_email=user.email)
     deployment: DeploymentORM = DeploymentORM.model_validate(
         dict(
@@ -140,6 +155,9 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
     current_template = session.get(ProductTemplateVersionORM, deployment.desired_template_id)
     if current_template and target_template.product_id != current_template.product_id:
         raise IntegrityException("Upgrade template must belong to the same product")
+
+    # Pre-flight the user-provided values against the template's schema:
+    _validate_user_values(target_template, deployment.user_values_json)
 
     deployment.desired_template_id = update.desired_template_id
     deployment.status = DEPLOYMENT_STATUS_UPGRADING

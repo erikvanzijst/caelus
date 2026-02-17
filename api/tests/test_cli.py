@@ -348,6 +348,8 @@ def test_cli_get_product_and_template_commands(cli_runner):
             "oci://example/chart",
             "--chart-version",
             "1.0.0",
+            "--values-schema-json",
+            "{\"type\":\"object\",\"properties\":{\"user\":{\"type\":\"object\"}}}",
         ],
     )
     assert template_res.exit_code == 0
@@ -402,6 +404,8 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
             "oci://example/chart",
             "--chart-version",
             "1.0.0",
+            "--values-schema-json",
+            "{\"type\":\"object\",\"properties\":{\"user\":{\"type\":\"object\"}}}",
         ],
     )
     assert template_res.exit_code == 0
@@ -443,6 +447,8 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
             "oci://example/chart",
             "--chart-version",
             "1.0.0",
+            "--values-schema-json",
+            "{\"type\":\"object\",\"properties\":{\"user\":{\"type\":\"object\"}}}",
         ],
     )
     assert template_res.exit_code == 0
@@ -486,6 +492,8 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
             "oci://example/chart",
             "--chart-version",
             "1.0.0",
+            "--values-schema-json",
+            "{\"type\":\"object\",\"properties\":{\"user\":{\"type\":\"object\"}}}",
         ],
     )
     assert template_res.exit_code == 0

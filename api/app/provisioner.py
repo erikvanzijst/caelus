@@ -14,7 +14,6 @@ class NamespaceResult:
     name: str
     exists: bool
     changed: bool
-    terminating: bool = False
 
 
 class KubeAdapter:
@@ -61,26 +60,6 @@ class KubeAdapter:
                 return False
             raise
 
-    def namespace_terminating(self, name: str) -> bool:
-        try:
-            result = run_command(
-                [
-                    "kubectl",
-                    "get",
-                    "namespace",
-                    name,
-                    "-o",
-                    "jsonpath={.status.phase}",
-                ],
-                runner=self._runner,
-                error_message=f"Failed to inspect namespace {name}",
-            )
-            return result.stdout.strip().lower() == "terminating"
-        except AdapterCommandError as exc:
-            text = f"{exc.result.stderr}\n{exc.result.stdout}".lower()
-            if "not found" in text:
-                return False
-            raise
 
 
 @dataclass(frozen=True)
@@ -276,9 +255,6 @@ class Provisioner:
 
     def namespace_exists(self, *, name: str) -> bool:
         return self.kube.namespace_exists(name)
-
-    def namespace_terminating(self, *, name: str) -> bool:
-        return self.kube.namespace_terminating(name)
 
     def helm_upgrade_install(
         self,

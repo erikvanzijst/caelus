@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+
+from app.models import DeploymentORM, ProductTemplateVersionORM
+from app.provisioner import Provisioner, provisioner as default_provisioner
+from app.services import template_values
+from app.services.errors import IntegrityException
+from app.services.reconcile_constants import (
+    DEPLOYMENT_STATUS_DELETED,
+    DEPLOYMENT_STATUS_ERROR,
+    DEPLOYMENT_STATUS_READY,
+)
+
+
+@dataclass(frozen=True)
+class ReconcileResult:
+    status: str
+    applied_template_id: int | None
+    last_error: str | None
+    last_reconcile_at: datetime | None
+
+
+class DeploymentReconciler:
+    """Reconcile a single deployment state against Kubernetes/Helm."""
+
+    def __init__(self, *, provisioner: Provisioner | None = None) -> None:
+        self._provisioner = provisioner or default_provisioner
+
+    def reconcile(self, deployment: DeploymentORM) -> ReconcileResult:
+        try:
+            self._validate_input_state(deployment)
+            if deployment.deleted_at is not None:
+                return self._reconcile_delete(deployment)
+            return self._reconcile_apply(deployment)
+        except Exception as exc:
+            return ReconcileResult(
+                status=DEPLOYMENT_STATUS_ERROR,
+                applied_template_id=deployment.applied_template_id,
+                last_error=str(exc),
+                last_reconcile_at=datetime.utcnow(),
+            )
+
+    @staticmethod
+    def _validate_input_state(deployment: DeploymentORM) -> None:
+        if not deployment.deployment_uid:
+            raise IntegrityException("Deployment is missing deployment_uid")
+        if deployment.user is None:
+            raise IntegrityException("Deployment is missing loaded user relationship")
+        if deployment.desired_template is None:
+            raise IntegrityException("Deployment is missing loaded desired_template relationship")
+        template = deployment.desired_template
+        if template.deleted_at is not None:
+            raise IntegrityException("Desired template is deleted")
+        if template.chart_ref is None or template.chart_version is None:
+            raise IntegrityException("Desired template chart_ref and chart_version are required")
+        if template.product is None:
+            raise IntegrityException("Desired template is missing loaded product relationship")
+
+    def _reconcile_apply(self, deployment: DeploymentORM) -> ReconcileResult:
+        template = deployment.desired_template
+        assert template is not None
+        release_name, namespace = self._resolve_identity(deployment)
+        merged_values = self._build_merged_values(deployment, template)
+
+        self._provisioner.ensure_namespace(name=namespace)
+        self._provisioner.helm_upgrade_install(
+            release_name=release_name,
+            namespace=namespace,
+            chart_ref=template.chart_ref,
+            chart_version=template.chart_version,
+            chart_digest=template.chart_digest,
+            values=merged_values,
+            timeout=template.health_timeout_sec or 300,
+            atomic=True,
+            wait=True,
+        )
+
+        return ReconcileResult(
+            status=DEPLOYMENT_STATUS_READY,
+            applied_template_id=deployment.desired_template_id,
+            last_error=None,
+            last_reconcile_at=datetime.utcnow(),
+        )
+
+    def _reconcile_delete(self, deployment: DeploymentORM) -> ReconcileResult:
+        release_name, namespace = self._resolve_identity(deployment)
+        timeout = (deployment.desired_template.health_timeout_sec or 300) if deployment.desired_template else 300
+
+        self._provisioner.helm_uninstall(
+            release_name=release_name,
+            namespace=namespace,
+            timeout=timeout,
+            wait=True,
+        )
+        self._provisioner.delete_namespace(name=namespace)
+
+        return ReconcileResult(
+            status=DEPLOYMENT_STATUS_DELETED,
+            applied_template_id=deployment.applied_template_id,
+            last_error=None,
+            last_reconcile_at=datetime.utcnow(),
+        )
+
+    @staticmethod
+    def _resolve_identity(deployment: DeploymentORM) -> tuple[str, str]:
+        identity = deployment.deployment_uid
+        return identity, identity
+
+    def _build_merged_values(
+        self,
+        deployment: DeploymentORM,
+        template: ProductTemplateVersionORM,
+    ) -> dict:
+        template_values.validate_user_values(deployment.user_values_json, template.values_schema_json)
+        merged_values = template_values.merge_values_scoped(
+            template.default_values_json,
+            deployment.user_values_json,
+            self._build_system_overrides(deployment),
+        )
+        template_values.validate_merged_values(merged_values, template.values_schema_json)
+        return merged_values
+
+    def _build_system_overrides(self, deployment: DeploymentORM) -> dict:
+        return {}

@@ -119,7 +119,7 @@ uv run --no-sync python -m app.cli create-template \
   --values-schema-json "$SCHEMA_JSON"
 uv run --no-sync python -m app.cli update-product 1 --template-id 1
 
-log "Creating deployment for $DOMAIN with custom message"
+log "Creating deployment for $DOMAIN with custom message: $MESSAGE"
 dep_out="$(uv run --no-sync python -m app.cli create-deployment \
   --user-id 1 \
   --desired-template-id 1 \

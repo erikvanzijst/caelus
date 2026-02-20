@@ -5,7 +5,10 @@ from app.services import templates, deployments, products, users, jobs
 from sqlmodel import select
 from app.models import DeploymentReconcileJobORM
 from app.services.errors import IntegrityException
+from app.services.reconcile import DeploymentReconciler
+from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
 from tests.conftest import db_session
+from tests.provisioner_utils import FakeProvisioner
 
 
 def test_product_name_unique_constraint(db_session):
@@ -77,6 +80,12 @@ def test_deployment_unique_constraint(db_session):
     jobs.mark_job_done(db_session, job_id=create_job.id)
     # Delete first deployment via service
     deployments.delete_deployment(db_session, user_id=user.id, deployment_id=dep1.id)
+
+    # Run the reconciler to actually process the delete request and set the status to deleted:
+    reconciler = DeploymentReconciler(session=db_session, provisioner=FakeProvisioner())
+
+    result = reconciler.reconcile(dep1.id)
+    assert result.status == DEPLOYMENT_STATUS_DELETED
 
     # Now creating same deployment should succeed
     dep2 = deployments.create_deployment(

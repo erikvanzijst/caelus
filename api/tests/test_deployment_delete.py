@@ -2,6 +2,7 @@ from sqlmodel import select
 
 from app.models import DeploymentReconcileJobORM
 from app.services import jobs
+from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETING
 from tests.conftest import client
 
 
@@ -36,11 +37,12 @@ def test_delete_deployment_flow(client, db_session):
     # delete deployment
     del_resp = client.delete(f"/users/{user_id}/deployments/{dep_id}")
     assert del_resp.status_code == 204
-    # get should be 404
+    # After deletion, the deployment can still be retrieved:
     get_resp = client.get(f"/users/{user_id}/deployments/{dep_id}")
-    assert get_resp.status_code == 404
-    # list should not include
+    assert get_resp.status_code == 200
+    assert get_resp.json()["status"] == DEPLOYMENT_STATUS_DELETING
+
+    # And also still present in listing:
     list_resp = client.get(f"/users/{user_id}/deployments")
     assert list_resp.status_code == 200
-    ids = [d["id"] for d in list_resp.json()]
-    assert dep_id not in ids
+    assert dep_id in {d["id"] for d in list_resp.json()}

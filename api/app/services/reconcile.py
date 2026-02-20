@@ -36,7 +36,7 @@ class DeploymentReconciler:
 
     def reconcile(self, deployment_id: int) -> ReconcileResult:
         logger.info("Starting reconcile for deployment_id=%s", deployment_id)
-        deployment = _get_deployment_orm(self._session, deployment_id=deployment_id, include_deleted=True)
+        deployment = _get_deployment_orm(self._session, deployment_id=deployment_id)
         try:
             self._validate_input_state(deployment)
             if deployment.deleted_at is not None:

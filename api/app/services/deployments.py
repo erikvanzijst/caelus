@@ -18,11 +18,10 @@ from app.services import users as user_service
 from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETING,
-    DEPLOYMENT_STATUS_PENDING,
-    DEPLOYMENT_STATUS_UPGRADING,
+    DEPLOYMENT_STATUS_PROVISIONING,
     JOB_REASON_CREATE,
     JOB_REASON_DELETE,
-    JOB_REASON_UPDATE,
+    JOB_REASON_UPDATE, DEPLOYMENT_STATUS_DELETED,
 )
 from app.services.reconcile_naming import generate_deployment_uid
 
@@ -38,7 +37,6 @@ def _get_deployment_orm(
     *,
     deployment_id: int,
     user_id: int | None = None,
-    include_deleted: bool = False,
 ) -> DeploymentORM:
     stmt = (
         select(DeploymentORM)
@@ -51,10 +49,7 @@ def _get_deployment_orm(
     )
     if user_id is not None:
         stmt = stmt.where(DeploymentORM.user_id == user_id)
-    if not include_deleted:
-        stmt = stmt.where(DeploymentORM.deleted_at == None)  # noqa: E712
-    deployment = session.exec(stmt).one_or_none()
-    if not deployment:
+    if not (deployment := session.exec(stmt).one_or_none()):
         raise NotFoundException("Deployment not found")
     return deployment
 
@@ -84,7 +79,7 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     deployment: DeploymentORM = DeploymentORM.model_validate(
         dict(
             deployment_uid=deployment_uid,
-            status=DEPLOYMENT_STATUS_PENDING,
+            status=DEPLOYMENT_STATUS_PROVISIONING,
             **payload.model_dump(),
         )
     )
@@ -113,7 +108,7 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
 
 
 def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
-    # Return deployments for the user that are not marked as deleted
+    # Return deployments for the user
     deployments = session.exec(
         select(DeploymentORM)
         .options(
@@ -121,18 +116,16 @@ def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
             selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
             selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
         )
-        .where(DeploymentORM.user_id == user_id, DeploymentORM.deleted_at == None)  # noqa: E712
+        .where(DeploymentORM.user_id == user_id)  # noqa: E712
     ).all()
-    # Convert ORM objects to read models
     return [DeploymentRead.model_validate(d) for d in deployments]
 
 
-def get_deployment(session: Session, *, deployment_id: int, user_id: int | None = None, include_deleted: bool|None = False) -> DeploymentRead:
+def get_deployment(session: Session, *, deployment_id: int, user_id: int | None = None) -> DeploymentRead:
     deployment = _get_deployment_orm(
         session,
         user_id=user_id,
         deployment_id=deployment_id,
-        include_deleted=include_deleted,
     )
     return DeploymentRead.model_validate(deployment)
 
@@ -141,31 +134,26 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
     """Mark a deployment as deleted.
 
     Retrieves the deployment ensuring it belongs to the given user. If not found,
-    raises NotFoundException. Otherwise, sets the ``deleted`` flag to ``True`` and
-    commits the transaction.
+    raises NotFoundException. Otherwise, sets the status to ``deleting`` and
+    commits the transaction (the reconciler worker will perform the actual deletion).
     """
-    deployment = _get_deployment_orm(
-        session,
-        user_id=user_id,
-        deployment_id=deployment_id,
-        include_deleted=False,
-    )
-    deployment.status = DEPLOYMENT_STATUS_DELETING
-    deployment.generation += 1
-    deployment.last_error = None
-
-    # TODO: this makes the deployment invisible to the user immediately (undesireable --
-    #  should probably only toggle the flag after the instance has been deleted successfully):
-    deployment.deleted_at = datetime.utcnow()
-    session.add(deployment)
-    try:
-        _enqueue_reconcile_job(session, deployment_id=deployment_id, reason=JOB_REASON_DELETE)
-        session.commit()
-    except DeploymentInProgressException:
-        session.rollback()
-        logger.warning("Delete deployment blocked by in-progress reconcile job deployment_id=%s", deployment_id)
-        raise
-    logger.info("Marked deployment id=%s user_id=%s for deletion", deployment_id, user_id)
+    deployment = _get_deployment_orm(session, user_id=user_id, deployment_id=deployment_id)
+    if deployment.status not in (DEPLOYMENT_STATUS_DELETING, DEPLOYMENT_STATUS_DELETED):
+        deployment.status = DEPLOYMENT_STATUS_DELETING
+        deployment.generation += 1
+        deployment.last_error = None
+        deployment.deleted_at = datetime.utcnow()
+        session.add(deployment)
+        try:
+            _enqueue_reconcile_job(session, deployment_id=deployment_id, reason=JOB_REASON_DELETE)
+            session.commit()
+        except DeploymentInProgressException:
+            session.rollback()
+            logger.warning("Delete deployment blocked by in-progress reconcile job deployment_id=%s", deployment_id)
+            raise
+        logger.info("Marked deployment id=%s user_id=%s for deletion", deployment_id, user_id)
+    else:
+        logger.info("Deployment id=%s user_id=%s is already marked for deletion or deleted", deployment_id, user_id)
     return DeploymentRead.model_validate(deployment)
 
 
@@ -174,7 +162,6 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
         session,
         user_id=update.user_id,
         deployment_id=update.id,
-        include_deleted=False,
     )
     if update.desired_template_id <= deployment.desired_template_id:
         raise IntegrityException("Can only upgrade to newer versions, not downgrade")
@@ -190,7 +177,7 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
     _validate_user_values(target_template, deployment.user_values_json)
 
     deployment.desired_template_id = update.desired_template_id
-    deployment.status = DEPLOYMENT_STATUS_UPGRADING
+    deployment.status = DEPLOYMENT_STATUS_PROVISIONING
     deployment.generation += 1
     deployment.last_error = None
     session.add(deployment)

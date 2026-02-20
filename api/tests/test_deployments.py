@@ -1,3 +1,4 @@
+from app.services.reconcile_constants import DEPLOYMENT_STATUS_PROVISIONING, DEPLOYMENT_STATUS_DELETING
 from tests.conftest import client, db_session
 from sqlmodel import select
 
@@ -29,7 +30,7 @@ def test_delete_deployment_flow(client, db_session):
     )
     assert deployment_resp.status_code == 201
     deployment_id = deployment_resp.json()["id"]
-    assert deployment_resp.json()["status"] == "pending"
+    assert deployment_resp.json()["status"] == DEPLOYMENT_STATUS_PROVISIONING
     assert deployment_resp.json()["generation"] == 1
     create_jobs = db_session.exec(
         select(DeploymentReconcileJobORM).where(
@@ -45,7 +46,7 @@ def test_delete_deployment_flow(client, db_session):
     assert del_resp.status_code == 204
     deleted = db_session.get(DeploymentORM, deployment_id)
     assert deleted is not None
-    assert deleted.status == "deleting"
+    assert deleted.status == DEPLOYMENT_STATUS_DELETING
     delete_jobs = db_session.exec(
         select(DeploymentReconcileJobORM).where(
             DeploymentReconcileJobORM.deployment_id == deployment_id,
@@ -54,15 +55,19 @@ def test_delete_deployment_flow(client, db_session):
     ).all()
     assert len(delete_jobs) == 1
 
-    # Verify it is not listed
+    # Verify its status is "deleting"
     list_resp = client.get(f"/users/{user_id}/deployments")
     assert list_resp.status_code == 200
-    ids = [d["id"] for d in list_resp.json()]
-    assert deployment_id not in ids
+    deleting_dep = next(filter(lambda d: d["id"] == deployment_id, list_resp.json()))
+    assert deleting_dep.get("status") == DEPLOYMENT_STATUS_DELETING
 
     # Deleting a non‑existent deployment should return 404
     not_found_resp = client.delete(f"/users/{user_id}/deployments/99999")
     assert not_found_resp.status_code == 404
+
+    # Re-deleting an already deleted/deleting deployment should be idempotent
+    resp = client.delete(f"/users/{user_id}/deployments/{deleted.id}")
+    assert resp.status_code == 204
 
 
 def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_session):
@@ -105,7 +110,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
         json={"desired_template_id": tmpl2_id},
     )
     assert upgrade_resp.status_code == 200
-    assert upgrade_resp.json()["status"] == "upgrading"
+    assert upgrade_resp.json()["status"] == DEPLOYMENT_STATUS_PROVISIONING
     assert upgrade_resp.json()["desired_template_id"] == tmpl2_id
     assert upgrade_resp.json()["generation"] == 2
 

@@ -4,6 +4,8 @@ from typing import Optional, Any
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String
 
+from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
+
 
 class UserBase(SQLModel):
     email: str
@@ -158,7 +160,7 @@ class DeploymentORM(DeploymentBase, table=True):
             "uq_domainname_active",
             "domainname",
             unique=True,
-            sqlite_where=Column("deleted_at").is_(None),
+            sqlite_where=Column("status").is_not(DEPLOYMENT_STATUS_DELETED),
         ),
     )
 

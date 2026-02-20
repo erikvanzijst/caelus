@@ -6,6 +6,7 @@ from sqlmodel import select
 from app.models import DeploymentReconcileJobORM
 from app.services import deployments, jobs, products, templates, users
 from app.services.errors import DeploymentInProgressException, IntegrityException
+from app.services.reconcile_constants import DEPLOYMENT_STATUS_PROVISIONING, DEPLOYMENT_STATUS_DELETING
 
 
 def _setup_user_and_templates(db_session):
@@ -45,7 +46,7 @@ def test_create_deployment_enqueues_create_job(db_session):
         ),
     )
 
-    assert dep.status == "pending"
+    assert dep.status == DEPLOYMENT_STATUS_PROVISIONING
     jobs = db_session.exec(
         select(DeploymentReconcileJobORM).where(DeploymentReconcileJobORM.deployment_id == dep.id)
     ).all()
@@ -72,7 +73,7 @@ def test_delete_deployment_sets_state_and_enqueues_delete_job(db_session):
     jobs.mark_job_done(db_session, job_id=create_job.id)
 
     deleted = deployments.delete_deployment(db_session, user_id=user.id, deployment_id=dep.id)
-    assert deleted.status == "deleting"
+    assert deleted.status == DEPLOYMENT_STATUS_DELETING
     assert deleted.generation == 2
     deleted_orm = db_session.get(deployments.DeploymentORM, dep.id)
     assert deleted_orm is not None
@@ -107,7 +108,7 @@ def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
         db_session,
         update=deployments.DeploymentUpdate(id=dep.id, user_id=user.id, desired_template_id=template_v2.id)
     )
-    assert upgraded.status == "upgrading"
+    assert upgraded.status == DEPLOYMENT_STATUS_PROVISIONING
     assert upgraded.generation == 2
     assert upgraded.desired_template_id == template_v2.id
 
@@ -149,5 +150,5 @@ def test_update_rolls_back_when_open_job_exists(db_session):
     current = db_session.get(deployments.DeploymentORM, dep.id)
     assert current is not None
     assert current.desired_template_id == template_v1.id
-    assert current.status == "pending"
+    assert current.status == DEPLOYMENT_STATUS_PROVISIONING
     assert current.generation == 1

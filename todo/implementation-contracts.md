@@ -57,5 +57,3 @@ Job reasons:
 - `update`
 - `delete`
 - `drift`
-- `retry`
-

@@ -19,7 +19,7 @@ Add a lightweight Postgres-backed integration test path for queue concurrency se
    - enqueue N jobs
    - run M concurrent claim calls
    - assert each job claimed once only.
-2. Retry/backoff behavior under concurrent workers.
+2. Failure handling behavior under concurrent workers.
 3. Verify Postgres dequeue path actually uses `FOR UPDATE SKIP LOCKED`.
 
 ## Acceptance Criteria

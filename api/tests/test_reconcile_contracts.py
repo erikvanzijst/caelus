@@ -26,7 +26,7 @@ def test_deployment_statuses_are_complete_and_unique() -> None:
 
 def test_job_statuses_and_reasons_are_complete_and_unique() -> None:
     assert set(c.JOB_STATUSES) == {"queued", "running", "done", "failed"}
-    assert set(c.JOB_REASONS) == {"create", "update", "delete", "drift", "retry"}
+    assert set(c.JOB_REASONS) == {"create", "update", "delete", "drift"}
     assert len(c.JOB_STATUSES) == len(set(c.JOB_STATUSES))
     assert len(c.JOB_REASONS) == len(set(c.JOB_REASONS))
 
@@ -64,4 +64,3 @@ def test_namespace_and_release_name_match_uid_contract() -> None:
     uid = "hello-static-user-example-com-1a2b3c"
     assert namespace_name_for_deployment_uid(uid) == uid
     assert release_name_for_deployment_uid(uid) == uid
-

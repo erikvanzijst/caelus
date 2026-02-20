@@ -15,9 +15,8 @@ Update `api/app/cli.py` with commands:
 3. `list-reconcile-jobs [--status ...] [--deployment-id ...]`.
 4. `run-worker-once [--worker-id ...]`.
 5. `run-worker-loop --concurrency <n> --poll-seconds <n>`.
-6. `requeue-job <job-id> --delay-seconds <n> --error <msg>`.
-7. `fail-job <job-id> --error <msg>`.
-8. `scan-drift [--drift-age-seconds <n>]`.
+6. `fail-job <job-id> --error <msg>`.
+7. `scan-drift [--drift-age-seconds <n>]`.
 
 ## Command Rules
 1. Use kebab-case command names only.

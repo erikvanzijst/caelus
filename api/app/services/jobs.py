@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text
@@ -139,31 +139,6 @@ def mark_job_done(session: Session, *, job_id: int) -> DeploymentReconcileJobORM
     job.locked_by = None
     job.locked_at = None
     job.updated_at = datetime.utcnow()
-    session.add(job)
-    session.commit()
-    session.refresh(job)
-    return job
-
-
-def requeue_job(
-    session: Session,
-    *,
-    job_id: int,
-    error: str,
-    delay_seconds: int,
-) -> DeploymentReconcileJobORM:
-    """Requeue a job with backoff, incrementing attempt and storing the last error."""
-    job = session.get(DeploymentReconcileJobORM, job_id)
-    if job is None:
-        raise NotFoundException("Job not found")
-    now = datetime.utcnow()
-    job.status = JOB_STATUS_QUEUED
-    job.last_error = error
-    job.attempt += 1
-    job.run_after = now + timedelta(seconds=delay_seconds)
-    job.locked_by = None
-    job.locked_at = None
-    job.updated_at = now
     session.add(job)
     session.commit()
     session.refresh(job)

@@ -57,7 +57,7 @@ def test_enqueue_and_list_jobs_with_filters(db_session):
     second = jobs.enqueue_job(
         db_session,
         deployment_id=deployment_id,
-        reason="retry",
+        reason="drift",
         run_after=datetime.utcnow() + timedelta(seconds=60),
     )
 
@@ -89,7 +89,7 @@ def test_claim_next_job_uses_sqlite_fallback_and_handles_empty_queue(db_session)
     assert jobs.claim_next_job(db_session, worker_id="worker-c") is None
 
 
-def test_mark_job_done_requeue_and_fail_paths(db_session):
+def test_mark_job_done_and_fail_paths(db_session):
     deployment_id = _seed_deployment(db_session)
     claimed_seed = jobs.claim_next_job(db_session, worker_id="seed-worker")
     assert claimed_seed is not None
@@ -100,16 +100,7 @@ def test_mark_job_done_requeue_and_fail_paths(db_session):
     assert claimed is not None
     assert claimed.id == job.id
 
-    requeued = jobs.requeue_job(db_session, job_id=claimed.id, error="temporary", delay_seconds=0)
-    assert requeued.status == "queued"
-    assert requeued.attempt == 1
-    assert requeued.last_error == "temporary"
-    assert requeued.run_after <= datetime.utcnow()
-    assert requeued.locked_by is None
-
-    claimed_again = jobs.claim_next_job(db_session, worker_id="worker-2")
-    assert claimed_again is not None
-    failed = jobs.mark_job_failed(db_session, job_id=claimed_again.id, error="fatal")
+    failed = jobs.mark_job_failed(db_session, job_id=claimed.id, error="fatal")
     assert failed.status == "failed"
     assert failed.last_error == "fatal"
     assert failed.locked_by is None
@@ -123,8 +114,6 @@ def test_mark_job_done_requeue_and_fail_paths(db_session):
 def test_not_found_paths_raise(db_session):
     with pytest.raises(NotFoundException):
         jobs.mark_job_done(db_session, job_id=999999)
-    with pytest.raises(NotFoundException):
-        jobs.requeue_job(db_session, job_id=999999, error="x", delay_seconds=1)
     with pytest.raises(NotFoundException):
         jobs.mark_job_failed(db_session, job_id=999999, error="x")
 

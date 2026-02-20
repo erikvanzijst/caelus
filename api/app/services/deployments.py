@@ -131,8 +131,8 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
     deployment.generation += 1
     deployment.last_error = None
 
-    # TODO: this makes the deployment invisible to the user --
-    #  should probably only toggle the flag after the instance has been deleted successfully:
+    # TODO: this makes the deployment invisible to the user immediately (undesireable --
+    #  should probably only toggle the flag after the instance has been deleted successfully):
     deployment.deleted_at = datetime.utcnow()
     session.add(deployment)
     try:

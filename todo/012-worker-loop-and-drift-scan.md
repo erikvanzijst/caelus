@@ -17,8 +17,7 @@ Implement in service layer, e.g. `api/app/services/reconcile_runner.py`:
 ## Behavior Requirements
 1. Worker loop claims one job at a time.
 2. On reconcile success, mark done.
-3. On retryable error, requeue with backoff.
-4. On fatal error, mark failed and preserve error text.
+3. On reconcile error, mark failed and preserve error text.
 5. Drift scan enqueues:
    - non-deleted deployments with stale reconcile timestamp.
    - deleted deployments not yet in `deleted` status.
@@ -28,6 +27,6 @@ Implement in service layer, e.g. `api/app/services/reconcile_runner.py`:
 2. Drift scan is safe to run repeatedly.
 
 ## Test Requirements
-1. Unit tests for run_worker_once success/retry/fatal branches.
+1. Unit tests for run_worker_once success/failure branches.
 2. Unit tests for drift-scan candidate selection.
 3. Test that one failing deployment does not block others.

@@ -267,6 +267,7 @@ class Provisioner:
         self.kube = kube or KubeAdapter()
         self.helm = helm or HelmAdapter()
 
+    # TODO: these namespace functions should not be exposed -- namespace creation/deletion should be done by the install/uninstall methods transparently
     def ensure_namespace(self, *, name: str) -> NamespaceResult:
         return self.kube.ensure_namespace(name)
 

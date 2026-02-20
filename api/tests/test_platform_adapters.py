@@ -41,7 +41,7 @@ def test_kube_namespace_exists_bubbles_non_not_found_errors_as_classified() -> N
     adapter = KubeAdapter(runner=runner)
     with pytest.raises(AdapterCommandError) as exc_info:
         adapter.namespace_exists("ns-a")
-    assert exc_info.value.retryable is True
+    assert "i/o timeout" in str(exc_info.value).lower()
 
 
 def test_helm_upgrade_install_passes_values_and_returns_status() -> None:
@@ -103,7 +103,7 @@ def test_helm_uninstall_not_found_is_idempotent() -> None:
     assert out.status == "not-found"
 
 
-def test_helm_upgrade_install_timeout_is_retryable_error() -> None:
+def test_helm_upgrade_install_timeout_raises_command_error() -> None:
     def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
         return _result(args=cmd, returncode=1, stderr="UPGRADE FAILED: context deadline exceeded")
 
@@ -120,4 +120,4 @@ def test_helm_upgrade_install_timeout_is_retryable_error() -> None:
             atomic=False,
             wait=False,
         )
-    assert exc_info.value.retryable is True
+    assert "context deadline exceeded" in str(exc_info.value).lower()

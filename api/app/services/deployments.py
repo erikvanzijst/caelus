@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
+import logging
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
@@ -25,8 +26,10 @@ from app.services.reconcile_constants import (
 )
 from app.services.reconcile_naming import generate_deployment_uid
 
+logger = logging.getLogger(__name__)
 
 def _enqueue_reconcile_job(session: Session, *, deployment_id: int, reason: str) -> None:
+    logger.debug("Queueing reconcile job deployment_id=%s reason=%s", deployment_id, reason)
     jobs_service.enqueue_job(session, deployment_id=deployment_id, reason=reason)
 
 
@@ -92,12 +95,20 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
         _enqueue_reconcile_job(session, deployment_id=deployment.id, reason=JOB_REASON_CREATE)
         session.commit()
         session.refresh(deployment)
+        logger.info(
+            "Created deployment id=%s user_id=%s desired_template_id=%s",
+            deployment.id,
+            deployment.user_id,
+            deployment.desired_template_id,
+        )
         return DeploymentRead.model_validate(deployment)
     except DeploymentInProgressException:
         session.rollback()
+        logger.warning("Create deployment blocked by in-progress reconcile job for user_id=%s", payload.user_id)
         raise
     except IntegrityError as exc:
         session.rollback()
+        logger.warning("Deployment create failed due to integrity conflict for user_id=%s", payload.user_id)
         raise IntegrityException("Deployment already exists") from exc
 
 
@@ -152,7 +163,9 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
         session.commit()
     except DeploymentInProgressException:
         session.rollback()
+        logger.warning("Delete deployment blocked by in-progress reconcile job deployment_id=%s", deployment_id)
         raise
+    logger.info("Marked deployment id=%s user_id=%s for deletion", deployment_id, user_id)
     return DeploymentRead.model_validate(deployment)
 
 
@@ -186,6 +199,13 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
         session.commit()
     except DeploymentInProgressException:
         session.rollback()
+        logger.warning("Update deployment blocked by in-progress reconcile job deployment_id=%s", update.id)
         raise
     session.refresh(deployment)
+    logger.info(
+        "Updated deployment id=%s user_id=%s desired_template_id=%s",
+        deployment.id,
+        deployment.user_id,
+        deployment.desired_template_id,
+    )
     return DeploymentRead.model_validate(deployment)

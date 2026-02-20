@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
+import shlex
 import subprocess
 from typing import Callable
 
 CommandRunner = Callable[[list[str]], subprocess.CompletedProcess[str]]
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,7 @@ class AdapterCommandError(RuntimeError):
 
 
 def default_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+    logger.info("Running external command: %s", shlex.join(command))
     return subprocess.run(command, capture_output=True, text=True, check=False)
 
 
@@ -55,8 +59,15 @@ def run_command(
         stderr=completed.stderr or "",
     )
     if result.returncode != 0:
+        logger.warning(
+            "External command failed (returncode=%s):\n%s\n%s",
+            result.returncode,
+            result.stdout,
+            result.stderr
+        )
         raise AdapterCommandError(
             message=error_message,
             result=result,
         )
+    logger.debug("External command succeeded: %s", shlex.join(command))
     return result

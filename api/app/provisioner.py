@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
 from app.proc import AdapterCommandError, CommandRunner, run_command
 
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class NamespaceResult:
@@ -23,7 +25,9 @@ class KubeAdapter:
         self._runner = runner
 
     def ensure_namespace(self, name: str) -> NamespaceResult:
+        logger.info("Ensuring Kubernetes namespace exists: %s", name)
         if self.namespace_exists(name):
+            logger.debug("Namespace already exists: %s", name)
             return NamespaceResult(name=name, exists=True, changed=False)
 
         run_command(
@@ -31,18 +35,22 @@ class KubeAdapter:
             runner=self._runner,
             error_message=f"Failed to create namespace {name}",
         )
+        logger.info("Created namespace: %s", name)
         return NamespaceResult(name=name, exists=True, changed=True)
 
     def delete_namespace(self, name: str) -> NamespaceResult:
+        logger.info("Deleting Kubernetes namespace: %s", name)
         try:
             run_command(
                 ["kubectl", "delete", "namespace", name, "--ignore-not-found=true"],
                 runner=self._runner,
                 error_message=f"Failed to delete namespace {name}",
             )
+            logger.info("Deleted namespace: %s", name)
             return NamespaceResult(name=name, exists=False, changed=True)
         except AdapterCommandError as exc:
             if "not found" in exc.result.stderr.lower():
+                logger.debug("Namespace was already absent: %s", name)
                 return NamespaceResult(name=name, exists=False, changed=False)
             raise
 
@@ -53,10 +61,12 @@ class KubeAdapter:
                 runner=self._runner,
                 error_message=f"Failed to check namespace {name}",
             )
+            logger.debug("Namespace exists: %s", name)
             return True
         except AdapterCommandError as exc:
             text = f"{exc.result.stderr}\n{exc.result.stdout}".lower()
             if "not found" in text:
+                logger.debug("Namespace not found: %s", name)
                 return False
             raise
 
@@ -100,6 +110,14 @@ class HelmAdapter:
         atomic: bool,
         wait: bool,
     ) -> HelmReleaseOperationResult:
+        logger.info(
+            "Applying Helm release '%s' in namespace '%s' (chart=%s version=%s digest=%s)",
+            release_name,
+            namespace,
+            chart_ref,
+            chart_version,
+            chart_digest,
+        )
         resolved_chart = _with_optional_digest(chart_ref=chart_ref, chart_digest=chart_digest)
         with _values_file(values) as values_file:
             cmd = [
@@ -147,6 +165,7 @@ class HelmAdapter:
         timeout: int,
         wait: bool,
     ) -> HelmReleaseOperationResult:
+        logger.info("Uninstalling Helm release '%s' from namespace '%s'", release_name, namespace)
         cmd = [
             "helm",
             "uninstall",
@@ -173,6 +192,11 @@ class HelmAdapter:
         except AdapterCommandError as exc:
             text = f"{exc.result.stderr}\n{exc.result.stdout}".lower()
             if "release: not found" in text or "not found" in text:
+                logger.debug(
+                    "Helm release already absent: release='%s' namespace='%s'",
+                    release_name,
+                    namespace,
+                )
                 return HelmReleaseOperationResult(
                     release_name=release_name,
                     namespace=namespace,
@@ -182,6 +206,11 @@ class HelmAdapter:
             raise
 
     def helm_get_release_status(self, *, release_name: str, namespace: str) -> HelmReleaseStatusResult:
+        logger.debug(
+            "Fetching Helm release status: release='%s' namespace='%s'",
+            release_name,
+            namespace,
+        )
         try:
             result = run_command(
                 ["helm", "status", release_name, "--namespace", namespace, "--output", "json"],
@@ -191,6 +220,11 @@ class HelmAdapter:
         except AdapterCommandError as exc:
             text = f"{exc.result.stderr}\n{exc.result.stdout}".lower()
             if "release: not found" in text or "not found" in text:
+                logger.debug(
+                    "Helm release not found during status check: release='%s' namespace='%s'",
+                    release_name,
+                    namespace,
+                )
                 return HelmReleaseStatusResult(release_name=release_name, namespace=namespace, exists=False)
             raise
 
@@ -234,11 +268,13 @@ class _values_file:
         tmp.close()
         self._tmp = tmp
         self.path = Path(tmp.name)
+        logger.debug("Wrote temporary values file: %s", self.path)
         return self.path
 
     def __exit__(self, exc_type, exc, tb) -> None:
         if self.path and self.path.exists():
             self.path.unlink()
+            logger.debug("Removed temporary values file: %s", self.path)
 
 
 class Provisioner:

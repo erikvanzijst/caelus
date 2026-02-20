@@ -6,6 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import users, products
 from app.api.utils import register_exception_handlers
+from app.logging_config import configure_logging
+
+configure_logging()
 
 app = FastAPI(
     title="Caelus Deploy",

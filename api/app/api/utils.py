@@ -1,4 +1,5 @@
-from pydantic import ValidationError
+import logging
+
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -15,8 +16,16 @@ ERROR_STATUS = {
     NotFoundException: 404
 }
 
+logger = logging.getLogger(__name__)
+
+
 def _exception_handler(request: Request, exc: Exception):
-    return JSONResponse({"detail": str(exc)}, status_code=ERROR_STATUS.get(type(exc), 500))
+    status = ERROR_STATUS.get(type(exc), 500)
+    if status >= 500:
+        logger.exception("Unhandled application error for path=%s: %s", request.url.path, exc)
+    else:
+        logger.warning("Request failed path=%s status=%s error=%s", request.url.path, status, exc)
+    return JSONResponse({"detail": str(exc)}, status_code=status)
 
 
 def register_exception_handlers(app):

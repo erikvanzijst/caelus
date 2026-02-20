@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import contextmanager
 from typing import Iterator, Generator
 
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
+
+logger = logging.getLogger(__name__)
 
 
 def _database_url() -> str:
@@ -27,7 +30,7 @@ engine = create_engine(
 
 def init_db(engine) -> None:
     # Ensure models are imported before creating tables.
-
+    logger.info("Initializing database schema")
     SQLModel.metadata.create_all(engine)
 
 
@@ -38,4 +41,10 @@ def get_session() -> Generator[Session, None, None]:
 
 @contextmanager
 def session_scope() -> Iterator[Session]:
-    return get_session()
+    with Session(engine) as session:
+        try:
+            yield session
+        except Exception:
+            logger.exception("Session scope failed; rolling back")
+            session.rollback()
+            raise

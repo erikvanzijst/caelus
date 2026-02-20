@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 
 from sqlmodel import Session
 
@@ -16,6 +17,7 @@ from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_READY,
 )
 
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ReconcileResult:
@@ -33,6 +35,7 @@ class DeploymentReconciler:
         self._provisioner = provisioner or default_provisioner
 
     def reconcile(self, deployment_id: int) -> ReconcileResult:
+        logger.info("Starting reconcile for deployment_id=%s", deployment_id)
         deployment = _get_deployment_orm(self._session, deployment_id=deployment_id, include_deleted=True)
         try:
             self._validate_input_state(deployment)
@@ -41,6 +44,7 @@ class DeploymentReconciler:
             else:
                 result = self._reconcile_apply(deployment)
         except Exception as exc:
+            logger.exception("Reconcile failed for deployment_id=%s", deployment_id)
             result = ReconcileResult(
                 status=DEPLOYMENT_STATUS_ERROR,
                 applied_template_id=deployment.applied_template_id,
@@ -54,6 +58,12 @@ class DeploymentReconciler:
         self._session.add(deployment)
         self._session.commit()
         self._session.refresh(deployment)
+        logger.info(
+            "Finished reconcile for deployment_id=%s status=%s applied_template_id=%s",
+            deployment_id,
+            result.status,
+            result.applied_template_id,
+        )
         return result
 
     @staticmethod
@@ -77,6 +87,13 @@ class DeploymentReconciler:
         assert template is not None
         release_name, namespace = self._resolve_identity(deployment)
         merged_values = self._build_merged_values(deployment, template)
+        logger.debug(
+            "Applying deployment_id=%s release=%s namespace=%s template_id=%s",
+            deployment.id,
+            release_name,
+            namespace,
+            deployment.desired_template_id,
+        )
 
         self._provisioner.ensure_namespace(name=namespace)
         self._provisioner.helm_upgrade_install(
@@ -100,6 +117,12 @@ class DeploymentReconciler:
 
     def _reconcile_delete(self, deployment: DeploymentORM) -> ReconcileResult:
         release_name, namespace = self._resolve_identity(deployment)
+        logger.debug(
+            "Deleting deployment_id=%s release=%s namespace=%s",
+            deployment.id,
+            release_name,
+            namespace,
+        )
         timeout = (deployment.desired_template.health_timeout_sec or 300) if deployment.desired_template else 300
 
         self._provisioner.helm_uninstall(

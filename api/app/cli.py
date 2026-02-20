@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import typer
 
 from app.db import session_scope
+from app.logging_config import configure_logging
 from app.models import (
     UserCreate,
     DeploymentCreate,
@@ -17,6 +19,8 @@ from app.services import (templates as template_service, deployments as deployme
                           products as product_service, users as user_service, reconcile as reconcile_service)
 from app.services.errors import CaelusException
 
+configure_logging()
+logger = logging.getLogger(__name__)
 app = typer.Typer(help="Caelus CLI", pretty_exceptions_show_locals=False)
 
 
@@ -56,6 +60,7 @@ def _parse_json_object_input(
 
 
 def _exit_for_domain_error(exc: CaelusException) -> None:
+    logger.warning("CLI command failed with domain error: %s", exc)
     typer.echo(f"Error: {exc}", err=True)
     raise typer.Exit(code=1)
 
@@ -224,6 +229,7 @@ def create_template(
             file_option_name="--capabilities-file",
         )
     except ValueError as e:
+        logger.warning("Invalid template JSON input: %s", e)
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
 
@@ -305,6 +311,7 @@ def create_deployment(
             file_option_name="--user-values-file",
         )
     except ValueError as e:
+        logger.warning("Invalid deployment user values JSON input: %s", e)
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
 

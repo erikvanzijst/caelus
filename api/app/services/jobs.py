@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text
@@ -15,6 +16,7 @@ from app.services.reconcile_constants import (
     JOB_STATUS_RUNNING,
 )
 
+logger = logging.getLogger(__name__)
 
 def enqueue_job(
     session: Session,
@@ -33,7 +35,18 @@ def enqueue_job(
     try:
         session.add(job)
         session.flush()
+        logger.info(
+            "Enqueued reconcile job id=%s deployment_id=%s reason=%s run_after=%s",
+            job.id,
+            deployment_id,
+            reason,
+            job.run_after,
+        )
     except IntegrityError as exc:
+        logger.warning(
+            "Duplicate in-progress job for deployment_id=%s; rejecting enqueue",
+            deployment_id,
+        )
         raise DeploymentInProgressException("A deployment job is already queued or running") from exc
     return job
 
@@ -70,6 +83,7 @@ def _claim_next_job_postgres(session: Session, *, worker_id: str) -> DeploymentR
     )
     job = session.exec(stmt).first()
     if job is None:
+        logger.debug("No runnable reconcile job available for worker_id=%s", worker_id)
         return None
     job.status = JOB_STATUS_RUNNING
     job.locked_by = worker_id
@@ -78,6 +92,12 @@ def _claim_next_job_postgres(session: Session, *, worker_id: str) -> DeploymentR
     session.add(job)
     session.commit()
     session.refresh(job)
+    logger.info(
+        "Claimed reconcile job id=%s deployment_id=%s worker_id=%s (postgres)",
+        job.id,
+        job.deployment_id,
+        worker_id,
+    )
     return job
 
 
@@ -113,10 +133,19 @@ def _claim_next_job_sqlite(session: Session, *, worker_id: str) -> DeploymentRec
     ).first()
     if row is None:
         session.commit()
+        logger.debug("No runnable reconcile job available for worker_id=%s", worker_id)
         return None
     job_id = int(row[0])
     session.commit()
-    return session.get(DeploymentReconcileJobORM, job_id)
+    job = session.get(DeploymentReconcileJobORM, job_id)
+    if job is not None:
+        logger.info(
+            "Claimed reconcile job id=%s deployment_id=%s worker_id=%s (sqlite)",
+            job.id,
+            job.deployment_id,
+            worker_id,
+        )
+    return job
 
 
 def claim_next_job(session: Session, *, worker_id: str) -> DeploymentReconcileJobORM | None:
@@ -142,6 +171,7 @@ def mark_job_done(session: Session, *, job_id: int) -> DeploymentReconcileJobORM
     session.add(job)
     session.commit()
     session.refresh(job)
+    logger.info("Marked reconcile job id=%s as done", job_id)
     return job
 
 
@@ -159,6 +189,7 @@ def mark_job_failed(session: Session, *, job_id: int, error: str) -> DeploymentR
     session.add(job)
     session.commit()
     session.refresh(job)
+    logger.warning("Marked reconcile job id=%s as failed: %s", job_id, error)
     return job
 
 
@@ -179,4 +210,9 @@ def dedupe_open_jobs(session: Session, *, deployment_id: int) -> int:
     for duplicate in jobs[1:]:
         session.delete(duplicate)
     session.commit()
+    logger.info(
+        "Removed duplicate open reconcile jobs for deployment_id=%s removed=%s",
+        deployment_id,
+        len(jobs) - 1,
+    )
     return len(jobs) - 1

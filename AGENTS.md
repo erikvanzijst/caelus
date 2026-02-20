@@ -52,6 +52,12 @@ For details, see `ui/README.md`.
 - Write tests for all new behavior.
 - No secrets in code.
 
+## Commit Messages
+- Follow standard Git commit message style:
+  - Short imperative subject line, followed by an empty line.
+  - Wrap all lines at 78 characters max.
+  - Explain why and what changed in the body.
+
 ## Contribution Checklist
 - Update or add tests for new behavior.
 - Keep API + CLI parity (same features and validations).

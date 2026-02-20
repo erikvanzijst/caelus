@@ -68,6 +68,11 @@ CLI equivalents (`python -m app.cli ...`):
   `update-deployment`, `delete-deployment`
 - `reconcile` (CLI-only operational command to run one reconcile pass)
 
+CLI output contract:
+- Successful command output on stdout is YAML-encoded entity payloads (single
+  object or list, mirroring REST JSON responses).
+- Logs and errors are emitted on stderr.
+
 ## Core Data Model
 
 ### User

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+from typing import Any
+
+import yaml
 
 from app.db import session_scope
 from app.models import DeploymentORM, DeploymentReconcileJobORM
@@ -8,18 +11,16 @@ from app.services import jobs as jobs_service, templates as template_service, re
 from sqlmodel import select
 
 
-def _get_product_id_from_list_output(output: str) -> int:
-    lines = [ln for ln in output.strip().splitlines() if ln]
-    assert len(lines) == 1
-    prod_id_str, prod_name = lines[0].split(maxsplit=1)
-    assert prod_name
-    return int(prod_id_str)
+def _stdout(result) -> str:
+    return getattr(result, "stdout", result.output)
 
 
-def _get_template_id_from_create_output(output: str) -> int:
-    # Expected format: "Created template {id} for product {product_id}"
-    parts = output.strip().split()
-    return int(parts[2])
+def _stderr(result) -> str:
+    return getattr(result, "stderr", result.output)
+
+
+def _parse_yaml_stdout(result) -> Any:
+    return yaml.safe_load(_stdout(result))
 
 
 def _seed_deployment_via_services() -> tuple[int, int]:
@@ -101,12 +102,15 @@ def test_cli_user_flow(cli_runner):
     # Create user
     result = runner.invoke(app, ["create-user", "cli@example.com"])
     assert result.exit_code == 0
-    assert "Created user" in result.output
+    created_user = _parse_yaml_stdout(result)
+    assert created_user["email"] == "cli@example.com"
 
     # List users to verify creation
     result = runner.invoke(app, ["list-users"])
     assert result.exit_code == 0
-    assert "cli@example.com" in result.output
+    users = _parse_yaml_stdout(result)
+    assert len(users) == 1
+    assert users[0]["email"] == "cli@example.com"
 
 
 def test_cli_product_flow(cli_runner):
@@ -116,35 +120,40 @@ def test_cli_product_flow(cli_runner):
     # Create a product
     create_res = runner.invoke(app, ["create-product", "testprod", "A test product"])
     assert create_res.exit_code == 0
-    assert "Created product" in create_res.output
+    created_product = _parse_yaml_stdout(create_res)
+    assert created_product["name"] == "testprod"
 
     # List products to get the ID
     list_res = runner.invoke(app, ["list-products"])
     assert list_res.exit_code == 0
-    # Expected format: "{id} {name}" per line
-    prod_id = _get_product_id_from_list_output(list_res.output)
+    products = _parse_yaml_stdout(list_res)
+    assert len(products) == 1
+    prod_id = products[0]["id"]
 
     # Delete the product
     del_res = runner.invoke(app, ["delete-product", str(prod_id)])
     assert del_res.exit_code == 0
-    assert "Deleted product" in del_res.output
+    deleted_product = _parse_yaml_stdout(del_res)
+    assert deleted_product["id"] == prod_id
 
     # Verify product list is empty
     list_res2 = runner.invoke(app, ["list-products"])
     assert list_res2.exit_code == 0
-    assert list_res2.output.strip() == ""
+    assert _parse_yaml_stdout(list_res2) == []
 
     result = runner.invoke(app, ["list-users"])
     assert result.exit_code == 0
-    assert result.output.strip() == ""
+    assert _parse_yaml_stdout(result) == []
 
     result = runner.invoke(app, ["create-user", "cli@example.com"])
     assert result.exit_code == 0
-    assert "Created user" in result.output
+    assert _parse_yaml_stdout(result)["email"] == "cli@example.com"
 
     result = runner.invoke(app, ["list-users"])
     assert result.exit_code == 0
-    assert "cli@example.com" in result.output
+    users = _parse_yaml_stdout(result)
+    assert len(users) == 1
+    assert users[0]["email"] == "cli@example.com"
 
 
 def test_cli_update_product_supports_template_and_description(cli_runner):
@@ -155,20 +164,22 @@ def test_cli_update_product_supports_template_and_description(cli_runner):
 
     list_res = runner.invoke(app, ["list-products"])
     assert list_res.exit_code == 0
-    prod_id = _get_product_id_from_list_output(list_res.output)
+    products = _parse_yaml_stdout(list_res)
+    prod_id = products[0]["id"]
 
     template_res = runner.invoke(app, ["create-template", "--product-id",  str(prod_id), "--chart-ref", "oci://example/chart", "--chart-version", "1.0.0"])
     assert template_res.exit_code == 0
-    template_id = _get_template_id_from_create_output(template_res.output)
+    template_id = _parse_yaml_stdout(template_res)["id"]
 
     update_res = runner.invoke(
         app,
         ["update-product", str(prod_id), "--template-id", str(template_id), "--description", "new description"],
     )
     assert update_res.exit_code == 0
-    assert "Updated product" in update_res.output
-    assert f"template_id={template_id}" in update_res.output
-    assert "description=new description" in update_res.output
+    updated = _parse_yaml_stdout(update_res)
+    assert updated["id"] == prod_id
+    assert updated["template_id"] == template_id
+    assert updated["description"] == "new description"
 
 
 def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
@@ -203,7 +214,7 @@ def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
         ],
     )
     assert template_res.exit_code == 0
-    template_id = _get_template_id_from_create_output(template_res.output)
+    template_id = _parse_yaml_stdout(template_res)["id"]
 
     template = _get_template_from_services(1, template_id)
     assert template.chart_digest == "sha256:abc123"
@@ -287,12 +298,9 @@ def test_cli_update_product_template_validation_returns_stable_error(cli_runner)
 
     list_res = runner.invoke(app, ["list-products"])
     assert list_res.exit_code == 0
-    lines = [ln for ln in list_res.output.strip().splitlines() if ln]
-    assert len(lines) == 2
-    ids_by_name = {}
-    for line in lines:
-        prod_id_str, prod_name = line.split(maxsplit=1)
-        ids_by_name[prod_name] = int(prod_id_str)
+    products = _parse_yaml_stdout(list_res)
+    assert len(products) == 2
+    ids_by_name = {product["name"]: product["id"] for product in products}
     prod_a_id = ids_by_name["prod-a"]
     prod_b_id = ids_by_name["prod-b"]
 
@@ -309,7 +317,7 @@ def test_cli_update_product_template_validation_returns_stable_error(cli_runner)
         ],
     )
     assert template_res.exit_code == 0
-    template_id = _get_template_id_from_create_output(template_res.output)
+    template_id = _parse_yaml_stdout(template_res)["id"]
 
     update_res = runner.invoke(app, ["update-product", str(prod_a_id), "--template-id", str(template_id)])
     assert update_res.exit_code == 1
@@ -325,7 +333,7 @@ def test_cli_get_user_command(cli_runner):
 
     get_res = runner.invoke(app, ["get-user", "1"])
     assert get_res.exit_code == 0
-    assert "getuser@example.com" in get_res.output
+    assert _parse_yaml_stdout(get_res)["email"] == "getuser@example.com"
 
     miss_res = runner.invoke(app, ["get-user", "99999"])
     assert miss_res.exit_code == 1
@@ -341,7 +349,7 @@ def test_cli_get_product_and_template_commands(cli_runner):
 
     get_prod_res = runner.invoke(app, ["get-product", "1"])
     assert get_prod_res.exit_code == 0
-    assert "get-prod" in get_prod_res.output
+    assert _parse_yaml_stdout(get_prod_res)["name"] == "get-prod"
 
     template_res = runner.invoke(
         app,
@@ -358,11 +366,11 @@ def test_cli_get_product_and_template_commands(cli_runner):
         ],
     )
     assert template_res.exit_code == 0
-    template_id = _get_template_id_from_create_output(template_res.output)
+    template_id = _parse_yaml_stdout(template_res)["id"]
 
     get_tmpl_res = runner.invoke(app, ["get-template", "1", str(template_id)])
     assert get_tmpl_res.exit_code == 0
-    assert "oci://example/chart" in get_tmpl_res.output
+    assert _parse_yaml_stdout(get_tmpl_res)["chart_ref"] == "oci://example/chart"
 
     missing_product_res = runner.invoke(app, ["get-product", "99999"])
     assert missing_product_res.exit_code == 1
@@ -382,7 +390,7 @@ def test_cli_get_deployment_command(cli_runner):
 
     get_dep_res = runner.invoke(app, ["get-deployment", str(user_id), str(deployment_id)])
     assert get_dep_res.exit_code == 0
-    assert "dep.example.com" in get_dep_res.output
+    assert _parse_yaml_stdout(get_dep_res)["domainname"] == "dep.example.com"
 
     missing_dep_res = runner.invoke(app, ["get-deployment", str(user_id), "99999"])
     assert missing_dep_res.exit_code == 1
@@ -414,7 +422,7 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
         ],
     )
     assert template_res.exit_code == 0
-    template_id = _get_template_id_from_create_output(template_res.output)
+    template_id = _parse_yaml_stdout(template_res)["id"]
 
     create_dep_res = runner.invoke(
         app,
@@ -429,8 +437,8 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
         ],
     )
     assert create_dep_res.exit_code == 0
-    assert "Created deployment:" in create_dep_res.output
-    assert "cli-audit.example.test" in create_dep_res.output
+    created_deployment = _parse_yaml_stdout(create_dep_res)
+    assert created_deployment["domainname"] == "cli-audit.example.test"
 
 
 def test_cli_create_deployment_accepts_user_values_json(cli_runner):
@@ -457,7 +465,7 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
         ],
     )
     assert template_res.exit_code == 0
-    template_id = _get_template_id_from_create_output(template_res.output)
+    template_id = _parse_yaml_stdout(template_res)["id"]
 
     create_dep_res = runner.invoke(
         app,
@@ -474,8 +482,9 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
         ],
     )
     assert create_dep_res.exit_code == 0
-    assert "Created deployment:" in create_dep_res.output
-    assert "cli-json.example.test" in create_dep_res.output
+    created_deployment = _parse_yaml_stdout(create_dep_res)
+    assert created_deployment["domainname"] == "cli-json.example.test"
+    assert created_deployment["user_values_json"] == {"message": "hi"}
 
 
 def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
@@ -502,7 +511,7 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
         ],
     )
     assert template_res.exit_code == 0
-    template_id = _get_template_id_from_create_output(template_res.output)
+    template_id = _parse_yaml_stdout(template_res)["id"]
 
     values_file = tmp_path / "user-values.json"
     values_file.write_text(json.dumps({"replicas": 2, "feature": {"enabled": True}}))
@@ -522,8 +531,9 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
         ],
     )
     assert create_dep_res.exit_code == 0
-    assert "Created deployment:" in create_dep_res.output
-    assert "cli-file.example.test" in create_dep_res.output
+    created_deployment = _parse_yaml_stdout(create_dep_res)
+    assert created_deployment["domainname"] == "cli-file.example.test"
+    assert created_deployment["user_values_json"] == {"replicas": 2, "feature": {"enabled": True}}
 
 
 def test_cli_create_deployment_user_values_invalid_json_returns_stable_error(cli_runner):
@@ -590,7 +600,7 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
         ],
     )
     assert tmpl1_res.exit_code == 0
-    tmpl1_id = _get_template_id_from_create_output(tmpl1_res.output)
+    tmpl1_id = _parse_yaml_stdout(tmpl1_res)["id"]
 
     tmpl2_res = runner.invoke(
         app,
@@ -605,7 +615,7 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
         ],
     )
     assert tmpl2_res.exit_code == 0
-    tmpl2_id = _get_template_id_from_create_output(tmpl2_res.output)
+    tmpl2_id = _parse_yaml_stdout(tmpl2_res)["id"]
 
     domain = "upgrade-cli.example.test"
     create_dep_res = runner.invoke(
@@ -641,12 +651,15 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
         ],
     )
     assert upgrade_res.exit_code == 0
-    assert f"Upgraded deployment {dep_id}" in upgrade_res.output
+    upgraded = _parse_yaml_stdout(upgrade_res)
+    assert upgraded["id"] == dep_id
+    assert upgraded["desired_template_id"] == tmpl2_id
     _mark_first_open_job_done(dep_id)
 
     delete_res = runner.invoke(app, ["delete-deployment", "1", str(dep_id)])
     assert delete_res.exit_code == 0
-    assert f"Deleted deployment {dep_id}" in delete_res.output
+    deleted = _parse_yaml_stdout(delete_res)
+    assert deleted["id"] == dep_id
 
     reasons = _get_job_reasons_for_deployment(dep_id)
     assert reasons == ["create", "update", "delete"]
@@ -659,15 +672,17 @@ def test_cli_duplicate_create_commands_return_stable_errors(cli_runner):
     assert user_first.exit_code == 0
     user_dup = runner.invoke(app, ["create-user", "dup@example.com"])
     assert user_dup.exit_code == 1
-    assert "Error: Email already in use: dup@example.com" in user_dup.output
-    assert "Traceback" not in user_dup.output
+    assert _stdout(user_dup) == ""
+    assert "Error: Email already in use: dup@example.com" in _stderr(user_dup)
+    assert "Traceback" not in _stderr(user_dup)
 
     prod_first = runner.invoke(app, ["create-product", "dup-product", "desc"])
     assert prod_first.exit_code == 0
     prod_dup = runner.invoke(app, ["create-product", "dup-product", "desc"])
     assert prod_dup.exit_code == 1
-    assert "Error: A product with this name already exists: dup-product" in prod_dup.output
-    assert "Traceback" not in prod_dup.output
+    assert _stdout(prod_dup) == ""
+    assert "Error: A product with this name already exists: dup-product" in _stderr(prod_dup)
+    assert "Traceback" not in _stderr(prod_dup)
 
 
 def test_cli_missing_delete_commands_return_stable_errors(cli_runner):
@@ -710,8 +725,9 @@ def test_cli_reconcile_command_reconciles_deployment(cli_runner, monkeypatch):
     result = runner.invoke(app, ["reconcile", str(deployment_id)])
 
     assert result.exit_code == 0
-    assert f"Reconciled deployment {deployment_id}" in result.output
-    assert "status=ready" in result.output
+    reconciled = _parse_yaml_stdout(result)
+    assert reconciled["status"] == "ready"
+    assert reconciled["applied_template_id"] is not None
 
     deployment = _get_deployment_by_id(deployment_id)
     assert deployment is not None

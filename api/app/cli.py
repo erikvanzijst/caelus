@@ -5,6 +5,8 @@ import logging
 from pathlib import Path
 
 import typer
+import yaml
+from fastapi.encoders import jsonable_encoder
 
 from app.db import session_scope
 from app.logging_config import configure_logging
@@ -65,6 +67,11 @@ def _exit_for_domain_error(exc: CaelusException) -> None:
     raise typer.Exit(code=1)
 
 
+def _echo_yaml_entity(entity: object) -> None:
+    encoded = jsonable_encoder(entity)
+    typer.echo(yaml.safe_dump(encoded, sort_keys=False), nl=False)
+
+
 @app.command("create-user")
 def create_user(email: str) -> None:
     with session_scope() as session:
@@ -72,7 +79,7 @@ def create_user(email: str) -> None:
             user = user_service.create_user(session, UserCreate(email=email))
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(f"Created user: {user}")
+        _echo_yaml_entity(user)
 
 
 @app.command("delete-user")
@@ -82,14 +89,13 @@ def delete_user(user_id: int) -> None:
             user = user_service.delete_user(session, user_id=user_id)
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(f"Deleted user: {user}")
+        _echo_yaml_entity(user)
 
 
 @app.command("list-users")
 def list_users() -> None:
     with session_scope() as session:
-        for user in user_service.list_users(session):
-            typer.echo(user)
+        _echo_yaml_entity(user_service.list_users(session))
 
 
 @app.command("get-user")
@@ -99,7 +105,7 @@ def get_user(user_id: int) -> None:
             user = user_service.get_user(session, user_id=user_id)
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(user)
+        _echo_yaml_entity(user)
 
 
 @app.command("create-product")
@@ -112,7 +118,7 @@ def create_product(name: str, description: str, template_id: int | None = None) 
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(f"Created product {product}")
+        _echo_yaml_entity(product)
 
 
 @app.command("update-product")
@@ -122,7 +128,6 @@ def update_product(
     template_id: int | None = typer.Option(None, "--template-id"),
     description: str | None = typer.Option(None, "--description"),
 ) -> None:
-    """Update a product's template_id and/or description."""
     with session_scope() as session:
         try:
             product = product_service.update_product(
@@ -135,9 +140,7 @@ def update_product(
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(
-            f"Updated product {product.id} template_id={product.template_id} description={product.description}"
-        )
+        _echo_yaml_entity(product)
 
 
 @app.command("delete-product")
@@ -147,14 +150,13 @@ def delete_product(product_id: int) -> None:
             product = product_service.delete_product(session, product_id=product_id)
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(f"Deleted product {product.id}")
+        _echo_yaml_entity(product)
 
 
 @app.command("list-products")
 def list_products() -> None:
     with session_scope() as session:
-        for product in product_service.list_products(session):
-            typer.echo(f"{product.id} {product.name}")
+        _echo_yaml_entity(product_service.list_products(session))
 
 
 @app.command("get-product")
@@ -164,7 +166,7 @@ def get_product(product_id: int) -> None:
             product = product_service.get_product(session, product_id=product_id)
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(product)
+        _echo_yaml_entity(product)
 
 
 @app.command("create-template")
@@ -250,14 +252,13 @@ def create_template(
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(f"Created template {template.id} for product {product_id}")
+        _echo_yaml_entity(template)
 
 
 @app.command("list-templates")
 def list_templates(product_id: int) -> None:
     with session_scope() as session:
-        for template in template_service.list_templates(session, product_id=product_id):
-            typer.echo(template)
+        _echo_yaml_entity(template_service.list_templates(session, product_id=product_id))
 
 
 @app.command("get-template")
@@ -271,7 +272,7 @@ def get_template(product_id: int, template_id: int) -> None:
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(template)
+        _echo_yaml_entity(template)
 
 
 @app.command("delete-template")
@@ -283,7 +284,7 @@ def delete_template(product_id: int, template_id: int) -> None:
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(f"Deleted template {template.id}")
+        _echo_yaml_entity(template)
 
 
 @app.command("create-deployment")
@@ -328,14 +329,13 @@ def create_deployment(
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(f"Created deployment: {deployment}")
+        _echo_yaml_entity(deployment)
 
 
 @app.command("list-deployments")
 def list_deployments(user_id: int) -> None:
     with session_scope() as session:
-        for deployment in deployment_service.list_deployments(session, user_id=user_id):
-            typer.echo(deployment)
+        _echo_yaml_entity(deployment_service.list_deployments(session, user_id=user_id))
 
 
 @app.command("get-deployment")
@@ -349,7 +349,7 @@ def get_deployment(user_id: int, deployment_id: int) -> None:
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(deployment)
+        _echo_yaml_entity(deployment)
 
 
 @app.command("delete-deployment")
@@ -361,7 +361,7 @@ def delete_deployment(user_id: int, deployment_id: int) -> None:
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(f"Deleted deployment {deployment.id}")
+        _echo_yaml_entity(deployment)
 
 
 @app.command("update-deployment")
@@ -379,7 +379,7 @@ def update_deployment(
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
-        typer.echo(f"Upgraded deployment {deployment.id} to desired_template_id={deployment.desired_template_id}")
+        _echo_yaml_entity(deployment)
 
 
 @app.command("reconcile")
@@ -399,10 +399,7 @@ def reconcile(
             )
             raise typer.Exit(code=1)
 
-        typer.echo(
-            f"Reconciled deployment {deployment_id} "
-            f"status={result.status} applied_template_id={result.applied_template_id}"
-        )
+        _echo_yaml_entity(result)
 
 
 if __name__ == "__main__":

@@ -6,9 +6,8 @@ import subprocess
 
 import pytest
 
-from app.services.helm_adapter import HelmAdapter
-from app.services.kube_adapter import KubeAdapter
 from app.proc import AdapterCommandError
+from app.provisioner import HelmAdapter, KubeAdapter
 
 
 def _result(*, args: list[str], returncode: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:

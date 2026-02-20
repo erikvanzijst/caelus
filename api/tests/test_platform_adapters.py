@@ -79,6 +79,7 @@ def test_helm_upgrade_install_passes_values_and_returns_status() -> None:
     assert seen_values == {"user": {"message": "hello"}}
     upgrade_cmd = calls[0]
     assert "oci://example/chart@sha256:abc" in upgrade_cmd
+    assert "--version" not in upgrade_cmd
     assert "--atomic" in upgrade_cmd
     assert "--wait" in upgrade_cmd
 

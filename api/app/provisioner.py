@@ -110,13 +110,15 @@ class HelmAdapter:
                 resolved_chart,
                 "--namespace",
                 namespace,
-                "--version",
-                chart_version,
                 "--timeout",
                 f"{timeout}s",
                 "--values",
                 str(values_file),
             ]
+            if not chart_digest:
+                cmd.extend(["--version", chart_version])
+            if resolved_chart.startswith("oci://"):
+                cmd.append("--plain-http")
             if atomic:
                 cmd.append("--atomic")
             if wait:

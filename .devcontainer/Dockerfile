@@ -37,6 +37,7 @@ RUN apt-get update -y && \
     rm -rf /var/lib/apt/lists/*
 RUN groupadd -f docker && usermod -aG docker vscode
 RUN npm i -g @openai/codex
+RUN npm i -g @qwen-code/qwen-code@latest
 RUN mkdir /workspace && chown vscode:vscode /workspace
 
 USER vscode
@@ -49,6 +50,9 @@ ENV PATH=/home/vscode/.local/bin:$PATH
 ENV COLORTERM=truecolor
 ENV UV_PROJECT_ENVIRONMENT="/home/vscode/venv"
 ENV DOCKER_BUILDKIT=1
+# https://opencode.ai/docs/tools/#websearch
+ENV OPENCODE_ENABLE_EXA=1
+
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN curl -fsSL https://opencode.ai/install | bash

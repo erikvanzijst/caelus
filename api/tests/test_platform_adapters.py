@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import subprocess
+
+import pytest
+
+from app.services.helm_adapter import HelmAdapter
+from app.services.kube_adapter import KubeAdapter
+from app.proc import AdapterCommandError
+
+
+def _result(*, args: list[str], returncode: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args=args, returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+def test_kube_ensure_namespace_creates_when_missing() -> None:
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        if cmd[:4] == ["kubectl", "get", "namespace", "ns-a"]:
+            return _result(args=cmd, returncode=1, stderr="Error from server (NotFound): namespaces \"ns-a\" not found")
+        if cmd[:4] == ["kubectl", "create", "namespace", "ns-a"]:
+            return _result(args=cmd, returncode=0, stdout="namespace/ns-a created")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    adapter = KubeAdapter(runner=runner)
+    out = adapter.ensure_namespace("ns-a")
+
+    assert out.exists is True
+    assert out.changed is True
+    assert calls[0][:4] == ["kubectl", "get", "namespace", "ns-a"]
+    assert calls[1][:4] == ["kubectl", "create", "namespace", "ns-a"]
+
+
+def test_kube_namespace_exists_bubbles_non_not_found_errors_as_classified() -> None:
+    def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        return _result(args=cmd, returncode=1, stderr="Unable to connect to the server: i/o timeout")
+
+    adapter = KubeAdapter(runner=runner)
+    with pytest.raises(AdapterCommandError) as exc_info:
+        adapter.namespace_exists("ns-a")
+    assert exc_info.value.retryable is True
+
+
+def test_helm_upgrade_install_passes_values_and_returns_status() -> None:
+    calls: list[list[str]] = []
+    seen_values: dict | None = None
+
+    def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        nonlocal seen_values
+        calls.append(cmd)
+        if cmd[:3] == ["helm", "upgrade", "--install"]:
+            values_path = Path(cmd[cmd.index("--values") + 1])
+            seen_values = json.loads(values_path.read_text())
+            return _result(args=cmd, returncode=0, stdout="Release upgraded")
+        if cmd[:2] == ["helm", "status"]:
+            payload = {"info": {"status": "deployed"}, "version": 7}
+            return _result(args=cmd, returncode=0, stdout=json.dumps(payload))
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    adapter = HelmAdapter(runner=runner)
+    out = adapter.helm_upgrade_install(
+        release_name="rel-a",
+        namespace="ns-a",
+        chart_ref="oci://example/chart",
+        chart_version="1.2.3",
+        chart_digest="sha256:abc",
+        values={"user": {"message": "hello"}},
+        timeout=300,
+        atomic=True,
+        wait=True,
+    )
+
+    assert out.changed is True
+    assert out.status == "deployed"
+    assert out.revision == 7
+    assert seen_values == {"user": {"message": "hello"}}
+    upgrade_cmd = calls[0]
+    assert "oci://example/chart@sha256:abc" in upgrade_cmd
+    assert "--atomic" in upgrade_cmd
+    assert "--wait" in upgrade_cmd
+
+
+def test_helm_status_not_found_returns_exists_false() -> None:
+    def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        return _result(args=cmd, returncode=1, stderr="Error: release: not found")
+
+    adapter = HelmAdapter(runner=runner)
+    out = adapter.helm_get_release_status(release_name="rel-a", namespace="ns-a")
+    assert out.exists is False
+    assert out.status is None
+
+
+def test_helm_uninstall_not_found_is_idempotent() -> None:
+    def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        return _result(args=cmd, returncode=1, stderr="Error: uninstall: Release not loaded: rel-a: release: not found")
+
+    adapter = HelmAdapter(runner=runner)
+    out = adapter.helm_uninstall(release_name="rel-a", namespace="ns-a", timeout=120, wait=True)
+    assert out.changed is False
+    assert out.status == "not-found"
+
+
+def test_helm_upgrade_install_timeout_is_retryable_error() -> None:
+    def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        return _result(args=cmd, returncode=1, stderr="UPGRADE FAILED: context deadline exceeded")
+
+    adapter = HelmAdapter(runner=runner)
+    with pytest.raises(AdapterCommandError) as exc_info:
+        adapter.helm_upgrade_install(
+            release_name="rel-a",
+            namespace="ns-a",
+            chart_ref="oci://example/chart",
+            chart_version="1.2.3",
+            chart_digest=None,
+            values={},
+            timeout=300,
+            atomic=False,
+            wait=False,
+        )
+    assert exc_info.value.retryable is True

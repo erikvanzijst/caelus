@@ -19,7 +19,7 @@ Implement functions:
 
 ## `build_desired_state` Requirements
 1. Load deployment + desired template.
-2. Enforce package type and active template.
+2. Enforce active template.
 3. Ensure identity fields exist or initialize using naming contract:
    - `deployment_uid = {product_slug}-{user_slug}-{suffix6}`.
    - `namespace_name = deployment_uid`.

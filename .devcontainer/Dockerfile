@@ -40,18 +40,21 @@ RUN npm i -g @openai/codex
 RUN npm i -g @qwen-code/qwen-code@latest
 RUN mkdir /workspace && chown vscode:vscode /workspace
 
-USER vscode
-WORKDIR /workspace
-RUN mkdir -p ~/.local/bin ~/.ssh ~/venv
-RUN chmod 700 ~/.ssh
-RUN ssh-keyscan github.com >> ~/.ssh/known_hosts
-
 ENV PATH=/home/vscode/.local/bin:$PATH
 ENV COLORTERM=truecolor
 ENV UV_PROJECT_ENVIRONMENT="/home/vscode/venv"
 ENV DOCKER_BUILDKIT=1
 # https://opencode.ai/docs/tools/#websearch
 ENV OPENCODE_ENABLE_EXA=1
+
+USER vscode
+WORKDIR /workspace
+RUN mkdir -p ~/.local/bin ~/.ssh ~/venv
+RUN chmod 700 ~/.ssh
+RUN ssh-keyscan github.com >> ~/.ssh/known_hosts
+RUN echo '' >> ~/.bashrc && \
+    echo '# Auto-activate Caelus virtualenv' >> ~/.bashrc && \
+    echo 'if [ -f $UV_PROJECT_ENVIRONMENT/bin/activate ]; then source $UV_PROJECT_ENVIRONMENT/bin/activate; fi' >> ~/.bashrc
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN curl -fsSL https://claude.ai/install.sh | bash

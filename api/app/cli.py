@@ -14,7 +14,7 @@ from app.models import (
     ProductUpdate, DeploymentUpdate,
 )
 from app.services import (templates as template_service, deployments as deployment_service,
-                          products as product_service, users as user_service)
+                          products as product_service, users as user_service, reconcile as reconcile_service)
 from app.services.errors import CaelusException
 
 app = typer.Typer(help="Caelus CLI", pretty_exceptions_show_locals=False)
@@ -373,6 +373,29 @@ def update_deployment(
         except CaelusException as e:
             _exit_for_domain_error(e)
         typer.echo(f"Upgraded deployment {deployment.id} to desired_template_id={deployment.desired_template_id}")
+
+
+@app.command("reconcile")
+def reconcile(
+    deployment_id: int,
+) -> None:
+    with session_scope() as session:
+        try:
+            result = reconcile_service.DeploymentReconciler(session=session).reconcile(deployment_id)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+
+        if result.status == "error":
+            typer.echo(
+                f"Error: Reconcile failed for deployment {deployment_id}: {result.last_error}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        typer.echo(
+            f"Reconciled deployment {deployment_id} "
+            f"status={result.status} applied_template_id={result.applied_template_id}"
+        )
 
 
 if __name__ == "__main__":

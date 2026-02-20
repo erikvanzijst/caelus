@@ -3,9 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from app.models import DeploymentORM, ProductTemplateVersionORM
+from sqlmodel import Session
+
+from app.models import DeploymentORM, ProductTemplateVersionORM, DeploymentRead
 from app.provisioner import Provisioner, provisioner as default_provisioner
 from app.services import template_values
+from app.services.deployments import _get_deployment_orm
 from app.services.errors import IntegrityException
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETED,
@@ -25,22 +28,33 @@ class ReconcileResult:
 class DeploymentReconciler:
     """Reconcile a single deployment state against Kubernetes/Helm."""
 
-    def __init__(self, *, provisioner: Provisioner | None = None) -> None:
+    def __init__(self, *, session: Session, provisioner: Provisioner | None = None) -> None:
+        self._session = session
         self._provisioner = provisioner or default_provisioner
 
-    def reconcile(self, deployment: DeploymentORM) -> ReconcileResult:
+    def reconcile(self, deployment_id: int) -> ReconcileResult:
+        deployment = _get_deployment_orm(self._session, deployment_id=deployment_id, include_deleted=True)
         try:
             self._validate_input_state(deployment)
             if deployment.deleted_at is not None:
-                return self._reconcile_delete(deployment)
-            return self._reconcile_apply(deployment)
+                result = self._reconcile_delete(deployment)
+            else:
+                result = self._reconcile_apply(deployment)
         except Exception as exc:
-            return ReconcileResult(
+            result = ReconcileResult(
                 status=DEPLOYMENT_STATUS_ERROR,
                 applied_template_id=deployment.applied_template_id,
                 last_error=str(exc),
                 last_reconcile_at=datetime.utcnow(),
             )
+        deployment.status = result.status
+        deployment.applied_template_id = result.applied_template_id
+        deployment.last_error = result.last_error
+        deployment.last_reconcile_at = result.last_reconcile_at
+        self._session.add(deployment)
+        self._session.commit()
+        self._session.refresh(deployment)
+        return result
 
     @staticmethod
     def _validate_input_state(deployment: DeploymentORM) -> None:

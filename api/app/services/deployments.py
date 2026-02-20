@@ -30,25 +30,27 @@ def _enqueue_reconcile_job(session: Session, *, deployment_id: int, reason: str)
     jobs_service.enqueue_job(session, deployment_id=deployment_id, reason=reason)
 
 
-def _get_active_deployment_orm(
+def _get_deployment_orm(
     session: Session,
     *,
-    user_id: int,
     deployment_id: int,
+    user_id: int | None = None,
+    include_deleted: bool = False,
 ) -> DeploymentORM:
-    deployment = session.exec(
+    stmt = (
         select(DeploymentORM)
         .options(
             selectinload(DeploymentORM.user),
             selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
             selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
         )
-        .where(
-            DeploymentORM.deleted_at == None,  # noqa: E712
-            DeploymentORM.user_id == user_id,
-            DeploymentORM.id == deployment_id,
-        )
-    ).one_or_none()
+        .where(DeploymentORM.id == deployment_id)
+    )
+    if user_id is not None:
+        stmt = stmt.where(DeploymentORM.user_id == user_id)
+    if not include_deleted:
+        stmt = stmt.where(DeploymentORM.deleted_at == None)  # noqa: E712
+    deployment = session.exec(stmt).one_or_none()
     if not deployment:
         raise NotFoundException("Deployment not found")
     return deployment
@@ -114,8 +116,13 @@ def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
     return [DeploymentRead.model_validate(d) for d in deployments]
 
 
-def get_deployment(session: Session, *, user_id: int, deployment_id: int) -> DeploymentRead:
-    deployment = _get_active_deployment_orm(session, user_id=user_id, deployment_id=deployment_id)
+def get_deployment(session: Session, *, deployment_id: int, user_id: int | None = None, include_deleted: bool|None = False) -> DeploymentRead:
+    deployment = _get_deployment_orm(
+        session,
+        user_id=user_id,
+        deployment_id=deployment_id,
+        include_deleted=include_deleted,
+    )
     return DeploymentRead.model_validate(deployment)
 
 
@@ -126,7 +133,12 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
     raises NotFoundException. Otherwise, sets the ``deleted`` flag to ``True`` and
     commits the transaction.
     """
-    deployment = _get_active_deployment_orm(session, user_id=user_id, deployment_id=deployment_id)
+    deployment = _get_deployment_orm(
+        session,
+        user_id=user_id,
+        deployment_id=deployment_id,
+        include_deleted=False,
+    )
     deployment.status = DEPLOYMENT_STATUS_DELETING
     deployment.generation += 1
     deployment.last_error = None
@@ -145,7 +157,12 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
 
 
 def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentRead:
-    deployment = _get_active_deployment_orm(session, user_id=update.user_id, deployment_id=update.id)
+    deployment = _get_deployment_orm(
+        session,
+        user_id=update.user_id,
+        deployment_id=update.id,
+        include_deleted=False,
+    )
     if update.desired_template_id <= deployment.desired_template_id:
         raise IntegrityException("Can only upgrade to newer versions, not downgrade")
 

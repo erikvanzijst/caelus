@@ -4,7 +4,7 @@ import json
 
 from app.db import session_scope
 from app.models import DeploymentORM, DeploymentReconcileJobORM
-from app.services import jobs as jobs_service, templates as template_service
+from app.services import jobs as jobs_service, templates as template_service, reconcile as reconcile_service
 from sqlmodel import select
 
 
@@ -74,6 +74,11 @@ def _get_job_reasons_for_deployment(deployment_id: int) -> list[str]:
             .order_by(DeploymentReconcileJobORM.id)
         ).all()
         return [job.reason for job in jobs]
+
+
+def _get_deployment_by_id(deployment_id: int) -> DeploymentORM | None:
+    with session_scope() as session:
+        return session.get(DeploymentORM, deployment_id)
 
 
 def _mark_first_open_job_done(deployment_id: int) -> None:
@@ -682,3 +687,43 @@ def test_cli_missing_delete_commands_return_stable_errors(cli_runner):
     assert delete_template_res.exit_code == 1
     assert "Error: Template not found" in delete_template_res.output
     assert "Traceback" not in delete_template_res.output
+
+
+def test_cli_reconcile_command_reconciles_deployment(cli_runner, monkeypatch):
+    runner, app = cli_runner
+    _, deployment_id = _seed_deployment_via_services()
+
+    class _FakeProvisioner:
+        def ensure_namespace(self, *, name: str):
+            return None
+
+        def helm_upgrade_install(self, **kwargs):
+            return None
+
+        def helm_uninstall(self, **kwargs):
+            return None
+
+        def delete_namespace(self, *, name: str):
+            return None
+
+    monkeypatch.setattr(reconcile_service, "default_provisioner", _FakeProvisioner())
+    result = runner.invoke(app, ["reconcile", str(deployment_id)])
+
+    assert result.exit_code == 0
+    assert f"Reconciled deployment {deployment_id}" in result.output
+    assert "status=ready" in result.output
+
+    deployment = _get_deployment_by_id(deployment_id)
+    assert deployment is not None
+    assert deployment.status == "ready"
+    assert deployment.applied_template_id == deployment.desired_template_id
+    assert deployment.last_error is None
+    assert deployment.last_reconcile_at is not None
+
+
+def test_cli_reconcile_command_not_found_returns_stable_error(cli_runner):
+    runner, app = cli_runner
+    result = runner.invoke(app, ["reconcile", "999999"])
+    assert result.exit_code == 1
+    assert "Error: Deployment not found" in result.output
+    assert "Traceback" not in result.output

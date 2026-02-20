@@ -15,5 +15,6 @@ services:
       - "5173:5173"
     environment:
       - DATABASE_URL=sqlite:////workspace/api/caelus.db
+      - KUBECONFIG=/workspace/k8s/kubeconfigs/dev-k3s.yaml
     volumes:
       - .:/workspace

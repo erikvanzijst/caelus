@@ -229,6 +229,7 @@ class DeploymentReconcileJobBase(SQLModel):
     reason: str
     status: str = Field(default="queued")
     run_after: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    # TODO: remove this field. Jobs are not being retried:
     attempt: int = Field(default=0, nullable=False)
     locked_by: Optional[str] = None
     locked_at: Optional[datetime] = None

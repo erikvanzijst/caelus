@@ -76,6 +76,10 @@ class JobService:
     def _claim_next_job_postgres(self, *, worker_id: str) -> DeploymentReconcileJobORM | None:
         """Claim the next runnable job using Postgres row locking with SKIP LOCKED."""
         now = datetime.utcnow()
+        # TODO: Write a more sophisticated query that groups by deployment_id, selects the deployment that has the
+        #  oldest open job and then selects all live jobs for that deployment ordered by run_after, immediately marks
+        #  all but the newest jobs as done, and then returns that newest job. This automatically eliminates redundant
+        #  pending jobs that have already been superseded by a newer job.
         stmt = (
             select(DeploymentReconcileJobORM)
             .where(

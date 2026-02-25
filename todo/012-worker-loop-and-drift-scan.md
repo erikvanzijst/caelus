@@ -1,32 +1,49 @@
 # Issue 012: Worker Loop And Drift Scanner Services
 
 ## Goal
-Implement worker orchestration as thin loop over job service that calls into the DeploymentReconciler.
+Implement worker orchestration as thin loop that dequeues from JobService and calls into the DeploymentReconciler.
 
 ## Depends On
 `008-reconcile-job-service.md`
 `011-reconcile-service-core.md`
 
 ## Scope
-Implement in service layer, e.g. `api/app/worker.py`:
-1. `run_worker_once(session, worker_id)`.
-2. `run_worker_loop(worker_id, poll_seconds, stop_signal)`.
-3. `run_drift_scan(session, drift_age_seconds)`.
-4. `enqueue_needed_jobs_for_stuck_or_stale_deployments(...)`.
 
-## Behavior Requirements
+### Worker command
+Implement a `worker` cli command that runs a loop of:
+1. Dequeue a job: `JobService.claim_next_job()`
+2. Reconcile the job: `DeploymentReconciler.reconcile(job)` synchronously
+3. Mark the job as done: `JobService.mark_job_done(job)` (or `mark_job_failed`, along with error text)
+4. Exit cleanly once the queue is empty or `-n` has been reached (whichever comes first), unless `--follow` is specified.
+
+The command should optionally take the following arguments:
+1. `-n`: Maximum number of jobs to process.
+2. `--follow`: Continuously poll for new jobs (don't exit).
+
+The worker process should emit reasonable (python) logging to keep the user informed of progress.
+The worker process does not require multithreading or multiprocessing. Sequential processing is sufficient.
+The output on stdout should be yaml list of jobs that were processed (each finished job printed in realtime, not
+batched as a complete list at the end).
+
+### Jobs command
+Also implement a `jobs` cli command that lists all `queued` and `running` jobs in the queue in chronological order of
+`run_after`. Output should be yaml as with the other cli commands, so it's easy to pipe into other tools or agents.
+
+It should have the following optional arguments:
+1. `--failed`: Show only failed jobs
+2. `--done`: Show only done jobs
+3. `-r`: Reverse `run_after` sort order
+4. `--deployment_id`/`-d`: Filter by deployment id
+
+
+## Behavior Requirements (worker)
 1. Worker loop claims one job at a time.
 2. On reconcile success, mark done.
 3. On reconcile error, mark failed and preserve error text.
-5. Drift scan enqueues:
-   - non-deleted deployments with stale reconcile timestamp.
-   - deleted deployments not yet in `deleted` status.
 
-## Acceptance Criteria
+## Acceptance Criteria (worker)
 1. Loop logic contains no business reconciliation detail.
-2. Drift scan is safe to run repeatedly.
 
-## Test Requirements
+## Test Requirements (worker)
 1. Unit tests for run_worker_once success/failure branches.
-2. Unit tests for drift-scan candidate selection.
-3. Test that one failing deployment does not block others.
+2. Test that one failing deployment does not block others.

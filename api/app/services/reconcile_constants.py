@@ -29,7 +29,7 @@ JOB_STATUSES: tuple[str, ...] = (
 JOB_REASON_CREATE = "create"
 JOB_REASON_UPDATE = "update"
 JOB_REASON_DELETE = "delete"
-JOB_REASON_DRIFT = "drift"
+JOB_REASON_DRIFT = "drift"  # TODO: remove the "drift" concept from the codebase entirely
 
 JOB_REASONS: tuple[str, ...] = (
     JOB_REASON_CREATE,

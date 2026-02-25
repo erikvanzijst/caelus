@@ -56,4 +56,3 @@ Job reasons:
 - `create`
 - `update`
 - `delete`
-- `drift`

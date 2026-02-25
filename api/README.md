@@ -117,7 +117,7 @@ CLI output contract:
 
 - Queue item for reconciliation work.
 - Lifecycle: `queued -> running -> done|failed`.
-- Reasons: `create|update|delete|drift`.
+- Reasons: `create|update|delete`.
 - Unique partial index prevents multiple open jobs (`queued` or `running`) per
   deployment.
 

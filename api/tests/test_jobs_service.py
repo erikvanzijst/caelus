@@ -58,7 +58,7 @@ def test_enqueue_and_list_jobs_with_filters(db_session):
     jobs.mark_job_done(job_id=first.id)
     second = jobs.enqueue_job(
         deployment_id=deployment_id,
-        reason="drift",
+        reason="update",
         run_after=datetime.utcnow() + timedelta(seconds=60),
     )
 

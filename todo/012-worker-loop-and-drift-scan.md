@@ -12,8 +12,8 @@ Implement worker orchestration as thin loop that dequeues from JobService and ca
 ### Worker command
 Implement a `worker` cli command that runs a loop of:
 1. Dequeue a job: `JobService.claim_next_job()`
-2. Reconcile the job: `DeploymentReconciler.reconcile(job)` synchronously
-3. Mark the job as done: `JobService.mark_job_done(job)` (or `mark_job_failed`, along with error text)
+2. Reconcile the job: `DeploymentReconciler.reconcile(deployment_id)` synchronously
+3. Mark the job as done: `JobService.mark_job_done(job_id)` (or `mark_job_failed`, along with error text)
 4. Exit cleanly once the queue is empty or `-n` has been reached (whichever comes first), unless `--follow` is specified.
 
 The command should optionally take the following arguments:
@@ -45,5 +45,5 @@ It should have the following optional arguments:
 1. Loop logic contains no business reconciliation detail.
 
 ## Test Requirements (worker)
-1. Unit tests for run_worker_once success/failure branches.
-2. Test that one failing deployment does not block others.
+1. CLI test case for `worker` with success/failure branches.
+2. CLI test case for `jobs` with and without status filtering

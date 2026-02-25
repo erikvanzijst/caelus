@@ -220,7 +220,7 @@ CLI catches domain exceptions and exits with code `1`.
 From `api/`:
 
 - Install deps: `uv sync`
-- Run API: `uvicorn app.main:app --reload`
+- Run API: `uvicorn app.main:app --host 0.0.0.0 --reload`
 - Run CLI help: `caelus --help`
 - Run tests: `pytest`
 

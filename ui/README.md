@@ -96,10 +96,14 @@ Data behavior:
 
 Deployment cards:
 - One card per deployment.
-- Shows domain, product chip (via `deployment.template.product.name`), created timestamp, template id.
+- Shows domain, product chip (via `deployment.desired_template.product.name`), created timestamp, and desired template id.
+- Shows reconcile status chip from backend deployment state.
+- Shows `last_reconcile_at` timestamp.
+- Shows inline error alert if `last_error` is present.
 - Actions:
   - `Open` uses `ensureUrl()` (adds `https://` if missing)
   - `Delete` shows `window.confirm('Delete this deployment?')`, then `DELETE /users/{id}/deployments/{deploymentId}`
+  - while delete is pending/reconciling, action is disabled and label changes to `Deleting...`
 
 Empty state:
 - `No deployments yet` card with guidance text.
@@ -134,13 +138,14 @@ Selected product panel:
 
 Create template version:
 - Disabled when no product is selected.
-- Docker image URL optional (`null` allowed).
+- Chart reference required (`chart_ref`).
+- Chart version required (`chart_version`).
 - On success:
   - invalidates templates + products queries
   - if selected product had no canonical template, new template is auto-set canonical
 
 Template versions list:
-- Each template row shows id, docker image URL fallback, created timestamp.
+- Each template row shows id, `chart_ref:chart_version`, and created timestamp.
 - Canonical template gets `Canonical` chip.
 - Row actions:
   - `Set canonical` => updates product template id
@@ -155,11 +160,50 @@ Empty templates state:
 - API base URL: `VITE_API_URL` or default `http://localhost:8000`.
 - `requestJson` always sends `Content-Type: application/json`.
 - `204` responses map to `null`.
-- Error handling throws `detail` from API when present.
+- Error handling normalizes FastAPI `detail` values (including validation arrays) into readable messages.
 - Query defaults:
   - `refetchOnWindowFocus: false`
   - `retry: 1`
   - `staleTime: 5000ms`
+- Deployments query auto-polls every 3s while any deployment is in transitional states (`provisioning` or `deleting`).
+
+## Manual QA Matrix
+Use these checks after UI/API contract changes:
+
+1. Template create (Admin):
+   - open `/admin`, select a product
+   - create template with `chart_ref=ghcr.io/example/foo`, `chart_version=1.2.3`
+   - expected: request `POST /products/{id}/templates` returns `201`
+   - expected: new row appears with `ghcr.io/example/foo:1.2.3`
+
+2. Canonical template behavior:
+   - set template canonical
+   - expected: product chip updates to `Canonical template #{id}`
+
+3. Template delete:
+   - delete non-canonical template
+   - expected: row removed and list refreshes
+   - delete canonical template
+   - expected: newest remaining template is auto-selected as canonical (if any)
+
+4. Deployment create (Dashboard):
+   - open `/`, pick product, enter domain, click `Launch`
+   - expected: request payload includes `desired_template_id` (not `template_id`)
+   - expected: `POST /users/{id}/deployments` returns `201`
+   - expected: new deployment card appears with correct product and desired template id
+
+5. Deployment status visibility:
+   - expected card fields: status chip, last reconcile timestamp
+   - if backend sets `last_error`, expected inline error alert with readable message
+
+6. Deployment delete UX:
+   - click delete and confirm
+   - expected button becomes `Deleting...` and disabled
+   - expected polling refreshes card state while deleting
+
+7. Validation error readability:
+   - trigger invalid create payload (for example empty required template fields)
+   - expected alert text is readable and not `[object Object]`
 
 ## Responsive Behavior
 - Dashboard create form uses column layout on small screens, row layout on medium+.
@@ -167,5 +211,4 @@ Empty templates state:
 - App bar content remains a single row; at very narrow widths it compresses tightly.
 
 ## Known UI Caveats
-- `GridLegacy` is still used and logs a deprecation warning in dev console.
 - Auth email state is not globally shared; see the reload caveat in `Auth Email Behavior`.

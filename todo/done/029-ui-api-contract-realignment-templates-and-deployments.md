@@ -33,6 +33,11 @@ Completed work:
    - inline error display from `deployment.last_error`
 8. Removed generation display after UX review:
    - `generation` is intentionally not shown to end users.
+9. Added a manual UI QA matrix to `ui/README.md` covering:
+   - template create/canonical/delete flows
+   - deployment create/delete flows
+   - status/error visibility expectations
+   - validation error readability checks
 
 Touched files:
 1. `ui/src/api/types.ts`
@@ -52,9 +57,8 @@ Validation performed:
    - deployment cards show status/reconcile/error fields correctly.
 
 Remaining optional follow-up:
-1. Improve async delete UX for deployments (pending/deleting feedback and
-   auto-refresh behavior while backend reconciles deletion).
-2. Add/automate UI regression checks (currently manual Playwright coverage).
+1. Add automated UI regression checks for contract-critical flows
+   (payload keys, status rendering, and error message mapping).
 
 ## Context
 Date audited: 2026-02-25  

@@ -23,29 +23,10 @@ import {
   listProducts,
   listUsers,
 } from '../api/endpoints'
-import type { DeploymentStatus, Product, User } from '../api/types'
+import type { Product, User } from '../api/types'
 import { useAuthEmail } from '../state/useAuthEmail'
+import { isTransitionalStatus, statusColor } from '../utils/deploymentStatus'
 import { ensureUrl, formatDateTime } from '../utils/format'
-
-function statusColor(status?: DeploymentStatus): 'default' | 'info' | 'warning' | 'success' | 'error' {
-  switch (status) {
-    case 'ready':
-      return 'success'
-    case 'error':
-      return 'error'
-    case 'provisioning':
-    case 'deleting':
-      return 'warning'
-    case 'deleted':
-      return 'default'
-    default:
-      return 'info'
-  }
-}
-
-function isTransitionalStatus(status?: DeploymentStatus) {
-  return status === 'provisioning' || status === 'deleting'
-}
 
 function Dashboard() {
   const queryClient = useQueryClient()

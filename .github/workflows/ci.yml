@@ -7,7 +7,30 @@ on:
     branches: ["**"]
 
 jobs:
-  test:
+  ui-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        run: |
+          cd ui
+          npm ci
+
+      - name: Run UI tests (Vitest)
+        run: |
+          cd ui
+          npm test
+
+  api-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

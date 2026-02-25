@@ -4,6 +4,7 @@ set -euo pipefail
 cd /workspace/api
 
 uv venv "$UV_PROJECT_ENVIRONMENT"
+uv sync
 uv pip install --python "$UV_PROJECT_ENVIRONMENT/bin/python" -e .
 
 source "$UV_PROJECT_ENVIRONMENT/bin/activate"

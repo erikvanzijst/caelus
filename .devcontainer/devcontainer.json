@@ -7,7 +7,7 @@
   "remoteUser": "vscode",
   "overrideCommand": true,
   "workspaceFolder": "/workspace",
-  "postCreateCommand": "cd api && uv sync && uv run alembic upgrade head && echo Database initialized.",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
   "forwardPorts": [
     8000
   ],

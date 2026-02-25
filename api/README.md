@@ -60,13 +60,20 @@ REST routes:
 - Deployments: `POST/GET /users/{user_id}/deployments`,
   `GET/PUT/DELETE /users/{user_id}/deployments/{deployment_id}`
 
-CLI equivalents (`python -m app.cli ...`):
+CLI equivalents (`caelus ...`):
 - `create-user`, `list-users`, `get-user`, `delete-user`
 - `create-product`, `list-products`, `get-product`, `update-product`, `delete-product`
 - `create-template`, `list-templates`, `get-template`, `delete-template`
 - `create-deployment`, `list-deployments`, `get-deployment`,
   `update-deployment`, `delete-deployment`
 - `reconcile` (CLI-only operational command to run one reconcile pass)
+
+Example:
+
+```bash
+caelus --help
+caelus create-user alice@example.com
+```
 
 CLI output contract:
 - Successful command output on stdout is YAML-encoded entity payloads (single
@@ -213,9 +220,9 @@ CLI catches domain exceptions and exits with code `1`.
 From `api/`:
 
 - Install deps: `uv sync`
-- Run API: `uv run --no-sync uvicorn app.main:app --reload`
-- Run CLI help: `uv run --no-sync python -m app.cli --help`
-- Run tests: `uv run --no-sync pytest`
+- Run API: `uvicorn app.main:app --reload`
+- Run CLI help: `caelus --help`
+- Run tests: `pytest`
 
 Docs UI:
 - `GET /` redirects to `/docs`.
@@ -227,8 +234,8 @@ Docs UI:
 - Alembic config: `alembic.ini`, scripts in `alembic/versions/`.
 
 Migration commands:
-- New migration: `uv run --no-sync alembic revision --autogenerate -m "message"`
-- Upgrade DB: `uv run --no-sync alembic upgrade head`
+- New migration: `alembic revision --autogenerate -m "message"`
+- Upgrade DB: `alembic upgrade head`
 
 ## Testing Strategy
 
@@ -262,5 +269,5 @@ Migration commands:
 1. Read `app/models.py` to understand entities and constraints.
 2. Read `app/services/deployments.py`, `jobs.py`, `reconcile.py` in that order.
 3. Skim `app/provisioner.py` and `app/proc.py` for external-system behavior.
-4. Run `uv run --no-sync pytest` and inspect failing tests if any.
+4. Run `pytest` and inspect failing tests if any.
 5. For feature work, implement in services first, then expose in both API and CLI.

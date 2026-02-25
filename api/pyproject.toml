@@ -20,6 +20,10 @@ dependencies = [
   "typer[all]>=0.21.1",
 ]
 
+[tool.setuptools]
+packages = ["app"]
+
+
 [project.scripts]
 caelus = "app.cli:app"
 

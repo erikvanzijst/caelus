@@ -6,6 +6,7 @@ case "$1" in
   up)    devcontainer up --workspace-folder . ;;
   sh)    devcontainer exec --workspace-folder . bash ;;
   run)   shift; devcontainer exec --workspace-folder . "$@" ;;
+  ps)    docker compose ps ;;
   down)  docker compose down --remove-orphans ;;
   *)
     echo "usage: ./dev {build|up|sh|run|down}"

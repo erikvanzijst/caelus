@@ -17,8 +17,13 @@ from app.models import (
     ProductCreate,
     ProductUpdate, DeploymentUpdate,
 )
-from app.services import (templates as template_service, deployments as deployment_service,
-                          products as product_service, users as user_service, reconcile as reconcile_service)
+from app.services import (
+    templates as template_service,
+    deployments as deployment_service,
+    products as product_service,
+    users as user_service,
+    reconcile as reconcile_service,
+)
 from app.services.errors import CaelusException
 
 configure_logging()
@@ -296,7 +301,7 @@ def create_deployment(
     user_values_json: str | None = typer.Option(
         None,
         "--user-values-json",
-        help="JSON object string for deployment user values, e.g. '{\"key\":\"value\"}'.",
+        help='JSON object string for deployment user values, e.g. \'{"key":"value"}\'.',
     ),
     user_values_file: Path | None = typer.Option(
         None,

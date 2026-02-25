@@ -265,20 +265,20 @@ function Dashboard() {
                 >
                   Open
                 </Button>
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  disabled={deletePendingIds.has(deployment.id) || deployment.status === 'deleting'}
-                  onClick={() => {
-                    if (window.confirm('Delete this deployment?')) {
-                      deleteDeploymentMutation.mutate(deployment.id)
-                    }
-                  }}
-                >
-                  {deletePendingIds.has(deployment.id) || deployment.status === 'deleting'
-                    ? 'Deleting...'
-                    : 'Delete'}
-                </Button>
+                {deployment.status !== 'deleting' && deployment.status !== 'deleted' && (
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    disabled={deletePendingIds.has(deployment.id)}
+                    onClick={() => {
+                      if (window.confirm('Delete this deployment?')) {
+                        deleteDeploymentMutation.mutate(deployment.id)
+                      }
+                    }}
+                  >
+                    {deletePendingIds.has(deployment.id) ? 'Deleting...' : 'Delete'}
+                  </Button>
+                )}
               </CardActions>
             </Card>
           </Grid>

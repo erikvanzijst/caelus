@@ -10,6 +10,11 @@ This a monorepo with three packages:
 - [ui/](./ui/README.md) -- the React app
 - [k8s/](./k8s/README.md) -- backend kubernetes connectivity utilities
 
+## Codex code review skill
+- Skill path: `.codex/skills/code-reviewer/`
+- Invoke in prompt: `Use $code-reviewer to review this diff: <diff or range>`
+- Expected output: findings first, ordered by severity, with file/line evidence.
+
 
 ## Devcontainer
 A [devcontainer](https://containers.dev/) is provided for sandboxed development:

@@ -8,7 +8,8 @@ import pytest
 from sqlmodel import Session, create_engine
 
 from app.db import init_db
-from app.services import deployments, jobs, products, templates, users
+from app.services import deployments, products, templates, users
+from app.services.jobs import JobService
 
 
 PG_TEST_DATABASE_URL = os.getenv("POSTGRES_TEST_DATABASE_URL")
@@ -43,13 +44,14 @@ def _seed_jobs(engine, *, job_count: int) -> None:
                 domainname=f"pg-jobs-{token}.example.test",
             ),
         )
+        jobs = JobService(session)
         for _ in range(job_count - 1):
-            jobs.enqueue_job(session, deployment_id=deployment.id, reason="update")
+            jobs.enqueue_job(deployment_id=deployment.id, reason="update")
 
 
 def _claim_once(engine, worker_id: str) -> int | None:
     with Session(engine) as session:
-        job = jobs.claim_next_job(session, worker_id=worker_id)
+        job = JobService(session).claim_next_job(worker_id=worker_id)
         return None if job is None else job.id
 
 

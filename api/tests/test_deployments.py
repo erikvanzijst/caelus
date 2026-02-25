@@ -1,9 +1,12 @@
-from app.services.reconcile_constants import DEPLOYMENT_STATUS_PROVISIONING, DEPLOYMENT_STATUS_DELETING
+from app.services.reconcile_constants import (
+    DEPLOYMENT_STATUS_PROVISIONING,
+    DEPLOYMENT_STATUS_DELETING,
+)
 from tests.conftest import client, db_session
 from sqlmodel import select
 
 from app.models import DeploymentORM, DeploymentReconcileJobORM
-from app.services import jobs
+from app.services.jobs import JobService
 
 
 def test_delete_deployment_flow(client, db_session):
@@ -39,7 +42,7 @@ def test_delete_deployment_flow(client, db_session):
         )
     ).all()
     assert len(create_jobs) == 1
-    jobs.mark_job_done(db_session, job_id=create_jobs[0].id)
+    JobService(db_session).mark_job_done(job_id=create_jobs[0].id)
 
     # Delete the deployment
     del_resp = client.delete(f"/users/{user_id}/deployments/{deployment_id}")
@@ -103,7 +106,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
             DeploymentReconcileJobORM.reason == "create",
         )
     ).one()
-    jobs.mark_job_done(db_session, job_id=create_job.id)
+    JobService(db_session).mark_job_done(job_id=create_job.id)
 
     upgrade_resp = client.put(
         f"/users/{user_id}/deployments/{dep_id}",
@@ -134,7 +137,11 @@ def test_create_deployment_rejects_user_values_when_user_scope_schema_missing(cl
 
     tmpl_resp = client.post(
         f"/products/{product_id}/templates",
-        json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": {"type": "object"}},
+        json={
+            "chart_ref": "oci://example/chart",
+            "chart_version": "1.0.0",
+            "values_schema_json": {"type": "object"},
+        },
     )
     assert tmpl_resp.status_code == 201
     tmpl_id = tmpl_resp.json()["id"]
@@ -173,7 +180,11 @@ def test_create_deployment_rejects_unknown_user_keys_against_schema(client):
     }
     tmpl_resp = client.post(
         f"/products/{product_id}/templates",
-        json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": schema},
+        json={
+            "chart_ref": "oci://example/chart",
+            "chart_version": "1.0.0",
+            "values_schema_json": schema,
+        },
     )
     assert tmpl_resp.status_code == 201
     tmpl_id = tmpl_resp.json()["id"]

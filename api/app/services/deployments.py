@@ -10,9 +10,10 @@ from app.models import (
     DeploymentCreate,
     DeploymentORM,
     DeploymentRead,
-    ProductTemplateVersionORM, DeploymentUpdate,
+    ProductTemplateVersionORM,
+    DeploymentUpdate,
 )
-from app.services import jobs as jobs_service
+from app.services.jobs import JobService
 from app.services import template_values
 from app.services import users as user_service
 from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException
@@ -21,15 +22,17 @@ from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_PROVISIONING,
     JOB_REASON_CREATE,
     JOB_REASON_DELETE,
-    JOB_REASON_UPDATE, DEPLOYMENT_STATUS_DELETED,
+    JOB_REASON_UPDATE,
+    DEPLOYMENT_STATUS_DELETED,
 )
 from app.services.reconcile_naming import generate_deployment_uid
 
 logger = logging.getLogger(__name__)
 
+
 def _enqueue_reconcile_job(session: Session, *, deployment_id: int, reason: str) -> None:
     logger.debug("Queueing reconcile job deployment_id=%s reason=%s", deployment_id, reason)
-    jobs_service.enqueue_job(session, deployment_id=deployment_id, reason=reason)
+    JobService(session).enqueue_job(deployment_id=deployment_id, reason=reason)
 
 
 def _get_deployment_orm(

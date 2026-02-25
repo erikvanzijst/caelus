@@ -1,7 +1,8 @@
 import pytest
 from datetime import datetime
 
-from app.services import templates, deployments, products, users, jobs
+from app.services import templates, deployments, products, users
+from app.services.jobs import JobService
 from sqlmodel import select
 from app.models import DeploymentReconcileJobORM
 from app.services.errors import IntegrityException
@@ -77,7 +78,7 @@ def test_deployment_unique_constraint(db_session):
             DeploymentReconcileJobORM.reason == "create",
         )
     ).one()
-    jobs.mark_job_done(db_session, job_id=create_job.id)
+    JobService(db_session).mark_job_done(job_id=create_job.id)
     # Delete first deployment via service
     deployments.delete_deployment(db_session, user_id=user.id, deployment_id=dep1.id)
 

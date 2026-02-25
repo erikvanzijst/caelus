@@ -7,7 +7,8 @@ import yaml
 
 from app.db import session_scope
 from app.models import DeploymentORM, DeploymentReconcileJobORM
-from app.services import jobs as jobs_service, templates as template_service, reconcile as reconcile_service
+from app.services.jobs import JobService
+from app.services import templates as template_service, reconcile as reconcile_service
 from sqlmodel import select
 
 
@@ -26,8 +27,12 @@ def _parse_yaml_stdout(result) -> Any:
 def _seed_deployment_via_services() -> tuple[int, int]:
     from app.db import session_scope
     from app.models import UserCreate, ProductCreate, ProductTemplateVersionCreate, DeploymentCreate
-    from app.services import users as user_service, products as product_service, templates as template_service, \
-        deployments as deployment_service
+    from app.services import (
+        users as user_service,
+        products as product_service,
+        templates as template_service,
+        deployments as deployment_service,
+    )
 
     with session_scope() as session:
         user = user_service.create_user(session, UserCreate(email="getdep@example.com"))
@@ -93,7 +98,7 @@ def _mark_first_open_job_done(deployment_id: int) -> None:
             .order_by(DeploymentReconcileJobORM.id)
         ).first()
         assert job is not None
-        jobs_service.mark_job_done(session, job_id=job.id)
+        JobService(session).mark_job_done(job_id=job.id)
 
 
 def test_cli_user_flow(cli_runner):
@@ -167,13 +172,31 @@ def test_cli_update_product_supports_template_and_description(cli_runner):
     products = _parse_yaml_stdout(list_res)
     prod_id = products[0]["id"]
 
-    template_res = runner.invoke(app, ["create-template", "--product-id",  str(prod_id), "--chart-ref", "oci://example/chart", "--chart-version", "1.0.0"])
+    template_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            str(prod_id),
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "1.0.0",
+        ],
+    )
     assert template_res.exit_code == 0
     template_id = _parse_yaml_stdout(template_res)["id"]
 
     update_res = runner.invoke(
         app,
-        ["update-product", str(prod_id), "--template-id", str(template_id), "--description", "new description"],
+        [
+            "update-product",
+            str(prod_id),
+            "--template-id",
+            str(template_id),
+            "--description",
+            "new description",
+        ],
     )
     assert update_res.exit_code == 0
     updated = _parse_yaml_stdout(update_res)
@@ -206,11 +229,11 @@ def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
             "--version-label",
             "stable-2.1.0",
             "--default-values-json",
-            "{\"message\":\"hello\"}",
+            '{"message":"hello"}',
             "--values-schema-file",
             str(values_schema_file),
             "--capabilities-json",
-            "{\"requires_admin_upgrade\":true}",
+            '{"requires_admin_upgrade":true}',
         ],
     )
     assert template_res.exit_code == 0
@@ -269,7 +292,7 @@ def test_cli_create_template_rejects_both_json_and_file_for_same_field(cli_runne
             "--chart-version",
             "1.0.0",
             "--default-values-json",
-            "{\"message\":\"from-inline\"}",
+            '{"message":"from-inline"}',
             "--default-values-file",
             str(default_values_file),
         ],
@@ -362,7 +385,7 @@ def test_cli_get_product_and_template_commands(cli_runner):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            "{\"type\":\"object\",\"properties\":{\"user\":{\"type\":\"object\"}}}",
+            '{"type":"object","properties":{"user":{"type":"object"}}}',
         ],
     )
     assert template_res.exit_code == 0
@@ -418,7 +441,7 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            "{\"type\":\"object\",\"properties\":{\"user\":{\"type\":\"object\"}}}",
+            '{"type":"object","properties":{"user":{"type":"object"}}}',
         ],
     )
     assert template_res.exit_code == 0
@@ -461,7 +484,7 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            "{\"type\":\"object\",\"properties\":{\"user\":{\"type\":\"object\"}}}",
+            '{"type":"object","properties":{"user":{"type":"object"}}}',
         ],
     )
     assert template_res.exit_code == 0
@@ -478,7 +501,7 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
             "--domainname",
             "cli-json.example.test",
             "--user-values-json",
-            "{\"message\":\"hi\"}",
+            '{"message":"hi"}',
         ],
     )
     assert create_dep_res.exit_code == 0
@@ -507,7 +530,7 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            "{\"type\":\"object\",\"properties\":{\"user\":{\"type\":\"object\"}}}",
+            '{"type":"object","properties":{"user":{"type":"object"}}}',
         ],
     )
     assert template_res.exit_code == 0

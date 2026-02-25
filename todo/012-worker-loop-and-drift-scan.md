@@ -1,14 +1,14 @@
 # Issue 012: Worker Loop And Drift Scanner Services
 
 ## Goal
-Implement worker orchestration as thin loop over job service + reconcile service, and add periodic drift scheduling.
+Implement worker orchestration as thin loop over job service that calls into the DeploymentReconciler.
 
 ## Depends On
 `008-reconcile-job-service.md`
 `011-reconcile-service-core.md`
 
 ## Scope
-Implement in service layer, e.g. `api/app/services/reconcile_runner.py`:
+Implement in service layer, e.g. `api/app/worker.py`:
 1. `run_worker_once(session, worker_id)`.
 2. `run_worker_loop(worker_id, poll_seconds, stop_signal)`.
 3. `run_drift_scan(session, drift_age_seconds)`.

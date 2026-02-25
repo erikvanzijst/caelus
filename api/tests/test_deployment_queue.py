@@ -4,9 +4,13 @@ import pytest
 from sqlmodel import select
 
 from app.models import DeploymentReconcileJobORM
-from app.services import deployments, jobs, products, templates, users
+from app.services import deployments, products, templates, users
+from app.services.jobs import JobService
 from app.services.errors import DeploymentInProgressException, IntegrityException
-from app.services.reconcile_constants import DEPLOYMENT_STATUS_PROVISIONING, DEPLOYMENT_STATUS_DELETING
+from app.services.reconcile_constants import (
+    DEPLOYMENT_STATUS_PROVISIONING,
+    DEPLOYMENT_STATUS_DELETING,
+)
 
 
 def _setup_user_and_templates(db_session):
@@ -70,7 +74,7 @@ def test_delete_deployment_sets_state_and_enqueues_delete_job(db_session):
         select(DeploymentReconcileJobORM)
         .where(DeploymentReconcileJobORM.deployment_id == dep.id, DeploymentReconcileJobORM.reason == "create")
     ).one()
-    jobs.mark_job_done(db_session, job_id=create_job.id)
+    JobService(db_session).mark_job_done(job_id=create_job.id)
 
     deleted = deployments.delete_deployment(db_session, user_id=user.id, deployment_id=dep.id)
     assert deleted.status == DEPLOYMENT_STATUS_DELETING
@@ -102,7 +106,7 @@ def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
         select(DeploymentReconcileJobORM)
         .where(DeploymentReconcileJobORM.deployment_id == dep.id, DeploymentReconcileJobORM.reason == "create")
     ).one()
-    jobs.mark_job_done(db_session, job_id=create_job.id)
+    JobService(db_session).mark_job_done(job_id=create_job.id)
 
     upgraded = deployments.update_deployment(
         db_session,

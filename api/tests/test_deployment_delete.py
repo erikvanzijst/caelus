@@ -1,7 +1,7 @@
 from sqlmodel import select
 
 from app.models import DeploymentReconcileJobORM
-from app.services import jobs
+from app.services.jobs import JobService
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETING
 from tests.conftest import client
 
@@ -33,7 +33,7 @@ def test_delete_deployment_flow(client, db_session):
             DeploymentReconcileJobORM.reason == "create",
         )
     ).one()
-    jobs.mark_job_done(db_session, job_id=create_job.id)
+    JobService(db_session).mark_job_done(job_id=create_job.id)
     # delete deployment
     del_resp = client.delete(f"/users/{user_id}/deployments/{dep_id}")
     assert del_resp.status_code == 204

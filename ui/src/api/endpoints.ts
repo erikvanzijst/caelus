@@ -43,7 +43,7 @@ export function listTemplates(productId: number, authEmail?: string) {
 
 export function createTemplate(
   productId: number,
-  payload: { docker_image_url?: string | null },
+  payload: { chart_ref: string; chart_version: string },
   authEmail?: string,
 ) {
   return requestJson<ProductTemplate>(`/products/${productId}/templates`, {
@@ -66,7 +66,7 @@ export function listDeployments(userId: number, authEmail?: string) {
 
 export function createDeployment(
   userId: number,
-  payload: { template_id: number; domainname: string },
+  payload: { desired_template_id: number; domainname: string },
   authEmail?: string,
 ) {
   return requestJson<Deployment>(`/users/${userId}/deployments`, {

@@ -7,11 +7,11 @@ import {
   CardContent,
   Chip,
   Divider,
+  Grid,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
-import Grid from '@mui/material/GridLegacy'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -33,7 +33,8 @@ function Admin() {
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null)
   const [productName, setProductName] = useState('')
   const [productDescription, setProductDescription] = useState('')
-  const [templateUrl, setTemplateUrl] = useState('')
+  const [templateChartRef, setTemplateChartRef] = useState('')
+  const [templateChartVersion, setTemplateChartVersion] = useState('')
   const [adminError, setAdminError] = useState<string | null>(null)
 
   const productsQuery = useQuery({
@@ -85,11 +86,15 @@ function Admin() {
     mutationFn: () =>
       createTemplate(
         selectedProductId!,
-        { docker_image_url: templateUrl.trim() || null },
+        {
+          chart_ref: templateChartRef.trim(),
+          chart_version: templateChartVersion.trim(),
+        },
         email,
       ),
     onSuccess: (template) => {
-      setTemplateUrl('')
+      setTemplateChartRef('')
+      setTemplateChartVersion('')
       queryClient.invalidateQueries({ queryKey: ['templates', selectedProductId] })
       queryClient.invalidateQueries({ queryKey: ['products'] })
       if (!selectedProduct?.template_id) {
@@ -136,7 +141,7 @@ function Admin() {
       </Box>
       {adminError && <Alert severity="error">{adminError}</Alert>}
       <Grid container spacing={3}>
-        <Grid item xs={12} md={5}>
+        <Grid size={{ xs: 12, md: 5 }}>
           <Stack spacing={2}>
             <Card>
               <CardContent>
@@ -211,7 +216,7 @@ function Admin() {
             </Card>
           </Stack>
         </Grid>
-        <Grid item xs={12} md={7}>
+        <Grid size={{ xs: 12, md: 7 }}>
           <Stack spacing={2}>
             <Card>
               <CardContent>
@@ -248,10 +253,17 @@ function Admin() {
                 <Stack spacing={2}>
                   <Typography variant="h6">Create template version</Typography>
                   <TextField
-                    label="Docker image URL"
-                    placeholder="ghcr.io/org/app:latest"
-                    value={templateUrl}
-                    onChange={(event) => setTemplateUrl(event.target.value)}
+                    label="Chart reference"
+                    placeholder="ghcr.io/org/chart"
+                    value={templateChartRef}
+                    onChange={(event) => setTemplateChartRef(event.target.value)}
+                    disabled={!selectedProductId}
+                  />
+                  <TextField
+                    label="Chart version"
+                    placeholder="1.0.0"
+                    value={templateChartVersion}
+                    onChange={(event) => setTemplateChartVersion(event.target.value)}
                     disabled={!selectedProductId}
                   />
                 </Stack>
@@ -259,7 +271,12 @@ function Admin() {
               <CardActions sx={{ px: 2, pb: 2 }}>
                 <Button
                   variant="contained"
-                  disabled={!selectedProductId || createTemplateMutation.isPending}
+                  disabled={
+                    !selectedProductId ||
+                    !templateChartRef.trim() ||
+                    !templateChartVersion.trim() ||
+                    createTemplateMutation.isPending
+                  }
                   onClick={() => {
                     setAdminError(null)
                     createTemplateMutation.mutate()
@@ -292,7 +309,7 @@ function Admin() {
                           )}
                         </Stack>
                         <Typography variant="body2" color="text.secondary">
-                          {template.docker_image_url || 'No image URL'}
+                          {template.chart_ref}:{template.chart_version}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                           Created {formatDateTime(template.created_at)}

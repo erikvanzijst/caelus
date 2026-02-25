@@ -6,13 +6,13 @@ import {
   CardActions,
   CardContent,
   Chip,
+  Grid,
   MenuItem,
   Select,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
-import Grid from '@mui/material/GridLegacy'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -23,9 +23,29 @@ import {
   listProducts,
   listUsers,
 } from '../api/endpoints'
-import type { Product, User } from '../api/types'
+import type { DeploymentStatus, Product, User } from '../api/types'
 import { useAuthEmail } from '../state/useAuthEmail'
 import { ensureUrl, formatDateTime } from '../utils/format'
+
+function statusColor(status?: DeploymentStatus): 'default' | 'info' | 'warning' | 'success' | 'error' {
+  switch (status) {
+    case 'ready':
+      return 'success'
+    case 'error':
+      return 'error'
+    case 'provisioning':
+    case 'deleting':
+      return 'warning'
+    case 'deleted':
+      return 'default'
+    default:
+      return 'info'
+  }
+}
+
+function isTransitionalStatus(status?: DeploymentStatus) {
+  return status === 'provisioning' || status === 'deleting'
+}
 
 function Dashboard() {
   const queryClient = useQueryClient()
@@ -33,6 +53,7 @@ function Dashboard() {
   const [selectedProductId, setSelectedProductId] = useState<number | ''>('')
   const [domainname, setDomainname] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
+  const [deletePendingIds, setDeletePendingIds] = useState<Set<number>>(new Set())
 
   const usersQuery = useQuery({
     queryKey: ['users'],
@@ -80,11 +101,19 @@ function Dashboard() {
     queryKey: ['deployments', currentUser?.id],
     queryFn: () => listDeployments(currentUser!.id, email),
     enabled: Boolean(currentUser?.id),
+    refetchInterval: (query) => {
+      const items = query.state.data ?? []
+      return items.some((deployment) => isTransitionalStatus(deployment.status)) ? 3000 : false
+    },
   })
 
   const createDeploymentMutation = useMutation({
     mutationFn: (payload: { userId: number; templateId: number; domainname: string }) =>
-      createDeployment(payload.userId, { template_id: payload.templateId, domainname: payload.domainname }, email),
+      createDeployment(
+        payload.userId,
+        { desired_template_id: payload.templateId, domainname: payload.domainname },
+        email,
+      ),
     onSuccess: () => {
       setDomainname('')
       setFormError(null)
@@ -96,8 +125,35 @@ function Dashboard() {
   const deleteDeploymentMutation = useMutation({
     mutationFn: (deploymentId: number) =>
       deleteDeployment(currentUser!.id, deploymentId, email),
+    onMutate: (deploymentId) => {
+      setDeletePendingIds((previous) => new Set(previous).add(deploymentId))
+      return { deploymentId }
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['deployments'] }),
+    onError: (_error, deploymentId) => {
+      setDeletePendingIds((previous) => {
+        const next = new Set(previous)
+        next.delete(deploymentId)
+        return next
+      })
+    },
   })
+
+  useEffect(() => {
+    const visibleIds = new Set((deploymentsQuery.data ?? []).map((deployment) => deployment.id))
+    setDeletePendingIds((previous) => {
+      let changed = false
+      const next = new Set<number>()
+      previous.forEach((id) => {
+        if (visibleIds.has(id)) {
+          next.add(id)
+        } else {
+          changed = true
+        }
+      })
+      return changed ? next : previous
+    })
+  }, [deploymentsQuery.data])
 
   const selectedProduct = useMemo<Product | undefined>(() => {
     return availableProducts.find((product) => product.id === selectedProductId)
@@ -180,14 +236,17 @@ function Dashboard() {
 
       <Grid container spacing={2}>
         {deploymentsQuery.data?.map((deployment) => (
-          <Grid item xs={12} md={6} key={deployment.id}>
+          <Grid size={{ xs: 12, md: 6 }} key={deployment.id}>
             <Card>
               <CardContent>
                 <Stack spacing={1.5}>
+                  {deletePendingIds.has(deployment.id) && deployment.status !== 'deleted' && (
+                    <Alert severity="info">Delete requested. Waiting for controller update.</Alert>
+                  )}
                   <Stack direction="row" justifyContent="space-between" alignItems="center">
                     <Typography variant="h6">{deployment.domainname}</Typography>
                     <Chip
-                      label={deployment.template?.product?.name ?? 'Unknown product'}
+                      label={deployment.desired_template?.product?.name ?? 'Unknown product'}
                       color="primary"
                       variant="outlined"
                     />
@@ -196,8 +255,24 @@ function Dashboard() {
                     Created {formatDateTime(deployment.created_at)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Template #{deployment.template_id}
+                    Desired template #{deployment.desired_template_id}
                   </Typography>
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                    <Chip
+                      size="small"
+                      label={`Status: ${deployment.status ?? 'unknown'}`}
+                      color={statusColor(deployment.status)}
+                      variant="outlined"
+                    />
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    Last reconcile {formatDateTime(deployment.last_reconcile_at)}
+                  </Typography>
+                  {deployment.last_error && (
+                    <Alert severity="error" sx={{ mt: 0.5 }}>
+                      {deployment.last_error}
+                    </Alert>
+                  )}
                 </Stack>
               </CardContent>
               <CardActions sx={{ px: 2, pb: 2 }}>
@@ -212,20 +287,23 @@ function Dashboard() {
                 <Button
                   variant="outlined"
                   color="secondary"
+                  disabled={deletePendingIds.has(deployment.id) || deployment.status === 'deleting'}
                   onClick={() => {
                     if (window.confirm('Delete this deployment?')) {
                       deleteDeploymentMutation.mutate(deployment.id)
                     }
                   }}
                 >
-                  Delete
+                  {deletePendingIds.has(deployment.id) || deployment.status === 'deleting'
+                    ? 'Deleting...'
+                    : 'Delete'}
                 </Button>
               </CardActions>
             </Card>
           </Grid>
         ))}
         {!deploymentsQuery.isLoading && deploymentsQuery.data?.length === 0 && (
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <Card sx={{ p: 4 }}>
               <Stack spacing={1}>
                 <Typography variant="h6">No deployments yet</Typography>

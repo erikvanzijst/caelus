@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import time
 from pathlib import Path
 
 import typer
@@ -23,8 +25,16 @@ from app.services import (
     products as product_service,
     users as user_service,
     reconcile as reconcile_service,
+    jobs as jobs_service,
 )
 from app.services.errors import CaelusException
+from app.services.reconcile_constants import (
+    DEPLOYMENT_STATUS_ERROR,
+    JOB_STATUS_QUEUED,
+    JOB_STATUS_RUNNING,
+    JOB_STATUS_DONE,
+    JOB_STATUS_FAILED,
+)
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -75,6 +85,11 @@ def _exit_for_domain_error(exc: CaelusException) -> None:
 def _echo_yaml_entity(entity: object) -> None:
     encoded = jsonable_encoder(entity)
     typer.echo(yaml.safe_dump(encoded, sort_keys=False), nl=False)
+
+
+def _echo_yaml_stream_item(entity: object) -> None:
+    encoded = jsonable_encoder(entity)
+    typer.echo(yaml.safe_dump(encoded, sort_keys=False).rstrip())
 
 
 @app.command("create-user")
@@ -405,6 +420,81 @@ def reconcile(
             raise typer.Exit(code=1)
 
         _echo_yaml_entity(result)
+
+
+def _run_worker_once(*, worker_id: str, session: Session) -> dict | None:
+    jobs = jobs_service.JobService(session)
+    claimed = jobs.claim_next_job(worker_id=worker_id)
+    if claimed is None:
+        return None
+
+    reconciler = reconcile_service.DeploymentReconciler(session=session)
+    result = reconciler.reconcile(claimed.deployment_id)
+
+    status: str
+    last_error: str | None = result.last_error
+    if result.status == DEPLOYMENT_STATUS_ERROR:
+        jobs.mark_job_failed(job_id=claimed.id, error=result.last_error or "unknown error")
+        status = JOB_STATUS_FAILED
+    else:
+        jobs.mark_job_done(job_id=claimed.id)
+        status = JOB_STATUS_DONE
+
+    return {
+        "id": claimed.id,
+        "deployment_id": claimed.deployment_id,
+        "reason": claimed.reason,
+        "status": status,
+        "locked_by": claimed.locked_by,
+        "locked_at": claimed.locked_at,
+        "last_error": last_error,
+    }
+
+
+@app.command("worker")
+def worker(
+    n: int = typer.Option(None, "-n", help="Maximum number of jobs to process"),
+    follow: bool = typer.Option(False, "--follow", help="Continuously poll for new jobs"),
+    poll_seconds: float = typer.Option(1.0, "--poll-seconds", help="Sleep interval when following"),
+) -> None:
+    worker_id = os.environ.get("CAELUS_WORKER_ID") or f"worker-{int(time.time())}"
+    processed = 0
+    with session_scope() as session:
+        while True:
+            payload = _run_worker_once(worker_id=worker_id, session=session)
+            if payload is None:
+                if follow:
+                    time.sleep(poll_seconds)
+                    continue
+                break
+            _echo_yaml_stream_item(payload)
+            processed += 1
+            if n is not None and processed >= n:
+                break
+
+
+@app.command("jobs")
+def jobs(
+    failed: bool = typer.Option(False, "--failed", help="Show only failed jobs"),
+    done: bool = typer.Option(False, "--done", help="Show only done jobs"),
+    reverse: bool = typer.Option(False, "--reverse", "-r", help="Reverse run_after sort order"),
+    deployment_id: int | None = typer.Option(None, "--deployment-id", "-d", help="Filter by deployment id"),
+) -> None:
+    if failed and done:
+        statuses = [JOB_STATUS_FAILED, JOB_STATUS_DONE]
+    elif failed:
+        statuses = [JOB_STATUS_FAILED]
+    elif done:
+        statuses = [JOB_STATUS_DONE]
+    else:
+        statuses = [JOB_STATUS_QUEUED, JOB_STATUS_RUNNING]
+
+    with session_scope() as session:
+        jobs_service_obj = jobs_service.JobService(session)
+        jobs_list = jobs_service_obj.list_jobs(statuses=statuses, deployment_id=deployment_id, limit=1000)
+        if reverse:
+            jobs_list = list(reversed(jobs_list))
+        _echo_yaml_entity(jobs_list)
 
 
 if __name__ == "__main__":

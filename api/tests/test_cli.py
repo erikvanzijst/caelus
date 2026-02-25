@@ -101,6 +101,20 @@ def _mark_first_open_job_done(deployment_id: int) -> None:
         JobService(session).mark_job_done(job_id=job.id)
 
 
+def _mark_first_open_job_failed(deployment_id: int, error: str = "boom") -> None:
+    with session_scope() as session:
+        job = session.exec(
+            select(DeploymentReconcileJobORM)
+            .where(
+                DeploymentReconcileJobORM.deployment_id == deployment_id,
+                DeploymentReconcileJobORM.status.in_(("queued", "running")),
+            )
+            .order_by(DeploymentReconcileJobORM.id)
+        ).first()
+        assert job is not None
+        JobService(session).mark_job_failed(job_id=job.id, error=error)
+
+
 def test_cli_user_flow(cli_runner):
     runner, app = cli_runner
 
@@ -766,3 +780,91 @@ def test_cli_reconcile_command_not_found_returns_stable_error(cli_runner):
     assert result.exit_code == 1
     assert "Error: Deployment not found" in result.output
     assert "Traceback" not in result.output
+
+
+def test_cli_worker_processes_jobs_and_streams_yaml(cli_runner, monkeypatch):
+    runner, app = cli_runner
+
+    # Seed deployment via services to ensure a queued create job exists
+    user_id, deployment_id = _seed_deployment_via_services()
+
+    # Ensure fake provisioner to avoid external calls
+    class _FakeProvisioner:
+        def ensure_namespace(self, *, name: str):
+            return None
+
+        def helm_upgrade_install(self, **kwargs):
+            return None
+
+        def helm_uninstall(self, **kwargs):
+            return None
+
+        def delete_namespace(self, *, name: str):
+            return None
+
+    monkeypatch.setenv("CAELUS_WORKER_ID", "worker-test")
+    monkeypatch.setattr(reconcile_service, "default_provisioner", _FakeProvisioner())
+
+    result = runner.invoke(app, ["worker", "-n", "1"])
+    assert result.exit_code == 0
+    # Expect one YAML document (id/status present)
+    lines = [line for line in result.output.strip().splitlines() if line]
+    assert any(line.startswith("id:") for line in lines)
+    assert any("status: done" in line for line in lines)
+
+    # With no remaining jobs and follow disabled, worker should exit cleanly
+    result_empty = runner.invoke(app, ["worker", "-n", "1"])
+    assert result_empty.exit_code == 0
+    assert result_empty.output.strip() == ""
+
+
+def test_cli_worker_marks_failure_and_continues(cli_runner, monkeypatch):
+    runner, app = cli_runner
+
+    user_id, deployment_id = _seed_deployment_via_services()
+
+    class _FailingProvisioner:
+        def ensure_namespace(self, *, name: str):
+            raise RuntimeError("fail")
+
+        def helm_upgrade_install(self, **kwargs):
+            raise RuntimeError("fail")
+
+        def helm_uninstall(self, **kwargs):
+            raise RuntimeError("fail")
+
+        def delete_namespace(self, *, name: str):
+            raise RuntimeError("fail")
+
+    monkeypatch.setenv("CAELUS_WORKER_ID", "worker-fail")
+    monkeypatch.setattr(reconcile_service, "default_provisioner", _FailingProvisioner())
+
+    result = runner.invoke(app, ["worker", "-n", "1"])
+    assert result.exit_code == 0
+    lines = [line for line in result.output.strip().splitlines() if line]
+    assert any("status: failed" in line for line in lines)
+
+    # Ensure job is marked failed in DB
+    with session_scope() as session:
+        jobs = JobService(session).list_jobs(deployment_id=deployment_id, statuses=["failed"], limit=10)
+        assert len(jobs) == 1
+
+
+def test_cli_jobs_lists_open_and_filters_status(cli_runner):
+    runner, app = cli_runner
+
+    user_id, deployment_id = _seed_deployment_via_services()
+
+    # initial queued create job should appear
+    result = runner.invoke(app, ["jobs", "-d", str(deployment_id)])
+    assert result.exit_code == 0
+    jobs_list = _parse_yaml_stdout(result)
+    assert len(jobs_list) >= 1
+    assert all(job["status"] in ("queued", "running") for job in jobs_list)
+
+    # mark it failed, then list failed-only
+    _mark_first_open_job_failed(deployment_id)
+    result_failed = runner.invoke(app, ["jobs", "--failed", "-d", str(deployment_id)])
+    assert result_failed.exit_code == 0
+    failed_jobs = _parse_yaml_stdout(result_failed)
+    assert all(job["status"] == "failed" for job in failed_jobs)

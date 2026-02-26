@@ -160,16 +160,16 @@ function Dashboard() {
   return (
     <Stack spacing={4}>
       <Box>
-        <Typography variant="h3">Your deployments</Typography>
+        <Typography variant="h3">Your applications</Typography>
         <Typography color="text.secondary">
-          Spin up new instances from products and keep track of live environments.
+          Spin up new products and keep track of your live environments.
         </Typography>
       </Box>
 
       <Card sx={{ p: 1 }}>
         <CardContent>
           <Stack spacing={2}>
-            <Typography variant="h5">Create deployment</Typography>
+            <Typography variant="h5">Deploy an application</Typography>
             {formError && <Alert severity="error">{formError}</Alert>}
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
               <Select
@@ -291,7 +291,7 @@ function Dashboard() {
           <Grid size={{ xs: 12 }}>
             <Card sx={{ p: 4 }}>
               <Stack spacing={1}>
-                <Typography variant="h6">No deployments yet</Typography>
+                <Typography variant="h6">No applications yet</Typography>
                 <Typography color="text.secondary">
                   Choose a product and domain to launch your first instance.
                 </Typography>

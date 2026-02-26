@@ -26,6 +26,7 @@ RUN apt-get update -y && \
       jq \
       yq \
       ca-certificates \
+      dnsutils \
       gnupg && \
     install -m 0755 -d /etc/apt/keyrings && \
     wget -qO- https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \

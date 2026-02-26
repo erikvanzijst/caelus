@@ -67,10 +67,10 @@ Important current behavior:
 
 ## Dashboard (`/`)
 Headline:
-- `Your deployments`
+- `Your applications`
 - Subtext: launch and track environments
 
-Create Deployment Card:
+Deploy an applications Card:
 - Product `Select` shows only products with `template_id` set (canonical template required).
 - Domain `TextField` is free text.
 - `Launch` button disabled when:

@@ -80,6 +80,24 @@ CLI output contract:
   object or list, mirroring REST JSON responses).
 - Logs and errors are emitted on stderr.
 
+**yq filtering tip**
+
+The CLI prints YAML‑encoded entities to stdout. You can pipe that output through `yq` to extract only the fields you care about.
+For example:
+
+```bash
+caelus list-deployments | yq -y '.[] | {id, domainname, status}'
+id: 1
+domainname: hello3.app.deprutser.be
+status: deleted
+---
+id: 2
+domainname: test3.example.com
+status: deleting
+```
+
+This works for any `caelus` command that returns a YAML list or object.
+
 ## Core Data Model
 
 ### User

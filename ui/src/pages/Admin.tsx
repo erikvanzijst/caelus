@@ -271,16 +271,16 @@ function Admin() {
             <Card>
               <CardContent>
                 <Stack spacing={2}>
-                  <Typography variant="h6">Create template version</Typography>
+                  <Typography variant="h6">Create product template</Typography>
                   <TextField
-                    label="Chart reference"
+                    label="Helm chart reference"
                     placeholder="ghcr.io/org/chart"
                     value={templateChartRef}
                     onChange={(event) => setTemplateChartRef(event.target.value)}
                     disabled={!selectedProductId}
                   />
                   <TextField
-                    label="Chart version"
+                    label="Helm chart tag"
                     placeholder="1.0.0"
                     value={templateChartVersion}
                     onChange={(event) => setTemplateChartVersion(event.target.value)}
@@ -288,7 +288,7 @@ function Admin() {
                   />
                   <Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Values JSON Schema (optional)
+                      Helm chart user values schema (JSONSchema -- optional)
                     </Typography>
                     <Box
                       sx={{
@@ -352,7 +352,7 @@ function Admin() {
             <Card>
               <CardContent>
                 <Stack spacing={2}>
-                  <Typography variant="h6">Template versions</Typography>
+                  <Typography variant="h6">Product template versions</Typography>
                   <Divider />
                   {templatesQuery.data?.map((template) => (
                     <Box
@@ -398,7 +398,7 @@ function Admin() {
                                 />
                               </IconButton>
                               <Typography variant="body2" component="span">
-                                Values Schema
+                                Helm chart user values schema
                               </Typography>
                             </Box>
                             <Collapse in={expandedSchemaId === template.id}>

@@ -56,6 +56,13 @@ For details, see `ui/README.md`.
 - Follow standard Git commit message style:
   - Short imperative subject line, followed by an empty line.
   - Wrap all lines at 78 characters max.
+- **Quote the whole command** – wrap the entire `git commit` call in single quotes (or use `-F <file>`).
+  ```bash
+  git commit -m 'subject line' -m $'body line 1\nbody line 2…'
+  ```
+- **Escape back‑ticks/quotes** – never place unescaped `` ` `` or " " inside a `-m` argument; use `\\` or `$'…'` quoting.
+- **Check exit status** – after `git commit …` verify `$? == 0`; on error abort and report before retrying.
+- **Prefer two‑`-m` or a message file** over a single multi‑line `-m` to avoid shell parsing issues.
   - Explain why and what changed in the body.
 
 ## Contribution Checklist

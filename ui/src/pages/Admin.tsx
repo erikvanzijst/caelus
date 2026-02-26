@@ -6,12 +6,16 @@ import {
   CardActions,
   CardContent,
   Chip,
+  Collapse,
   Divider,
   Grid,
+  IconButton,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
+import ExpandMore from '@mui/icons-material/ExpandMore'
+import Editor from '@monaco-editor/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -35,6 +39,9 @@ function Admin() {
   const [productDescription, setProductDescription] = useState('')
   const [templateChartRef, setTemplateChartRef] = useState('')
   const [templateChartVersion, setTemplateChartVersion] = useState('')
+  const [valuesSchemaJson, setValuesSchemaJson] = useState('')
+  const [schemaError, setSchemaError] = useState<string | null>(null)
+  const [expandedSchemaId, setExpandedSchemaId] = useState<number | null>(null)
   const [adminError, setAdminError] = useState<string | null>(null)
 
   const productsQuery = useQuery({
@@ -83,18 +90,31 @@ function Admin() {
   })
 
   const createTemplateMutation = useMutation({
-    mutationFn: () =>
-      createTemplate(
+    mutationFn: () => {
+      let parsedSchema: object | undefined
+      if (valuesSchemaJson.trim()) {
+        try {
+          parsedSchema = JSON.parse(valuesSchemaJson)
+          setSchemaError(null)
+        } catch {
+          setSchemaError('Invalid JSON in values schema')
+          throw new Error('Invalid JSON in values schema')
+        }
+      }
+      return createTemplate(
         selectedProductId!,
         {
           chart_ref: templateChartRef.trim(),
           chart_version: templateChartVersion.trim(),
+          values_schema_json: parsedSchema,
         },
         email,
-      ),
+      )
+    },
     onSuccess: (template) => {
       setTemplateChartRef('')
       setTemplateChartVersion('')
+      setValuesSchemaJson('')
       queryClient.invalidateQueries({ queryKey: ['templates', selectedProductId] })
       queryClient.invalidateQueries({ queryKey: ['products'] })
       if (!selectedProduct?.template_id) {
@@ -266,6 +286,48 @@ function Admin() {
                     onChange={(event) => setTemplateChartVersion(event.target.value)}
                     disabled={!selectedProductId}
                   />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Values JSON Schema (optional)
+                    </Typography>
+                    <Box
+                      sx={{
+                        border: '1px solid rgba(148, 163, 184, 0.3)',
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        resize: 'vertical',
+                        minHeight: 100,
+                        maxHeight: 600,
+                        cursor: 'se-resize',
+                      }}
+                    >
+                      <Editor
+                        height="100%"
+                        defaultLanguage="json"
+                        value={valuesSchemaJson}
+                        onChange={(value) => {
+                          setValuesSchemaJson(value || '')
+                          setSchemaError(null)
+                        }}
+                        options={{
+                          minimap: { enabled: false },
+                          lineNumbers: 'on',
+                          folding: false,
+                          wordWrap: 'on',
+                          scrollBeyondLastLine: false,
+                          fontSize: 13,
+                          renderLineHighlight: 'none',
+                          automaticLayout: true,
+                        }}
+                        theme="vs-light"
+                      />
+                    </Box>
+                    {schemaError && (
+                      <Typography variant="body2" color="error" sx={{ mt: 0.5 }}>
+                        {schemaError}
+                      </Typography>
+                    )}
+                  </Box>
                 </Stack>
               </CardContent>
               <CardActions sx={{ px: 2, pb: 2 }}>
@@ -314,6 +376,64 @@ function Admin() {
                         <Typography variant="body2" color="text.secondary">
                           Created {formatDateTime(template.created_at)}
                         </Typography>
+                        {template.values_schema_json && (
+                          <>
+                            <Box>
+                              <IconButton
+                                size="small"
+                                onClick={() =>
+                                  setExpandedSchemaId(
+                                    expandedSchemaId === template.id ? null : template.id,
+                                  )
+                                }
+                              >
+                                <ExpandMore
+                                  sx={{
+                                    transform:
+                                      expandedSchemaId === template.id
+                                        ? 'rotate(180deg)'
+                                        : 'rotate(0deg)',
+                                    transition: 'transform 0.2s',
+                                  }}
+                                />
+                              </IconButton>
+                              <Typography variant="body2" component="span">
+                                Values Schema
+                              </Typography>
+                            </Box>
+                            <Collapse in={expandedSchemaId === template.id}>
+                              <Box
+                                sx={{
+                                  border: '1px solid rgba(148, 163, 184, 0.3)',
+                                  borderRadius: 1,
+                                  overflow: 'hidden',
+                                  resize: 'vertical',
+                                  minHeight: 100,
+                                  maxHeight: 600,
+                                  cursor: 'se-resize',
+                                }}
+                              >
+                                <Editor
+                                  height="100%"
+                                  defaultLanguage="json"
+                                  value={JSON.stringify(template.values_schema_json, null, 2)}
+                                  options={{
+                                    readOnly: true,
+                                    minimap: { enabled: false },
+                                    lineNumbers: 'on',
+                                    folding: false,
+                                    wordWrap: 'on',
+                                    scrollBeyondLastLine: false,
+                                    fontSize: 13,
+                                    renderLineHighlight: 'none',
+                                    automaticLayout: true,
+                                  }}
+                                  theme="vs-light"
+                                />
+                              </Box>
+                            </Collapse>
+                          </>
+                        )}
                         <Stack direction="row" spacing={1}>
                           <Button
                             variant="outlined"

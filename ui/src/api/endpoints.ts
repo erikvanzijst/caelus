@@ -43,7 +43,7 @@ export function listTemplates(productId: number, authEmail?: string) {
 
 export function createTemplate(
   productId: number,
-  payload: { chart_ref: string; chart_version: string },
+  payload: { chart_ref: string; chart_version: string; values_schema_json?: object },
   authEmail?: string,
 ) {
   return requestJson<ProductTemplate>(`/products/${productId}/templates`, {

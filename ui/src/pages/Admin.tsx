@@ -41,7 +41,10 @@ function Admin() {
   const [templateChartVersion, setTemplateChartVersion] = useState('')
   const [valuesSchemaJson, setValuesSchemaJson] = useState('')
   const [schemaError, setSchemaError] = useState<string | null>(null)
+  const [defaultValuesJson, setDefaultValuesJson] = useState('')
+  const [defaultValuesError, setDefaultValuesError] = useState<string | null>(null)
   const [expandedSchemaId, setExpandedSchemaId] = useState<number | null>(null)
+  const [expandedDefaultsId, setExpandedDefaultsId] = useState<number | null>(null)
   const [adminError, setAdminError] = useState<string | null>(null)
 
   const productsQuery = useQuery({
@@ -101,12 +104,23 @@ function Admin() {
           throw new Error('Invalid JSON in values schema')
         }
       }
+      let parsedDefaults: object | undefined
+      if (defaultValuesJson.trim()) {
+        try {
+          parsedDefaults = JSON.parse(defaultValuesJson)
+          setDefaultValuesError(null)
+        } catch {
+          setDefaultValuesError('Invalid JSON in default values')
+          throw new Error('Invalid JSON in default values')
+        }
+      }
       return createTemplate(
         selectedProductId!,
         {
           chart_ref: templateChartRef.trim(),
           chart_version: templateChartVersion.trim(),
           values_schema_json: parsedSchema,
+          default_values_json: parsedDefaults,
         },
         email,
       )
@@ -115,6 +129,7 @@ function Admin() {
       setTemplateChartRef('')
       setTemplateChartVersion('')
       setValuesSchemaJson('')
+      setDefaultValuesJson('')
       queryClient.invalidateQueries({ queryKey: ['templates', selectedProductId] })
       queryClient.invalidateQueries({ queryKey: ['products'] })
       if (!selectedProduct?.template_id) {
@@ -288,6 +303,49 @@ function Admin() {
                   />
                   <Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Default Helm values (JSON -- optional)
+                    </Typography>
+                    <Box
+                      sx={{
+                        border: '1px solid rgba(148, 163, 184, 0.3)',
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        resize: 'vertical',
+                        minHeight: 100,
+                        maxHeight: 600,
+                        cursor: 'se-resize',
+                        height: 150,
+                      }}
+                    >
+                      <Editor
+                        height="100%"
+                        defaultLanguage="json"
+                        value={defaultValuesJson}
+                        onChange={(value) => {
+                          setDefaultValuesJson(value || '')
+                          setDefaultValuesError(null)
+                        }}
+                        options={{
+                          minimap: { enabled: false },
+                          lineNumbers: 'on',
+                          folding: false,
+                          wordWrap: 'on',
+                          scrollBeyondLastLine: false,
+                          fontSize: 13,
+                          renderLineHighlight: 'none',
+                          automaticLayout: true,
+                        }}
+                        theme="vs-light"
+                      />
+                    </Box>
+                    {defaultValuesError && (
+                      <Typography variant="body2" color="error" sx={{ mt: 0.5 }}>
+                        {defaultValuesError}
+                      </Typography>
+                    )}
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       Helm chart user values schema (JSONSchema -- optional)
                     </Typography>
                     <Box
@@ -299,6 +357,7 @@ function Admin() {
                         minHeight: 100,
                         maxHeight: 600,
                         cursor: 'se-resize',
+                        height: 150,
                       }}
                     >
                       <Editor
@@ -376,6 +435,65 @@ function Admin() {
                         <Typography variant="body2" color="text.secondary">
                           Created {formatDateTime(template.created_at)}
                         </Typography>
+                        {template.default_values_json && (
+                          <>
+                            <Box>
+                              <IconButton
+                                size="small"
+                                onClick={() =>
+                                  setExpandedDefaultsId(
+                                    expandedDefaultsId === template.id ? null : template.id,
+                                  )
+                                }
+                              >
+                                <ExpandMore
+                                  sx={{
+                                    transform:
+                                      expandedDefaultsId === template.id
+                                        ? 'rotate(180deg)'
+                                        : 'rotate(0deg)',
+                                    transition: 'transform 0.2s',
+                                  }}
+                                />
+                              </IconButton>
+                              <Typography variant="body2" component="span">
+                                Default Helm values
+                              </Typography>
+                            </Box>
+                            <Collapse in={expandedDefaultsId === template.id}>
+                              <Box
+                                sx={{
+                                  border: '1px solid rgba(148, 163, 184, 0.3)',
+                                  borderRadius: 1,
+                                  overflow: 'hidden',
+                                  resize: 'vertical',
+                                  minHeight: 100,
+                                  maxHeight: 600,
+                                  cursor: 'se-resize',
+                                  height: 150,
+                                }}
+                              >
+                                <Editor
+                                  height="100%"
+                                  defaultLanguage="json"
+                                  value={JSON.stringify(template.default_values_json, null, 2)}
+                                  options={{
+                                    readOnly: true,
+                                    minimap: { enabled: false },
+                                    lineNumbers: 'on',
+                                    folding: false,
+                                    wordWrap: 'on',
+                                    scrollBeyondLastLine: false,
+                                    fontSize: 13,
+                                    renderLineHighlight: 'none',
+                                    automaticLayout: true,
+                                  }}
+                                  theme="vs-light"
+                                />
+                              </Box>
+                            </Collapse>
+                          </>
+                        )}
                         {template.values_schema_json && (
                           <>
                             <Box>
@@ -411,6 +529,7 @@ function Admin() {
                                   minHeight: 100,
                                   maxHeight: 600,
                                   cursor: 'se-resize',
+                                  height: 150,
                                 }}
                               >
                                 <Editor

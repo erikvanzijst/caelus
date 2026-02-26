@@ -7,16 +7,28 @@ vi.mock('./client', () => ({
 }))
 
 describe('endpoints payload contracts', () => {
-  it('creates templates with chart_ref/chart_version payload', async () => {
+  it('creates templates with values_schema_json payload', async () => {
     vi.mocked(requestJson).mockResolvedValueOnce({} as never)
 
-    await createTemplate(4, { chart_ref: 'ghcr.io/org/chart', chart_version: '1.2.3' }, 'a@b.com')
+    const schema = {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+      },
+    }
+
+    await createTemplate(
+      4,
+      { chart_ref: 'ghcr.io/org/chart', chart_version: '1.2.3', values_schema_json: schema },
+      'a@b.com',
+    )
 
     expect(requestJson).toHaveBeenCalledWith('/products/4/templates', {
       method: 'POST',
       body: JSON.stringify({
         chart_ref: 'ghcr.io/org/chart',
         chart_version: '1.2.3',
+        values_schema_json: schema,
       }),
       authEmail: 'a@b.com',
     })

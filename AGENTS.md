@@ -62,8 +62,7 @@ For details, see `ui/README.md`.
   ```
 - **Escape back‑ticks/quotes** – never place unescaped `` ` `` or " " inside a `-m` argument; use `\\` or `$'…'` quoting.
 - **Check exit status** – after `git commit …` verify `$? == 0`; on error abort and report before retrying.
-- **Prefer two‑`-m` or a message file** over a single multi‑line `-m` to avoid shell parsing issues.
-  - Explain why and what changed in the body.
+- Explain why and what changed in the body.
 
 ## Contribution Checklist
 - Update or add tests for new behavior.

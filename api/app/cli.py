@@ -17,7 +17,8 @@ from app.models import (
     DeploymentCreate,
     ProductTemplateVersionCreate,
     ProductCreate,
-    ProductUpdate, DeploymentUpdate,
+    ProductUpdate,
+    DeploymentUpdate,
 )
 from app.services import (
     templates as template_service,
@@ -353,7 +354,7 @@ def create_deployment(
 
 
 @app.command("list-deployments")
-def list_deployments(user_id: int) -> None:
+def list_deployments(user_id: int | None = typer.Argument(None, help="Filter deployments by user ID")) -> None:
     with session_scope() as session:
         _echo_yaml_entity(deployment_service.list_deployments(session, user_id=user_id))
 
@@ -395,7 +396,9 @@ def update_deployment(
         try:
             deployment = deployment_service.update_deployment(
                 session,
-                update=DeploymentUpdate(user_id=user_id, id=deployment_id, desired_template_id=desired_template_id)
+                update=DeploymentUpdate(
+                    user_id=user_id, id=deployment_id, desired_template_id=desired_template_id
+                ),
             )
         except CaelusException as e:
             _exit_for_domain_error(e)

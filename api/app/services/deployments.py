@@ -110,18 +110,16 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
         raise IntegrityException("Deployment already exists") from exc
 
 
-def list_deployments(session: Session, *, user_id: int) -> list[DeploymentRead]:
-    # Return deployments for the user
-    deployments = session.exec(
-        select(DeploymentORM)
-        .options(
-            selectinload(DeploymentORM.user),
-            selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
-            selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
-        )
-        .where(DeploymentORM.user_id == user_id)  # noqa: E712
-    ).all()
-    return [DeploymentRead.model_validate(d) for d in deployments]
+def list_deployments(session: Session, *, user_id: int | None = None) -> list[DeploymentRead]:
+    # Return deployments for the given user if provided, otherwise all deployments
+    stmt = select(DeploymentORM).options(
+        selectinload(DeploymentORM.user),
+        selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
+        selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
+    )
+    if user_id is not None:
+        stmt = stmt.where(DeploymentORM.user_id == user_id)  # noqa: E712
+    return [DeploymentRead.model_validate(d) for d in session.exec(stmt).all()]
 
 
 def get_deployment(session: Session, *, deployment_id: int, user_id: int | None = None) -> DeploymentRead:

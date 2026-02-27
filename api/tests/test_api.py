@@ -85,11 +85,11 @@ def test_user_deployment_flow_with_user_values(client):
         json={
             "desired_template_id": template_id,
             "domainname": "values.example.com",
-            "user_values_json": {"message": "hi"},
+            "user_values_json": {"user": {"message": "hi"}},
         },
     )
     assert deployment.status_code == 201
-    assert deployment.json()["user_values_json"] == {"message": "hi"}
+    assert deployment.json()["user_values_json"] == {"user": {"message": "hi"}}
 
 
 def test_user_delete_flow(client):

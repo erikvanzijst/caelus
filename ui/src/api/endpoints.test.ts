@@ -78,4 +78,29 @@ describe('endpoints payload contracts', () => {
       authEmail: 'a@b.com',
     })
   })
+
+  it('creates deployments with user_values_json payload', async () => {
+    vi.mocked(requestJson).mockResolvedValueOnce({} as never)
+
+    const userValues = {
+      ingress: { host: 'example.com' },
+      user: { message: 'Hello' },
+    }
+
+    await createDeployment(
+      3,
+      { desired_template_id: 7, domainname: 'app.example.com', user_values_json: userValues },
+      'a@b.com',
+    )
+
+    expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
+      method: 'POST',
+      body: JSON.stringify({
+        desired_template_id: 7,
+        domainname: 'app.example.com',
+        user_values_json: userValues,
+      }),
+      authEmail: 'a@b.com',
+    })
+  })
 })

@@ -22,45 +22,18 @@ def deep_merge(base: Any, override: Any) -> Any:
     return deepcopy(override)
 
 
-def extract_user_subschema(values_schema_json: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Return `properties.user` subschema when present."""
-    if values_schema_json is None:
-        return None
-    if not isinstance(values_schema_json, dict):
-        raise IntegrityException("values_schema_json must be an object")
-
-    properties = values_schema_json.get("properties")
-    if properties is None:
-        return None
-    if not isinstance(properties, dict):
-        raise IntegrityException("values_schema_json.properties must be an object")
-
-    user_schema = properties.get("user")
-    if user_schema is None:
-        return None
-    if not isinstance(user_schema, dict):
-        raise IntegrityException("values_schema_json.properties.user must be an object")
-    return user_schema
-
-
 def validate_user_values(
-    user_values_json: dict[str, Any] | None,
+    user_values_json: dict[str, Any],
     values_schema_json: dict[str, Any] | None,
 ) -> None:
     """Validate user-scoped values against `properties.user` schema."""
-    if user_values_json is None:
+    if not values_schema_json and not user_values_json:
         return
-    if not isinstance(user_values_json, dict):
-        raise IntegrityException("user_values_json must be a JSON object")
-
-    user_schema = extract_user_subschema(values_schema_json)
-    if user_schema is None:
-        if user_values_json:
-            raise IntegrityException("Template does not define values_schema_json.properties.user")
-        return
+    elif user_values_json and not values_schema_json:
+        raise IntegrityException("user_values_json not supported on this product template")
 
     try:
-        jsonschema_validate(instance=user_values_json, schema=user_schema)
+        jsonschema_validate(instance=user_values_json, schema=values_schema_json)
     except ValidationError as exc:
         raise IntegrityException(f"user_values_json is invalid: {exc.message}") from exc
 
@@ -80,7 +53,7 @@ def merge_values_scoped(
 
     merged = deepcopy(defaults) if defaults is not None else {}
     if user_scope_delta is not None:
-        merged = deep_merge(merged, {"user": deepcopy(user_scope_delta)})
+        merged = deep_merge(merged, deepcopy(user_scope_delta))
     if system_overrides is not None:
         merged = deep_merge(merged, deepcopy(system_overrides))
     return merged

@@ -21,19 +21,23 @@ import {
   deleteDeployment,
   listDeployments,
   listProducts,
+  listTemplates,
   listUsers,
 } from '../api/endpoints'
-import type { Product, User } from '../api/types'
+import type { Product, ProductTemplate, User } from '../api/types'
 import { useAuthEmail } from '../state/useAuthEmail'
 import { isTransitionalStatus, statusColor } from '../utils/deploymentStatus'
 import { ensureUrl, formatDateTime } from '../utils/format'
+import { UserValuesForm, validateUserValues } from '../components/UserValuesForm'
 
 function Dashboard() {
   const queryClient = useQueryClient()
   const { email } = useAuthEmail()
   const [selectedProductId, setSelectedProductId] = useState<number | ''>('')
   const [domainname, setDomainname] = useState('')
+  const [userValues, setUserValues] = useState<Record<string, unknown> | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [userValuesErrors, setUserValuesErrors] = useState<string[]>([])
   const [deletePendingIds, setDeletePendingIds] = useState<Set<number>>(new Set())
 
   const usersQuery = useQuery({
@@ -78,6 +82,20 @@ function Dashboard() {
     }
   }, [availableProducts, selectedProductId])
 
+  const selectedProduct = useMemo<Product | undefined>(() => {
+    return availableProducts.find((product) => product.id === selectedProductId)
+  }, [availableProducts, selectedProductId])
+
+  const canonicalTemplateQuery = useQuery({
+    queryKey: ['templates', selectedProductId],
+    queryFn: () => listTemplates(selectedProductId as number, email),
+    enabled: Boolean(selectedProductId),
+  })
+
+  const canonicalTemplate: ProductTemplate | undefined = useMemo(() => {
+    return canonicalTemplateQuery.data?.find((t) => t.id === selectedProduct?.template_id)
+  }, [canonicalTemplateQuery.data, selectedProduct?.template_id])
+
   const deploymentsQuery = useQuery({
     queryKey: ['deployments', currentUser?.id],
     queryFn: () => listDeployments(currentUser!.id, email),
@@ -89,18 +107,31 @@ function Dashboard() {
   })
 
   const createDeploymentMutation = useMutation({
-    mutationFn: (payload: { userId: number; templateId: number; domainname: string }) =>
+    mutationFn: (payload: { userId: number; templateId: number; domainname: string; userValuesJson?: object }) =>
       createDeployment(
         payload.userId,
-        { desired_template_id: payload.templateId, domainname: payload.domainname },
+        { desired_template_id: payload.templateId, domainname: payload.domainname, user_values_json: payload.userValuesJson },
         email,
       ),
     onSuccess: () => {
       setDomainname('')
+      setUserValues(null)
       setFormError(null)
+      setUserValuesErrors([])
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
     },
-    onError: (error: Error) => setFormError(error.message),
+    onError: (error: Error) => {
+      const errorMsg = error.message
+      if (errorMsg.includes('user_values_json') || errorMsg.includes('validation')) {
+        const validationErrors = validateUserValues(
+          canonicalTemplate?.values_schema_json ?? null,
+          userValues,
+        )
+        setUserValuesErrors(validationErrors.length > 0 ? validationErrors : [errorMsg])
+      } else {
+        setFormError(error.message)
+      }
+    },
   })
 
   const deleteDeploymentMutation = useMutation({
@@ -136,10 +167,6 @@ function Dashboard() {
     })
   }, [deploymentsQuery.data])
 
-  const selectedProduct = useMemo<Product | undefined>(() => {
-    return availableProducts.find((product) => product.id === selectedProductId)
-  }, [availableProducts, selectedProductId])
-
   const handleCreateDeployment = () => {
     if (!currentUser) return
     if (!selectedProduct?.template_id) {
@@ -150,10 +177,26 @@ function Dashboard() {
       setFormError('Enter a domain name to continue.')
       return
     }
+
+    // Validate user values against schema
+    if (canonicalTemplate?.values_schema_json) {
+      const validationErrors = validateUserValues(
+        canonicalTemplate.values_schema_json as Record<string, unknown>,
+        userValues,
+      )
+      if (validationErrors.length > 0) {
+        setUserValuesErrors(validationErrors)
+        return
+      }
+    }
+
+    setUserValuesErrors([])
+    const valuesToSend = userValues ?? canonicalTemplate?.default_values_json ?? undefined
     createDeploymentMutation.mutate({
       userId: currentUser.id,
       templateId: selectedProduct.template_id,
       domainname: domainname.trim(),
+      userValuesJson: valuesToSend,
     })
   }
 
@@ -200,11 +243,22 @@ function Dashboard() {
                 Launch
               </Button>
             </Stack>
-            {selectedProduct && (
-              <Typography color="text.secondary" variant="body2">
-                Canonical template:{' '}
-                {selectedProduct.template_id ? `#${selectedProduct.template_id}` : 'Not set'}
-              </Typography>
+            {selectedProduct && canonicalTemplate && (
+              <>
+                <Typography color="text.secondary" variant="body2">
+                  Canonical template: #{selectedProduct.template_id}
+                </Typography>
+                {canonicalTemplateQuery.isLoading ? (
+                  <Typography color="text.secondary">Loading template...</Typography>
+                ) : (
+                  <UserValuesForm
+                    valuesSchemaJson={canonicalTemplate.values_schema_json as Record<string, unknown> | null}
+                    defaultValuesJson={canonicalTemplate.default_values_json as Record<string, unknown> | null}
+                    onChange={setUserValues}
+                    errors={userValuesErrors}
+                  />
+                )}
+              </>
             )}
             {!availableProducts.length && (
               <Alert severity="info">

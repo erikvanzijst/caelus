@@ -43,7 +43,7 @@ def _seed_deployment(db_session) -> int:
             user_id=user.id,
             desired_template_id=template.id,
             domainname="reconcile.example.test",
-            user_values_json={"message": "hello"},
+            user_values_json={"user": {"message": "hello"}},
         ),
     )
     return deployment.id

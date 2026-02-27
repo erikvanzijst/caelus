@@ -126,7 +126,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
     assert len(update_jobs) == 1
 
 
-def test_create_deployment_rejects_user_values_when_user_scope_schema_missing(client):
+def test_create_deployment_user_values_with_empty_schema(client):
     user_resp = client.post("/users", json={"email": "noscope@example.com"})
     assert user_resp.status_code == 201
     user_id = user_resp.json()["id"]
@@ -154,8 +154,7 @@ def test_create_deployment_rejects_user_values_when_user_scope_schema_missing(cl
             "user_values_json": {"message": "hello"},
         },
     )
-    assert dep_resp.status_code == 409
-    assert "properties.user" in dep_resp.json()["detail"]
+    assert dep_resp.status_code == 201
 
 
 def test_create_deployment_rejects_unknown_user_keys_against_schema(client):

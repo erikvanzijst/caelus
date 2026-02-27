@@ -199,7 +199,7 @@ class DeploymentORM(DeploymentBase, table=True):
 
 
 class DeploymentCreate(DeploymentBase):
-    user_values_json: Optional[dict[str, Any]] = Field(default=None)
+    user_values_json: dict[str, Any] = Field(default=dict())
     user_id: Optional[int] = None
 
 

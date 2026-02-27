@@ -48,7 +48,7 @@ def _parse_json_object_input(
     json_file: Path | None,
     json_option_name: str,
     file_option_name: str,
-) -> dict | None:
+) -> dict:
     if json_text is not None and json_file is not None:
         raise ValueError(f"Provide only one of {json_option_name} or {file_option_name}")
 
@@ -74,7 +74,7 @@ def _parse_json_object_input(
             raise ValueError(f"{file_option_name} must contain a JSON object")
         return parsed
 
-    return None
+    return {}
 
 
 def _exit_for_domain_error(exc: CaelusException) -> None:

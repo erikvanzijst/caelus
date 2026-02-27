@@ -57,7 +57,7 @@ def _get_deployment_orm(
     return deployment
 
 
-def _validate_user_values(template: ProductTemplateVersionORM, user_values_json: dict | None) -> None:
+def _validate_user_values(template: ProductTemplateVersionORM, user_values_json: dict) -> None:
     template_values.validate_user_values(user_values_json, template.values_schema_json)
     merged_values = template_values.merge_values_scoped(
         template.default_values_json,

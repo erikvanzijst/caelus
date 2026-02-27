@@ -31,6 +31,14 @@ import type { Product } from '../api/types'
 import { useAuthEmail } from '../state/useAuthEmail'
 import { formatDateTime } from '../utils/format'
 
+const DEFAULT_VALUES_SCHEMA = `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+  },
+  "additionalProperties": false
+}`
+
 function Admin() {
   const { email } = useAuthEmail()
   const queryClient = useQueryClient()
@@ -39,7 +47,7 @@ function Admin() {
   const [productDescription, setProductDescription] = useState('')
   const [templateChartRef, setTemplateChartRef] = useState('')
   const [templateChartVersion, setTemplateChartVersion] = useState('')
-  const [valuesSchemaJson, setValuesSchemaJson] = useState('')
+  const [valuesSchemaJson, setValuesSchemaJson] = useState(DEFAULT_VALUES_SCHEMA)
   const [schemaError, setSchemaError] = useState<string | null>(null)
   const [defaultValuesJson, setDefaultValuesJson] = useState('')
   const [defaultValuesError, setDefaultValuesError] = useState<string | null>(null)
@@ -128,7 +136,7 @@ function Admin() {
     onSuccess: (template) => {
       setTemplateChartRef('')
       setTemplateChartVersion('')
-      setValuesSchemaJson('')
+      setValuesSchemaJson(DEFAULT_VALUES_SCHEMA)
       setDefaultValuesJson('')
       queryClient.invalidateQueries({ queryKey: ['templates', selectedProductId] })
       queryClient.invalidateQueries({ queryKey: ['products'] })
@@ -346,7 +354,7 @@ function Admin() {
                   </Box>
                   <Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Helm chart user values schema (JSONSchema -- optional)
+                      Helm chart user values schema
                     </Typography>
                     <Box
                       sx={{

@@ -54,16 +54,16 @@ resource "kubernetes_deployment" "api" {
             }
           }
 
-          resources {
-            requests = {
-              memory = "128Mi"
-              cpu    = "100m"
-            }
-            limits = {
-              memory = "256Mi"
-              cpu    = "200m"
-            }
-          }
+          # resources {
+          #   requests = {
+          #     memory = "128Mi"
+          #     cpu    = "100m"
+          #   }
+          #   limits = {
+          #     memory = "256Mi"
+          #     cpu    = "200m"
+          #   }
+          # }
         }
       }
     }

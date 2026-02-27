@@ -42,16 +42,16 @@ resource "kubernetes_deployment" "ui" {
             protocol       = "TCP"
           }
 
-          resources {
-            requests = {
-              memory = "64Mi"
-              cpu    = "100m"
-            }
-            limits = {
-              memory = "128Mi"
-              cpu    = "200m"
-            }
-          }
+          # resources {
+          #   requests = {
+          #     memory = "64Mi"
+          #     cpu    = "100m"
+          #   }
+          #   limits = {
+          #     memory = "128Mi"
+          #     cpu    = "200m"
+          #   }
+          # }
         }
       }
     }

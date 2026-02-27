@@ -104,13 +104,50 @@ app.include_router(products.router, prefix="/api")
 - All routes in that router get the prefix prepended
 - This changes `/users` → `/api/users`, `/products` → `/api/products`
 
+#### Move OpenAPI Docs to `/api` Prefix
+
+The API documentation (Swagger UI and ReDoc) must also move under the `/api` prefix for consistency. Update `api/app/main.py`:
+
+```python
+from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
+
+app = FastAPI(
+    title="Caelus Deploy",
+    description="Service for provisioning user-owned webapp instances on cloud infrastructure",
+    version="0.1.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
+
+@app.get("/docs", include_in_schema=False)
+def redirect_to_docs() -> RedirectResponse:
+    """Redirect /docs to /api/docs for backwards compatibility."""
+    return RedirectResponse(url="/api/docs")
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    """Redirect root URL to Swagger UI docs."""
+    return RedirectResponse(url="/api/docs")
+```
+
+**Key decisions:**
+- `docs_url="/api/docs"`: Swagger UI at `/api/docs`
+- `redoc_url="/api/redoc"`: ReDoc at `/api/redoc`  
+- `openapi_url="/api/openapi.json"`: OpenAPI schema at `/api/openapi.json`
+- Added `/docs` redirect: Maintains backwards compatibility for developers who bookmark `/docs`
+- Updated root redirect: Root URL now points to `/api/docs`
+
 ### 0.3 Verification Checklist
 
 After these changes:
 - [ ] API endpoints are: `/api/users`, `/api/users/{id}`, `/api/products`, `/api/products/{id}`
 - [ ] UI calls `/api/*` paths
 - [ ] Local dev still works: `VITE_API_URL=http://localhost:8000 npm run dev`
-- [ ] API docs (Swagger UI) accessible at `/docs`
+- [ ] API docs (Swagger UI) accessible at `/api/docs`
+- [ ] ReDoc accessible at `/api/redoc`
+- [ ] OpenAPI schema at `/api/openapi.json`
 
 ### 0.4 CORS Consideration
 
@@ -286,6 +323,7 @@ server {
 
     # =========================================================================
     # API Proxy: Forward /api requests to backend service
+    # Includes /api/users, /api/products, /api/docs, /api/redoc, /api/openapi.json
     # =========================================================================
     location /api {
         # In Kubernetes, this resolves to the caelus-api service

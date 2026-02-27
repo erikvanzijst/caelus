@@ -6,7 +6,6 @@ from app.services.errors import IntegrityException
 from app.services.template_values import (
     deep_merge,
     merge_values_scoped,
-    validate_merged_values,
     validate_user_values,
 )
 
@@ -37,33 +36,3 @@ def test_deep_merge_replaces_arrays_and_scalars() -> None:
     base = {"arr": [1, 2], "obj": {"x": 1}, "s": "a"}
     override = {"arr": [3], "obj": {"y": 2}, "s": "b"}
     assert deep_merge(base, override) == {"arr": [3], "obj": {"x": 1, "y": 2}, "s": "b"}
-
-
-def test_validate_merged_values_rejects_unknown_keys() -> None:
-    schema = {
-        "type": "object",
-        "properties": {"user": {"type": "object", "properties": {"message": {"type": "string"}}, "additionalProperties": False}},
-        "additionalProperties": False,
-    }
-    with pytest.raises(IntegrityException):
-        validate_merged_values({"user": {"message": "x", "unknown": True}}, schema)
-
-
-def test_validate_merged_values_accepts_nested_and_arrays() -> None:
-    schema = {
-        "type": "object",
-        "properties": {
-            "user": {
-                "type": "object",
-                "properties": {
-                    "items": {"type": "array", "items": {"type": "integer"}},
-                    "nested": {"type": "object", "properties": {"flag": {"type": "boolean"}}, "required": ["flag"]},
-                },
-                "required": ["items", "nested"],
-                "additionalProperties": False,
-            }
-        },
-        "required": ["user"],
-        "additionalProperties": False,
-    }
-    validate_merged_values({"user": {"items": [1, 2], "nested": {"flag": True}}}, schema)

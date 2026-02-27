@@ -95,3 +95,77 @@ Validate auth, node/template resolution, key paths, and next VMID without creati
 
 - Last detected VM IP: `k8s/last_vm_ip.txt`
 - Generated kubeconfig: `k8s/kubeconfigs/<vm-name>-<vmid>.yaml`
+
+
+# Onboarding new Helm Charts
+
+To onboard a new Helm chart (e.g. Nextcloud -- https://github.com/nextcloud/helm/tree/main/charts/nextcloud):
+
+```bash
+helm repo add nextcloud https://nextcloud.github.io/helm/
+helm repo update
+# Now see all the versions available:
+helm search repo nextcloud/nextcloud --versions
+```
+
+Then to manually test install the chart:
+
+```bash
+helm upgrade --install nextcloud-test nextcloud/nextcloud --namespace nextcloud-test --create-namespace --version 8.9.1 \
+    --set ingress.enabled=true \
+    --set ingress.className=traefik \
+    --set phpClientHttpsFix.enabled=true \
+    --set phpClientHttpsFix.protocol=https \
+    --set nextcloud.host=nextcloud-test.app.deprutser.be
+```
+
+Visit https://nextcloud-test.app.deprutser.be/ and login with `admin/changeme`.
+Afterward, clean up with `helm uninstall nextcloud-test --namespace nextcloud-test`
+
+## Onboarding: Create product and template
+
+Then in the admin UI, create a product and template for the new chart. The template should use the following:
+
+### Default values
+
+```json
+{
+    "ingress": {
+        "enabled": true,
+        "className": "traefik"
+    },
+    "phpClientHttpsFix": {
+        "enabled": true,
+        "protocol": "https"
+    }
+}
+```
+
+### Schema
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "nextcloud": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "title": "domainname",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^((?!-)(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]?\\.)+(xn--)?[a-z0-9-]{2,}$",
+          "description": "The domainname for your Nextcloud instance"
+        }
+      },
+      "required": ["host"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["nextcloud"],
+  "additionalProperties": false
+}
+```
+
+Note: additional user-defined values could be added from: https://github.com/nextcloud/helm/tree/main/charts/nextcloud#configuration

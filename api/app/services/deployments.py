@@ -59,12 +59,6 @@ def _get_deployment_orm(
 
 def _validate_user_values(template: ProductTemplateVersionORM, user_values_json: dict) -> None:
     template_values.validate_user_values(user_values_json, template.values_schema_json)
-    merged_values = template_values.merge_values_scoped(
-        template.default_values_json,
-        user_values_json,
-        system_overrides={},
-    )
-    template_values.validate_merged_values(merged_values, template.values_schema_json)
 
 
 def create_deployment(session: Session, *, payload: DeploymentCreate) -> DeploymentRead:

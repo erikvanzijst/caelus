@@ -151,13 +151,11 @@ class DeploymentReconciler:
         template: ProductTemplateVersionORM,
     ) -> dict:
         template_values.validate_user_values(deployment.user_values_json, template.values_schema_json)
-        merged_values = template_values.merge_values_scoped(
+        return template_values.merge_values_scoped(
             template.default_values_json,
             deployment.user_values_json,
             self._build_system_overrides(deployment),
         )
-        template_values.validate_merged_values(merged_values, template.values_schema_json)
-        return merged_values
 
     def _build_system_overrides(self, deployment: DeploymentORM) -> dict:
         return {}

@@ -57,20 +57,3 @@ def merge_values_scoped(
     if system_overrides is not None:
         merged = deep_merge(merged, deepcopy(system_overrides))
     return merged
-
-
-def validate_merged_values(
-    merged_values: dict[str, Any],
-    values_schema_json: dict[str, Any] | None,
-) -> None:
-    """Validate final merged values against full template schema."""
-    if not isinstance(merged_values, dict):
-        raise IntegrityException("merged_values must be an object")
-    if values_schema_json is None:
-        return
-    if not isinstance(values_schema_json, dict):
-        raise IntegrityException("values_schema_json must be an object")
-    try:
-        jsonschema_validate(instance=merged_values, schema=values_schema_json)
-    except ValidationError as exc:
-        raise IntegrityException(f"merged values are invalid: {exc.message}") from exc

@@ -220,7 +220,7 @@ export function UserValuesForm({
   return (
     <Stack spacing={2}>
       <Typography variant="body2" color="text.secondary">
-        Configure application values
+        Configure application values:
       </Typography>
       {errors.length > 0 && Object.keys(fieldErrors).length === 0 && (
         <Box sx={{ p: 1, bgcolor: 'error.light', borderRadius: 1 }}>

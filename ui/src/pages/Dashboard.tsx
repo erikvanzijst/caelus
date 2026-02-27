@@ -245,9 +245,6 @@ function Dashboard() {
             </Stack>
             {selectedProduct && canonicalTemplate && (
               <>
-                <Typography color="text.secondary" variant="body2">
-                  Canonical template: #{selectedProduct.template_id}
-                </Typography>
                 {canonicalTemplateQuery.isLoading ? (
                   <Typography color="text.secondary">Loading template...</Typography>
                 ) : (

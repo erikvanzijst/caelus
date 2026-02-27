@@ -42,6 +42,9 @@ RUN apt-get update -y && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list && \
     apt-get update -y && \
     apt-get install -y --no-install-recommends gh && \
+    wget -O - https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list && \
+    sudo apt update && apt install terraform && \
     rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 968 -f docker && usermod -aG docker vscode
 RUN npm i -g @openai/codex

@@ -15,6 +15,7 @@
     "SSH_AUTH_SOCK": "/ssh-agent"
   },
   "mounts": [
+    "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind",
     "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind",
     "source=${localEnv:HOME}/.local/share/opencode,target=/home/vscode/.local/share/opencode,type=bind",
     "source=${localEnv:HOME}/.codex,target=/home/vscode/.codex,type=bind",

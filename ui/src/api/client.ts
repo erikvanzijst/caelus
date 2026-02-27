@@ -1,6 +1,6 @@
 const envUrl = import.meta.env.VITE_API_URL as string | undefined
 
-export const API_URL = envUrl ?? 'http://localhost:8000'
+export const API_URL = envUrl ?? '/api'
 
 function toErrorMessage(detail: unknown, fallback: string) {
   if (typeof detail === 'string' && detail.trim()) return detail

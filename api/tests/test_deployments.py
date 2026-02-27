@@ -11,24 +11,25 @@ from app.services.jobs import JobService
 
 def test_delete_deployment_flow(client, db_session):
     # Setup: create user, product, template, deployment
-    user_resp = client.post("/users", json={"email": "deldep@example.com"})
+    user_resp = client.post("/api/users", json={"email": "deldep@example.com"})
     assert user_resp.status_code == 201
     user_id = user_resp.json()["id"]
 
     product_resp = client.post(
-        "/products", json={"name": "nextcloud", "description": "Nextcloud app"}
+        "/api/products", json={"name": "nextcloud", "description": "Nextcloud app"}
     )
     assert product_resp.status_code == 201
     product_id = product_resp.json()["id"]
 
     template_resp = client.post(
-        f"/products/{product_id}/templates", json={"chart_ref": "registry.home:80/nextcloud/", "chart_version": "1.0.0"}
+        f"/api/products/{product_id}/templates",
+        json={"chart_ref": "registry.home:80/nextcloud/", "chart_version": "1.0.0"},
     )
     assert template_resp.status_code == 201
     template_id = template_resp.json()["id"]
 
     deployment_resp = client.post(
-        f"/users/{user_id}/deployments",
+        f"/api/users/{user_id}/deployments",
         json={"desired_template_id": template_id, "domainname": "cloud.example.com"},
     )
     assert deployment_resp.status_code == 201
@@ -45,7 +46,7 @@ def test_delete_deployment_flow(client, db_session):
     JobService(db_session).mark_job_done(job_id=create_jobs[0].id)
 
     # Delete the deployment
-    del_resp = client.delete(f"/users/{user_id}/deployments/{deployment_id}")
+    del_resp = client.delete(f"/api/users/{user_id}/deployments/{deployment_id}")
     assert del_resp.status_code == 204
     deleted = db_session.get(DeploymentORM, deployment_id)
     assert deleted is not None
@@ -59,43 +60,47 @@ def test_delete_deployment_flow(client, db_session):
     assert len(delete_jobs) == 1
 
     # Verify its status is "deleting"
-    list_resp = client.get(f"/users/{user_id}/deployments")
+    list_resp = client.get(f"/api/users/{user_id}/deployments")
     assert list_resp.status_code == 200
     deleting_dep = next(filter(lambda d: d["id"] == deployment_id, list_resp.json()))
     assert deleting_dep.get("status") == DEPLOYMENT_STATUS_DELETING
 
     # Deleting a non‑existent deployment should return 404
-    not_found_resp = client.delete(f"/users/{user_id}/deployments/99999")
+    not_found_resp = client.delete(f"/api/users/{user_id}/deployments/99999")
     assert not_found_resp.status_code == 404
 
     # Re-deleting an already deleted/deleting deployment should be idempotent
-    resp = client.delete(f"/users/{user_id}/deployments/{deleted.id}")
+    resp = client.delete(f"/api/users/{user_id}/deployments/{deleted.id}")
     assert resp.status_code == 204
 
 
 def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_session):
-    user_resp = client.post("/users", json={"email": "upgrade-api@example.com"})
+    user_resp = client.post("/api/users", json={"email": "upgrade-api@example.com"})
     assert user_resp.status_code == 201
     user_id = user_resp.json()["id"]
 
-    product_resp = client.post("/products", json={"name": "upgrade-api-prod", "description": "desc"})
+    product_resp = client.post(
+        "/api/products", json={"name": "upgrade-api-prod", "description": "desc"}
+    )
     assert product_resp.status_code == 201
     product_id = product_resp.json()["id"]
 
     tmpl1_resp = client.post(
-        f"/products/{product_id}/templates", json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0"}
+        f"/api/products/{product_id}/templates",
+        json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0"},
     )
     assert tmpl1_resp.status_code == 201
     tmpl1_id = tmpl1_resp.json()["id"]
 
     tmpl2_resp = client.post(
-        f"/products/{product_id}/templates", json={"chart_ref": "oci://example/chart", "chart_version": "2.0.0"}
+        f"/api/products/{product_id}/templates",
+        json={"chart_ref": "oci://example/chart", "chart_version": "2.0.0"},
     )
     assert tmpl2_resp.status_code == 201
     tmpl2_id = tmpl2_resp.json()["id"]
 
     dep_resp = client.post(
-        f"/users/{user_id}/deployments",
+        f"/api/users/{user_id}/deployments",
         json={"desired_template_id": tmpl1_id, "domainname": "upgrade-api.example.test"},
     )
     assert dep_resp.status_code == 201
@@ -109,7 +114,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
     JobService(db_session).mark_job_done(job_id=create_job.id)
 
     upgrade_resp = client.put(
-        f"/users/{user_id}/deployments/{dep_id}",
+        f"/api/users/{user_id}/deployments/{dep_id}",
         json={"desired_template_id": tmpl2_id},
     )
     assert upgrade_resp.status_code == 200
@@ -127,16 +132,18 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
 
 
 def test_create_deployment_user_values_with_empty_schema(client):
-    user_resp = client.post("/users", json={"email": "noscope@example.com"})
+    user_resp = client.post("/api/users", json={"email": "noscope@example.com"})
     assert user_resp.status_code == 201
     user_id = user_resp.json()["id"]
 
-    product_resp = client.post("/products", json={"name": "noscope-prod", "description": "desc"})
+    product_resp = client.post(
+        "/api/products", json={"name": "noscope-prod", "description": "desc"}
+    )
     assert product_resp.status_code == 201
     product_id = product_resp.json()["id"]
 
     tmpl_resp = client.post(
-        f"/products/{product_id}/templates",
+        f"/api/products/{product_id}/templates",
         json={
             "chart_ref": "oci://example/chart",
             "chart_version": "1.0.0",
@@ -147,7 +154,7 @@ def test_create_deployment_user_values_with_empty_schema(client):
     tmpl_id = tmpl_resp.json()["id"]
 
     dep_resp = client.post(
-        f"/users/{user_id}/deployments",
+        f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": tmpl_id,
             "domainname": "noscope.example.test",
@@ -158,11 +165,13 @@ def test_create_deployment_user_values_with_empty_schema(client):
 
 
 def test_create_deployment_rejects_unknown_user_keys_against_schema(client):
-    user_resp = client.post("/users", json={"email": "unknownkeys@example.com"})
+    user_resp = client.post("/api/users", json={"email": "unknownkeys@example.com"})
     assert user_resp.status_code == 201
     user_id = user_resp.json()["id"]
 
-    product_resp = client.post("/products", json={"name": "unknownkeys-prod", "description": "desc"})
+    product_resp = client.post(
+        "/api/products", json={"name": "unknownkeys-prod", "description": "desc"}
+    )
     assert product_resp.status_code == 201
     product_id = product_resp.json()["id"]
 
@@ -178,7 +187,7 @@ def test_create_deployment_rejects_unknown_user_keys_against_schema(client):
         "additionalProperties": False,
     }
     tmpl_resp = client.post(
-        f"/products/{product_id}/templates",
+        f"/api/products/{product_id}/templates",
         json={
             "chart_ref": "oci://example/chart",
             "chart_version": "1.0.0",
@@ -189,7 +198,7 @@ def test_create_deployment_rejects_unknown_user_keys_against_schema(client):
     tmpl_id = tmpl_resp.json()["id"]
 
     dep_resp = client.post(
-        f"/users/{user_id}/deployments",
+        f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": tmpl_id,
             "domainname": "unknownkeys.example.test",

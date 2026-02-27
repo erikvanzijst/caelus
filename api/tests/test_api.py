@@ -2,63 +2,74 @@ from tests.conftest import client
 
 
 def test_product(client):
-    product = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app"})
+    product = client.post(
+        "/api/products", json={"name": "nextcloud", "description": "Nextcloud app"}
+    )
     assert product.status_code == 201
 
-    conflict = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app"})
+    conflict = client.post(
+        "/api/products", json={"name": "nextcloud", "description": "Nextcloud app"}
+    )
     assert conflict.status_code == 409
 
 
 def test_product_deletion(client):
-    product = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app"})
+    product = client.post(
+        "/api/products", json={"name": "nextcloud", "description": "Nextcloud app"}
+    )
     assert product.status_code == 201
 
-    resp = client.delete(f"/products/{product.json()['id']}")
+    resp = client.delete(f"/api/products/{product.json()['id']}")
     assert resp.status_code == 204
 
 
 def test_user_deployment_flow(client):
-    user = client.post("/users", json={"email": "user@example.com"})
+    user = client.post("/api/users", json={"email": "user@example.com"})
     assert user.status_code == 201
     user_id = user.json()["id"]
 
-    product = client.post("/products", json={"name": "nextcloud", "description": "Nextcloud app"})
+    product = client.post(
+        "/api/products", json={"name": "nextcloud", "description": "Nextcloud app"}
+    )
     assert product.status_code == 201
     product_id = product.json()["id"]
 
     template = client.post(
-        f"/products/{product_id}/templates", json={"chart_ref": "registry.home:80/nextcloud/", "chart_version": "1.0.0"}
+        f"/api/products/{product_id}/templates",
+        json={"chart_ref": "registry.home:80/nextcloud/", "chart_version": "1.0.0"},
     )
     assert template.status_code == 201
     template_id = template.json()["id"]
 
     deployment = client.post(
-        f"/users/{user_id}/deployments",
+        f"/api/users/{user_id}/deployments",
         json={"desired_template_id": template_id, "domainname": "cloud.example.com"},
     )
     assert deployment.status_code == 201
     deployment_id = deployment.json()["id"]
 
-    listed = client.get(f"/users/{user_id}/deployments")
+    listed = client.get(f"/api/users/{user_id}/deployments")
     assert listed.status_code == 200
     assert [d["id"] for d in listed.json()] == [deployment_id]
 
-    fetched = client.get(f"/users/{user_id}/deployments/{deployment_id}")
+    fetched = client.get(f"/api/users/{user_id}/deployments/{deployment_id}")
     assert fetched.status_code == 200
     assert fetched.json()["domainname"] == "cloud.example.com"
 
 
 def test_user_deployment_flow_with_user_values(client):
-    user = client.post("/users", json={"email": "user-values@example.com"})
+    user = client.post("/api/users", json={"email": "user-values@example.com"})
     assert user.status_code == 201
     user_id = user.json()["id"]
 
-    product = client.post("/products", json={"name": "nextcloud-values", "description": "Nextcloud app"})
+    product = client.post(
+        "/api/products", json={"name": "nextcloud-values", "description": "Nextcloud app"}
+    )
     assert product.status_code == 201
     product_id = product.json()["id"]
 
     template = client.post(
-        f"/products/{product_id}/templates",
+        f"/api/products/{product_id}/templates",
         json={
             "chart_ref": "oci://example/chart",
             "chart_version": "1.0.0",
@@ -81,7 +92,7 @@ def test_user_deployment_flow_with_user_values(client):
     template_id = template.json()["id"]
 
     deployment = client.post(
-        f"/users/{user_id}/deployments",
+        f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": template_id,
             "domainname": "values.example.com",
@@ -94,12 +105,12 @@ def test_user_deployment_flow_with_user_values(client):
 
 def test_user_delete_flow(client):
     # Create a user
-    user = client.post("/users", json={"email": "del@example.com"})
+    user = client.post("/api/users", json={"email": "del@example.com"})
     assert user.status_code == 201
     user_id = user.json()["id"]
     # Delete the user
-    delete_resp = client.delete(f"/users/{user_id}")
+    delete_resp = client.delete(f"/api/users/{user_id}")
     assert delete_resp.status_code == 204
     # Verify user is gone
-    get_resp = client.get(f"/users/{user_id}")
+    get_resp = client.get(f"/api/users/{user_id}")
     assert get_resp.status_code == 404

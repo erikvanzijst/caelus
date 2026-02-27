@@ -306,6 +306,8 @@ CMD ["nginx", "-g", "daemon off;"]
 
 **Location**: `ui/nginx.conf`
 
+**Note**: This nginx only serves static UI files. API requests are routed by the Kubernetes Ingress before reaching this container, so no proxy configuration is needed here.
+
 ```nginx
 server {
     listen 80;
@@ -319,31 +321,6 @@ server {
     # =========================================================================
     location / {
         try_files $uri $uri/ /index.html;
-    }
-
-    # =========================================================================
-    # API Proxy: Forward /api requests to backend service
-    # Includes /api/users, /api/products, /api/docs, /api/redoc, /api/openapi.json
-    # =========================================================================
-    location /api {
-        # In Kubernetes, this resolves to the caelus-api service
-        # Service name must match kubernetes service name
-        proxy_pass http://caelus-api:8000;
-        
-        # Preserve original host (needed for virtual hosting)
-        proxy_set_header Host $host;
-        
-        # Pass client IP to backend
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        
-        # Support proxied HTTPS if ingress terminates TLS
-        proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # Timeout settings
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
     }
 
     # =========================================================================
@@ -364,11 +341,9 @@ server {
 
 **Key decisions:**
 - SPA fallback: `try_files $uri $uri/ /index.html` handles client-side routing
-- API proxy: `/api` requests forward to backend service
+- No API proxy needed: Ingress routes `/api/*` directly to API service
 - Caching: Static assets get 1-year cache with immutable flag
 - Security headers: Basic hardening
-
-**Important**: The proxy_pass URL `http://caelus-api:8000` must match the Kubernetes service name exactly. We'll create a service named `caelus-api` in Phase 3.
 
 ### 1.4 .dockerignore Files
 

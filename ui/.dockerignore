@@ -1,0 +1,11 @@
+.git
+.gitignore
+node_modules
+dist
+coverage
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+*.log

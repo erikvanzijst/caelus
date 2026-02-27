@@ -1,0 +1,53 @@
+variable "api_image" {
+  description = "API container image (including registry and tag)"
+  type        = string
+  default     = "ghcr.io/erikvanzijst/caelus-api:latest"
+}
+
+variable "ui_image" {
+  description = "UI container image (including registry and tag)"
+  type        = string
+  default     = "ghcr.io/erikvanzijst/caelus-ui:latest"
+}
+
+variable "namespace" {
+  description = "Kubernetes namespace for all resources"
+  type        = string
+  default     = "caelus"
+}
+
+variable "db_name" {
+  description = "Postgres database name"
+  type        = string
+  default     = "caelus"
+}
+
+variable "db_user" {
+  description = "Postgres username"
+  type        = string
+  default     = "caelus"
+}
+
+variable "db_password" {
+  description = "Postgres password (use secrets.auto.tfvars)"
+  type        = string
+  sensitive   = true
+}
+
+variable "domain" {
+  description = "External domain for ingress"
+  type        = string
+  default     = "app.deprutser.be"
+}
+
+variable "api_replicas" {
+  description = "Number of API pod replicas"
+  type        = number
+  default     = 2
+}
+
+variable "ui_replicas" {
+  description = "Number of UI pod replicas"
+  type        = number
+  default     = 2
+}

@@ -43,11 +43,11 @@ variable "domain" {
 variable "api_replicas" {
   description = "Number of API pod replicas"
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "ui_replicas" {
   description = "Number of UI pod replicas"
   type        = number
-  default     = 2
+  default     = 1
 }

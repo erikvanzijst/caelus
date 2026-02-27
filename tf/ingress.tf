@@ -4,15 +4,13 @@ resource "kubernetes_ingress" "main" {
     namespace = var.namespace
 
     annotations = {
-      "kubernetes.io/ingress.class"                    = "nginx"
-      "nginx.ingress.kubernetes.io/rewrite-target"     = "/"
-      "nginx.ingress.kubernetes.io/proxy-read-timeout" = "60"
-      "nginx.ingress.kubernetes.io/proxy-send-timeout" = "60"
+      "kubernetes.io/ingress.class"                  = "traefik"
+      "traefik.ingress.kubernetes.io/rewrite-target" = "/"
     }
   }
 
   spec {
-    ingress_class_name = "nginx"
+    ingress_class_name = "traefik"
 
     rule {
       host = var.domain

@@ -8,7 +8,7 @@ resource "kubernetes_deployment" "api" {
   }
 
   spec {
-    replicas = var.api_replicas
+    replicas = 1
 
     selector {
       match_labels = {
@@ -56,35 +56,13 @@ resource "kubernetes_deployment" "api" {
 
           resources {
             requests = {
-              memory = "256Mi"
-              cpu    = "250m"
+              memory = "128Mi"
+              cpu    = "100m"
             }
             limits = {
-              memory = "512Mi"
-              cpu    = "500m"
+              memory = "256Mi"
+              cpu    = "200m"
             }
-          }
-
-          liveness_probe {
-            http_get {
-              path = "/api/docs"
-              port = "http"
-            }
-            initial_delay_seconds = 10
-            period_seconds        = 10
-            timeout_seconds       = 5
-            failure_threshold     = 3
-          }
-
-          readiness_probe {
-            http_get {
-              path = "/api/docs"
-              port = "http"
-            }
-            initial_delay_seconds = 5
-            period_seconds        = 5
-            timeout_seconds       = 3
-            failure_threshold     = 3
           }
         }
       }

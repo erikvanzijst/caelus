@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "caelus"
 version = "0.1.0"
@@ -13,6 +17,7 @@ dependencies = [
   "alembic>=1.13",
   "jsonschema>=4.0",
   "psycopg[binary]>=3.1",
+  "asyncpg>=0.29",
   "python-dotenv>=1.0",
   "PyYAML>=6.0",
   "httpx>=0.27,<0.28",
@@ -21,7 +26,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["app"]
+packages = { find = { "exclude" = ["alembic*"] } }
 
 
 [project.scripts]

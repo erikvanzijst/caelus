@@ -32,6 +32,8 @@ resource "kubernetes_deployment" "api" {
       }
 
       spec {
+        service_account_name = kubernetes_service_account.api.metadata[0].name
+
         container {
           image = var.api_image
           name  = "api"
@@ -54,6 +56,11 @@ resource "kubernetes_deployment" "api" {
             }
           }
 
+          volume_mount {
+            name       = "sqlite-data"
+            mount_path = "/app/db"
+          }
+
           # resources {
           #   requests = {
           #     memory = "128Mi"
@@ -65,9 +72,15 @@ resource "kubernetes_deployment" "api" {
           #   }
           # }
         }
+        volume {
+          name = "sqlite-data"
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.sqlite_pvc.metadata[0].name
+          }
+        }
       }
     }
   }
 
-  depends_on = [kubernetes_namespace.main]
+  depends_on = [kubernetes_namespace.main, kubernetes_cluster_role_binding.api]
 }

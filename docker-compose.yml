@@ -1,4 +1,15 @@
 services:
+  postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=caelus
+      - POSTGRES_PASSWORD=caelus
+      - POSTGRES_DB=caelus
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./var/pg_data:/var/lib/postgresql/data
+
   app:
     build:
       context: .
@@ -14,7 +25,9 @@ services:
       - "8000:8000"
       - "5173:5173"
     environment:
-      - DATABASE_URL=sqlite:////workspace/api/caelus.db
+      - DATABASE_URL=postgresql+psycopg://caelus:caelus@postgres:5432/caelus
       - KUBECONFIG=/workspace/k8s/kubeconfigs/dev-k3s.yaml
     volumes:
       - .:/workspace
+    depends_on:
+      - postgres

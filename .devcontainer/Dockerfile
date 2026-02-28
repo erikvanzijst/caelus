@@ -27,6 +27,7 @@ RUN apt-get update -y && \
       yq \
       ca-certificates \
       dnsutils \
+      postgresql-client \
       gnupg && \
     install -m 0755 -d /etc/apt/keyrings && \
     wget -qO- https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
@@ -60,8 +61,8 @@ ENV OPENCODE_ENABLE_EXA=1
 
 USER vscode
 WORKDIR /workspace
-RUN mkdir -p ~/.local/bin ~/.ssh ~/venv
-RUN chmod 700 ~/.ssh
+RUN mkdir -p ~/.local/bin ~/.ssh ~/venv ~/.docker
+RUN chmod 700 ~/.ssh ~/.docker
 RUN ssh-keyscan github.com >> ~/.ssh/known_hosts
 RUN echo '' >> ~/.bashrc && \
     echo '# Auto-activate Caelus virtualenv' >> ~/.bashrc && \

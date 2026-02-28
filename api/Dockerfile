@@ -1,28 +1,23 @@
-FROM python:3.11-slim AS builder
+FROM bitnami/kubectl AS kubectl
+FROM d3fk/helm:latest AS helm
+
+FROM python:3.13-slim
+COPY --from=kubectl /opt/bitnami/kubectl/bin/kubectl /usr/local/bin/kubectl
+COPY --from=helm /helm /usr/local/bin/helm
+
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends postgresql-client
 
 RUN pip install uv
 
+RUN mkdir /app
 WORKDIR /app
-
-COPY pyproject.toml uv.lock .
+COPY . .
 RUN uv sync --no-dev --frozen
-
-FROM python:3.11-slim
-
-RUN pip install uv && \
-    useradd -m -u 1000 appuser
-
-WORKDIR /app
-
-COPY --from=builder /app/.venv .venv
-COPY app/ app/
-
-ENV PATH="/app/.venv/bin:$PATH"
-USER appuser
+RUN uv pip install . --no-deps
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8000/api/docs')" || exit 1
+ENV PATH="/app/.venv/bin:$PATH"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

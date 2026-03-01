@@ -99,6 +99,8 @@ Validate auth, node/template resolution, key paths, and next VMID without creati
 
 # Onboarding new Helm Charts
 
+### Use local Helm repo:
+
 To onboard a new Helm chart (e.g. Nextcloud -- https://github.com/nextcloud/helm/tree/main/charts/nextcloud):
 
 ```bash
@@ -121,6 +123,22 @@ helm upgrade --install nextcloud-test nextcloud/nextcloud --namespace nextcloud-
 
 Visit https://nextcloud-test.app.deprutser.be/ and login with `admin/changeme`.
 Afterward, clean up with `helm uninstall nextcloud-test --namespace nextcloud-test`
+
+### Point directly to the online chart release archive
+
+Instead of adding the product's helm repo locally, you can point to the online chart release archive.
+E.g. https://github.com/nextcloud/helm/releases/download/nextcloud-8.9.1/nextcloud-8.9.1.tgz
+
+```bash
+helm upgrade --install nextcloud-test https://github.com/nextcloud/helm/releases/download/nextcloud-8.9.1/nextcloud-8.9.1.tgz --namespace nextcloud-test --create-namespace --version 8.9.1 \
+    --set ingress.enabled=true \
+    --set ingress.className=traefik \
+    --set phpClientHttpsFix.enabled=true \
+    --set phpClientHttpsFix.protocol=https \
+    --set persistence.enabled=true \
+    --set persistence.nextcloudData.enabled=true \
+    --set nextcloud.host=nextcloud-test.app.deprutser.be
+```
 
 ## Onboarding: Create product and template
 

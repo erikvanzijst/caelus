@@ -1,0 +1,41 @@
+# Default values for mattermost self-contained Helm chart
+# This chart bundles PostgreSQL with Mattermost Team Edition
+
+# NOTE: You can set host as a simple string: --set host=mm.example.com
+# This will be converted to the ingress.hosts array internally
+host: ""
+
+mattermost-team-edition:
+  enabled: true
+  image:
+    repository: mattermost/mattermost-team-edition
+    tag: "11.4.2"
+    imagePullPolicy: IfNotPresent
+
+  ingress:
+    enabled: false
+    className: "traefik"
+    path: /
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    hosts: []
+    tls: []
+
+  mysql:
+    enabled: false
+
+  externalDB:
+    enabled: true
+    externalDriverType: postgres
+    externalConnectionString: ""
+
+# PostgreSQL configuration using official image
+postgresql:
+  image: postgres
+  imageTag: "18"
+  username: postgres
+  password: postgres
+  database: postgres
+  size: 10Gi

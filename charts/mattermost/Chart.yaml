@@ -1,0 +1,22 @@
+apiVersion: v2
+name: mattermost
+description: |
+  Self-contained Mattermost Team Edition Helm chart with PostgreSQL.
+  This wrapper chart bundles the official mattermost-team-edition chart
+  with a PostgreSQL deployment to provide a fully self-contained deployment.
+type: application
+version: 1.0.0
+appVersion: 11.4.2
+keywords:
+  - mattermost
+  - chat
+  - collaboration
+  - postgres
+maintainers:
+  - name: Caelus Team
+
+dependencies:
+  - name: mattermost-team-edition
+    version: "6.6.93"
+    repository: "https://helm.mattermost.com"
+    condition: mattermost-team-edition.enabled

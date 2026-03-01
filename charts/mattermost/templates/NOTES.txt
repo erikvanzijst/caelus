@@ -1,0 +1,2 @@
+# NOTES.txt - Displayed after helm install/upgrade
+# This file is optional but provides useful post-install information

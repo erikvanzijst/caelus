@@ -8,6 +8,7 @@ Cloud provisioning tool with FastAPI + SQLModel + Alembic + Typer CLI and React 
 This a monorepo with three packages:
 - [api/](./api/README.md) -- the FastAPI app
 - [ui/](./ui/README.md) -- the React app
+- [tf/](./tf/README.md) -- the Terraform project to deploy Caelus itself
 - [k8s/](./k8s/README.md) -- backend kubernetes connectivity utilities
 
 ## Codex code review skill
@@ -23,6 +24,11 @@ A [devcontainer](https://containers.dev/) is provided for sandboxed development:
 - Open a shell in the devcontainer: `./dev sh`
 - Run a command in the devcontainer: `./dev run uv run pytest -s`
 - Shut down the devcontainer: `./dev down`
+
+## Deployment
+
+Caelus itself is deployed to kubernetes using the Terraform project in the [tf/](./tf/) directory.
+
 
 ## Kubernetes
 Caelus is built to provision application instances into a Kubernetes backend.

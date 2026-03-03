@@ -1,0 +1,57 @@
+serverName: "matrix.example.com"
+
+image:
+  repository: ghcr.io/matrix-construct/tuwunel
+  tag: "v1.5.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 6167
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations: {}
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  size: 10Gi
+  accessMode: ReadWriteOnce
+  storageClassName: null
+
+registration:
+  token: ""
+  tokenSecretRef:
+    name: ""
+    key: registration-token
+
+federation:
+  enabled: true
+
+trustedServers:
+  - matrix.org
+
+tuwunel:
+  maxRequestSize: 20000000
+  queryOverTcpOnly: false
+  log: info
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Additional environment variables for advanced tuning.
+# Each entry needs `name` and either `value` or `valueFrom`.
+extraEnv: []

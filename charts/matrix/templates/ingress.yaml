@@ -1,0 +1,46 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "matrix.fullname" . }}
+  labels:
+    {{- include "matrix.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  rules:
+    - host: {{ .Values.serverName | quote }}
+      http:
+        paths:
+          - path: /_matrix
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "matrix.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+          - path: /_tuwunel
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "matrix.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+          - path: /.well-known/matrix
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "matrix.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "matrix.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

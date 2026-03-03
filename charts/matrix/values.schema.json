@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "matrix values",
+  "type": "object",
+  "properties": {
+    "serverName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "minLength": 1 },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      },
+      "required": ["repository", "tag", "pullPolicy"],
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "targetPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      },
+      "required": ["type", "port", "targetPort"],
+      "additionalProperties": false
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["enabled", "className", "annotations"],
+      "additionalProperties": false
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "existingClaim": { "type": "string" },
+        "size": { "type": "string", "minLength": 1 },
+        "accessMode": {
+          "type": "string",
+          "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"]
+        },
+        "storageClassName": {
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["enabled", "existingClaim", "size", "accessMode"],
+      "additionalProperties": false
+    },
+    "registration": {
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "tokenSecretRef": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "key": { "type": "string" }
+          },
+          "required": ["name", "key"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["token", "tokenSecretRef"],
+      "additionalProperties": false
+    },
+    "federation": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["enabled"],
+      "additionalProperties": false
+    },
+    "trustedServers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "tuwunel": {
+      "type": "object",
+      "properties": {
+        "maxRequestSize": { "type": "integer", "minimum": 1 },
+        "queryOverTcpOnly": { "type": "boolean" },
+        "log": { "type": "string", "minLength": 1 }
+      },
+      "required": ["maxRequestSize", "queryOverTcpOnly", "log"],
+      "additionalProperties": false
+    },
+    "resources": {
+      "type": "object"
+    },
+    "podAnnotations": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "tolerations": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "affinity": {
+      "type": "object"
+    },
+    "extraEnv": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "value": { "type": ["string", "number", "boolean"] },
+          "valueFrom": { "type": "object" }
+        },
+        "required": ["name"],
+        "anyOf": [
+          { "required": ["value"] },
+          { "required": ["valueFrom"] }
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "serverName",
+    "image",
+    "service",
+    "ingress",
+    "persistence",
+    "registration",
+    "federation",
+    "trustedServers",
+    "tuwunel",
+    "resources",
+    "podAnnotations",
+    "nodeSelector",
+    "tolerations",
+    "affinity",
+    "extraEnv"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ingress": {
+            "properties": {
+              "enabled": { "const": true }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ingress": {
+            "properties": {
+              "className": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

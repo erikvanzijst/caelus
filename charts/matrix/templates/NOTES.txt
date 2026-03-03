@@ -1,0 +1,13 @@
+Tuwunel has been installed.
+
+Endpoints:
+- Internal service: {{ include "matrix.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+- Public host: https://{{ .Values.serverName }}
+
+Quick checks:
+- curl https://{{ .Values.serverName }}/_tuwunel/server_version
+- curl https://{{ .Values.serverName }}/.well-known/matrix/server
+
+Notes:
+- This chart intentionally runs a single replica (Tuwunel is not horizontally scalable).
+- Federation is expected to run via 443 + well-known.

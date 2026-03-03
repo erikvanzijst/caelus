@@ -1,0 +1,129 @@
+{{- $tokenKey := default "registration-token" .Values.registration.tokenSecretRef.key -}}
+{{- $hasInlineToken := ne (trim .Values.registration.token) "" -}}
+{{- $hasSecretRef := ne (trim .Values.registration.tokenSecretRef.name) "" -}}
+{{- if and $hasInlineToken $hasSecretRef -}}
+{{- fail "set either registration.token or registration.tokenSecretRef.name, not both" -}}
+{{- end }}
+{{- $registrationEnabled := or $hasInlineToken $hasSecretRef -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "matrix.fullname" . }}
+  labels:
+    {{- include "matrix.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "matrix.fullname" . }}-headless
+  selector:
+    matchLabels:
+      {{- include "matrix.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "matrix.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+        - name: tuwunel
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+          env:
+            - name: TUWUNEL_SERVER_NAME
+              value: {{ .Values.serverName | quote }}
+            - name: TUWUNEL_DATABASE_PATH
+              value: /var/lib/tuwunel
+            - name: TUWUNEL_ADDRESS
+              value: 0.0.0.0
+            - name: TUWUNEL_PORT
+              value: {{ .Values.service.targetPort | quote }}
+            - name: TUWUNEL_ALLOW_FEDERATION
+              value: {{ ternary "true" "false" .Values.federation.enabled | quote }}
+            - name: TUWUNEL_ALLOW_REGISTRATION
+              value: {{ ternary "true" "false" $registrationEnabled | quote }}
+            - name: TUWUNEL_TRUSTED_SERVERS
+              value: {{ toJson .Values.trustedServers | quote }}
+            - name: TUWUNEL_MAX_REQUEST_SIZE
+              value: {{ int .Values.tuwunel.maxRequestSize | quote }}
+            - name: TUWUNEL_QUERY_OVER_TCP_ONLY
+              value: {{ ternary "true" "false" .Values.tuwunel.queryOverTcpOnly | quote }}
+            - name: TUWUNEL_LOG
+              value: {{ .Values.tuwunel.log | quote }}
+            - name: TUWUNEL_WELL_KNOWN__CLIENT
+              value: {{ printf "https://%s" .Values.serverName | quote }}
+            - name: TUWUNEL_WELL_KNOWN__SERVER
+              value: {{ printf "%s:443" .Values.serverName | quote }}
+            {{- if $registrationEnabled }}
+            - name: TUWUNEL_REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if $hasSecretRef }}{{ .Values.registration.tokenSecretRef.name }}{{ else }}{{ include "matrix.registrationSecretName" . }}{{ end }}
+                  key: {{ $tokenKey | quote }}
+            {{- end }}
+            {{- range .Values.extraEnv }}
+            - name: {{ .name | quote }}
+              {{- if hasKey . "valueFrom" }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+              {{- else }}
+              value: {{ printf "%v" .value | quote }}
+              {{- end }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /_tuwunel/server_version
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /_tuwunel/server_version
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/tuwunel
+      {{- if or (and .Values.persistence.enabled .Values.persistence.existingClaim) (not .Values.persistence.enabled) }}
+      volumes:
+        - name: data
+          {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- end }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+  {{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "matrix.labels" . | nindent 10 }}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+        {{- if ne .Values.persistence.storageClassName nil }}
+        storageClassName: {{ .Values.persistence.storageClassName | quote }}
+        {{- end }}
+  {{- end }}

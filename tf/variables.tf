@@ -11,9 +11,10 @@ variable "ui_image" {
 }
 
 variable "namespace" {
-  description = "Kubernetes namespace for all resources"
+  description = "Kubernetes namespace for all resources (null = workspace default)"
   type        = string
-  default     = "caelus"
+  default     = null
+  nullable    = true
 }
 
 variable "db_name" {
@@ -35,9 +36,10 @@ variable "db_password" {
 }
 
 variable "domain" {
-  description = "External domain for ingress"
+  description = "External domain for ingress (null = workspace default)"
   type        = string
-  default     = "app.deprutser.be"
+  default     = null
+  nullable    = true
 }
 
 variable "api_replicas" {
@@ -50,4 +52,11 @@ variable "ui_replicas" {
   description = "Number of UI pod replicas"
   type        = number
   default     = 1
+}
+
+variable "environment" {
+  description = "Namespace label for environment (null = workspace default)"
+  type        = string
+  default     = null
+  nullable    = true
 }

@@ -1,7 +1,7 @@
 resource "kubernetes_deployment" "postgres" {
   metadata {
     name      = "caelus-postgres"
-    namespace = var.namespace
+    namespace = local.namespace
     labels = {
       app = "caelus-postgres"
     }
@@ -111,7 +111,7 @@ resource "kubernetes_deployment" "postgres" {
 resource "kubernetes_service" "postgres" {
   metadata {
     name      = "caelus-postgres"
-    namespace = var.namespace
+    namespace = local.namespace
   }
 
   spec {

@@ -1,13 +1,13 @@
 resource "kubernetes_service_account" "api" {
   metadata {
     name      = "caelus-api"
-    namespace = var.namespace
+    namespace = local.namespace
   }
 }
 
 resource "kubernetes_cluster_role" "api" {
   metadata {
-    name = "caelus-api"
+    name = local.rbac_name
   }
 
   rule {
@@ -24,7 +24,7 @@ resource "kubernetes_cluster_role" "api" {
 
 resource "kubernetes_cluster_role_binding" "api" {
   metadata {
-    name = "caelus-api"
+    name = local.rbac_name
   }
 
   role_ref {
@@ -36,6 +36,6 @@ resource "kubernetes_cluster_role_binding" "api" {
   subject {
     kind      = "ServiceAccount"
     name      = kubernetes_service_account.api.metadata[0].name
-    namespace = var.namespace
+    namespace = local.namespace
   }
 }

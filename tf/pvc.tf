@@ -1,7 +1,7 @@
 resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
   metadata {
     name      = "caelus-db-pvc"
-    namespace = var.namespace
+    namespace = local.namespace
   }
 
   wait_until_bound = false
@@ -19,7 +19,7 @@ resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
 resource "kubernetes_persistent_volume_claim" "sqlite_pvc" {
   metadata {
     name      = "caelus-sqlite-pvc"
-    namespace = var.namespace
+    namespace = local.namespace
   }
 
   wait_until_bound = false

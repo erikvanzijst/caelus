@@ -1,7 +1,7 @@
 resource "kubernetes_config_map" "api" {
   metadata {
     name      = "caelus-api-config"
-    namespace = var.namespace
+    namespace = local.namespace
   }
 
   data = {

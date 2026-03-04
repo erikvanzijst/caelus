@@ -1,7 +1,7 @@
 resource "kubernetes_secret" "db" {
   metadata {
     name      = "caelus-db"
-    namespace = var.namespace
+    namespace = local.namespace
   }
 
   type = "Opaque"

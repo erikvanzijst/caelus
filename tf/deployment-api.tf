@@ -1,7 +1,7 @@
 resource "kubernetes_deployment" "api" {
   metadata {
     name      = "caelus-api"
-    namespace = var.namespace
+    namespace = local.namespace
     labels = {
       app = "caelus-api"
     }

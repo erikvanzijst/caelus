@@ -1,7 +1,7 @@
 resource "kubernetes_service" "ui" {
   metadata {
     name      = "caelus-ui"
-    namespace = var.namespace
+    namespace = local.namespace
   }
 
   spec {

@@ -1,7 +1,7 @@
 resource "kubernetes_deployment" "worker" {
   metadata {
     name      = "caelus-worker"
-    namespace = var.namespace
+    namespace = local.namespace
     labels = {
       app = "caelus-worker"
     }
@@ -69,4 +69,3 @@ resource "kubernetes_deployment" "worker" {
 
   depends_on = [kubernetes_namespace.main, kubernetes_cluster_role_binding.api]
 }
-

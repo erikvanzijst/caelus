@@ -1,31 +1,46 @@
-# NOTE: Ingress is managed manually since the terraform kubernetes provider
-# doesn't fully support networking.k8s.io/v1 ingresses.
-# Run: kubectl apply -f - <<EOF
-# apiVersion: networking.k8s.io/v1
-# kind: Ingress
-# metadata:
-#   name: caelus-ingress
-#   namespace: caelus
-#   annotations:
-#     traefik.ingress.kubernetes.io/rewrite-target: /
-# spec:
-#   ingressClassName: traefik
-#   rules:
-#   - host: app.deprutser.be
-#     http:
-#       paths:
-#       - path: /api
-#         pathType: Prefix
-#         backend:
-#           service:
-#             name: caelus-api
-#             port:
-#               number: 8000
-#       - path: /
-#         pathType: Prefix
-#         backend:
-#           service:
-#             name: caelus-ui
-#             port:
-#               number: 80
-# EOF
+resource "kubernetes_ingress_v1" "main" {
+  metadata {
+    name      = "caelus-ingress"
+    namespace = local.namespace
+  }
+
+  spec {
+    ingress_class_name = "traefik"
+
+    rule {
+      host = local.domain
+
+      http {
+        path {
+          path      = "/api"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = kubernetes_service.api.metadata[0].name
+              port {
+                number = 8000
+              }
+            }
+          }
+        }
+
+        path {
+          path      = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = kubernetes_service.ui.metadata[0].name
+              port {
+                number = 80
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_namespace.main]
+}

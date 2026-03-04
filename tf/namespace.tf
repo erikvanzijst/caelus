@@ -1,10 +1,10 @@
 resource "kubernetes_namespace" "main" {
   metadata {
-    name = var.namespace
+    name = local.namespace
 
     labels = {
-      name        = var.namespace
-      environment = "production"
+      name        = local.namespace
+      environment = local.environment
     }
   }
 }

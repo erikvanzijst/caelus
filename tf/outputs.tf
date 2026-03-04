@@ -15,10 +15,10 @@ output "ui_service_name" {
 
 output "ingress_host" {
   description = "External hostname"
-  value       = var.domain
+  value       = local.domain
 }
 
 output "api_endpoint" {
   description = "Full API endpoint URL"
-  value       = "https://${var.domain}/api"
+  value       = "https://${local.domain}/api"
 }

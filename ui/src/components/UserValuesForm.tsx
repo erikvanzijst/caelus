@@ -145,16 +145,20 @@ export function UserValuesForm({
   const fields = useMemo(() => flattenSchema(valuesSchemaJson), [valuesSchemaJson])
   const defaults = useMemo(() => flattenDefaults(defaultValuesJson), [defaultValuesJson])
 
-  const [formData, setFormData] = useState<Record<string, string>>({})
+  const [formData, setFormData] = useState<Record<string, unknown>>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    const initialData: Record<string, string> = {}
+    const initialData: Record<string, unknown> = {}
     for (const field of fields) {
       if (field.path in defaults) {
-        initialData[field.path] = String(defaults[field.path])
+        if (field.type === 'boolean') {
+          initialData[field.path] = Boolean(defaults[field.path])
+        } else {
+          initialData[field.path] = defaults[field.path]
+        }
       } else if (field.type === 'boolean') {
-        initialData[field.path] = 'false'
+        initialData[field.path] = false
       }
     }
     setFormData(initialData)
@@ -166,7 +170,12 @@ export function UserValuesForm({
       return
     }
 
-    const hasValues = Object.values(formData).some((v) => v !== '' && v !== 'false')
+    const hasValues = Object.values(formData).some((v) => {
+      if (typeof v === 'string') {
+        return v !== ''
+      }
+      return v !== undefined && v !== null
+    })
     if (!hasValues) {
       onChange(null)
       return
@@ -192,13 +201,11 @@ export function UserValuesForm({
     }
   }, [errors, fields])
 
-  const handleChange = (path: string, value: string, fieldType: string) => {
+  const handleChange = (path: string, value: unknown, fieldType: string) => {
     let processedValue = value
 
-    if (fieldType === 'integer' || fieldType === 'number') {
-      processedValue = value
-    } else if (fieldType === 'boolean') {
-      processedValue = value ? 'true' : 'false'
+    if (fieldType === 'boolean') {
+      processedValue = value === true || value === 'true'
     }
 
     setFormData((prev) => ({ ...prev, [path]: processedValue }))
@@ -237,8 +244,8 @@ export function UserValuesForm({
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={formData[field.path] === 'true'}
-                  onChange={(e) => handleChange(field.path, e.target.checked ? 'true' : 'false', 'boolean')}
+                  checked={formData[field.path] === true}
+                  onChange={(e) => handleChange(field.path, e.target.checked, 'boolean')}
                 />
               }
               label={field.title || field.path}
@@ -247,7 +254,11 @@ export function UserValuesForm({
             <TextField
               label={field.title || field.path}
               helperText={fieldErrors[field.path] || field.description}
-              value={formData[field.path] || ''}
+              value={
+                typeof formData[field.path] === 'string' || typeof formData[field.path] === 'number'
+                  ? formData[field.path]
+                  : ''
+              }
               onChange={(e) => handleChange(field.path, e.target.value, field.type)}
               type={
                 field.type === 'integer' || field.type === 'number'

@@ -40,6 +40,20 @@ describe('UserValuesForm', () => {
       message: 'Hello World',
     },
   }
+  const booleanSchema = {
+    type: 'object',
+    properties: {
+      federation: {
+        type: 'object',
+        properties: {
+          enabled: {
+            type: 'boolean',
+            title: 'federation.enabled',
+          },
+        },
+      },
+    },
+  }
 
   it('renders form when schema is provided', () => {
     const onChange = vi.fn()
@@ -115,5 +129,42 @@ describe('UserValuesForm', () => {
     )
 
     expect(container.firstChild).toBeNull()
+  })
+
+  it('prefills boolean defaults as booleans', async () => {
+    const onChange = vi.fn()
+    render(
+      <UserValuesForm
+        valuesSchemaJson={booleanSchema}
+        defaultValuesJson={{ federation: { enabled: false } }}
+        onChange={onChange}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith({
+        federation: { enabled: false },
+      })
+    })
+  })
+
+  it('updates checkbox values as booleans', async () => {
+    const onChange = vi.fn()
+    render(
+      <UserValuesForm
+        valuesSchemaJson={booleanSchema}
+        defaultValuesJson={{ federation: { enabled: false } }}
+        onChange={onChange}
+      />,
+    )
+
+    const checkbox = screen.getByRole('checkbox')
+    fireEvent.click(checkbox)
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith({
+        federation: { enabled: true },
+      })
+    })
   })
 })

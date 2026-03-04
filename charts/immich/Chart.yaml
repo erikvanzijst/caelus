@@ -1,0 +1,20 @@
+apiVersion: v2
+name: immich
+description: Self-contained Immich wrapper chart for Caelus with bundled Postgres and Redis
+type: application
+version: 2.0.0
+appVersion: "v2.0.0"
+keywords:
+  - immich
+  - photos
+  - media
+  - postgres
+  - redis
+maintainers:
+  - name: Caelus Team
+
+dependencies:
+  - name: immich
+    version: "0.10.3"
+    repository: "oci://ghcr.io/immich-app/immich-charts"
+    condition: immich.enabled

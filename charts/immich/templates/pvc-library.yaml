@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: library
+  labels:
+    {{- include "immich-wrapper.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.storage.library.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.library.size }}
+{{- if .Values.storage.library.storageClassName }}
+  storageClassName: {{ .Values.storage.library.storageClassName }}
+{{- end }}

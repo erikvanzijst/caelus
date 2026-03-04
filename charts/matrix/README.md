@@ -58,3 +58,20 @@ The chart always injects:
 - `TUWUNEL_WELL_KNOWN__SERVER=<serverName>:443`
 
 This supports federation on a single hostname with TLS termination handled upstream.
+
+## Package and Push (OCI)
+
+Package the chart and push to the Caelus OCI registry:
+
+```bash
+cd charts/matrix
+helm package .
+helm registry login registry.home:80
+helm push matrix-0.1.0.tgz oci://registry.home:80/helm --plain-http
+```
+
+Pull test:
+
+```bash
+helm pull oci://registry.home:80/helm/matrix --version 0.1.0 --plain-http
+```

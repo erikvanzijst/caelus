@@ -1,0 +1,70 @@
+# Wrapper ingress exposed by this chart (upstream ingress is disabled).
+ingress:
+  enabled: true
+  className: traefik
+  annotations: {}
+  host: "immich.local"
+
+storage:
+  library:
+    accessMode: ReadWriteOnce
+    size: 100Gi
+    storageClassName: ""
+
+postgresql:
+  enabled: true
+  image:
+    repository: ghcr.io/immich-app/postgres
+    tag: 14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    pullPolicy: IfNotPresent
+  auth:
+    username: postgres
+    password: postgres
+    database: immich
+  persistence:
+    accessMode: ReadWriteOnce
+    size: 20Gi
+    storageClassName: ""
+
+redis:
+  enabled: true
+  image:
+    repository: docker.io/valkey/valkey
+    tag: 9@sha256:2bce660b767cb62c8c0ea020e94a230093be63dbd6af4f21b044960517a5842d
+    pullPolicy: IfNotPresent
+  persistence:
+    enabled: true
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    storageClassName: ""
+
+# Values passed to upstream immich dependency chart.
+immich:
+  enabled: true
+
+  controllers:
+    main:
+      containers:
+        main:
+          envFrom:
+            - secretRef:
+                name: postgresql-auth
+          env:
+            DB_HOSTNAME: postgresql
+            DB_PORT: "5432"
+            DB_VECTOR_EXTENSION: vectorchord
+            REDIS_HOSTNAME: redis
+            REDIS_PORT: "6379"
+
+  immich:
+    persistence:
+      library:
+        existingClaim: library
+
+  valkey:
+    enabled: false
+
+  server:
+    ingress:
+      main:
+        enabled: false

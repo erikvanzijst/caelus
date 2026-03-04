@@ -34,6 +34,29 @@ resource "kubernetes_deployment" "api" {
       spec {
         service_account_name = kubernetes_service_account.api.metadata[0].name
 
+        init_container {
+          name    = "migrate"
+          image   = var.api_image
+          command = ["alembic", "upgrade", "head"]
+
+          env_from {
+            config_map_ref {
+              name = "caelus-api-config"
+            }
+          }
+
+          env_from {
+            secret_ref {
+              name = "caelus-db"
+            }
+          }
+
+          volume_mount {
+            name       = "sqlite-data"
+            mount_path = "/app/db"
+          }
+        }
+
         container {
           image = var.api_image
           name  = "api"

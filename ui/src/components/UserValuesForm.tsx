@@ -1,4 +1,4 @@
-import Ajv from 'ajv'
+import Ajv2020 from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 import {
   Box,
@@ -12,7 +12,7 @@ import {
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 
-const ajv = new Ajv({ allErrors: true, strict: false })
+const ajv = new Ajv2020({ allErrors: true, strict: false })
 addFormats(ajv)
 
 export interface SchemaField {

@@ -192,6 +192,27 @@ describe('validateUserValues', () => {
 
     expect(validateUserValues(schema, null)).toEqual([])
   })
+
+  it('validates draft-2020-12 schemas on first call', () => {
+    const schema = {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: {
+        federation: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+          },
+          required: ['enabled'],
+        },
+      },
+      required: ['federation'],
+    }
+
+    expect(validateUserValues(schema, { federation: { enabled: true } })).toEqual([])
+    const errors = validateUserValues(schema, { federation: { enabled: 'true' } })
+    expect(errors.some((error) => error.includes('/federation/enabled'))).toBe(true)
+  })
 })
 
 describe('schema flattening integration', () => {

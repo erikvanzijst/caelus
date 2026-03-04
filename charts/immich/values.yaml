@@ -26,18 +26,6 @@ postgresql:
     size: 20Gi
     storageClassName: ""
 
-redis:
-  enabled: true
-  image:
-    repository: docker.io/valkey/valkey
-    tag: 9@sha256:2bce660b767cb62c8c0ea020e94a230093be63dbd6af4f21b044960517a5842d
-    pullPolicy: IfNotPresent
-  persistence:
-    enabled: true
-    accessMode: ReadWriteOnce
-    size: 5Gi
-    storageClassName: ""
-
 # Values passed to upstream immich dependency chart.
 immich:
   enabled: true
@@ -53,8 +41,6 @@ immich:
             DB_HOSTNAME: postgresql
             DB_PORT: "5432"
             DB_VECTOR_EXTENSION: vectorchord
-            REDIS_HOSTNAME: redis
-            REDIS_PORT: "6379"
 
   immich:
     persistence:
@@ -62,7 +48,13 @@ immich:
         existingClaim: library
 
   valkey:
-    enabled: false
+    enabled: true
+    persistence:
+      data:
+        enabled: true
+        type: persistentVolumeClaim
+        accessMode: ReadWriteOnce
+        size: 5Gi
 
   server:
     ingress:

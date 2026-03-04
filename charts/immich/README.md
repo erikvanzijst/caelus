@@ -3,7 +3,7 @@
 This chart wraps the official Immich chart and adds resources the upstream chart no longer bundles:
 
 - PostgreSQL deployment + PVC
-- Redis (Valkey) deployment + PVC
+- Upstream Valkey enabled and configured for persistence
 - Immich library PVC
 - Wrapper-managed Ingress
 
@@ -15,7 +15,7 @@ This chart wraps the official Immich chart and adds resources the upstream chart
 ## Notes
 
 - Upstream ingress is disabled; wrapper ingress is used instead.
-- Upstream `valkey` dependency is disabled; wrapper Redis service is used.
+- Upstream `valkey` dependency is enabled and used directly.
 - Immich library claim is auto-created as `library` and injected into upstream values.
 - This chart is intended for namespace-per-deployment usage (as in Caelus).
 

@@ -4,7 +4,7 @@ from datetime import datetime
 from app.services import templates, deployments, products, users
 from app.services.jobs import JobService
 from sqlmodel import select
-from app.models import DeploymentReconcileJobORM
+from app.models import DeploymentORM, DeploymentReconcileJobORM, SQLModel
 from app.services.errors import IntegrityException
 from app.services.reconcile import DeploymentReconciler
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
@@ -41,6 +41,22 @@ def test_product_name_unique_constraint(db_session):
     assert p2.id != p1.id
     # deletion should still work (the partial index should allow duplicate deleted name entries)
     delete_product(p2)
+
+
+def test_product_name_unique_constraint_is_case_insensitive(db_session):
+    products.create_product(
+        db_session, payload=products.ProductCreate(name="CaseProd", description="desc")
+    )
+    with pytest.raises(IntegrityException):
+        products.create_product(
+            db_session, payload=products.ProductCreate(name="caseprod", description="desc")
+        )
+
+
+def test_user_email_unique_constraint_is_case_insensitive(db_session):
+    users.create_user(db_session, payload=users.UserCreate(email="CaseUser@example.com"))
+    with pytest.raises(IntegrityException):
+        users.create_user(db_session, payload=users.UserCreate(email="caseuser@example.com"))
 
 
 def test_deployment_unique_constraint(db_session):
@@ -173,3 +189,92 @@ def test_domainname_active_unique_constraint_across_non_deleted_deployments(db_s
         ),
     )
     assert dep_b.domainname == "shared.example.com"
+
+
+def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_session):
+    user = users.create_user(db_session, payload=users.UserCreate(email="active-uniq@example.com"))
+    product = products.create_product(
+        db_session, payload=products.ProductCreate(name="active-uniq-product", description="desc")
+    )
+    template = templates.create_template(
+        db_session,
+        payload=templates.ProductTemplateVersionCreate(
+            product_id=product.id,
+            chart_ref="oci://example/chart",
+            chart_version="1.0.0",
+            values_schema_json={
+                "type": "object",
+                "properties": {"domain": {"type": "string", "title": "domainname"}},
+            },
+        ),
+    )
+
+    dep_a = deployments.create_deployment(
+        db_session,
+        payload=deployments.DeploymentCreate(
+            user_id=user.id,
+            desired_template_id=template.id,
+            user_values_json={"domain": "active.example.com"},
+        ),
+    )
+    with pytest.raises(IntegrityException):
+        deployments.create_deployment(
+            db_session,
+            payload=deployments.DeploymentCreate(
+                user_id=user.id,
+                desired_template_id=template.id,
+                user_values_json={"domain": "active.example.com"},
+            ),
+        )
+    db_session.rollback()
+
+    dep_a_orm = db_session.get(DeploymentORM, dep_a.id)
+    assert dep_a_orm is not None
+    dep_a_orm.status = DEPLOYMENT_STATUS_DELETED
+    dep_a_orm.deleted_at = None
+    db_session.add(dep_a_orm)
+    db_session.commit()
+
+    dep_b = deployments.create_deployment(
+        db_session,
+        payload=deployments.DeploymentCreate(
+            user_id=user.id,
+            desired_template_id=template.id,
+            user_values_json={"domain": "active.example.com"},
+        ),
+    )
+    assert dep_b.id != dep_a.id
+
+
+def test_template_versions_allow_duplicates_when_active(db_session):
+    product = products.create_product(
+        db_session,
+        payload=products.ProductCreate(name="template-dup-product", description="desc"),
+    )
+    template_a = templates.create_template(
+        db_session,
+        payload=templates.ProductTemplateVersionCreate(
+            product_id=product.id,
+            chart_ref="oci://example/dup-chart",
+            chart_version="1.0.0",
+        ),
+    )
+    template_b = templates.create_template(
+        db_session,
+        payload=templates.ProductTemplateVersionCreate(
+            product_id=product.id,
+            chart_ref="oci://example/dup-chart",
+            chart_version="1.0.0",
+        ),
+    )
+    assert template_a.id != template_b.id
+
+
+def test_partial_indexes_with_sqlite_where_define_postgres_where():
+    for table in SQLModel.metadata.tables.values():
+        for index in table.indexes:
+            sqlite_where = index.dialect_options["sqlite"].get("where")
+            if sqlite_where is None:
+                continue
+            postgresql_where = index.dialect_options["postgresql"].get("where")
+            assert postgresql_where is not None, f"Index {index.name} is missing postgresql_where"

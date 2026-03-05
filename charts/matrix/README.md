@@ -75,3 +75,64 @@ Pull test:
 ```bash
 helm pull oci://registry.home:80/helm/matrix --version 0.1.0 --plain-http
 ```
+
+## Caelus product template
+
+Use empty default user values:
+
+```json
+{
+}
+```
+
+For the Caelus Admin product template, use the following values schema:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "matrix values",
+  "type": "object",
+  "properties": {
+    "serverName": {
+      "title": "DomainName",
+      "description": "The hostname of your homeserver, e.g. `matrix.app.deprutser.be`.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+    },
+    "registration": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "title": "Registration token",
+          "type": "string",
+          "description": "The registration token for your homeserver to allow new signups. When left empty, registration is disabled."
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "additionalProperties": false
+    },
+    "federation": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "serverName",
+    "registration",
+    "federation"
+  ],
+  "additionalProperties": false
+}
+```

@@ -45,6 +45,7 @@ helm install hello-static oci://registry.home:80/helm/hello-static \
 
 ## Caelus product template
 
+Default user values:
 
 ```json
 {

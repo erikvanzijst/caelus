@@ -45,6 +45,10 @@ def _seed_deployment_via_services() -> tuple[int, int]:
                 product_id=product.id,
                 chart_ref="oci://example/chart",
                 chart_version="1.0.0",
+                values_schema_json={
+                    "type": "object",
+                    "properties": {"domain": {"type": "string", "title": "domainname"}},
+                },
             ),
         )
         deployment = deployment_service.create_deployment(
@@ -52,7 +56,7 @@ def _seed_deployment_via_services() -> tuple[int, int]:
             payload=DeploymentCreate(
                 user_id=user.id,
                 desired_template_id=template.id,
-                domainname="dep.example.com",
+                user_values_json={"domain": "dep.example.com"},
             ),
         )
         return user.id, deployment.id
@@ -455,7 +459,7 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            '{"type":"object","properties":{"user":{"type":"object"}}}',
+            '{"type":"object","properties":{"domain":{"type":"string","title":"domainname"}}}',
         ],
     )
     assert template_res.exit_code == 0
@@ -469,8 +473,8 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
             "1",
             "--desired-template-id",
             str(template_id),
-            "--domainname",
-            "cli-audit.example.test",
+            "--user-values-json",
+            '{"domain":"cli-audit.example.test"}',
         ],
     )
     assert create_dep_res.exit_code == 0
@@ -498,7 +502,7 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            '{"type":"object","properties":{"user":{"type":"object"}}}',
+            '{"type":"object","properties":{"domain":{"type":"string","title":"domainname"},"message":{"type":"string"}}}',
         ],
     )
     assert template_res.exit_code == 0
@@ -512,16 +516,14 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
             "1",
             "--desired-template-id",
             str(template_id),
-            "--domainname",
-            "cli-json.example.test",
             "--user-values-json",
-            '{"message":"hi"}',
+            '{"domain":"cli-json.example.test","message":"hi"}',
         ],
     )
     assert create_dep_res.exit_code == 0
     created_deployment = _parse_yaml_stdout(create_dep_res)
     assert created_deployment["domainname"] == "cli-json.example.test"
-    assert created_deployment["user_values_json"] == {"message": "hi"}
+    assert created_deployment["user_values_json"] == {"domain": "cli-json.example.test", "message": "hi"}
 
 
 def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
@@ -544,14 +546,17 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            '{"type":"object","properties":{"user":{"type":"object"}}}',
+            '{"type":"object","properties":{"domain":{"type":"string","title":"domainname"},"replicas":{"type":"integer"},"feature":{"type":"object"}}}',
         ],
     )
     assert template_res.exit_code == 0
     template_id = _parse_yaml_stdout(template_res)["id"]
 
+    # TODO: use `with NamedTemporaryFile()`
     values_file = tmp_path / "user-values.json"
-    values_file.write_text(json.dumps({"replicas": 2, "feature": {"enabled": True}}))
+    values_file.write_text(
+        json.dumps({"domain": "cli-file.example.test", "replicas": 2, "feature": {"enabled": True}})
+    )
 
     create_dep_res = runner.invoke(
         app,
@@ -561,8 +566,6 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
             "1",
             "--desired-template-id",
             str(template_id),
-            "--domainname",
-            "cli-file.example.test",
             "--user-values-file",
             str(values_file),
         ],
@@ -570,7 +573,11 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
     assert create_dep_res.exit_code == 0
     created_deployment = _parse_yaml_stdout(create_dep_res)
     assert created_deployment["domainname"] == "cli-file.example.test"
-    assert created_deployment["user_values_json"] == {"replicas": 2, "feature": {"enabled": True}}
+    assert created_deployment["user_values_json"] == {
+        "domain": "cli-file.example.test",
+        "replicas": 2,
+        "feature": {"enabled": True},
+    }
 
 
 def test_cli_create_deployment_user_values_invalid_json_returns_stable_error(cli_runner):
@@ -584,8 +591,6 @@ def test_cli_create_deployment_user_values_invalid_json_returns_stable_error(cli
             "1",
             "--desired-template-id",
             "1",
-            "--domainname",
-            "bad-json.example.test",
             "--user-values-json",
             "{not-json}",
         ],
@@ -606,13 +611,47 @@ def test_cli_create_deployment_not_found_returns_stable_error(cli_runner):
             "99999",
             "--desired-template-id",
             "1",
-            "--domainname",
-            "missing-user.example.test",
         ],
     )
     assert missing_user_res.exit_code == 1
     assert "Error: User not found" in missing_user_res.output
     assert "Traceback" not in missing_user_res.output
+
+
+def test_cli_rejects_removed_domainname_write_option(cli_runner):
+    runner, app = cli_runner
+
+    create_with_domain_option = runner.invoke(
+        app,
+        [
+            "create-deployment",
+            "--user-id",
+            "1",
+            "--desired-template-id",
+            "1",
+            "--domainname",
+            "deprecated.example.test",
+        ],
+    )
+    assert create_with_domain_option.exit_code != 0
+    assert "No such option: --domainname" in create_with_domain_option.output
+
+    update_with_domain_option = runner.invoke(
+        app,
+        [
+            "update-deployment",
+            "--user-id",
+            "1",
+            "--deployment-id",
+            "1",
+            "--desired-template-id",
+            "2",
+            "--domainname",
+            "deprecated.example.test",
+        ],
+    )
+    assert update_with_domain_option.exit_code != 0
+    assert "No such option: --domainname" in update_with_domain_option.output
 
 
 def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
@@ -634,6 +673,8 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
             "oci://example/chart",
             "--chart-version",
             "1.0.0",
+            "--values-schema-json",
+            '{"type":"object","properties":{"domain":{"type":"string","title":"domainname"}}}',
         ],
     )
     assert tmpl1_res.exit_code == 0
@@ -649,6 +690,8 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
             "oci://example/chart",
             "--chart-version",
             "2.0.0",
+            "--values-schema-json",
+            '{"type":"object","properties":{"domain":{"type":"string","title":"domainname"}}}',
         ],
     )
     assert tmpl2_res.exit_code == 0
@@ -663,8 +706,8 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
             "1",
             "--desired-template-id",
             str(tmpl1_id),
-            "--domainname",
-            domain,
+            "--user-values-json",
+            json.dumps({"domain": domain}),
         ],
     )
     assert create_dep_res.exit_code == 0

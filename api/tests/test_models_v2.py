@@ -1,6 +1,10 @@
+import pytest
+from pydantic import ValidationError
+
 from app.models import (
     ProductTemplateVersionCreate,
     DeploymentCreate,
+    DeploymentUpdate,
     DeploymentRead,
     DeploymentReconcileJobORM,
 )
@@ -28,11 +32,32 @@ def test_deployment_create_supports_user_values_alias() -> None:
         {
             "user_id": 1,
             "desired_template_id": 2,
-            "domainname": "cloud.example.com",
             "user_values_json": {"message": "hi"},
         }
     )
     assert payload.user_values_json == {"message": "hi"}
+
+
+def test_deployment_write_models_forbid_domainname_field() -> None:
+    with pytest.raises(ValidationError):
+        DeploymentCreate.model_validate(
+            {
+                "user_id": 1,
+                "desired_template_id": 2,
+                "domainname": "cloud.example.com",
+                "user_values_json": {"message": "hi"},
+            }
+        )
+
+    with pytest.raises(ValidationError):
+        DeploymentUpdate.model_validate(
+            {
+                "id": 1,
+                "user_id": 1,
+                "desired_template_id": 2,
+                "domainname": "cloud.example.com",
+            }
+        )
 
 
 def test_deployment_read_has_new_state_fields() -> None:
@@ -65,4 +90,3 @@ def test_reconcile_job_model_has_required_fields() -> None:
         "updated_at",
     ):
         assert expected in fields
-

@@ -156,6 +156,10 @@ This works for any `caelus` command that returns a YAML list or object.
 ### Create
 
 - `create_deployment()` validates user + template + user values.
+- REST/CLI create payloads do not accept top-level `domainname`.
+- Service derives persisted `domainname` from `user_values_json` by recursively
+  scanning template `values_schema_json` for the first field whose `title`
+  matches `domainname` case-insensitively.
 - Generates `deployment_uid` from product name + user email + random suffix.
 - Persists deployment with status `provisioning`.
 - Enqueues job with reason `create`.
@@ -164,6 +168,9 @@ This works for any `caelus` command that returns a YAML list or object.
 
 - Only allows forward template changes (`desired_template_id` must increase).
 - Requires same product lineage between current and target template.
+- REST/CLI update inputs do not accept top-level `domainname`.
+- Service re-derives persisted `domainname` from effective
+  `user_values_json` using the same recursive schema-title rule as create.
 - Revalidates values against target schema.
 - Sets status `provisioning`, increments `generation`, enqueues `update` job.
 

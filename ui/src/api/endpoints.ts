@@ -66,7 +66,7 @@ export function listDeployments(userId: number, authEmail?: string) {
 
 export function createDeployment(
   userId: number,
-  payload: { desired_template_id: number; domainname: string; user_values_json?: object },
+  payload: { desired_template_id: number; user_values_json?: object },
   authEmail?: string,
 ) {
   return requestJson<Deployment>(`/users/${userId}/deployments`, {

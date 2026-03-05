@@ -53,13 +53,20 @@ def test_deployment_unique_constraint(db_session):
     template = templates.create_template(
         db_session,
         payload=templates.ProductTemplateVersionCreate(
-            product_id=product.id, chart_ref="registry.home:80/nextcloud/", chart_version="1.0.0")
+            product_id=product.id,
+            chart_ref="registry.home:80/nextcloud/",
+            chart_version="1.0.0",
+            values_schema_json={
+                "type": "object",
+                "properties": {"domain": {"type": "string", "title": "domainname"}},
+            },
+        )
     )
     # Create first deployment
     dep1 = deployments.create_deployment(
         db_session,
         payload=deployments.DeploymentCreate(
-            user_id=user.id,desired_template_id=template.id, domainname="example.com"
+            user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"}
         ),
     )
     # Attempt duplicate deployment
@@ -67,7 +74,7 @@ def test_deployment_unique_constraint(db_session):
         deployments.create_deployment(
             db_session,
             payload=deployments.DeploymentCreate(
-                user_id=user.id, desired_template_id=template.id, domainname="example.com"
+                user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"}
             ),
         )
     # rollback the failed transaction
@@ -92,7 +99,77 @@ def test_deployment_unique_constraint(db_session):
     dep2 = deployments.create_deployment(
         db_session,
         payload=deployments.DeploymentCreate(
-            user_id=user.id,desired_template_id=template.id, domainname="example.com"
+            user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"}
         ),
     )
     assert dep2.id != dep1.id
+
+
+def test_domainname_active_unique_constraint_across_non_deleted_deployments(db_session):
+    user_a = users.create_user(db_session, payload=users.UserCreate(email="domain-a@example.com"))
+    user_b = users.create_user(db_session, payload=users.UserCreate(email="domain-b@example.com"))
+    product = products.create_product(
+        db_session,
+        payload=products.ProductCreate(name="domain-uniq-product", description="desc"),
+    )
+    template_v1 = templates.create_template(
+        db_session,
+        payload=templates.ProductTemplateVersionCreate(
+            product_id=product.id,
+            chart_ref="registry.home:80/nextcloud/",
+            chart_version="1.0.0",
+            values_schema_json={
+                "type": "object",
+                "properties": {"domain": {"type": "string", "title": "domainname"}},
+            },
+        ),
+    )
+    template_v2 = templates.create_template(
+        db_session,
+        payload=templates.ProductTemplateVersionCreate(
+            product_id=product.id,
+            chart_ref="registry.home:80/nextcloud/",
+            chart_version="2.0.0",
+            values_schema_json={
+                "type": "object",
+                "properties": {"domain": {"type": "string", "title": "domainname"}},
+            },
+        ),
+    )
+
+    dep_a = deployments.create_deployment(
+        db_session,
+        payload=deployments.DeploymentCreate(
+            user_id=user_a.id,
+            desired_template_id=template_v1.id,
+            user_values_json={"domain": "shared.example.com"},
+        ),
+    )
+    assert dep_a.domainname == "shared.example.com"
+
+    with pytest.raises(IntegrityException):
+        deployments.create_deployment(
+            db_session,
+            payload=deployments.DeploymentCreate(
+                user_id=user_b.id,
+                desired_template_id=template_v2.id,
+                user_values_json={"domain": "shared.example.com"},
+            ),
+        )
+
+    db_session.rollback()
+    dep_a_orm = db_session.get(deployments.DeploymentORM, dep_a.id)
+    assert dep_a_orm is not None
+    dep_a_orm.status = DEPLOYMENT_STATUS_DELETED
+    db_session.add(dep_a_orm)
+    db_session.commit()
+
+    dep_b = deployments.create_deployment(
+        db_session,
+        payload=deployments.DeploymentCreate(
+            user_id=user_b.id,
+            desired_template_id=template_v2.id,
+            user_values_json={"domain": "shared.example.com"},
+        ),
+    )
+    assert dep_b.domainname == "shared.example.com"

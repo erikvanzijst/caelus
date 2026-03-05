@@ -313,7 +313,6 @@ def create_deployment(
     *,
     user_id: int = typer.Option(..., "--user-id"),
     desired_template_id: int = typer.Option(..., "--desired-template-id"),
-    domainname: str = typer.Option(..., "--domainname"),
     user_values_json: str | None = typer.Option(
         None,
         "--user-values-json",
@@ -344,7 +343,6 @@ def create_deployment(
                 payload=DeploymentCreate(
                     user_id=user_id,
                     desired_template_id=desired_template_id,
-                    domainname=domainname,
                     user_values_json=parsed_user_values,
                 ),
             )

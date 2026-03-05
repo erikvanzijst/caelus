@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, Any
 
+from pydantic import ConfigDict
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String
 
@@ -142,7 +143,6 @@ class ProductTemplateVersionRead(ProductTemplateVersionBase):
 
 class DeploymentBase(SQLModel):
     desired_template_id: int
-    domainname: str
     user_id: int
     user_values_json: Optional[dict[str, Any]] = Field(default=None)
 
@@ -183,7 +183,7 @@ class DeploymentORM(DeploymentBase, table=True):
             index=True,
         ),
     )
-    domainname: str = Field(index=True)
+    domainname: Optional[str] = Field(default=None, sa_column=Column(String(), nullable=True, index=True))
     deployment_uid: str = Field(sa_column=Column(String(), nullable=False, index=True))
     user_values_json: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
     status: str = Field(default="pending", nullable=False, index=True)
@@ -199,15 +199,16 @@ class DeploymentORM(DeploymentBase, table=True):
 
 
 class DeploymentCreate(DeploymentBase):
+    model_config = ConfigDict(extra="forbid")
     user_values_json: dict[str, Any] = Field(default=dict())
     user_id: Optional[int] = None
 
 
-class DeploymentUpdate(DeploymentBase):
+class DeploymentUpdate(SQLModel):
+    model_config = ConfigDict(extra="forbid")
     id: Optional[int] = None
     user_id: Optional[int] = None
-    domainname: Optional[str] = None
-    desired_template_id: Optional[int] = Field(default=None)
+    desired_template_id: int
     user_values_json: Optional[dict[str, Any]] = Field(default=None)
 
 
@@ -215,6 +216,7 @@ class DeploymentRead(DeploymentBase):
     id: int
     created_at: datetime
     user: UserRead
+    domainname: Optional[str] = None
     desired_template: ProductTemplateVersionRead
     applied_template: Optional[ProductTemplateVersionRead]
     deployment_uid: Optional[str] = None

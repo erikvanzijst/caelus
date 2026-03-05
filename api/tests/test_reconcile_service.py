@@ -19,7 +19,10 @@ def _seed_deployment(db_session) -> int:
         "properties": {
             "user": {
                 "type": "object",
-                "properties": {"message": {"type": "string"}},
+                "properties": {
+                    "message": {"type": "string"},
+                    "domain": {"type": "string", "title": "domainname"},
+                },
                 "additionalProperties": False,
             },
             "replicas": {"type": "integer"},
@@ -42,8 +45,7 @@ def _seed_deployment(db_session) -> int:
         payload=DeploymentCreate(
             user_id=user.id,
             desired_template_id=template.id,
-            domainname="reconcile.example.test",
-            user_values_json={"user": {"message": "hello"}},
+            user_values_json={"user": {"message": "hello", "domain": "reconcile.example.test"}},
         ),
     )
     return deployment.id
@@ -66,7 +68,10 @@ def test_reconcile_apply_happy_path_returns_ready_and_applied_template(db_sessio
     assert deployment.applied_template_id == deployment.desired_template_id
     assert fake_provisioner.calls[0][0] == "ensure_namespace"
     assert fake_provisioner.calls[1][0] == "helm_upgrade_install"
-    assert fake_provisioner.calls[1][1]["values"] == {"replicas": 1, "user": {"message": "hello"}}
+    assert fake_provisioner.calls[1][1]["values"] == {
+        "replicas": 1,
+        "user": {"message": "hello", "domain": "reconcile.example.test"},
+    }
 
 
 def test_reconcile_delete_returns_deleted_when_marked_deleted(db_session) -> None:

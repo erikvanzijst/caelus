@@ -36,14 +36,29 @@ def test_user_deployment_flow(client):
 
     template = client.post(
         f"/api/products/{product_id}/templates",
-        json={"chart_ref": "registry.home:80/nextcloud/", "chart_version": "1.0.0"},
+        json={
+            "chart_ref": "registry.home:80/nextcloud/",
+            "chart_version": "1.0.0",
+            "values_schema_json": {
+                "type": "object",
+                "properties": {
+                    "user": {
+                        "type": "object",
+                        "properties": {"host": {"type": "string", "title": "DomainName"}},
+                    }
+                },
+            },
+        },
     )
     assert template.status_code == 201
     template_id = template.json()["id"]
 
     deployment = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_id, "domainname": "cloud.example.com"},
+        json={
+            "desired_template_id": template_id,
+            "user_values_json": {"user": {"host": "cloud.example.com"}},
+        },
     )
     assert deployment.status_code == 201
     deployment_id = deployment.json()["id"]
@@ -78,7 +93,10 @@ def test_user_deployment_flow_with_user_values(client):
                 "properties": {
                     "user": {
                         "type": "object",
-                        "properties": {"message": {"type": "string"}},
+                        "properties": {
+                            "message": {"type": "string"},
+                            "domain": {"type": "string", "title": "domainname"},
+                        },
                         "required": ["message"],
                         "additionalProperties": False,
                     }
@@ -95,12 +113,71 @@ def test_user_deployment_flow_with_user_values(client):
         f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": template_id,
-            "domainname": "values.example.com",
-            "user_values_json": {"user": {"message": "hi"}},
+            "user_values_json": {"user": {"message": "hi", "domain": "values.example.com"}},
         },
     )
     assert deployment.status_code == 201
-    assert deployment.json()["user_values_json"] == {"user": {"message": "hi"}}
+    assert deployment.json()["domainname"] == "values.example.com"
+    assert deployment.json()["user_values_json"] == {"user": {"message": "hi", "domain": "values.example.com"}}
+
+
+def test_deployment_write_contract_rejects_domainname(client):
+    user = client.post("/api/users", json={"email": "contract@example.com"})
+    assert user.status_code == 201
+    user_id = user.json()["id"]
+
+    product = client.post(
+        "/api/products", json={"name": "contract-product", "description": "Contract app"}
+    )
+    assert product.status_code == 201
+    product_id = product.json()["id"]
+
+    template_1 = client.post(
+        f"/api/products/{product_id}/templates",
+        json={
+            "chart_ref": "oci://example/chart",
+            "chart_version": "1.0.0",
+            "values_schema_json": {
+                "type": "object",
+                "properties": {"user": {"type": "object"}},
+            },
+        },
+    )
+    assert template_1.status_code == 201
+    template_1_id = template_1.json()["id"]
+
+    template_2 = client.post(
+        f"/api/products/{product_id}/templates",
+        json={
+            "chart_ref": "oci://example/chart",
+            "chart_version": "2.0.0",
+            "values_schema_json": {
+                "type": "object",
+                "properties": {"user": {"type": "object"}},
+            },
+        },
+    )
+    assert template_2.status_code == 201
+    template_2_id = template_2.json()["id"]
+
+    bad_create = client.post(
+        f"/api/users/{user_id}/deployments",
+        json={"desired_template_id": template_1_id, "domainname": "bad.example.com"},
+    )
+    assert bad_create.status_code == 422
+
+    created = client.post(
+        f"/api/users/{user_id}/deployments",
+        json={"desired_template_id": template_1_id, "user_values_json": {"user": {}}},
+    )
+    assert created.status_code == 201
+    deployment_id = created.json()["id"]
+
+    bad_update = client.put(
+        f"/api/users/{user_id}/deployments/{deployment_id}",
+        json={"desired_template_id": template_2_id, "domainname": "bad.example.com"},
+    )
+    assert bad_update.status_code == 422
 
 
 def test_user_delete_flow(client):

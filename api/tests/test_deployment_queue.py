@@ -25,6 +25,10 @@ def _setup_user_and_templates(db_session):
             product_id=product.id,
             chart_ref="oci://example/chart",
             chart_version="1.0.0",
+            values_schema_json={
+                "type": "object",
+                "properties": {"domain": {"type": "string", "title": "domainname"}},
+            },
         ),
     )
     template_v2 = templates.create_template(
@@ -33,6 +37,10 @@ def _setup_user_and_templates(db_session):
             product_id=product.id,
             chart_ref="oci://example/chart",
             chart_version="2.0.0",
+            values_schema_json={
+                "type": "object",
+                "properties": {"domain": {"type": "string", "title": "domainname"}},
+            },
         ),
     )
     return user, template_v1, template_v2
@@ -46,7 +54,7 @@ def test_create_deployment_enqueues_create_job(db_session):
         payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
-            domainname="queue-create.example.test",
+            user_values_json={"domain": "queue-create.example.test"},
         ),
     )
 
@@ -66,7 +74,7 @@ def test_delete_deployment_sets_state_and_enqueues_delete_job(db_session):
         payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
-            domainname="queue-delete.example.test",
+            user_values_json={"domain": "queue-delete.example.test"},
         ),
     )
 
@@ -98,7 +106,7 @@ def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
         payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
-            domainname="queue-upgrade.example.test",
+            user_values_json={"domain": "queue-upgrade.example.test"},
         ),
     )
 
@@ -137,7 +145,7 @@ def test_update_rolls_back_when_open_job_exists(db_session):
         payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
-            domainname="queue-rollback.example.test",
+            user_values_json={"domain": "queue-rollback.example.test"},
         ),
     )
 

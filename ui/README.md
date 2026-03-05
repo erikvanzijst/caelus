@@ -78,7 +78,6 @@ Deploy an applications Card:
   - no deployable products
   - create mutation is pending
 - Inline validation:
-  - empty domain => `Enter a domain name to continue.`
   - selected product without canonical template => explicit canonical-template error
 - Helper text shows selected canonical template id.
 - If no deployable products, info alert tells user to set canonical template in Admin.
@@ -187,8 +186,9 @@ Use these checks after UI/API contract changes:
    - expected: newest remaining template is auto-selected as canonical (if any)
 
 4. Deployment create (Dashboard):
-   - open `/`, pick product, enter domain, click `Launch`
+   - open `/`, pick product, configure user values (if required), click `Launch`
    - expected: request payload includes `desired_template_id` (not `template_id`)
+   - expected: request payload does not include top-level `domainname`
    - expected: `POST /users/{id}/deployments` returns `201`
    - expected: new deployment card appears with correct product and desired template id
 

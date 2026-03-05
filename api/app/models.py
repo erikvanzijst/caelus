@@ -19,6 +19,7 @@ class UserORM(UserBase, table=True):
             "uq_user_active",
             "email",
             unique=True,
+            # TODO: add postgresql_where
             sqlite_where=Column("deleted_at").is_(None),
         ),
     )
@@ -53,6 +54,7 @@ class ProductORM(ProductBase, table=True):
             "uq_product_name_active",
             "name",
             unique=True,
+            # TODO: add postgresql_where
             sqlite_where=Column("deleted_at").is_(None),
         ),
     )
@@ -108,6 +110,7 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
             "uq_producttemplate_active",
             "chart_ref", "chart_version", "product_id",
             unique=True,
+            # TODO: add postgresql_where
             sqlite_where=Column("deleted_at").is_(None),
         ),
     )
@@ -154,12 +157,14 @@ class DeploymentORM(DeploymentBase, table=True):
             "uq_deployment_active",
             "user_id", "domainname", "desired_template_id",
             unique=True,
+            # TODO: add postgresql_where
             sqlite_where=Column("deleted_at").is_(None),
         ),
         Index(
             "uq_domainname_active",
             "domainname",
             unique=True,
+            # TODO: add postgresql_where
             sqlite_where=Column("status").is_not(DEPLOYMENT_STATUS_DELETED),
         ),
     )

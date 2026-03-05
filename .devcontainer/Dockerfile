@@ -50,6 +50,7 @@ RUN apt-get update -y && \
 RUN groupadd --gid 968 -f docker && usermod -aG docker vscode
 RUN npm i -g @openai/codex
 RUN npm i -g @qwen-code/qwen-code@latest
+RUN npm i -g @fission-ai/openspec@latest
 RUN mkdir /workspace && chown vscode:vscode /workspace
 
 ENV PATH=/home/vscode/.local/bin:$PATH

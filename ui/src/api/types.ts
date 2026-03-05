@@ -31,7 +31,7 @@ export interface ProductTemplate {
 
 export interface Deployment {
   desired_template_id: number
-  domainname: string
+  domainname: string | null
   user_id: number
   user_values_json?: Record<string, unknown> | null
   id: number

@@ -18,14 +18,21 @@ def test_delete_deployment_flow(client, db_session):
     # create template
     tmpl_resp = client.post(
         f"/api/products/{prod_id}/templates",
-        json={"chart_ref": "registry.home:80/nextcloud/", "chart_version": "1.0.0"},
+        json={
+            "chart_ref": "registry.home:80/nextcloud/",
+            "chart_version": "1.0.0",
+            "values_schema_json": {
+                "type": "object",
+                "properties": {"domain": {"type": "string", "title": "domainname"}},
+            },
+        },
     )
     assert tmpl_resp.status_code == 201
     tmpl_id = tmpl_resp.json()["id"]
     # create deployment
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": tmpl_id, "domainname": "example.com"},
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "example.com"}},
     )
     assert dep_resp.status_code == 201
     dep_id = dep_resp.json()["id"]

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def _database_url() -> str:
-    return os.getenv("DATABASE_URL", "sqlite:///./caelus.db")
+    return os.getenv("DATABASE_URL", "postgresql+psycopg://caelus:caelus@localhost:5432/caelus")
 
 
 DATABASE_URL = _database_url()

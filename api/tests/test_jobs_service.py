@@ -23,6 +23,10 @@ def _seed_deployment(db_session):
             product_id=product.id,
             chart_ref="oci://example/chart",
             chart_version="1.0.0",
+            values_schema_json={
+                "type": "object",
+                "properties": {"domain": {"type": "string", "title": "domainname"}},
+            },
         ),
     )
     deployment = deployments.create_deployment(
@@ -30,7 +34,7 @@ def _seed_deployment(db_session):
         payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template.id,
-            domainname="jobs.example.test",
+            user_values_json={"domain": "jobs.example.test"},
         ),
     )
     return deployment.id

@@ -23,14 +23,26 @@ def test_delete_deployment_flow(client, db_session):
 
     template_resp = client.post(
         f"/api/products/{product_id}/templates",
-        json={"chart_ref": "registry.home:80/nextcloud/", "chart_version": "1.0.0"},
+        json={
+            "chart_ref": "registry.home:80/nextcloud/",
+            "chart_version": "1.0.0",
+            "values_schema_json": {
+                "type": "object",
+                "properties": {
+                    "ingress": {
+                        "type": "object",
+                        "properties": {"host": {"type": "string", "title": "domainname"}},
+                    }
+                },
+            },
+        },
     )
     assert template_resp.status_code == 201
     template_id = template_resp.json()["id"]
 
     deployment_resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_id, "domainname": "cloud.example.com"},
+        json={"desired_template_id": template_id, "user_values_json": {"ingress": {"host": "cloud.example.com"}}},
     )
     assert deployment_resp.status_code == 201
     deployment_id = deployment_resp.json()["id"]
@@ -87,21 +99,48 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
 
     tmpl1_resp = client.post(
         f"/api/products/{product_id}/templates",
-        json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0"},
+        json={
+            "chart_ref": "oci://example/chart",
+            "chart_version": "1.0.0",
+            "values_schema_json": {
+                "type": "object",
+                "properties": {
+                    "user": {
+                        "type": "object",
+                        "properties": {"domain": {"type": "string", "title": "domainname"}},
+                    }
+                },
+            },
+        },
     )
     assert tmpl1_resp.status_code == 201
     tmpl1_id = tmpl1_resp.json()["id"]
 
     tmpl2_resp = client.post(
         f"/api/products/{product_id}/templates",
-        json={"chart_ref": "oci://example/chart", "chart_version": "2.0.0"},
+        json={
+            "chart_ref": "oci://example/chart",
+            "chart_version": "2.0.0",
+            "values_schema_json": {
+                "type": "object",
+                "properties": {
+                    "user": {
+                        "type": "object",
+                        "properties": {"domain": {"type": "string", "title": "domainname"}},
+                    }
+                },
+            },
+        },
     )
     assert tmpl2_resp.status_code == 201
     tmpl2_id = tmpl2_resp.json()["id"]
 
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": tmpl1_id, "domainname": "upgrade-api.example.test"},
+        json={
+            "desired_template_id": tmpl1_id,
+            "user_values_json": {"user": {"domain": "upgrade-api.example.test"}},
+        },
     )
     assert dep_resp.status_code == 201
     dep_id = dep_resp.json()["id"]
@@ -157,7 +196,6 @@ def test_create_deployment_user_values_with_empty_schema(client):
         f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": tmpl_id,
-            "domainname": "noscope.example.test",
             "user_values_json": {"message": "hello"},
         },
     )
@@ -201,9 +239,106 @@ def test_create_deployment_rejects_unknown_user_keys_against_schema(client):
         f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": tmpl_id,
-            "domainname": "unknownkeys.example.test",
             "user_values_json": {"message": "hello", "extra": True},
         },
     )
     assert dep_resp.status_code == 409
     assert "invalid" in dep_resp.json()["detail"]
+
+
+def test_create_deployment_derives_domainname_recursively_case_insensitive_and_first_match(client):
+    user_resp = client.post("/api/users", json={"email": "recursive@example.com"})
+    assert user_resp.status_code == 201
+    user_id = user_resp.json()["id"]
+
+    product_resp = client.post(
+        "/api/products", json={"name": "recursive-prod", "description": "desc"}
+    )
+    assert product_resp.status_code == 201
+    product_id = product_resp.json()["id"]
+
+    tmpl_resp = client.post(
+        f"/api/products/{product_id}/templates",
+        json={
+            "chart_ref": "oci://example/chart",
+            "chart_version": "1.0.0",
+            "values_schema_json": {
+                "type": "object",
+                "properties": {
+                    "outer_first": {"type": "string", "title": "DomainName"},
+                    "nested": {
+                        "type": "object",
+                        "properties": {
+                            "inner": {"type": "string", "title": "domainname"},
+                        },
+                    },
+                },
+            },
+        },
+    )
+    assert tmpl_resp.status_code == 201
+    tmpl_id = tmpl_resp.json()["id"]
+
+    dep_resp = client.post(
+        f"/api/users/{user_id}/deployments",
+        json={
+            "desired_template_id": tmpl_id,
+            "user_values_json": {"outer_first": "first.example.test", "nested": {"inner": "second.example.test"}},
+        },
+    )
+    assert dep_resp.status_code == 201
+    assert dep_resp.json()["domainname"] == "first.example.test"
+
+
+def test_update_deployment_rederives_domainname_from_user_values(client, db_session):
+    user_resp = client.post("/api/users", json={"email": "rederive@example.com"})
+    assert user_resp.status_code == 201
+    user_id = user_resp.json()["id"]
+
+    product_resp = client.post(
+        "/api/products", json={"name": "rederive-prod", "description": "desc"}
+    )
+    assert product_resp.status_code == 201
+    product_id = product_resp.json()["id"]
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "domain": {"type": "string", "title": "domainname"},
+            "user": {"type": "object"},
+        },
+    }
+    tmpl1_resp = client.post(
+        f"/api/products/{product_id}/templates",
+        json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": schema},
+    )
+    assert tmpl1_resp.status_code == 201
+    tmpl1_id = tmpl1_resp.json()["id"]
+
+    tmpl2_resp = client.post(
+        f"/api/products/{product_id}/templates",
+        json={"chart_ref": "oci://example/chart", "chart_version": "2.0.0", "values_schema_json": schema},
+    )
+    assert tmpl2_resp.status_code == 201
+    tmpl2_id = tmpl2_resp.json()["id"]
+
+    dep_resp = client.post(
+        f"/api/users/{user_id}/deployments",
+        json={"desired_template_id": tmpl1_id, "user_values_json": {"domain": "before.example.test", "user": {}}},
+    )
+    assert dep_resp.status_code == 201
+    dep_id = dep_resp.json()["id"]
+    create_job = db_session.exec(
+        select(DeploymentReconcileJobORM).where(
+            DeploymentReconcileJobORM.deployment_id == dep_id,
+            DeploymentReconcileJobORM.reason == "create",
+        )
+    ).one()
+    JobService(db_session).mark_job_done(job_id=create_job.id)
+
+    update_resp = client.put(
+        f"/api/users/{user_id}/deployments/{dep_id}",
+        json={"desired_template_id": tmpl2_id, "user_values_json": {"domain": "after.example.test", "user": {}}},
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["domainname"] == "after.example.test"

@@ -34,6 +34,10 @@ def _seed_jobs(engine, *, job_count: int) -> None:
                 product_id=product.id,
                 chart_ref="oci://example/chart",
                 chart_version="1.0.0",
+                values_schema_json={
+                    "type": "object",
+                    "properties": {"domain": {"type": "string", "title": "domainname"}},
+                },
             ),
         )
         deployment = deployments.create_deployment(
@@ -41,7 +45,7 @@ def _seed_jobs(engine, *, job_count: int) -> None:
             payload=deployments.DeploymentCreate(
                 user_id=user.id,
                 desired_template_id=template.id,
-                domainname=f"pg-jobs-{token}.example.test",
+                user_values_json={"domain": f"pg-jobs-{token}.example.test"},
             ),
         )
         jobs = JobService(session)

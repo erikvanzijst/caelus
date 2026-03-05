@@ -63,33 +63,27 @@ describe('endpoints payload contracts', () => {
   it('creates deployments with desired_template_id payload', async () => {
     vi.mocked(requestJson).mockResolvedValueOnce({} as never)
 
-    await createDeployment(
-      3,
-      { desired_template_id: 7, domainname: 'app.example.com' },
-      'a@b.com',
-    )
+    await createDeployment(3, { desired_template_id: 7 }, 'a@b.com')
 
     expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
       method: 'POST',
       body: JSON.stringify({
         desired_template_id: 7,
-        domainname: 'app.example.com',
       }),
       authEmail: 'a@b.com',
     })
   })
 
-  it('creates deployments with user_values_json payload', async () => {
+  it('creates deployments with user_values_json payload without domainname value', async () => {
     vi.mocked(requestJson).mockResolvedValueOnce({} as never)
 
     const userValues = {
-      ingress: { host: 'example.com' },
       user: { message: 'Hello' },
     }
 
     await createDeployment(
       3,
-      { desired_template_id: 7, domainname: 'app.example.com', user_values_json: userValues },
+      { desired_template_id: 7, user_values_json: userValues },
       'a@b.com',
     )
 
@@ -97,7 +91,26 @@ describe('endpoints payload contracts', () => {
       method: 'POST',
       body: JSON.stringify({
         desired_template_id: 7,
-        domainname: 'app.example.com',
+        user_values_json: userValues,
+      }),
+      authEmail: 'a@b.com',
+    })
+  })
+
+  it('creates deployments with user_values_json payload with domainname value', async () => {
+    vi.mocked(requestJson).mockResolvedValueOnce({} as never)
+
+    const userValues = {
+      ingress: { host: 'example.com', domainname: 'example.com' },
+      user: { message: 'Hello' },
+    }
+
+    await createDeployment(3, { desired_template_id: 7, user_values_json: userValues }, 'a@b.com')
+
+    expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
+      method: 'POST',
+      body: JSON.stringify({
+        desired_template_id: 7,
         user_values_json: userValues,
       }),
       authEmail: 'a@b.com',

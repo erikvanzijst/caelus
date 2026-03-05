@@ -10,7 +10,6 @@ import {
   MenuItem,
   Select,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -34,7 +33,6 @@ function Dashboard() {
   const queryClient = useQueryClient()
   const { email } = useAuthEmail()
   const [selectedProductId, setSelectedProductId] = useState<number | ''>('')
-  const [domainname, setDomainname] = useState('')
   const [userValues, setUserValues] = useState<Record<string, unknown> | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [userValuesErrors, setUserValuesErrors] = useState<string[]>([])
@@ -107,14 +105,13 @@ function Dashboard() {
   })
 
   const createDeploymentMutation = useMutation({
-    mutationFn: (payload: { userId: number; templateId: number; domainname: string; userValuesJson?: object }) =>
+    mutationFn: (payload: { userId: number; templateId: number; userValuesJson?: object }) =>
       createDeployment(
         payload.userId,
-        { desired_template_id: payload.templateId, domainname: payload.domainname, user_values_json: payload.userValuesJson },
+        { desired_template_id: payload.templateId, user_values_json: payload.userValuesJson },
         email,
       ),
     onSuccess: () => {
-      setDomainname('')
       setUserValues(null)
       setFormError(null)
       setUserValuesErrors([])
@@ -173,10 +170,6 @@ function Dashboard() {
       setFormError('Select a product with a canonical template set in Admin.')
       return
     }
-    if (!domainname.trim()) {
-      setFormError('Enter a domain name to continue.')
-      return
-    }
 
     // Validate user values against schema
     if (canonicalTemplate?.values_schema_json) {
@@ -195,7 +188,6 @@ function Dashboard() {
     createDeploymentMutation.mutate({
       userId: currentUser.id,
       templateId: selectedProduct.template_id,
-      domainname: domainname.trim(),
       userValuesJson: valuesToSend,
     })
   }
@@ -228,13 +220,6 @@ function Dashboard() {
                   </MenuItem>
                 ))}
               </Select>
-              <TextField
-                fullWidth
-                label="Domain name"
-                placeholder="app.example.com"
-                value={domainname}
-                onChange={(event) => setDomainname(event.target.value)}
-              />
               <Button
                 variant="contained"
                 onClick={handleCreateDeployment}
@@ -310,14 +295,20 @@ function Dashboard() {
                 </Stack>
               </CardContent>
               <CardActions sx={{ px: 2, pb: 2 }}>
-                <Button
-                  href={ensureUrl(deployment.domainname)}
-                  target="_blank"
-                  rel="noreferrer"
-                  variant="contained"
-                >
-                  Open
-                </Button>
+                {deployment.domainname ? (
+                  <Button
+                    href={ensureUrl(deployment.domainname)}
+                    target="_blank"
+                    rel="noreferrer"
+                    variant="contained"
+                  >
+                    Open
+                  </Button>
+                ) : (
+                  <Button variant="contained" disabled>
+                    Open
+                  </Button>
+                )}
                 {deployment.status !== 'deleting' && deployment.status !== 'deleted' && (
                   <Button
                     variant="outlined"
@@ -344,7 +335,7 @@ function Dashboard() {
               <Stack spacing={1}>
                 <Typography variant="h6">No applications yet</Typography>
                 <Typography color="text.secondary">
-                  Choose a product and domain to launch your first instance.
+                  Choose a product to launch your first instance.
                 </Typography>
               </Stack>
             </Card>

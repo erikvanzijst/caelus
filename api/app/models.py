@@ -3,7 +3,7 @@ from typing import Optional, Any
 
 from pydantic import ConfigDict
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String
+from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String, func
 
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
 
@@ -17,9 +17,10 @@ class UserORM(UserBase, table=True):
     __table_args__ = (
         Index(
             "uq_user_active",
-            "email",
+            func.lower(Column("email")),
             unique=True,
             sqlite_where=Column("deleted_at").is_(None),
+            postgresql_where=Column("deleted_at").is_(None),
         ),
     )
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -51,9 +52,10 @@ class ProductORM(ProductBase, table=True):
     __table_args__ = (
         Index(
             "uq_product_name_active",
-            "name",
+            func.lower(Column("name")),
             unique=True,
             sqlite_where=Column("deleted_at").is_(None),
+            postgresql_where=Column("deleted_at").is_(None),
         ),
     )
 
@@ -103,14 +105,6 @@ class ProductTemplateVersionBase(SQLModel):
 
 class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     __tablename__ = "product_template_version"
-    __table_args__ = (
-        Index(
-            "uq_producttemplate_active",
-            "chart_ref", "chart_version", "product_id",
-            unique=True,
-            sqlite_where=Column("deleted_at").is_(None),
-        ),
-    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     version_label: Optional[str] = Field(default=None)
@@ -154,13 +148,15 @@ class DeploymentORM(DeploymentBase, table=True):
             "uq_deployment_active",
             "user_id", "domainname", "desired_template_id",
             unique=True,
-            sqlite_where=Column("deleted_at").is_(None),
+            sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
+            postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
         ),
         Index(
             "uq_domainname_active",
             "domainname",
             unique=True,
-            sqlite_where=Column("status").is_not(DEPLOYMENT_STATUS_DELETED),
+            sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
+            postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
         ),
     )
 

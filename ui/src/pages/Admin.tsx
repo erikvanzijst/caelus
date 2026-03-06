@@ -19,7 +19,6 @@ import Editor from '@monaco-editor/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import {
-  createProduct,
   createTemplate,
   deleteProduct,
   deleteTemplate,
@@ -30,6 +29,7 @@ import {
 import type { Product } from '../api/types'
 import { useAuthEmail } from '../state/useAuthEmail'
 import { formatDateTime } from '../utils/format'
+import { NewProduct } from '../components/NewProduct'
 
 const DEFAULT_VALUES_SCHEMA = `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -43,8 +43,6 @@ function Admin() {
   const { email } = useAuthEmail()
   const queryClient = useQueryClient()
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null)
-  const [productName, setProductName] = useState('')
-  const [productDescription, setProductDescription] = useState('')
   const [templateChartRef, setTemplateChartRef] = useState('')
   const [templateChartVersion, setTemplateChartVersion] = useState('')
   const [valuesSchemaJson, setValuesSchemaJson] = useState(DEFAULT_VALUES_SCHEMA)
@@ -76,23 +74,6 @@ function Admin() {
     queryKey: ['templates', selectedProductId],
     queryFn: () => listTemplates(selectedProductId!, email),
     enabled: Boolean(selectedProductId),
-  })
-
-  const createProductMutation = useMutation({
-    mutationFn: () =>
-      createProduct(
-        {
-          name: productName.trim(),
-          description: productDescription.trim() || null,
-        },
-        email,
-      ),
-    onSuccess: () => {
-      setProductName('')
-      setProductDescription('')
-      queryClient.invalidateQueries({ queryKey: ['products'] })
-    },
-    onError: (error: Error) => setAdminError(error.message),
   })
 
   const deleteProductMutation = useMutation({
@@ -186,37 +167,11 @@ function Admin() {
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 5 }}>
           <Stack spacing={2}>
-            <Card>
-              <CardContent>
-                <Stack spacing={2}>
-                  <Typography variant="h6">Create product</Typography>
-                  <TextField
-                    label="Product name"
-                    value={productName}
-                    onChange={(event) => setProductName(event.target.value)}
-                  />
-                  <TextField
-                    label="Description"
-                    multiline
-                    minRows={3}
-                    value={productDescription}
-                    onChange={(event) => setProductDescription(event.target.value)}
-                  />
-                </Stack>
-              </CardContent>
-              <CardActions sx={{ px: 2, pb: 2 }}>
-                <Button
-                  variant="contained"
-                  disabled={!productName.trim() || createProductMutation.isPending}
-                  onClick={() => {
-                    setAdminError(null)
-                    createProductMutation.mutate()
-                  }}
-                >
-                  Add product
-                </Button>
-              </CardActions>
-            </Card>
+            <NewProduct
+              authEmail={email}
+              onSuccess={() => queryClient.invalidateQueries({ queryKey: ['products'] })}
+              onError={(error: Error) => setAdminError(error.message)}
+            />
             <Card>
               <CardContent>
                 <Stack spacing={2}>

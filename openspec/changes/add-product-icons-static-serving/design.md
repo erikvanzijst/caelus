@@ -5,7 +5,7 @@ Caelus currently stores only structured metadata in the database and does not ex
 Constraints and inputs for this design:
 - No authorization changes in this change set.
 - API static files must be publicly readable.
-- Product icon files are immutable UUID-named files.
+- Product icon files are immutable content-hash named files.
 - Existing files are never deleted by replacement or product deletion.
 - Product API reads expose `icon_url`, not storage-relative paths.
 - `ProductCreate` payload schema remains icon-free; icon transport is a multipart file part.
@@ -66,10 +66,10 @@ Constraints and inputs for this design:
 - Rationale: guards against oversized inputs and resource abuse with minimal additional code.
 - Alternative considered: no limits; rejected for safety and operational predictability.
 
-8. Use UUID filenames under `icons/` and never mutate or delete prior files.
-- Filename format: `icons/<uuid4>.png`.
-- Rationale: immutable asset strategy simplifies caching and avoids race/overwrite issues.
-- Alternative considered: deterministic names per product; rejected because cache invalidation and overwrite behavior become complex.
+8. Use content-hash filenames under `icons/` and never mutate or delete prior files.
+- Filename format: `icons/<sha1>.png` based on processed PNG bytes.
+- Rationale: immutable content-addressed assets simplify caching and deduplicate identical uploads.
+- Alternative considered: random UUID names per upload; rejected to avoid duplicate files for identical content.
 
 9. Implement `GET /api/products/{id}/icon` as a `302` redirect to `/api/static/{rel_icon_path}`.
 - Rationale: preserves product-specific lookup endpoint while delegating bytes/caching to static serving.

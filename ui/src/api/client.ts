@@ -51,3 +51,41 @@ export async function requestJson<T>(
   }
   return data as T
 }
+
+export async function requestMultipart<T>(
+  path: string,
+  payload: object,
+  file?: { field: string; file: File | Blob },
+  options: RequestInit & { authEmail?: string } = {},
+): Promise<T> {
+  const { authEmail, headers, ...rest } = options
+  const formData = new FormData()
+  formData.append('payload', JSON.stringify(payload))
+  if (file) {
+    formData.append(file.field, file.file)
+  }
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...rest,
+    method: 'POST',
+    body: formData,
+    headers: {
+      ...(authEmail ? { 'x-auth-request-email': authEmail } : {}),
+      ...(headers ?? {}),
+    },
+  })
+
+  let data: ({ detail?: unknown } & T) | null = null
+  try {
+    data = (await response.json()) as { detail?: unknown } & T
+  } catch {
+    if (!response.ok) {
+      throw new Error(response.statusText || 'Request failed')
+    }
+    throw new Error('Invalid JSON response')
+  }
+  if (!response.ok) {
+    throw new Error(toErrorMessage(data?.detail, response.statusText || 'Request failed'))
+  }
+  return data as T
+}

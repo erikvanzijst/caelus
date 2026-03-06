@@ -5,7 +5,7 @@ Caelus products currently have no visual identity and the API cannot serve stati
 ## What Changes
 
 - Add product icon support to the data model with a new nullable `Product.rel_icon_path` field storing a relative path under `STATIC_PATH`.
-- Expose product icon in API reads as `ProductRead.icon_url` (absolute API path like `/api/static/icons/<uuid>.png`) and do not expose `rel_icon_path` in API response models.
+- Expose product icon in API reads as `ProductRead.icon_url` (absolute API path like `/api/static/icons/<sha1>.png`) and do not expose `rel_icon_path` in API response models.
 - Extend `POST /api/products` to support multipart form creation with two parts:
   - one JSON part for product payload,
   - one binary icon part,
@@ -14,7 +14,7 @@ Caelus products currently have no visual identity and the API cannot serve stati
 - Add API endpoint `PUT /api/products/{product_id}/icon` for binary image upload, server-side square crop, PNG conversion, and max-size downscaling.
 - Add API endpoint `GET /api/products/{product_id}/icon` that returns a `302` redirect to `/api/static/{rel_icon_path}` when icon is present.
 - Add public API endpoint `GET /api/static/{path}` to serve files rooted at `STATIC_PATH` with path traversal protection, MIME type handling, ETag, and `If-None-Match` support.
-- Make uploaded icon files immutable: each upload writes a new UUID-based filename and updates `rel_icon_path`; previously uploaded files remain on disk.
+- Make uploaded icon files immutable: each upload resolves to a content-hash filename and updates `rel_icon_path`; previously uploaded files remain on disk.
 - Enforce lightweight upload caps at icon ingest boundary: max upload size `10MB`, max source image resolution `2048x2048`.
 - Extend CLI parity by adding `create-product --icon <path>` that creates the product with icon atomically.
 - Refactor Admin UI by extracting the New Product widget from `Admin.tsx` into a dedicated component and adding a dedicated icon input component with pre-submit preview.

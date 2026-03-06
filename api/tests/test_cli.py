@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 import yaml
+from PIL import Image
 
 from app.db import session_scope
 from app.models import DeploymentORM, DeploymentReconcileJobORM
@@ -911,3 +912,37 @@ def test_cli_jobs_lists_open_and_filters_status(cli_runner):
     assert result_failed.exit_code == 0
     failed_jobs = _parse_yaml_stdout(result_failed)
     assert all(job["status"] == "failed" for job in failed_jobs)
+
+
+def test_cli_create_product_with_icon(cli_runner, tmp_path):
+    """Test creating a product with an icon via CLI."""
+    runner, app = cli_runner
+
+    icon_path = tmp_path / "test_icon.png"
+
+    img = Image.new("RGB", (100, 100), color="red")
+    img.save(icon_path)
+
+    create_res = runner.invoke(
+        app,
+        ["create-product", "icon-prod", "Product with icon", "--icon", str(icon_path)],
+    )
+    assert create_res.exit_code == 0
+    product = _parse_yaml_stdout(create_res)
+    assert product["name"] == "icon-prod"
+    assert product["icon_url"] is not None
+    assert "/api/static/icons/" in product["icon_url"]
+
+
+def test_cli_create_product_without_icon(cli_runner):
+    """Test creating a product without an icon via CLI."""
+    runner, app = cli_runner
+
+    create_res = runner.invoke(
+        app,
+        ["create-product", "noicon-prod", "Product without icon"],
+    )
+    assert create_res.exit_code == 0
+    product = _parse_yaml_stdout(create_res)
+    assert product["name"] == "noicon-prod"
+    assert product["icon_url"] is None

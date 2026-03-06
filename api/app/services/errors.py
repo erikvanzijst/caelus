@@ -15,5 +15,9 @@ class NotFoundException(CaelusException):
     pass
 
 
+class ValidationException(CaelusException):
+    pass
+
+
 # Backward‑compatible alias expected by the CLI tests
 NotFoundError = NotFoundException

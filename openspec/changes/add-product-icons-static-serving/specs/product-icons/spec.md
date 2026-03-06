@@ -8,8 +8,8 @@ The system MUST store icon paths internally as `rel_icon_path` and expose produc
 - **THEN** product read responses SHALL include `icon_url` with value `null`
 
 #### Scenario: Product with icon
-- **WHEN** a product has an icon stored at `rel_icon_path = icons/<uuid>.png`
-- **THEN** product read responses SHALL include `icon_url = /api/static/icons/<uuid>.png`
+- **WHEN** a product has an icon stored at `rel_icon_path = icons/<sha1>.png`
+- **THEN** product read responses SHALL include `icon_url = /api/static/icons/<sha1>.png`
 
 #### Scenario: Storage-relative path not exposed
 - **WHEN** a client reads product responses from API endpoints
@@ -35,7 +35,7 @@ The system MUST provide `PUT /api/products/{product_id}/icon` for binary image u
 
 #### Scenario: Successful icon upload
 - **WHEN** a valid image file is uploaded to `PUT /api/products/{product_id}/icon`
-- **THEN** the system SHALL decode the image, normalize orientation, center-crop to a square, downscale to at most `256x256` without upscaling, encode as PNG, store it under `STATIC_PATH/icons/<uuid>.png`, update `product.rel_icon_path`, and expose updated `icon_url`
+- **THEN** the system SHALL decode the image, normalize orientation, center-crop to a square, downscale to at most `256x256` without upscaling, encode as PNG, store it under `STATIC_PATH/icons/<sha1>.png`, update `product.rel_icon_path`, and expose updated `icon_url`
 
 #### Scenario: Unknown product
 - **WHEN** an icon upload is requested for a product id that does not exist
@@ -46,7 +46,7 @@ The system MUST treat uploaded product icon files as immutable assets.
 
 #### Scenario: Replacing an existing icon
 - **WHEN** a new icon is uploaded for a product that already has an icon
-- **THEN** the system SHALL write a new UUID-based filename, update `rel_icon_path` to the new file, and SHALL NOT overwrite or delete the previous file
+- **THEN** the system SHALL write a content-hash filename based on processed PNG bytes, update `rel_icon_path` to the resulting path, and SHALL NOT delete existing files
 
 #### Scenario: Product deletion
 - **WHEN** a product is deleted

@@ -273,7 +273,7 @@ COPY package*.json ./
 RUN npm ci
 
 # Copy source code
-COPY . .
+COPY .. .
 
 # Build production bundle
 # This creates optimized static files in dist/

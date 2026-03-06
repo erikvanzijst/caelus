@@ -1,4 +1,4 @@
-import { requestJson } from './client'
+import { requestJson, requestMultipart } from './client'
 import type { Deployment, Product, ProductTemplate, User } from './types'
 
 export function listUsers(authEmail?: string) {
@@ -17,7 +17,14 @@ export function listProducts(authEmail?: string) {
   return requestJson<Product[]>('/products', { authEmail })
 }
 
-export function createProduct(payload: { name: string; description?: string | null }, authEmail?: string) {
+export function createProduct(
+  payload: { name: string; description?: string | null },
+  authEmail?: string,
+  iconFile?: File,
+) {
+  if (iconFile) {
+    return requestMultipart<Product>('/products', payload, { field: 'icon', file: iconFile }, { authEmail })
+  }
   return requestJson<Product>('/products', {
     method: 'POST',
     body: JSON.stringify(payload),

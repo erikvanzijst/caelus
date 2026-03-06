@@ -33,3 +33,21 @@ resource "kubernetes_persistent_volume_claim" "sqlite_pvc" {
     }
   }
 }
+
+resource "kubernetes_persistent_volume_claim" "static_pvc" {
+  metadata {
+    name      = "caelus-static-pvc"
+    namespace = local.namespace
+  }
+
+  wait_until_bound = false
+
+  spec {
+    access_modes = ["ReadWriteOnce"]
+    resources {
+      requests = {
+        storage = "1Gi"
+      }
+    }
+  }
+}

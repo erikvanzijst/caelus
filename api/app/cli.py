@@ -130,12 +130,21 @@ def get_user(user_id: int) -> None:
 
 
 @app.command("create-product")
-def create_product(name: str, description: str, template_id: int | None = None) -> None:
+def create_product(
+    name: str,
+    description: str,
+    template_id: int | None = None,
+    icon: Path | None = typer.Option(None, "--icon", help="Path to product icon image"),
+) -> None:
     with session_scope() as session:
         try:
+            icon_data = None
+            if icon is not None:
+                icon_data = icon.read_bytes()
             product = product_service.create_product(
                 session,
                 payload=ProductCreate(name=name, description=description, template_id=template_id),
+                icon_data=icon_data,
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
@@ -192,8 +201,12 @@ def get_product(product_id: int) -> None:
 
 @app.command("create-template")
 def create_template(
-    product_id: int = typer.Option(..., "--product-id", help="Product ID to associate with the template."),
-    chart_ref: str = typer.Option(..., "--chart-ref", help="Chart reference (e.g. 'oci://example/chart')."),
+    product_id: int = typer.Option(
+        ..., "--product-id", help="Product ID to associate with the template."
+    ),
+    chart_ref: str = typer.Option(
+        ..., "--chart-ref", help="Chart reference (e.g. 'oci://example/chart')."
+    ),
     chart_version: str = typer.Option(..., "--chart-version", help="Chart version (e.g. '1.2.3')."),
     chart_digest: str | None = typer.Option(
         None, "--chart-digest", help="Optional immutable digest for the chart artifact."
@@ -352,7 +365,9 @@ def create_deployment(
 
 
 @app.command("list-deployments")
-def list_deployments(user_id: int | None = typer.Argument(None, help="Filter deployments by user ID")) -> None:
+def list_deployments(
+    user_id: int | None = typer.Argument(None, help="Filter deployments by user ID"),
+) -> None:
     with session_scope() as session:
         _echo_yaml_entity(deployment_service.list_deployments(session, user_id=user_id))
 
@@ -409,7 +424,9 @@ def reconcile(
 ) -> None:
     with session_scope() as session:
         try:
-            result = reconcile_service.DeploymentReconciler(session=session).reconcile(deployment_id)
+            result = reconcile_service.DeploymentReconciler(session=session).reconcile(
+                deployment_id
+            )
         except CaelusException as e:
             _exit_for_domain_error(e)
 
@@ -479,7 +496,9 @@ def jobs(
     failed: bool = typer.Option(False, "--failed", help="Show only failed jobs"),
     done: bool = typer.Option(False, "--done", help="Show only done jobs"),
     reverse: bool = typer.Option(False, "--reverse", "-r", help="Reverse run_after sort order"),
-    deployment_id: int | None = typer.Option(None, "--deployment-id", "-d", help="Filter by deployment id"),
+    deployment_id: int | None = typer.Option(
+        None, "--deployment-id", "-d", help="Filter by deployment id"
+    ),
 ) -> None:
     if failed and done:
         statuses = [JOB_STATUS_FAILED, JOB_STATUS_DONE]
@@ -492,7 +511,9 @@ def jobs(
 
     with session_scope() as session:
         jobs_service_obj = jobs_service.JobService(session)
-        jobs_list = jobs_service_obj.list_jobs(statuses=statuses, deployment_id=deployment_id, limit=1000)
+        jobs_list = jobs_service_obj.list_jobs(
+            statuses=statuses, deployment_id=deployment_id, limit=1000
+        )
         if reverse:
             jobs_list = list(reversed(jobs_list))
         _echo_yaml_entity(jobs_list)

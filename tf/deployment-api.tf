@@ -67,6 +67,11 @@ resource "kubernetes_deployment" "api" {
             protocol       = "TCP"
           }
 
+          env {
+            name  = "STATIC_PATH"
+            value = "/var/static"
+          }
+
           env_from {
             config_map_ref {
               name = "caelus-api-config"
@@ -84,6 +89,11 @@ resource "kubernetes_deployment" "api" {
             mount_path = "/app/db"
           }
 
+          volume_mount {
+            name       = "static-data"
+            mount_path = "/var/static"
+          }
+
           # resources {
           #   requests = {
           #     memory = "128Mi"
@@ -99,6 +109,12 @@ resource "kubernetes_deployment" "api" {
           name = "sqlite-data"
           persistent_volume_claim {
             claim_name = kubernetes_persistent_volume_claim.sqlite_pvc.metadata[0].name
+          }
+        }
+        volume {
+          name = "static-data"
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.static_pvc.metadata[0].name
           }
         }
       }

@@ -37,6 +37,8 @@ npm run build
 - `src/App.tsx`: route switch (`/` Dashboard, `/admin` Admin).
 - `src/components/AppShell.tsx`: global layout shell, top app bar, nav buttons, signed-in chip, email switch button, decorative radial background, and email dialog gating.
 - `src/components/EmailDialog.tsx`: modal to capture local dev email.
+- `src/components/NewProduct.tsx`: extracted component for product creation form with icon upload support.
+- `src/components/IconInput.tsx`: icon upload component with preview and automatic client-side downscaling for oversized images.
 - `src/pages/Dashboard.tsx`: user deployment creation + deployment cards.
 - `src/pages/Admin.tsx`: product/template management and canonical template management.
 - `src/api/*`: request helpers and endpoint wrappers.
@@ -124,7 +126,9 @@ Two-column desktop layout (stacks on small screens):
 Create product:
 - Requires non-empty product name.
 - Description optional.
+- Icon upload: optional image file with client-side preview; oversized images are automatically scaled down before upload.
 - On success: clears fields, invalidates products query.
+- Uses multipart form upload to send product data + optional icon file atomically.
 
 Products list:
 - Each item shows name, description fallback, canonical template chip.

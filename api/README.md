@@ -98,6 +98,32 @@ status: deleting
 
 This works for any `caelus` command that returns a YAML list or object.
 
+## Product Icon and Static File Serving
+
+### Static File Endpoint
+- `GET /api/static/{path}` serves files from `STATIC_PATH` (configurable via `STATIC_PATH` env var, defaults to `./static`).
+- Path traversal outside `STATIC_PATH` is blocked.
+- Responses include `ETag` headers and support `If-None-Match` for `304 Not Modified`.
+- Public access (no auth required).
+
+### Product Icon Workflow
+- **Create with icon**: `POST /api/products` accepts multipart form with:
+  - `payload`: JSON object with product data (`name`, `description`, `template_id`)
+  - `icon`: optional image file
+- Atomic create: if icon processing fails, no product is persisted.
+- Icon processing: decode, normalize orientation, center-crop to square, downscale to max 256x256, output PNG.
+- Icon size limit: 10MB max.
+- Resolution limit: 2048x2048 max source dimensions.
+- Icon files are immutable and content-addressed: uploads are stored as content-hash files, and existing files remain.
+
+### Icon Endpoints
+- `PUT /api/products/{product_id}/icon`: Upload/replace icon for existing product.
+- `GET /api/products/{product_id}/icon`: Returns `302` redirect to `/api/static/{rel_icon_path}` or `404` if no icon.
+
+### Configuration
+- `STATIC_PATH`: Root directory for static files (default: `./static` in dev, `/var/static` in production).
+- Static files are served at `/api/static`.
+
 ## Core Data Model
 
 ### User
@@ -109,8 +135,9 @@ This works for any `caelus` command that returns a YAML list or object.
 ### Product
 
 - Represents an application family (e.g. Nextcloud).
-- Fields: `name` (active-unique), `description`, optional canonical `template_id`.
+- Fields: `name` (active-unique), `description`, optional canonical `template_id`, optional `icon_url`.
 - Owns many template versions.
+- Icon support: Products can have an icon uploaded. The icon is stored as an immutable file in `STATIC_PATH/icons/` with a content-hash filename. The API exposes `icon_url` (absolute path like `/api/static/icons/<sha1>.png`) in read responses but does not expose the internal `rel_icon_path` field.
 
 ### ProductTemplateVersion
 

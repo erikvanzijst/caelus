@@ -8,12 +8,14 @@ from app.services.errors import (
     DeploymentInProgressException,
     IntegrityException,
     NotFoundException,
+    ValidationException,
 )
 
 ERROR_STATUS = {
     IntegrityException: 409,
     DeploymentInProgressException: 409,
-    NotFoundException: 404
+    NotFoundException: 404,
+    ValidationException: 400,
 }
 
 logger = logging.getLogger(__name__)

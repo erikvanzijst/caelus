@@ -62,9 +62,14 @@ class ProductORM(ProductBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field()
     # The product's canonical template used for new deployments:
-    template_id: Optional[int] = Field(default=None, foreign_key="product_template_version.id", index=True)
+    template_id: Optional[int] = Field(
+        default=None, foreign_key="product_template_version.id", index=True
+    )
+    # Relative path to product icon under STATIC_PATH (e.g., "icons/<sha1>.png")
+    rel_icon_path: Optional[str] = Field(default=None, nullable=True)
     template: "ProductTemplateVersionORM" = Relationship(
-        back_populates="products", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"})
+        back_populates="products", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"}
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     templates: list["ProductTemplateVersionORM"] = Relationship(
         back_populates="product",
@@ -89,7 +94,8 @@ class ProductReadBase(ProductBase):
 
 
 class ProductRead(ProductReadBase):
-    template: Optional['ProductTemplateVersionRead']
+    template: Optional["ProductTemplateVersionRead"]
+    icon_url: Optional[str] = None
 
 
 class ProductTemplateVersionBase(SQLModel):
@@ -110,17 +116,30 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     version_label: Optional[str] = Field(default=None)
     chart_ref: str
     chart_version: str
-    default_values_json: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
-    values_schema_json: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
-    capabilities_json: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    default_values_json: Optional[dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
+    values_schema_json: Optional[dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
+    capabilities_json: Optional[dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
     health_timeout_sec: Optional[int] = Field(default=None)
-    product_id: int = Field(sa_column=Column(Integer, ForeignKey("product.id"), nullable=False, index=True))
-    product: ProductORM = Relationship(back_populates="templates",
-                                       sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"})
-    products: list["ProductORM"] = Relationship(back_populates="template",
-                                                sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"})
-    deployments: list["DeploymentORM"] = Relationship(back_populates="applied_template",
-                                                      sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id"})
+    product_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("product.id"), nullable=False, index=True)
+    )
+    product: ProductORM = Relationship(
+        back_populates="templates",
+        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"},
+    )
+    products: list["ProductORM"] = Relationship(
+        back_populates="template", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"}
+    )
+    deployments: list["DeploymentORM"] = Relationship(
+        back_populates="applied_template",
+        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id"},
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     deleted_at: Optional[datetime] = Field(default=None)
 
@@ -146,7 +165,9 @@ class DeploymentORM(DeploymentBase, table=True):
     __table_args__ = (
         Index(
             "uq_deployment_active",
-            "user_id", "domainname", "desired_template_id",
+            "user_id",
+            "domainname",
+            "desired_template_id",
             unique=True,
             sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
             postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
@@ -179,9 +200,13 @@ class DeploymentORM(DeploymentBase, table=True):
             index=True,
         ),
     )
-    domainname: Optional[str] = Field(default=None, sa_column=Column(String(), nullable=True, index=True))
+    domainname: Optional[str] = Field(
+        default=None, sa_column=Column(String(), nullable=True, index=True)
+    )
     deployment_uid: str = Field(sa_column=Column(String(), nullable=False, index=True))
-    user_values_json: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    user_values_json: Optional[dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
     status: str = Field(default="pending", nullable=False, index=True)
     generation: int = Field(default=1, nullable=False)
     last_error: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
@@ -190,8 +215,12 @@ class DeploymentORM(DeploymentBase, table=True):
     deleted_at: Optional[datetime] = Field(default=None)
     reconcile_jobs: list["DeploymentReconcileJobORM"] = Relationship(back_populates="deployment")
     user: UserORM = Relationship(back_populates="deployments")
-    desired_template: Optional[ProductTemplateVersionORM] = Relationship(sa_relationship_kwargs={"foreign_keys": "DeploymentORM.desired_template_id"})
-    applied_template: Optional[ProductTemplateVersionORM] = Relationship(sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id"})
+    desired_template: Optional[ProductTemplateVersionORM] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.desired_template_id"}
+    )
+    applied_template: Optional[ProductTemplateVersionORM] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id"}
+    )
 
 
 class DeploymentCreate(DeploymentBase):

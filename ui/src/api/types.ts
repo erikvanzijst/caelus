@@ -12,6 +12,7 @@ export interface Product {
   name: string
   description?: string | null
   template_id?: number | null
+  icon_url?: string | null
   created_at: IsoDate
 }
 

@@ -60,3 +60,33 @@ variable "environment" {
   default     = null
   nullable    = true
 }
+
+variable "keycloak_admin_password" {
+  description = "Keycloak admin password (use secrets.auto.tfvars)"
+  type        = string
+  sensitive   = true
+}
+
+variable "oauth2_proxy_client_secret" {
+  description = "OAuth2-proxy client secret for Keycloak"
+  type        = string
+  sensitive   = true
+}
+
+variable "oauth2_proxy_cookie_secret" {
+  description = "Cookie secret for oauth2-proxy (32 bytes, base64 encoded)"
+  type        = string
+  sensitive   = true
+}
+
+variable "smtp_password" {
+  description = "SMTP password for outbound email (use secrets.auto.tfvars)"
+  type        = string
+  sensitive   = true
+}
+
+variable "smtp_username" {
+  description = "SMTP username for outbound email"
+  type        = string
+  default     = "caelus@deprutser.be"
+}

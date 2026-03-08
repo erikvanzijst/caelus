@@ -8,3 +8,26 @@ resource "kubernetes_namespace" "main" {
     }
   }
 }
+
+resource "kubernetes_namespace" "keycloak" {
+  metadata {
+    name = "keycloak"
+  }
+}
+
+resource "kubernetes_namespace" "oauth2-proxy" {
+  metadata {
+    name = "oauth2-proxy"
+  }
+}
+
+resource "kubernetes_namespace" "auth_system" {
+  metadata {
+    name = "auth-system"
+
+    labels = {
+      name        = "auth-system"
+      environment = local.environment
+    }
+  }
+}

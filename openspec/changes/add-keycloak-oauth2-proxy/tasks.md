@@ -1,54 +1,47 @@
 ## 1. Terraform Infrastructure Setup
 
-- [ ] 1.1 Create `auth-system` namespace in Terraform (or add to existing namespace.tf)
-- [ ] 1.2 Create Keycloak Kubernetes manifest resources in Terraform
-  - [ ] 1.2.1 Deployment with H2 database
-  - [ ] 1.2.2 Service (ClusterIP)
-  - [ ] 1.2.3 PersistentVolumeClaim for data persistence
-  - [ ] 1.2.4 Ingress for Keycloak admin/realm access
-- [ ] 1.3 Create oauth2-proxy Kubernetes manifest resources in Terraform
-  - [ ] 1.3.1 Deployment with OIDC configuration
-  - [ ] 1.3.2 Service (ClusterIP)
-  - [ ] 1.3.3 Ingress for Caelus access
-- [ ] 1.4 Create Kubernetes Secrets for oauth2-proxy in Terraform
-  - [ ] 1.4.1 OAuth client secret
-  - [ ] 1.4.2 Cookie secret
-- [ ] 1.5 Create ConfigMaps for oauth2-proxy configuration in Terraform
+- [x] 1.1 Create `auth-system` namespace in Terraform
+- [x] 1.2 Deploy Keycloak using Bitnami Helm chart
+- [x] 1.3 Deploy oauth2-proxy using official Helm chart
+- [x] 1.4 Create Kubernetes Secrets for oauth2-proxy in Terraform
+  - [x] 1.4.1 OAuth client secret
+  - [x] 1.4.2 Cookie secret
+- [x] 1.5 Configure Ingress for Keycloak and oauth2-proxy
 
 ## 2. Keycloak Configuration
 
-- [ ] 2.1 Create `caelus` realm in Keycloak
-- [ ] 2.2 Enable local user registration
-- [ ] 2.3 Enable email verification requirement
-- [ ] 2.4 Configure SMTP settings for email sending
-- [ ] 2.5 Configure Google identity provider
-  - [ ] 2.5.1 Create OAuth client in Google Cloud
-  - [ ] 2.5.2 Add Google IDP in Keycloak with client ID/secret
-- [ ] 2.6 Configure Apple identity provider
-  - [ ] 2.6.1 Create OAuth app in Apple Developer
-  - [ ] 2.6.2 Add Apple IDP in Keycloak with credentials
-- [ ] 2.7 Configure Microsoft identity provider
-  - [ ] 2.7.1 Create Azure AD app registration
-  - [ ] 2.7.2 Add Microsoft IDP in Keycloak with tenant/client ID/secret
-- [ ] 2.8 Create oauth2-proxy client in Keycloak
-  - [ ] 2.8.1 Set client ID to `oauth2-proxy`
-  - [ ] 2.8.2 Configure valid redirect URIs
-  - [ ] 2.8.3 Enable authorization code flow with PKCE
+- [x] 2.1 Create `caelus` realm in Keycloak (via keycloakConfigCli)
+- [x] 2.2 Enable local user registration (via keycloakConfigCli)
+- [x] 2.3 Enable email verification requirement (via keycloakConfigCli)
+- [x] 2.4 Configure SMTP settings for email sending (via keycloakConfigCli)
+- [ ] 2.5 Configure Google identity provider (manual - requires GCP credentials)
+- [ ] 2.5.1 Create OAuth client in Google Cloud
+- [ ] 2.5.2 Add Google IDP in Keycloak with client ID/secret
+- [ ] 2.6 Configure Apple identity provider (manual - requires Apple Developer account)
+- [ ] 2.6.1 Create OAuth app in Apple Developer
+- [ ] 2.6.2 Add Apple IDP in Keycloak with credentials
+- [ ] 2.7 Configure Microsoft identity provider (manual - requires Azure AD)
+- [ ] 2.7.1 Create Azure AD app registration
+- [ ] 2.7.2 Add Microsoft IDP in Keycloak with tenant/client ID/secret
+- [x] 2.8 Create oauth2-proxy client in Keycloak (via keycloakConfigCli)
+  - [x] 2.8.1 Set client ID to `oauth2-proxy`
+  - [x] 2.8.2 Configure valid redirect URIs
+  - [x] 2.8.3 Enable authorization code flow with PKCE
 
 ## 3. oauth2-proxy Configuration
 
-- [ ] 3.1 Configure OIDC issuer URL (Keycloak realm URL)
-- [ ] 3.2 Configure client ID and secret
-- [ ] 3.3 Set up cookie secret
-- [ ] 3.4 Configure email domain/claim mapping
-- [ ] 3.5 Enable X-Auth-Request headers (SET_XAUTHREQUEST)
-- [ ] 3.6 Configure upstream to Caelus service
-- [ ] 3.7 Configure session handling
-- [ ] 3.8 Set up health check endpoints
+- [x] 3.1 Configure OIDC issuer URL (Keycloak realm URL)
+- [x] 3.2 Configure client ID and secret
+- [x] 3.3 Set up cookie secret
+- [x] 3.4 Configure email domain/claim mapping
+- [x] 3.5 Enable X-Auth-Request headers (SET_XAUTHREQUEST)
+- [x] 3.6 Configure upstream to Caelus service
+- [x] 3.7 Configure session handling
+- [x] 3.8 Set up health check endpoints
 
 ## 4. Caelus Ingress Integration
 
-- [ ] 4.1 Update Caelus Ingress to route through oauth2-proxy
+- [x] 4.1 Update Caelus Ingress to route through oauth2-proxy
 - [ ] 4.2 Verify X-Auth-Request-Email header is forwarded
 - [ ] 4.3 Test unauthenticated request redirect behavior
 

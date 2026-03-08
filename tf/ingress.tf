@@ -2,6 +2,10 @@ resource "kubernetes_ingress_v1" "main" {
   metadata {
     name      = "caelus-ingress"
     namespace = local.namespace
+
+    # annotations = {
+    #   "traefik.ingress.kubernetes.io/router.middlewares": "oauth2-proxy-forward-auth@kubernetescrd"
+    # }
   }
 
   spec {

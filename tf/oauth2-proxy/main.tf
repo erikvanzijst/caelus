@@ -4,43 +4,39 @@
 # helm repo update
 
 resource "helm_release" "oauth2_proxy" {
-  name       = "oauth2-proxy"
+  name = "oauth2-proxy"
   # repository = "https://oauth2-proxy.github.io/manifests"
-  chart      = "oauth2-proxy/oauth2-proxy"
-  version    = "10.1.4"
-  namespace  = var.namespace
+  chart            = "oauth2-proxy/oauth2-proxy"
+  version          = "10.1.4"
+  namespace        = var.namespace
   create_namespace = false
 
   values = [
     yamlencode({
       replicaCount = 1
       config = {
-        # https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/keycloak_oidc
-        provider      = "keycloak-oidc"
-        clientID      = "caelus-dev"
-        clientSecret  = var.oauth2_proxy_client_secret
-        cookieSecret  = var.oauth2_proxy_cookie_secret
-        redirectUrl   = "https://login.${var.domain}/oauth2/callback"
-        oidcIssuerUrl = "https://keycloak.${var.domain}/realms/master"
-        # providerDisplayName = "Keycloak"
-        emailDomains       = ["*"]
-        whitelistDomains   = [".app.deprutser.be", ".dev.deprutser.be"]
-        setXAuthRequest    = true
-        cookieName         = "_oauth2_proxy"
-        cookieSecure       = true
-        sessionStoreType   = "cookie"
-        skipProviderButton = true
-        # proxyPrefix         = "/oauth2"
+        clientID     = "caelus-dev"
+        clientSecret = var.oauth2_proxy_client_secret
+        cookieSecret = var.oauth2_proxy_cookie_secret
+        configFile   = <<-EOT
+          email_domains = ["*"]
+          upstreams = ["file:///dev/null"]
+          cookie_secure = false
+          cookie_domains = [".app.deprutser.be", ".dev.deprutser.be"]
+          whitelist_domains = [".app.deprutser.be", ".dev.deprutser.be"]
+          provider = "keycloak-oidc"
+        EOT
       }
       extraArgs = {
         provider          = "keycloak-oidc"
-        oidc-issuer-url = "https://keycloak.${var.domain}/realms/master"
-        # cookie-domain     = ".app.deprutser.be"
-        # whitelist-domain  = "*.app.deprutser.be"
+        oidc-issuer-url   = "https://keycloak.${var.domain}/realms/master"
+        redirect-url      = "https://login.${var.domain}/oauth2/callback"
+        # cookie-domain     = ".dev.deprutser.be"
+        # whitelist-domain  = ".dev.deprutser.be"
         pass-user-headers = true
         set-xauthrequest  = true
-        # http-address = "0.0.0.0:8080"
-        upstream     = "static://202"
+        reverse-proxy     = true
+        skip-auth-route   = "GET=^/oauth2/.*"
       }
       service = {
         enabled    = true
@@ -56,22 +52,6 @@ resource "helm_release" "oauth2_proxy" {
           "traefik.ingress.kubernetes.io/rule-type" = "path-only"
         }
       }
-      # resources = {
-      #   requests = {
-      #     memory = "128Mi"
-      #     cpu    = "100m"
-      #   }
-      #   limits = {
-      #     memory = "256Mi"
-      #     cpu    = "200m"
-      #   }
-      # }
-      # readinessProbe = {
-      #   path = "/oauth2/healthz"
-      # }
-      # livenessProbe = {
-      #   path = "/oauth2/healthz"
-      # }
     })
   ]
 }
@@ -93,6 +73,9 @@ resource "kubernetes_manifest" "oauth2_proxy_middleware" {
           "Authorization"
         ]
         trustForwardHeader = true
+        authRequestHeaders = [
+          "Cookie"
+        ]
       }
     }
   }

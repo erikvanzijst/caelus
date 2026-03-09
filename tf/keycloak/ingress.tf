@@ -2,16 +2,13 @@ resource "kubernetes_ingress_v1" "keycloak" {
   metadata {
     name      = "keycloak"
     namespace = var.namespace
-    # annotations = {
-    #   "traefik.ingress.kubernetes.io/router.entrypoints" = "websecure"
-    # }
+    annotations = {
+      "kubernetes.io/ingress.class"                         = "traefik"
+      # "traefik.ingress.kubernetes.io/router.entrypoints" = "websecure"
+    }
   }
 
   spec {
-    # tls {
-    #   hosts = ["keycloak.${var.domain}"]
-    # }
-
     rule {
       host = "keycloak.${var.domain}"
 

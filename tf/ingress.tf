@@ -3,14 +3,14 @@ resource "kubernetes_ingress_v1" "main" {
     name      = "caelus-ingress"
     namespace = local.namespace
 
-    # annotations = {
-    #   "traefik.ingress.kubernetes.io/router.middlewares": "oauth2-proxy-forward-auth@kubernetescrd"
-    # }
+    annotations = {
+      "kubernetes.io/ingress.class"                      = "traefik"
+      "traefik.ingress.kubernetes.io/router.entrypoints" = "web, websecure"
+      "traefik.ingress.kubernetes.io/router.middlewares" = "oauth2-proxy-forward-auth@kubernetescrd"
+    }
   }
 
   spec {
-    ingress_class_name = "traefik"
-
     rule {
       host = local.domain
 

@@ -5,7 +5,6 @@
 
 resource "helm_release" "oauth2_proxy" {
   name = "oauth2-proxy"
-  # repository = "https://oauth2-proxy.github.io/manifests"
   chart            = "oauth2-proxy/oauth2-proxy"
   version          = "10.1.4"
   namespace        = var.namespace
@@ -22,8 +21,8 @@ resource "helm_release" "oauth2_proxy" {
           email_domains = ["*"]
           upstreams = ["file:///dev/null"]
           cookie_secure = false
-          cookie_domains = [".app.deprutser.be", ".dev.deprutser.be"]
-          whitelist_domains = [".app.deprutser.be", ".dev.deprutser.be"]
+          cookie_domains = ["app.deprutser.be", "dev.deprutser.be"]
+          whitelist_domains = ["app.deprutser.be", "dev.deprutser.be"]
           provider = "keycloak-oidc"
         EOT
       }
@@ -61,12 +60,12 @@ resource "kubernetes_manifest" "oauth2_proxy_middleware" {
     apiVersion = "traefik.io/v1alpha1"
     kind       = "Middleware"
     metadata = {
-      name      = "oauth2-proxy-forward-auth"
+      name      = "forward-auth"
       namespace = var.namespace
     }
     spec = {
       forwardAuth = {
-        address = "http://oauth2-proxy.${var.namespace}.svc.cluster.local/oauth2/auth"
+        address = "http://oauth2-proxy.${var.namespace}.svc.cluster.local:8080/oauth2/auth"
         authResponseHeaders = [
           "X-Auth-Request-User",
           "X-Auth-Request-Email",

@@ -20,7 +20,7 @@
     "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind",
     "source=${localEnv:HOME}/.local/share/opencode,target=/home/vscode/.local/share/opencode,type=bind",
     "source=${localEnv:HOME}/.codex,target=/home/vscode/.codex,type=bind",
-    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
+    "source=./var/.claude,target=/home/vscode/.claude,type=bind",
     "source=${localEnv:HOME}/.config/git,target=/home/vscode/.config/git,type=bind",
     "source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind",
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"

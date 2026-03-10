@@ -1,11 +1,9 @@
 # https://junwu.shouyicheng.com/posts/keycloak-oauth2-proxy-secure-web-application/
 #
-# helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
-# helm repo update
-
 resource "helm_release" "oauth2_proxy" {
-  name = "oauth2-proxy"
-  chart            = "oauth2-proxy/oauth2-proxy"
+  name             = "oauth2-proxy"
+  repository       = "https://oauth2-proxy.github.io/manifests"
+  chart            = "oauth2-proxy"
   version          = "10.1.4"
   namespace        = var.namespace
   create_namespace = false
@@ -21,15 +19,15 @@ resource "helm_release" "oauth2_proxy" {
           email_domains = ["*"]
           upstreams = ["file:///dev/null"]
           cookie_secure = false
-          cookie_domains = ["app.deprutser.be", "dev.deprutser.be"]
-          whitelist_domains = ["app.deprutser.be", "dev.deprutser.be"]
+          cookie_domains = ["${var.domain}"]
+          whitelist_domains = ["${var.domain}"]
           provider = "keycloak-oidc"
         EOT
       }
       extraArgs = {
         provider             = "keycloak-oidc"
-        oidc-issuer-url      = "https://keycloak.${var.domain}/realms/master"
-        redirect-url         = "https://login.dev.deprutser.be/oauth2/callback"
+        oidc-issuer-url      = "https://keycloak.app.deprutser.be/realms/master"
+        redirect-url         = "https://login.${var.domain}/oauth2/callback"
         # cookie-domain     = ".dev.deprutser.be"
         # whitelist-domain  = ".dev.deprutser.be"
         pass-user-headers    = true
@@ -48,7 +46,7 @@ resource "helm_release" "oauth2_proxy" {
         enabled          = true
         ingressClassName = "traefik"
         pathType         = "Prefix"
-        hosts = ["login.dev.deprutser.be"]
+        hosts = ["login.${var.domain}"]
         paths = ["/oauth2"]
       }
     })

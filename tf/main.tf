@@ -10,13 +10,11 @@ module "keycloak" {
 }
 
 module "oauth2-proxy" {
-  source                     = "./oauth2-proxy"
+  source                     = "./login"
   namespace                  = kubernetes_namespace.oauth2-proxy.metadata[0].name
-  domain                     = "app.deprutser.be"
+  domain                     = local.domain
   oauth2_proxy_client_secret = var.oauth2_proxy_client_secret
   oauth2_proxy_cookie_secret = var.oauth2_proxy_cookie_secret
-  google_client_id = var.google_client_id
-  google_client_secret = var.google_client_secret
 }
 
 module "echo" {

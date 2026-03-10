@@ -1,10 +1,28 @@
-resource "kubernetes_namespace" "main" {
+resource "kubernetes_namespace" "caelus" {
   metadata {
-    name = local.namespace
+    name = local.ns_caelus
 
     labels = {
-      name        = local.namespace
+      name        = local.ns_caelus
       environment = local.environment
     }
+  }
+}
+
+resource "kubernetes_namespace" "keycloak" {
+  metadata {
+    name = "keycloak"
+  }
+}
+
+resource "kubernetes_namespace" "login" {
+  metadata {
+    name = local.is_prod_workspace ? "login" : "login-dev"
+  }
+}
+
+resource "kubernetes_namespace" "echo" {
+  metadata {
+    name = "echo"
   }
 }

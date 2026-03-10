@@ -1,7 +1,7 @@
 resource "kubernetes_deployment" "postgres" {
   metadata {
     name      = "caelus-postgres"
-    namespace = local.namespace
+    namespace = var.namespace
     labels = {
       app = "caelus-postgres"
     }
@@ -105,13 +105,13 @@ resource "kubernetes_deployment" "postgres" {
     }
   }
 
-  depends_on = [kubernetes_namespace.main, kubernetes_secret.db]
+  depends_on = [kubernetes_secret.db]
 }
 
 resource "kubernetes_service" "postgres" {
   metadata {
     name      = "caelus-postgres"
-    namespace = local.namespace
+    namespace = var.namespace
   }
 
   spec {
@@ -127,6 +127,4 @@ resource "kubernetes_service" "postgres" {
 
     cluster_ip = "None"
   }
-
-  depends_on = [kubernetes_namespace.main]
 }

@@ -1,24 +1,24 @@
 output "namespace" {
   description = "Kubernetes namespace"
-  value       = kubernetes_namespace.caelus.metadata[0].name
+  value       = var.namespace
 }
 
 output "api_service_name" {
   description = "API Kubernetes service name"
-  value       = module.caelus.api_service_name
+  value       = kubernetes_service.api.metadata[0].name
 }
 
 output "ui_service_name" {
   description = "UI Kubernetes service name"
-  value       = module.caelus.ui_service_name
+  value       = kubernetes_service.ui.metadata[0].name
 }
 
 output "ingress_host" {
   description = "External hostname"
-  value       = local.domain
+  value       = var.domain
 }
 
 output "api_endpoint" {
   description = "Full API endpoint URL"
-  value       = "https://${local.domain}/api"
+  value       = "https://${var.domain}/api"
 }

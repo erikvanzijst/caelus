@@ -1,7 +1,7 @@
 resource "kubernetes_config_map" "api" {
   metadata {
     name      = "caelus-api-config"
-    namespace = local.namespace
+    namespace = var.namespace
   }
 
   data = {
@@ -10,6 +10,4 @@ resource "kubernetes_config_map" "api" {
     # LOG_LEVEL        = "info"
     PYTHONUNBUFFERED = "1"
   }
-
-  depends_on = [kubernetes_namespace.main]
 }

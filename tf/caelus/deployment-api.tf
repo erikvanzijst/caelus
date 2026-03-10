@@ -1,9 +1,9 @@
-resource "kubernetes_deployment" "worker" {
+resource "kubernetes_deployment" "api" {
   metadata {
-    name      = "caelus-worker"
-    namespace = local.namespace
+    name      = "caelus-api"
+    namespace = var.namespace
     labels = {
-      app = "caelus-worker"
+      app = "caelus-api"
     }
   }
 
@@ -12,7 +12,7 @@ resource "kubernetes_deployment" "worker" {
 
     selector {
       match_labels = {
-        app = "caelus-worker"
+        app = "caelus-api"
       }
     }
 
@@ -27,7 +27,7 @@ resource "kubernetes_deployment" "worker" {
     template {
       metadata {
         labels = {
-          app = "caelus-worker"
+          app = "caelus-api"
         }
       }
 
@@ -58,9 +58,19 @@ resource "kubernetes_deployment" "worker" {
         }
 
         container {
-          image   = var.api_image
-          name    = "worker"
-          command = ["caelus", "worker", "--follow"]
+          image = var.api_image
+          name  = "api"
+
+          port {
+            name           = "http"
+            container_port = 8000
+            protocol       = "TCP"
+          }
+
+          env {
+            name  = "STATIC_PATH"
+            value = "/var/static"
+          }
 
           env_from {
             config_map_ref {
@@ -79,6 +89,21 @@ resource "kubernetes_deployment" "worker" {
             mount_path = "/app/db"
           }
 
+          volume_mount {
+            name       = "static-data"
+            mount_path = "/var/static"
+          }
+
+          # resources {
+          #   requests = {
+          #     memory = "128Mi"
+          #     cpu    = "100m"
+          #   }
+          #   limits = {
+          #     memory = "256Mi"
+          #     cpu    = "200m"
+          #   }
+          # }
         }
         volume {
           name = "sqlite-data"
@@ -86,9 +111,15 @@ resource "kubernetes_deployment" "worker" {
             claim_name = kubernetes_persistent_volume_claim.sqlite_pvc.metadata[0].name
           }
         }
+        volume {
+          name = "static-data"
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.static_pvc.metadata[0].name
+          }
+        }
       }
     }
   }
 
-  depends_on = [kubernetes_namespace.main, kubernetes_cluster_role_binding.api]
+  depends_on = [kubernetes_cluster_role_binding.api]
 }

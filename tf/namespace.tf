@@ -1,9 +1,9 @@
-resource "kubernetes_namespace" "main" {
+resource "kubernetes_namespace" "caelus" {
   metadata {
-    name = local.namespace
+    name = local.ns_caelus
 
     labels = {
-      name        = local.namespace
+      name        = local.ns_caelus
       environment = local.environment
     }
   }
@@ -15,9 +15,9 @@ resource "kubernetes_namespace" "keycloak" {
   }
 }
 
-resource "kubernetes_namespace" "oauth2-proxy" {
+resource "kubernetes_namespace" "login" {
   metadata {
-    name = "oauth2-proxy"
+    name = local.is_prod_workspace ? "login" : "login-dev"
   }
 }
 

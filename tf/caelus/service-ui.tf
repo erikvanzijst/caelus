@@ -1,7 +1,7 @@
 resource "kubernetes_service" "ui" {
   metadata {
     name      = "caelus-ui"
-    namespace = local.namespace
+    namespace = var.namespace
   }
 
   spec {
@@ -17,6 +17,4 @@ resource "kubernetes_service" "ui" {
 
     type = "ClusterIP"
   }
-
-  depends_on = [kubernetes_namespace.main]
 }

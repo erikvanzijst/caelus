@@ -89,7 +89,7 @@ resource "kubernetes_manifest" "oauth2_proxy_errors" {
     spec = {
       errors = {
         status = ["401"]
-        query  = "/oauth2/start?rd={url}"
+        query  = "/oauth2/start?rd=https://${var.domain}"
         statusRewrites = {
           "401" = "302"
         }

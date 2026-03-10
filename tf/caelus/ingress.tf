@@ -1,17 +1,17 @@
-resource "kubernetes_ingress_v1" "main" {
+resource "kubernetes_ingress_v1" "caelus" {
   metadata {
     name      = "caelus-ingress"
-    namespace = local.namespace
+    namespace = var.namespace
 
     annotations = {
       "traefik.ingress.kubernetes.io/router.entrypoints" = "web, websecure"
-      "traefik.ingress.kubernetes.io/router.middlewares" = "oauth2-proxy-oauth-errors@kubernetescrd, oauth2-proxy-forward-auth@kubernetescrd"
+      "traefik.ingress.kubernetes.io/router.middlewares" = "${var.ns_login}-oauth-errors@kubernetescrd, ${var.ns_login}-forward-auth@kubernetescrd"
     }
   }
 
   spec {
     rule {
-      host = local.domain
+      host = var.domain
 
       http {
         path {
@@ -44,6 +44,4 @@ resource "kubernetes_ingress_v1" "main" {
       }
     }
   }
-
-  depends_on = [kubernetes_namespace.main]
 }

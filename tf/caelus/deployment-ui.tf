@@ -1,7 +1,7 @@
 resource "kubernetes_deployment" "ui" {
   metadata {
     name      = "caelus-ui"
-    namespace = local.namespace
+    namespace = var.namespace
     labels = {
       app = "caelus-ui"
     }
@@ -56,6 +56,4 @@ resource "kubernetes_deployment" "ui" {
       }
     }
   }
-
-  depends_on = [kubernetes_namespace.main]
 }

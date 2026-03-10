@@ -17,41 +17,12 @@ variable "namespace" {
   nullable    = true
 }
 
-variable "db_name" {
-  description = "Postgres database name"
-  type        = string
-  default     = "caelus"
-}
-
-variable "db_user" {
-  description = "Postgres username"
-  type        = string
-  default     = "caelus"
-}
-
-variable "db_password" {
-  description = "Postgres password (use secrets.auto.tfvars)"
-  type        = string
-  sensitive   = true
-}
 
 variable "domain" {
   description = "External domain for ingress (null = workspace default)"
   type        = string
   default     = null
   nullable    = true
-}
-
-variable "api_replicas" {
-  description = "Number of API pod replicas"
-  type        = number
-  default     = 1
-}
-
-variable "ui_replicas" {
-  description = "Number of UI pod replicas"
-  type        = number
-  default     = 1
 }
 
 variable "environment" {
@@ -89,4 +60,10 @@ variable "smtp_username" {
   description = "SMTP username for outbound email"
   type        = string
   default     = "caelus@deprutser.be"
+}
+
+variable "db_password" {
+  description = "Postgres password (use secrets.auto.tfvars)"
+  type        = string
+  sensitive   = true
 }

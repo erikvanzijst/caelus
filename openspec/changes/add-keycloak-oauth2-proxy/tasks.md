@@ -42,18 +42,18 @@
 ## 4. Caelus Ingress Integration
 
 - [x] 4.1 Update Caelus Ingress to route through oauth2-proxy
-- [ ] 4.2 Verify X-Auth-Request-Email header is forwarded
-- [ ] 4.3 Test unauthenticated request redirect behavior
+- [x] 4.2 Verify X-Auth-Request-Email header is forwarded
+- [x] 4.3 Test unauthenticated request redirect behavior
 
 ## 5. Testing & Validation
 
-- [ ] 5.1 Test local user registration flow
-  - [ ] 5.1.1 Register new user
-  - [ ] 5.1.2 Verify email is sent
-  - [ ] 5.1.3 Verify email validation link works
+- [x] 5.1 Test local user registration flow
+  - [x] 5.1.1 Register new user
+  - [x] 5.1.2 Verify email is sent
+  - [x] 5.1.3 Verify email validation link works
 - [ ] 5.2 Test Google social login
 - [ ] 5.3 Test Apple social login
 - [ ] 5.4 Test Microsoft social login
 - [ ] 5.5 Verify X-Auth-Request-Email header reaches Caelus
-- [ ] 5.6 Test authenticated access to Caelus
-- [ ] 5.7 Test unauthenticated access redirects to login
+- [x] 5.6 Test authenticated access to Caelus
+- [x] 5.7 Test unauthenticated access redirects to login

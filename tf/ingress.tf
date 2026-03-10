@@ -4,9 +4,8 @@ resource "kubernetes_ingress_v1" "main" {
     namespace = local.namespace
 
     annotations = {
-      "kubernetes.io/ingress.class"                      = "traefik"
       "traefik.ingress.kubernetes.io/router.entrypoints" = "web, websecure"
-      "traefik.ingress.kubernetes.io/router.middlewares" = "oauth2-proxy-forward-auth@kubernetescrd"
+      "traefik.ingress.kubernetes.io/router.middlewares" = "oauth2-proxy-oauth-errors@kubernetescrd, oauth2-proxy-forward-auth@kubernetescrd"
     }
   }
 

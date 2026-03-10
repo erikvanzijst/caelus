@@ -15,4 +15,6 @@ module "oauth2-proxy" {
   domain                     = "app.deprutser.be"
   oauth2_proxy_client_secret = var.oauth2_proxy_client_secret
   oauth2_proxy_cookie_secret = var.oauth2_proxy_cookie_secret
+  google_client_id = var.google_client_id
+  google_client_secret = var.google_client_secret
 }

@@ -90,3 +90,11 @@ variable "smtp_username" {
   type        = string
   default     = "caelus@deprutser.be"
 }
+
+variable "google_client_id" {
+  type = string
+}
+
+variable "google_client_secret" {
+  type = string
+}

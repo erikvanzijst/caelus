@@ -27,15 +27,17 @@ resource "helm_release" "oauth2_proxy" {
         EOT
       }
       extraArgs = {
-        provider          = "keycloak-oidc"
-        oidc-issuer-url   = "https://keycloak.${var.domain}/realms/master"
-        redirect-url      = "https://login.${var.domain}/oauth2/callback"
+        provider             = "keycloak-oidc"
+        oidc-issuer-url      = "https://keycloak.${var.domain}/realms/master"
+        redirect-url         = "https://login.dev.deprutser.be/oauth2/callback"
         # cookie-domain     = ".dev.deprutser.be"
         # whitelist-domain  = ".dev.deprutser.be"
-        pass-user-headers = true
-        set-xauthrequest  = true
-        reverse-proxy     = true
-        skip-auth-route   = "GET=^/oauth2/.*"
+        pass-user-headers    = true
+        set-xauthrequest     = true
+        reverse-proxy        = true
+        skip-provider-button = true
+        upstream             = "static://202"
+        skip-auth-route      = "GET=^/oauth2/.*"
       }
       service = {
         enabled    = true
@@ -45,11 +47,9 @@ resource "helm_release" "oauth2_proxy" {
       ingress = {
         enabled          = true
         ingressClassName = "traefik"
-        hosts            = ["login.${var.domain}"]
-        paths            = ["/oauth2"]
-        annotations = {
-          "traefik.ingress.kubernetes.io/rule-type" = "path-only"
-        }
+        pathType         = "Prefix"
+        hosts = ["login.dev.deprutser.be"]
+        paths = ["/oauth2"]
       }
     })
   ]
@@ -75,6 +75,30 @@ resource "kubernetes_manifest" "oauth2_proxy_middleware" {
         authRequestHeaders = [
           "Cookie"
         ]
+      }
+    }
+  }
+}
+
+resource "kubernetes_manifest" "oauth2_proxy_errors" {
+  manifest = {
+    apiVersion = "traefik.io/v1alpha1"
+    kind       = "Middleware"
+    metadata = {
+      name      = "oauth-errors"
+      namespace = var.namespace
+    }
+    spec = {
+      errors = {
+        status = ["401"]
+        query  = "/oauth2/start?rd={url}"
+        statusRewrites = {
+          "401" = "302"
+        }
+        service = {
+          name = "oauth2-proxy"
+          port = 8080
+        }
       }
     }
   }

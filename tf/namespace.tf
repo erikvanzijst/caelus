@@ -31,3 +31,9 @@ resource "kubernetes_namespace" "auth_system" {
     }
   }
 }
+
+resource "kubernetes_namespace" "echo" {
+  metadata {
+    name = "echo"
+  }
+}

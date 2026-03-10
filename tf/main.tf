@@ -18,3 +18,9 @@ module "oauth2-proxy" {
   google_client_id = var.google_client_id
   google_client_secret = var.google_client_secret
 }
+
+module "echo" {
+  source                     = "./echo"
+  namespace                  = kubernetes_namespace.echo.metadata[0].name
+  domain                     = local.domain
+}

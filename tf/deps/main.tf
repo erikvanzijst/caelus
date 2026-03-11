@@ -22,3 +22,7 @@ module "echo" {
   namespace = kubernetes_namespace.echo.metadata[0].name
   domain    = "app.deprutser.be"
 }
+
+module "system" {
+  source = "./system"
+}

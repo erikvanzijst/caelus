@@ -54,37 +54,3 @@ resource "kubernetes_service" "echo" {
     }
   }
 }
-
-resource "kubernetes_ingress_v1" "echo" {
-  metadata {
-    name      = "echo"
-    namespace = var.namespace
-    annotations = {
-      "kubernetes.io/ingress.class"                         = "traefik"
-      # "traefik.ingress.kubernetes.io/router.entrypoints" = "websecure"
-    }
-  }
-
-  spec {
-    rule {
-      host = "echo.${var.domain}"
-
-      http {
-        path {
-          path      = "/"
-          path_type = "Prefix"
-
-          backend {
-            service {
-              name = kubernetes_service.echo.metadata[0].name
-
-              port {
-                number = 8080
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}

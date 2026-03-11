@@ -34,7 +34,7 @@ resource "kubernetes_ingress_v1" "caelus" {
 
           backend {
             service {
-              name = kubernetes_service.echo_proxy.metadata[0].name
+              name = kubernetes_service.echo.metadata[0].name
               port {
                 number = 8080
               }
@@ -80,23 +80,5 @@ data "kubernetes_service" "echo" {
   metadata {
     name      = "echo"
     namespace = "echo"
-  }
-}
-
-resource "kubernetes_endpoints" "echo_proxy" {
-  metadata {
-    # Must match the service name for Kubernetes to associate them.
-    name      = kubernetes_service.echo_proxy.metadata[0].name
-    namespace = var.namespace
-  }
-
-  subset {
-    address {
-      ip = data.kubernetes_service.echo.spec[0].cluster_ip
-    }
-
-    port {
-      port = 8080
-    }
   }
 }

@@ -32,7 +32,7 @@ resource "helm_release" "oauth2_proxy" {
         # whitelist-domain  = ".dev.deprutser.be"
         pass-user-headers    = true
         set-xauthrequest     = true
-        user-id-claim        = "sub"  # Keycloak's immutable user UUID, used as user_id in Caelus' DB
+        user-id-claim        = "sub"  # Keycloak's immutable user UUID
         reverse-proxy        = true
         skip-provider-button = true
         upstream             = "static://202"

@@ -30,7 +30,7 @@ def test_me_auto_creates_unknown_email(client):
     assert data["email"] == "newuser@example.com"
     assert data["is_admin"] is False
 
-    # Verify the user now appears in the user list
+    # Verify the user now appears in the user list (client is admin)
     users_resp = client.get("/api/users")
     emails = [u["email"] for u in users_resp.json()]
     assert "newuser@example.com" in emails
@@ -278,14 +278,12 @@ def test_deployment_write_contract_rejects_domainname(client):
     assert bad_update.status_code == 422
 
 
-def test_user_delete_flow(client):
+def test_user_delete_returns_501(client):
     # Create a user
     user = client.post("/api/users", json={"email": "del@example.com"})
     assert user.status_code == 201
     user_id = user.json()["id"]
-    # Delete the user
+    # User deletion is disabled
     delete_resp = client.delete(f"/api/users/{user_id}")
-    assert delete_resp.status_code == 204
-    # Verify user is gone
-    get_resp = client.get(f"/api/users/{user_id}")
-    assert get_resp.status_code == 404
+    assert delete_resp.status_code == 501
+    assert delete_resp.json()["detail"] == "User deletion is not yet implemented"

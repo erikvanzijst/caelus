@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.db import get_session
-from app.deps import get_current_user
+from app.deps import get_current_user, require_admin, require_self
 from app.models import (
     DeploymentCreate,
     DeploymentRead,
@@ -27,7 +27,7 @@ def get_me(current_user: UserORM = Depends(get_current_user)) -> UserRead:
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: UserCreate,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> UserRead:
     return user_service.create_user(session, payload)
@@ -35,25 +35,27 @@ def create_user(
 
 @router.get("", response_model=list[UserRead])
 def list_users(
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> list[UserRead]:
     return user_service.list_users(session)
 
 
-@router.delete("/{user_id}", status_code=204)
+@router.delete("/{user_id}", status_code=501)
 def delete_user_endpoint(
     user_id: int,
-    _current_user: UserORM = Depends(get_current_user),
-    session: Session = Depends(get_session),
+    current_user: UserORM = Depends(get_current_user),
 ) -> None:
-    user_service.delete_user(session, user_id=user_id)
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="User deletion is not yet implemented",
+    )
 
 
 @router.get("/{user_id}", response_model=UserRead)
 def get_user(
     user_id: int,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> UserRead:
     return user_service.get_user(session, user_id=user_id)
@@ -67,7 +69,7 @@ def get_user(
 def create_deployment(
     user_id: int,
     payload: DeploymentCreate,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> DeploymentRead:
     payload.user_id = user_id
@@ -78,7 +80,7 @@ def create_deployment(
 @router.get("/{user_id}/deployments", response_model=list[DeploymentRead])
 def list_deployments(
     user_id: int,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ):
     return deployment_service.list_deployments(session, user_id=user_id)
@@ -88,7 +90,7 @@ def list_deployments(
 def get_deployment(
     user_id: int,
     deployment_id: int,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> DeploymentRead:
     return deployment_service.get_deployment(session, user_id=user_id, deployment_id=deployment_id)
@@ -99,7 +101,7 @@ def update_deployment(
     user_id: int,
     deployment_id: int,
     deployment: DeploymentUpdate,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> DeploymentRead:
     deployment.user_id = user_id
@@ -111,7 +113,7 @@ def update_deployment(
 def delete_deployment_endpoint(
     user_id: int,
     deployment_id: int,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> None:
     deployment_service.delete_deployment(session, user_id=user_id, deployment_id=deployment_id)

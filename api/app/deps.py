@@ -5,8 +5,7 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import UserORM, UserCreate
-from app.services import users as user_service
+from app.models import UserORM
 
 
 def get_current_user(
@@ -32,3 +31,20 @@ def get_current_user(
         session.refresh(user)
 
     return user
+
+
+def require_admin(
+    current_user: UserORM = Depends(get_current_user),
+) -> UserORM:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return current_user
+
+
+def require_self(
+    user_id: int,
+    current_user: UserORM = Depends(get_current_user),
+) -> UserORM:
+    if current_user.id != user_id and not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return current_user

@@ -10,6 +10,7 @@ Every API endpoint currently verifies authentication (a valid user exists via `X
 - **Disable** `DELETE /api/users/{user_id}` with HTTP 501 — user deletion has unresolved business logic (active deployments, future billing).
 - Product `GET` endpoints remain open to any authenticated user.
 - `GET /api/me` remains unchanged.
+- UI: Admin button in the page header is only visible to admin users (consumes `is_admin` from `GET /api/me`).
 - Authorization lives only in the API layer; service layer and CLI are unaffected.
 
 ## Capabilities

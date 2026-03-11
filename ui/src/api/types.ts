@@ -4,6 +4,7 @@ export type DeploymentStatus = 'provisioning' | 'ready' | 'deleting' | 'deleted'
 export interface User {
   id: number
   email: string
+  is_admin: boolean
   created_at: IsoDate
 }
 

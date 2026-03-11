@@ -16,7 +16,7 @@ from starlette.datastructures import UploadFile
 from sqlmodel import Session
 
 from app.db import get_session
-from app.deps import get_current_user
+from app.deps import get_current_user, require_admin
 from app.models import (
     ProductRead,
     ProductCreate,
@@ -88,7 +88,7 @@ async def parse_product_request(request: Request) -> tuple[ProductCreate, bytes 
 @router.post("", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
 async def create_product(
     request: Request,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> ProductRead:
     payload, icon_data = await parse_product_request(request)
@@ -117,7 +117,7 @@ def get_product(
 def update_product(
     product_id: int,
     product: ProductUpdate,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> ProductRead:
     product.id = product_id
@@ -127,7 +127,7 @@ def update_product(
 @router.delete("/{product_id}", status_code=204)
 def delete_product_endpoint(
     product_id: int,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> None:
     product_service.delete_product(session, product_id=product_id)
@@ -141,7 +141,7 @@ def delete_product_endpoint(
 def create_template(
     product_id: int,
     payload: ProductTemplateVersionCreate,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ):
     payload.product_id = product_id
@@ -171,7 +171,7 @@ def get_template(
 def delete_template_endpoint(
     product_id: int,
     template_id: int,
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> None:
     template_service.delete_template(session, product_id=product_id, template_id=template_id)
@@ -181,7 +181,7 @@ def delete_template_endpoint(
 def upload_icon(
     product_id: int,
     icon: FastAPIUploadFile = File(...),
-    _current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> ProductRead:
     icon_data = icon.file.read()

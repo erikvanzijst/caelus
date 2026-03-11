@@ -73,15 +73,17 @@ function AppShell({ children }: PropsWithChildren) {
             >
               Dashboard
             </Button>
-            <Button
-              component={NavLink}
-              to="/admin"
-              variant="outlined"
-              color="secondary"
-              sx={{ borderColor: 'rgba(236, 72, 153, 0.35)' }}
-            >
-              Admin
-            </Button>
+            {user?.is_admin && (
+              <Button
+                component={NavLink}
+                to="/admin"
+                variant="outlined"
+                color="secondary"
+                sx={{ borderColor: 'rgba(236, 72, 153, 0.35)' }}
+              >
+                Admin
+              </Button>
+            )}
           </Stack>
           <Box sx={{ flex: 1 }} />
           <Stack direction="row" spacing={1} alignItems="center">

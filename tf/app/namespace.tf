@@ -9,20 +9,8 @@ resource "kubernetes_namespace" "caelus" {
   }
 }
 
-resource "kubernetes_namespace" "keycloak" {
-  metadata {
-    name = "keycloak"
-  }
-}
-
 resource "kubernetes_namespace" "login" {
   metadata {
     name = local.is_prod_workspace ? "login" : "login-dev"
-  }
-}
-
-resource "kubernetes_namespace" "echo" {
-  metadata {
-    name = "echo"
   }
 }

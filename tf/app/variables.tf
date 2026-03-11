@@ -32,12 +32,6 @@ variable "environment" {
   nullable    = true
 }
 
-variable "keycloak_admin_password" {
-  description = "Keycloak admin password (use secrets.auto.tfvars)"
-  type        = string
-  sensitive   = true
-}
-
 variable "oauth2_proxy_client_secret" {
   description = "OAuth2-proxy client secret for Keycloak"
   type        = string

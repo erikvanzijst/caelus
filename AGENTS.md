@@ -3,6 +3,7 @@
 This repository is a monorepo with:
 - `api/`: FastAPI + SQLModel service with a Typer CLI for provisioning.
 - `ui/`: React + TypeScript + MUI frontend for the API.
+- `tf/`: Terraform infrastructure for deploying to Kubernetes.
 
 ## Project Goals
 - Provision user-owned webapp instances on Kubernetes (pods, PVCs, ingress).
@@ -29,6 +30,21 @@ For details, see `api/README.md`.
 - Run UI: `npm run dev`
 - Build: `npm run build`
 For details, see `ui/README.md`.
+
+### Terraform (`tf/`)
+
+The Terraform infrastructure is split into two independent root modules:
+
+- `tf/app/`: Caelus application resources (API, UI, worker, OAuth2-proxy,
+  Postgres). Uses Terraform workspaces for dev (`default`) and prod (`prod`)
+  environment separation.
+- `tf/deps/`: Shared singleton dependencies (Keycloak, Echo). No workspaces;
+  single instance shared across all environments.
+
+Both deploy to the same k3s cluster. Deploy `tf/deps/` first, then
+`tf/app/`. Each has its own `secrets.auto.tfvars` (gitignored).
+
+For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
 
 ## Conventions
 - Keep CLI and REST functionality in lockstep.
@@ -68,4 +84,5 @@ For details, see `ui/README.md`.
 - Update or add tests for new behavior.
 - Keep API + CLI parity (same features and validations).
 - Update migrations for schema changes.
-- Update api/README.md, ui/README.md and AGENTS.md when workflow changes.
+- Update api/README.md, ui/README.md, tf/README.md, and AGENTS.md when
+  workflow changes.

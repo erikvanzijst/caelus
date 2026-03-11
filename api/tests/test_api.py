@@ -1,4 +1,102 @@
-from tests.conftest import client
+from starlette.testclient import TestClient
+
+from tests.conftest import client, db_session
+
+from app.db import get_session
+from app.main import app as fastapi_app
+
+
+# ── /api/me tests ─────────────────────────────────────────────────────
+
+
+def test_me_returns_user_for_known_email(client, db_session):
+    # Pre-create a user via the normal endpoint
+    resp = client.post("/api/users", json={"email": "known@example.com"})
+    assert resp.status_code == 201
+
+    # Now call /api/me with that email
+    me_resp = client.get("/api/me", headers={"X-Auth-Request-Email": "known@example.com"})
+    assert me_resp.status_code == 200
+    data = me_resp.json()
+    assert data["email"] == "known@example.com"
+    assert "id" in data
+    assert "is_admin" in data
+
+
+def test_me_auto_creates_unknown_email(client):
+    me_resp = client.get("/api/me", headers={"X-Auth-Request-Email": "newuser@example.com"})
+    assert me_resp.status_code == 200
+    data = me_resp.json()
+    assert data["email"] == "newuser@example.com"
+    assert data["is_admin"] is False
+
+    # Verify the user now appears in the user list
+    users_resp = client.get("/api/users")
+    emails = [u["email"] for u in users_resp.json()]
+    assert "newuser@example.com" in emails
+
+
+def test_me_case_insensitive_email(client, db_session):
+    # Create a user with lowercase email
+    client.post("/api/users", json={"email": "alice@example.com"})
+
+    # Call /api/me with mixed-case variant
+    me_resp = client.get("/api/me", headers={"X-Auth-Request-Email": "Alice@Example.COM"})
+    assert me_resp.status_code == 200
+    assert me_resp.json()["email"] == "alice@example.com"
+
+
+def test_me_returns_404_when_header_missing(db_session):
+    # Use a client WITHOUT the default auth header
+    def override_get_db():
+        yield db_session
+
+    fastapi_app.dependency_overrides[get_session] = override_get_db
+    with TestClient(fastapi_app) as no_auth_client:
+        resp = no_auth_client.get("/api/me")
+        assert resp.status_code == 404
+    fastapi_app.dependency_overrides.clear()
+
+
+# ── Auth enforcement on existing endpoints ────────────────────────────
+
+
+def test_endpoints_return_404_without_auth_header(db_session):
+    """All protected endpoints should return 404 when X-Auth-Request-Email is absent."""
+    def override_get_db():
+        yield db_session
+
+    fastapi_app.dependency_overrides[get_session] = override_get_db
+    with TestClient(fastapi_app) as no_auth_client:
+        endpoints = [
+            ("GET", "/api/users"),
+            ("POST", "/api/users"),
+            ("GET", "/api/users/1"),
+            ("DELETE", "/api/users/1"),
+            ("GET", "/api/users/1/deployments"),
+            ("POST", "/api/users/1/deployments"),
+            ("GET", "/api/users/1/deployments/1"),
+            ("PUT", "/api/users/1/deployments/1"),
+            ("DELETE", "/api/users/1/deployments/1"),
+            ("GET", "/api/products"),
+            ("POST", "/api/products"),
+            ("GET", "/api/products/1"),
+            ("PUT", "/api/products/1"),
+            ("DELETE", "/api/products/1"),
+            ("POST", "/api/products/1/templates"),
+            ("GET", "/api/products/1/templates"),
+            ("GET", "/api/products/1/templates/1"),
+            ("DELETE", "/api/products/1/templates/1"),
+        ]
+        for method, path in endpoints:
+            resp = no_auth_client.request(method, path)
+            assert resp.status_code == 404, (
+                f"{method} {path} returned {resp.status_code}, expected 404"
+            )
+    fastapi_app.dependency_overrides.clear()
+
+
+# ── Existing tests ────────────────────────────────────────────────────
 
 
 def test_product(client):

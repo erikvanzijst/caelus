@@ -1,3 +1,5 @@
+import { getStoredAuthHeaders } from '../state/useAuthEmail'
+
 const envUrl = import.meta.env.VITE_API_URL as string | undefined
 
 export const API_URL = envUrl ?? '/api'
@@ -21,14 +23,15 @@ function toErrorMessage(detail: unknown, fallback: string) {
 
 export async function requestJson<T>(
   path: string,
-  options: RequestInit & { authEmail?: string } = {},
+  options: RequestInit = {},
 ): Promise<T> {
-  const { authEmail, headers, ...rest } = options
+  const { headers, ...rest } = options
+  const authHeaders = getStoredAuthHeaders()
   const response = await fetch(`${API_URL}${path}`, {
     ...rest,
     headers: {
       'Content-Type': 'application/json',
-      ...(authEmail ? { 'x-auth-request-email': authEmail } : {}),
+      ...authHeaders,
       ...(headers ?? {}),
     },
   })
@@ -56,9 +59,10 @@ export async function requestMultipart<T>(
   path: string,
   payload: object,
   file?: { field: string; file: File | Blob },
-  options: RequestInit & { authEmail?: string } = {},
+  options: RequestInit = {},
 ): Promise<T> {
-  const { authEmail, headers, ...rest } = options
+  const { headers, ...rest } = options
+  const authHeaders = getStoredAuthHeaders()
   const formData = new FormData()
   formData.append('payload', JSON.stringify(payload))
   if (file) {
@@ -70,7 +74,7 @@ export async function requestMultipart<T>(
     method: 'POST',
     body: formData,
     headers: {
-      ...(authEmail ? { 'x-auth-request-email': authEmail } : {}),
+      ...authHeaders,
       ...(headers ?? {}),
     },
   })

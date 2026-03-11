@@ -39,6 +39,53 @@ deployment lifecycle operations. Both call the same service layer.
 - `alembic/`: database migration history.
 - `tests/`: API, CLI, service, and adapter tests.
 
+## Authentication
+
+All API endpoints (except `/api/docs` and `/api/static`) require
+authentication via the `X-Auth-Request-Email` header. Endpoints return
+`404` when the header is absent.
+
+### How it works
+
+- In production, Traefik routes requests through oauth2-proxy, which
+  injects `X-Auth-Request-Email` after Keycloak authentication.
+- In local development, the frontend sets this header from localStorage
+  after the user enters their email in the dialog.
+- The backend trusts the header unconditionally — behavior is identical
+  regardless of header source.
+
+### GET /api/me
+
+Session initialization endpoint. Returns the authenticated user or `404`.
+
+- If the email matches an existing user: returns `200` with `UserRead`.
+- If the email is new: auto-creates a user record, returns `200`.
+- If no header: returns `404`.
+- Email matching is case-insensitive.
+
+### FastAPI dependency: `get_current_user`
+
+Defined in `app/deps.py`. Resolves `X-Auth-Request-Email` to a `UserORM`
+with auto-creation. Injected into all endpoint functions via
+`Depends(get_current_user)`.
+
+### CLI authentication
+
+The CLI authenticates via the `CAELUS_USER_EMAIL` environment variable.
+An optional `--as-user` flag overrides the env var:
+
+```bash
+# Via environment variable
+export CAELUS_USER_EMAIL=alice@example.com
+caelus list-users
+
+# Via flag (overrides env var)
+caelus --as-user bob@example.com list-users
+```
+
+Commands that require user context exit with code 1 and a clear error
+when neither is configured.
+
 ## Request Flow (How Work Actually Moves)
 
 1. API or CLI receives a command.

@@ -10,14 +10,13 @@ import {
   Typography,
 } from '@mui/material'
 import type { PropsWithChildren } from 'react'
-import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import EmailDialog from './EmailDialog'
-import { useAuthEmail } from '../state/useAuthEmail'
+import { useAuth } from '../state/AuthContext'
 
 function AppShell({ children }: PropsWithChildren) {
-  const { email, setEmail } = useAuthEmail()
-  const [dialogOpen, setDialogOpen] = useState(!email)
+  const { user, loading, email, setEmail } = useAuth()
+  const showDialog = !loading && !user
 
   return (
     <Box sx={{ minHeight: '100vh', position: 'relative' }}>
@@ -87,13 +86,10 @@ function AppShell({ children }: PropsWithChildren) {
           <Box sx={{ flex: 1 }} />
           <Stack direction="row" spacing={1} alignItems="center">
             <Chip
-              label={email ? `Signed in as ${email}` : 'No email set'}
+              label={user ? `Signed in as ${user.email}` : 'No email set'}
               variant="outlined"
               sx={{ bgcolor: 'rgba(15, 23, 42, 0.04)' }}
             />
-            <Button variant="contained" onClick={() => setDialogOpen(true)}>
-              Switch
-            </Button>
           </Stack>
         </Toolbar>
       </AppBar>
@@ -101,11 +97,10 @@ function AppShell({ children }: PropsWithChildren) {
         {children}
       </Container>
       <EmailDialog
-        open={dialogOpen || !email}
+        open={showDialog}
         current={email}
         onSave={(value) => {
           setEmail(value)
-          setDialogOpen(false)
         }}
       />
     </Box>

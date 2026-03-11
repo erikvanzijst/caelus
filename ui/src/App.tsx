@@ -2,16 +2,19 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import Admin from './pages/Admin'
 import Dashboard from './pages/Dashboard'
+import { AuthProvider } from './state/AuthContext'
 
 function App() {
   return (
-    <AppShell>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/admin" element={<Admin />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AppShell>
+    <AuthProvider>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppShell>
+    </AuthProvider>
   )
 }
 

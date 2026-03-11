@@ -1,23 +1,49 @@
 import { useEffect, useState } from 'react'
 
-const STORAGE_KEY = 'caelus.auth.email'
+const HEADERS_KEY = 'caelus.auth.headers'
 
-export function getStoredEmail() {
-  if (typeof window === 'undefined') return ''
-  return window.localStorage.getItem(STORAGE_KEY) ?? ''
+export type AuthHeaders = Record<string, string>
+
+export function getStoredAuthHeaders(): AuthHeaders {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(HEADERS_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as AuthHeaders
+    }
+  } catch {
+    // corrupted value — ignore
+  }
+  return {}
 }
 
-export function useAuthEmail() {
-  const [email, setEmail] = useState(getStoredEmail)
+function getEmailFromHeaders(headers: AuthHeaders): string {
+  return headers['X-Auth-Request-Email'] ?? ''
+}
+
+export function useAuthHeaders() {
+  const [headers, setHeaders] = useState<AuthHeaders>(getStoredAuthHeaders)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (email) {
-      window.localStorage.setItem(STORAGE_KEY, email)
+    if (Object.keys(headers).length > 0) {
+      window.localStorage.setItem(HEADERS_KEY, JSON.stringify(headers))
     } else {
-      window.localStorage.removeItem(STORAGE_KEY)
+      window.localStorage.removeItem(HEADERS_KEY)
     }
-  }, [email])
+  }, [headers])
 
-  return { email, setEmail }
+  const email = getEmailFromHeaders(headers)
+
+  const setEmail = (newEmail: string) => {
+    if (newEmail) {
+      setHeaders({ 'X-Auth-Request-Email': newEmail })
+    } else {
+      setHeaders({})
+    }
+  }
+
+  return { headers, setHeaders, email, setEmail }
 }

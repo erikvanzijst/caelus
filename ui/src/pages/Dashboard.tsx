@@ -16,55 +16,31 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import {
   createDeployment,
-  createUser,
   deleteDeployment,
   listDeployments,
   listProducts,
   listTemplates,
-  listUsers,
 } from '../api/endpoints'
-import type { Product, ProductTemplate, User } from '../api/types'
-import { useAuthEmail } from '../state/useAuthEmail'
+import type { Product, ProductTemplate } from '../api/types'
+import { useAuth } from '../state/AuthContext'
 import { isTransitionalStatus, statusColor } from '../utils/deploymentStatus'
 import { ensureUrl, formatDateTime } from '../utils/format'
 import { UserValuesForm, validateUserValues } from '../components/UserValuesForm'
 
 function Dashboard() {
   const queryClient = useQueryClient()
-  const { email } = useAuthEmail()
+  const { user } = useAuth()
   const [selectedProductId, setSelectedProductId] = useState<number | ''>('')
   const [userValues, setUserValues] = useState<Record<string, unknown> | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [userValuesErrors, setUserValuesErrors] = useState<string[]>([])
   const [deletePendingIds, setDeletePendingIds] = useState<Set<number>>(new Set())
 
-  const usersQuery = useQuery({
-    queryKey: ['users'],
-    queryFn: () => listUsers(email),
-    enabled: Boolean(email),
-  })
-
   const productsQuery = useQuery({
     queryKey: ['products'],
-    queryFn: () => listProducts(email),
-    enabled: Boolean(email),
+    queryFn: () => listProducts(),
+    enabled: Boolean(user),
   })
-
-  const currentUser = useMemo<User | undefined>(() => {
-    return usersQuery.data?.find((user) => user.email === email)
-  }, [usersQuery.data, email])
-
-  const createUserMutation = useMutation({
-    mutationFn: (newEmail: string) => createUser(newEmail, email),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
-  })
-
-  useEffect(() => {
-    if (!email || usersQuery.isLoading || usersQuery.isError) return
-    if (!currentUser && !createUserMutation.isPending) {
-      createUserMutation.mutate(email)
-    }
-  }, [email, usersQuery.isLoading, usersQuery.isError, currentUser, createUserMutation])
 
   const availableProducts = useMemo<Product[]>(() => {
     return (productsQuery.data ?? []).filter((product) => Boolean(product.template_id))
@@ -86,7 +62,7 @@ function Dashboard() {
 
   const canonicalTemplateQuery = useQuery({
     queryKey: ['templates', selectedProductId],
-    queryFn: () => listTemplates(selectedProductId as number, email),
+    queryFn: () => listTemplates(selectedProductId as number),
     enabled: Boolean(selectedProductId),
   })
 
@@ -95,9 +71,9 @@ function Dashboard() {
   }, [canonicalTemplateQuery.data, selectedProduct?.template_id])
 
   const deploymentsQuery = useQuery({
-    queryKey: ['deployments', currentUser?.id],
-    queryFn: () => listDeployments(currentUser!.id, email),
-    enabled: Boolean(currentUser?.id),
+    queryKey: ['deployments', user?.id],
+    queryFn: () => listDeployments(user!.id),
+    enabled: Boolean(user?.id),
     refetchInterval: (query) => {
       const items = query.state.data ?? []
       return items.some((deployment) => isTransitionalStatus(deployment.status)) ? 3000 : false
@@ -109,7 +85,6 @@ function Dashboard() {
       createDeployment(
         payload.userId,
         { desired_template_id: payload.templateId, user_values_json: payload.userValuesJson },
-        email,
       ),
     onSuccess: () => {
       setUserValues(null)
@@ -133,7 +108,7 @@ function Dashboard() {
 
   const deleteDeploymentMutation = useMutation({
     mutationFn: (deploymentId: number) =>
-      deleteDeployment(currentUser!.id, deploymentId, email),
+      deleteDeployment(user!.id, deploymentId),
     onMutate: (deploymentId) => {
       setDeletePendingIds((previous) => new Set(previous).add(deploymentId))
       return { deploymentId }
@@ -165,7 +140,7 @@ function Dashboard() {
   }, [deploymentsQuery.data])
 
   const handleCreateDeployment = () => {
-    if (!currentUser) return
+    if (!user) return
     if (!selectedProduct?.template_id) {
       setFormError('Select a product with a canonical template set in Admin.')
       return
@@ -186,7 +161,7 @@ function Dashboard() {
     setUserValuesErrors([])
     const valuesToSend = userValues ?? canonicalTemplate?.default_values_json ?? undefined
     createDeploymentMutation.mutate({
-      userId: currentUser.id,
+      userId: user.id,
       templateId: selectedProduct.template_id,
       userValuesJson: valuesToSend,
     })
@@ -223,7 +198,7 @@ function Dashboard() {
               <Button
                 variant="contained"
                 onClick={handleCreateDeployment}
-                disabled={createDeploymentMutation.isPending || !currentUser || !availableProducts.length}
+                disabled={createDeploymentMutation.isPending || !user || !availableProducts.length}
               >
                 Launch
               </Button>

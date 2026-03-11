@@ -129,12 +129,12 @@ def test_cli_user_flow(cli_runner):
     created_user = _parse_yaml_stdout(result)
     assert created_user["email"] == "cli@example.com"
 
-    # List users to verify creation
+    # List users to verify creation (includes auto-created auth user)
     result = runner.invoke(app, ["list-users"])
     assert result.exit_code == 0
     users = _parse_yaml_stdout(result)
-    assert len(users) == 1
-    assert users[0]["email"] == "cli@example.com"
+    emails = [u["email"] for u in users]
+    assert "cli@example.com" in emails
 
 
 def test_cli_product_flow(cli_runner):
@@ -165,10 +165,6 @@ def test_cli_product_flow(cli_runner):
     assert list_res2.exit_code == 0
     assert _parse_yaml_stdout(list_res2) == []
 
-    result = runner.invoke(app, ["list-users"])
-    assert result.exit_code == 0
-    assert _parse_yaml_stdout(result) == []
-
     result = runner.invoke(app, ["create-user", "cli@example.com"])
     assert result.exit_code == 0
     assert _parse_yaml_stdout(result)["email"] == "cli@example.com"
@@ -176,8 +172,8 @@ def test_cli_product_flow(cli_runner):
     result = runner.invoke(app, ["list-users"])
     assert result.exit_code == 0
     users = _parse_yaml_stdout(result)
-    assert len(users) == 1
-    assert users[0]["email"] == "cli@example.com"
+    emails = [u["email"] for u in users]
+    assert "cli@example.com" in emails
 
 
 def test_cli_update_product_supports_template_and_description(cli_runner):
@@ -372,8 +368,9 @@ def test_cli_get_user_command(cli_runner):
 
     create_res = runner.invoke(app, ["create-user", "getuser@example.com"])
     assert create_res.exit_code == 0
+    user_id = _parse_yaml_stdout(create_res)["id"]
 
-    get_res = runner.invoke(app, ["get-user", "1"])
+    get_res = runner.invoke(app, ["get-user", str(user_id)])
     assert get_res.exit_code == 0
     assert _parse_yaml_stdout(get_res)["email"] == "getuser@example.com"
 
@@ -946,3 +943,39 @@ def test_cli_create_product_without_icon(cli_runner):
     product = _parse_yaml_stdout(create_res)
     assert product["name"] == "noicon-prod"
     assert product["icon_url"] is None
+
+
+# ── CLI authentication tests ──────────────────────────────────────────
+
+
+def test_cli_auth_via_env_var(cli_runner):
+    """CAELUS_USER_EMAIL env var authenticates the CLI user."""
+    runner, app = cli_runner
+    # The fixture sets CAELUS_USER_EMAIL=cli-test@example.com
+    # Running any command should auto-create that user
+    result = runner.invoke(app, ["list-users"])
+    assert result.exit_code == 0
+    users = _parse_yaml_stdout(result)
+    emails = [u["email"] for u in users]
+    assert "cli-test@example.com" in emails
+
+
+def test_cli_auth_as_user_override(cli_runner, monkeypatch):
+    """--as-user flag overrides CAELUS_USER_EMAIL."""
+    runner, app = cli_runner
+    # Even though CAELUS_USER_EMAIL=cli-test@example.com, --as-user wins
+    result = runner.invoke(app, ["--as-user", "override@example.com", "list-users"])
+    assert result.exit_code == 0
+    users = _parse_yaml_stdout(result)
+    emails = [u["email"] for u in users]
+    assert "override@example.com" in emails
+
+
+def test_cli_auth_missing_email_errors(cli_runner, monkeypatch):
+    """CLI commands fail with clear error when no email is configured."""
+    runner, app = cli_runner
+    monkeypatch.delenv("CAELUS_USER_EMAIL", raising=False)
+    result = runner.invoke(app, ["list-users"])
+    assert result.exit_code == 1
+    assert "No user email configured" in result.output
+    assert "CAELUS_USER_EMAIL" in result.output

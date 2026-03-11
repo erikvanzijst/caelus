@@ -14,6 +14,10 @@ This repository is a monorepo with:
 - API and CLI are thin facades over services in `api/app/services/`.
 - Provisioning is stubbed in `api/app/provisioner.py` and should be replaced with a K8s implementation.
 - Product Templates are scoped to products; deployments are scoped to users.
+- Authentication: All API endpoints require `X-Auth-Request-Email` header
+  (injected by oauth2-proxy in production, set by frontend in local dev).
+  `GET /api/me` is the session initialization endpoint. CLI uses
+  `CAELUS_USER_EMAIL` env var with optional `--as-user` override.
 
 ## Quick Start
 ### API (`api/`)

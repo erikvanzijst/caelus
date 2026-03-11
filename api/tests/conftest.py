@@ -37,6 +37,7 @@ def cli_runner(tmp_path, monkeypatch):
     if db_path.exists():
         db_path.unlink()
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+    monkeypatch.setenv("CAELUS_USER_EMAIL", "cli-test@example.com")
 
     import app.db as db
 
@@ -50,6 +51,9 @@ def cli_runner(tmp_path, monkeypatch):
     return CliRunner(), cli.app
 
 
+AUTH_HEADER = {"X-Auth-Request-Email": "test@example.com"}
+
+
 @pytest.fixture
 def client(db_session):
     def override_get_db():
@@ -57,7 +61,7 @@ def client(db_session):
 
     app.dependency_overrides[get_session] = override_get_db
 
-    with TestClient(app) as client:
+    with TestClient(app, headers=AUTH_HEADER) as client:
         yield client
 
     app.dependency_overrides.clear()

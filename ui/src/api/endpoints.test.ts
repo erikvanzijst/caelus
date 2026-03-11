@@ -20,7 +20,6 @@ describe('endpoints payload contracts', () => {
     await createTemplate(
       4,
       { chart_ref: 'ghcr.io/org/chart', chart_version: '1.2.3', values_schema_json: schema },
-      'a@b.com',
     )
 
     expect(requestJson).toHaveBeenCalledWith('/products/4/templates', {
@@ -30,7 +29,6 @@ describe('endpoints payload contracts', () => {
         chart_version: '1.2.3',
         values_schema_json: schema,
       }),
-      authEmail: 'a@b.com',
     })
   })
 
@@ -46,7 +44,6 @@ describe('endpoints payload contracts', () => {
     await createTemplate(
       4,
       { chart_ref: 'ghcr.io/org/chart', chart_version: '1.2.3', default_values_json: defaults },
-      'a@b.com',
     )
 
     expect(requestJson).toHaveBeenCalledWith('/products/4/templates', {
@@ -56,21 +53,19 @@ describe('endpoints payload contracts', () => {
         chart_version: '1.2.3',
         default_values_json: defaults,
       }),
-      authEmail: 'a@b.com',
     })
   })
 
   it('creates deployments with desired_template_id payload', async () => {
     vi.mocked(requestJson).mockResolvedValueOnce({} as never)
 
-    await createDeployment(3, { desired_template_id: 7 }, 'a@b.com')
+    await createDeployment(3, { desired_template_id: 7 })
 
     expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
       method: 'POST',
       body: JSON.stringify({
         desired_template_id: 7,
       }),
-      authEmail: 'a@b.com',
     })
   })
 
@@ -84,7 +79,6 @@ describe('endpoints payload contracts', () => {
     await createDeployment(
       3,
       { desired_template_id: 7, user_values_json: userValues },
-      'a@b.com',
     )
 
     expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
@@ -93,7 +87,6 @@ describe('endpoints payload contracts', () => {
         desired_template_id: 7,
         user_values_json: userValues,
       }),
-      authEmail: 'a@b.com',
     })
   })
 
@@ -105,7 +98,7 @@ describe('endpoints payload contracts', () => {
       user: { message: 'Hello' },
     }
 
-    await createDeployment(3, { desired_template_id: 7, user_values_json: userValues }, 'a@b.com')
+    await createDeployment(3, { desired_template_id: 7, user_values_json: userValues })
 
     expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
       method: 'POST',
@@ -113,7 +106,6 @@ describe('endpoints payload contracts', () => {
         desired_template_id: 7,
         user_values_json: userValues,
       }),
-      authEmail: 'a@b.com',
     })
   })
 })

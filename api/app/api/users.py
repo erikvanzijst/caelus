@@ -4,34 +4,58 @@ from fastapi import APIRouter, Depends, status
 from sqlmodel import Session
 
 from app.db import get_session
+from app.deps import get_current_user
 from app.models import (
     DeploymentCreate,
     DeploymentRead,
     UserCreate,
+    UserORM,
     UserRead, DeploymentUpdate,
 )
 from app.services import deployments as deployment_service, users as user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+me_router = APIRouter(tags=["users"])
+
+
+@me_router.get("/me", response_model=UserRead)
+def get_me(current_user: UserORM = Depends(get_current_user)) -> UserRead:
+    return UserRead.model_validate(current_user)
+
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, session: Session = Depends(get_session)) -> UserRead:
+def create_user(
+    payload: UserCreate,
+    _current_user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> UserRead:
     return user_service.create_user(session, payload)
 
 
 @router.get("", response_model=list[UserRead])
-def list_users(session: Session = Depends(get_session)) -> list[UserRead]:
+def list_users(
+    _current_user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> list[UserRead]:
     return user_service.list_users(session)
 
 
 @router.delete("/{user_id}", status_code=204)
-def delete_user_endpoint(user_id: int, session: Session = Depends(get_session)) -> None:
+def delete_user_endpoint(
+    user_id: int,
+    _current_user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> None:
     user_service.delete_user(session, user_id=user_id)
 
 
 @router.get("/{user_id}", response_model=UserRead)
-def get_user(user_id: int, session: Session = Depends(get_session)) -> UserRead:
+def get_user(
+    user_id: int,
+    _current_user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> UserRead:
     return user_service.get_user(session, user_id=user_id)
 
 
@@ -40,20 +64,33 @@ def get_user(user_id: int, session: Session = Depends(get_session)) -> UserRead:
     response_model=DeploymentRead,
     status_code=status.HTTP_201_CREATED,
 )
-def create_deployment(user_id: int, payload: DeploymentCreate,
-                      session: Session = Depends(get_session)) -> DeploymentRead:
+def create_deployment(
+    user_id: int,
+    payload: DeploymentCreate,
+    _current_user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> DeploymentRead:
     payload.user_id = user_id
     # TODO: validate that the template exists and is associated with the scoped product
     return deployment_service.create_deployment(session, payload=payload)
 
 
 @router.get("/{user_id}/deployments", response_model=list[DeploymentRead])
-def list_deployments(user_id: int, session: Session = Depends(get_session)):
+def list_deployments(
+    user_id: int,
+    _current_user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     return deployment_service.list_deployments(session, user_id=user_id)
 
 
 @router.get("/{user_id}/deployments/{deployment_id}", response_model=DeploymentRead)
-def get_deployment(user_id: int, deployment_id: int, session: Session = Depends(get_session)) -> DeploymentRead:
+def get_deployment(
+    user_id: int,
+    deployment_id: int,
+    _current_user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> DeploymentRead:
     return deployment_service.get_deployment(session, user_id=user_id, deployment_id=deployment_id)
 
 
@@ -62,6 +99,7 @@ def update_deployment(
     user_id: int,
     deployment_id: int,
     deployment: DeploymentUpdate,
+    _current_user: UserORM = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> DeploymentRead:
     deployment.user_id = user_id
@@ -70,5 +108,10 @@ def update_deployment(
 
 
 @router.delete("/{user_id}/deployments/{deployment_id}", status_code=204)
-def delete_deployment_endpoint(user_id: int, deployment_id: int, session: Session = Depends(get_session)) -> None:
+def delete_deployment_endpoint(
+    user_id: int,
+    deployment_id: int,
+    _current_user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> None:
     deployment_service.delete_deployment(session, user_id=user_id, deployment_id=deployment_id)

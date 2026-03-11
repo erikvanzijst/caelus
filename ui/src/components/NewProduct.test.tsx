@@ -37,7 +37,7 @@ describe('NewProduct', () => {
     const onError = vi.fn()
 
     renderWithQuery(
-      <NewProduct authEmail="admin@example.com" onSuccess={onSuccess} onError={onError} />,
+      <NewProduct onSuccess={onSuccess} onError={onError} />,
     )
 
     fireEvent.change(screen.getByLabelText('Product name'), { target: { value: 'My Product' } })
@@ -51,7 +51,6 @@ describe('NewProduct', () => {
     await waitFor(() => {
       expect(createProductMock).toHaveBeenCalledWith(
         { name: 'My Product', description: 'My Description' },
-        'admin@example.com',
         expect.any(File),
       )
     })

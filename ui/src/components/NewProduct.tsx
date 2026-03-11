@@ -5,12 +5,11 @@ import { createProduct } from '../api/endpoints'
 import { IconInput } from './IconInput'
 
 interface NewProductProps {
-  authEmail?: string
   onSuccess: () => void
   onError: (error: Error) => void
 }
 
-export function NewProduct({ authEmail, onSuccess, onError }: NewProductProps) {
+export function NewProduct({ onSuccess, onError }: NewProductProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [iconFile, setIconFile] = useState<File | null>(null)
@@ -22,7 +21,6 @@ export function NewProduct({ authEmail, onSuccess, onError }: NewProductProps) {
           name: name.trim(),
           description: description.trim() || null,
         },
-        authEmail,
         iconFile || undefined,
       ),
     onSuccess: () => {

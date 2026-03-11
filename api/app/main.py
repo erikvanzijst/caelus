@@ -47,6 +47,7 @@ def redirect_to_docs() -> RedirectResponse:
     return RedirectResponse(url="/api/docs")
 
 
+app.include_router(users.me_router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
 

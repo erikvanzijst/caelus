@@ -27,7 +27,7 @@ import {
   updateProductTemplate,
 } from '../api/endpoints'
 import type { Product } from '../api/types'
-import { useAuthEmail } from '../state/useAuthEmail'
+import { useAuth } from '../state/AuthContext'
 import { formatDateTime } from '../utils/format'
 import { NewProduct } from '../components/NewProduct'
 
@@ -40,7 +40,7 @@ const DEFAULT_VALUES_SCHEMA = `{
 }`
 
 function Admin() {
-  const { email } = useAuthEmail()
+  const { user } = useAuth()
   const queryClient = useQueryClient()
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null)
   const [templateChartRef, setTemplateChartRef] = useState('')
@@ -55,8 +55,8 @@ function Admin() {
 
   const productsQuery = useQuery({
     queryKey: ['products'],
-    queryFn: () => listProducts(email),
-    enabled: Boolean(email),
+    queryFn: () => listProducts(),
+    enabled: Boolean(user),
   })
 
   useEffect(() => {
@@ -72,12 +72,12 @@ function Admin() {
 
   const templatesQuery = useQuery({
     queryKey: ['templates', selectedProductId],
-    queryFn: () => listTemplates(selectedProductId!, email),
+    queryFn: () => listTemplates(selectedProductId!),
     enabled: Boolean(selectedProductId),
   })
 
   const deleteProductMutation = useMutation({
-    mutationFn: (productId: number) => deleteProduct(productId, email),
+    mutationFn: (productId: number) => deleteProduct(productId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
   })
 
@@ -111,7 +111,6 @@ function Admin() {
           values_schema_json: parsedSchema,
           default_values_json: parsedDefaults,
         },
-        email,
       )
     },
     onSuccess: (template) => {
@@ -130,14 +129,14 @@ function Admin() {
 
   const deleteTemplateMutation = useMutation({
     mutationFn: (payload: { templateId: number; wasCanonical: boolean }) =>
-      deleteTemplate(selectedProductId!, payload.templateId, email).then(() => payload),
+      deleteTemplate(selectedProductId!, payload.templateId).then(() => payload),
     onSuccess: async (payload) => {
       queryClient.invalidateQueries({ queryKey: ['templates', selectedProductId] })
       queryClient.invalidateQueries({ queryKey: ['products'] })
       if (!payload.wasCanonical) return
       const templates = await queryClient.fetchQuery({
         queryKey: ['templates', selectedProductId],
-        queryFn: () => listTemplates(selectedProductId!, email),
+        queryFn: () => listTemplates(selectedProductId!),
       })
       const newest = [...templates].sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
@@ -150,7 +149,7 @@ function Admin() {
 
   const updateCanonicalMutation = useMutation({
     mutationFn: (templateId: number) =>
-      updateProductTemplate(selectedProductId!, templateId, email),
+      updateProductTemplate(selectedProductId!, templateId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
     onError: (error: Error) => setAdminError(error.message),
   })
@@ -168,7 +167,6 @@ function Admin() {
         <Grid size={{ xs: 12, md: 5 }}>
           <Stack spacing={2}>
             <NewProduct
-              authEmail={email}
               onSuccess={() => queryClient.invalidateQueries({ queryKey: ['products'] })}
               onError={(error: Error) => setAdminError(error.message)}
             />

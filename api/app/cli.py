@@ -37,9 +37,62 @@ from app.services.reconcile_constants import (
     JOB_STATUS_FAILED,
 )
 
+from sqlalchemy import func
+from sqlmodel import Session, select
+
+from app.models import UserORM
+
 configure_logging()
 logger = logging.getLogger(__name__)
 app = typer.Typer(help="Caelus CLI", pretty_exceptions_show_locals=False)
+
+# ── CLI authentication ────────────────────────────────────────────────
+
+_cli_user_email: str | None = None
+
+
+@app.callback()
+def _main(
+    as_user: str | None = typer.Option(
+        None,
+        "--as-user",
+        envvar="CAELUS_USER_EMAIL",
+        help="Email of the acting user (overrides CAELUS_USER_EMAIL).",
+    ),
+) -> None:
+    global _cli_user_email
+    _cli_user_email = as_user
+
+
+def _require_cli_user(session: Session) -> UserORM:
+    """Resolve the CLI user email to a UserORM, auto-creating if needed.
+
+    Exits with code 1 when no email is configured.
+    """
+    if not _cli_user_email:
+        typer.echo(
+            "Error: No user email configured. "
+            "Set CAELUS_USER_EMAIL or pass --as-user.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    email = _cli_user_email.strip().lower()
+
+    user = session.exec(
+        select(UserORM).where(
+            func.lower(UserORM.email) == email,
+            UserORM.deleted_at.is_(None),  # type: ignore[union-attr]
+        )
+    ).one_or_none()
+
+    if user is None:
+        user = UserORM(email=email)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+    return user
 
 
 def _parse_json_object_input(
@@ -96,6 +149,7 @@ def _echo_yaml_stream_item(entity: object) -> None:
 @app.command("create-user")
 def create_user(email: str) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             user = user_service.create_user(session, UserCreate(email=email))
         except CaelusException as e:
@@ -106,6 +160,7 @@ def create_user(email: str) -> None:
 @app.command("delete-user")
 def delete_user(user_id: int) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             user = user_service.delete_user(session, user_id=user_id)
         except CaelusException as e:
@@ -116,12 +171,14 @@ def delete_user(user_id: int) -> None:
 @app.command("list-users")
 def list_users() -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         _echo_yaml_entity(user_service.list_users(session))
 
 
 @app.command("get-user")
 def get_user(user_id: int) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             user = user_service.get_user(session, user_id=user_id)
         except CaelusException as e:
@@ -137,6 +194,7 @@ def create_product(
     icon: Path | None = typer.Option(None, "--icon", help="Path to product icon image"),
 ) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             icon_data = None
             if icon is not None:
@@ -159,6 +217,7 @@ def update_product(
     description: str | None = typer.Option(None, "--description"),
 ) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             product = product_service.update_product(
                 session,
@@ -176,6 +235,7 @@ def update_product(
 @app.command("delete-product")
 def delete_product(product_id: int) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             product = product_service.delete_product(session, product_id=product_id)
         except CaelusException as e:
@@ -186,12 +246,14 @@ def delete_product(product_id: int) -> None:
 @app.command("list-products")
 def list_products() -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         _echo_yaml_entity(product_service.list_products(session))
 
 
 @app.command("get-product")
 def get_product(product_id: int) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             product = product_service.get_product(session, product_id=product_id)
         except CaelusException as e:
@@ -270,6 +332,7 @@ def create_template(
         raise typer.Exit(code=1)
 
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             template = template_service.create_template(
                 session,
@@ -292,12 +355,14 @@ def create_template(
 @app.command("list-templates")
 def list_templates(product_id: int) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         _echo_yaml_entity(template_service.list_templates(session, product_id=product_id))
 
 
 @app.command("get-template")
 def get_template(product_id: int, template_id: int) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             template = template_service.get_template(
                 session,
@@ -312,6 +377,7 @@ def get_template(product_id: int, template_id: int) -> None:
 @app.command("delete-template")
 def delete_template(product_id: int, template_id: int) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             template = template_service.delete_template(
                 session, product_id=product_id, template_id=template_id
@@ -350,6 +416,7 @@ def create_deployment(
         raise typer.Exit(code=1)
 
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             deployment = deployment_service.create_deployment(
                 session,
@@ -369,12 +436,14 @@ def list_deployments(
     user_id: int | None = typer.Argument(None, help="Filter deployments by user ID"),
 ) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         _echo_yaml_entity(deployment_service.list_deployments(session, user_id=user_id))
 
 
 @app.command("get-deployment")
 def get_deployment(user_id: int, deployment_id: int) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             deployment = deployment_service.get_deployment(
                 session,
@@ -389,6 +458,7 @@ def get_deployment(user_id: int, deployment_id: int) -> None:
 @app.command("delete-deployment")
 def delete_deployment(user_id: int, deployment_id: int) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             deployment = deployment_service.delete_deployment(
                 session, user_id=user_id, deployment_id=deployment_id
@@ -406,6 +476,7 @@ def update_deployment(
     desired_template_id: int = typer.Option(..., "--desired-template-id"),
 ) -> None:
     with session_scope() as session:
+        _require_cli_user(session)
         try:
             deployment = deployment_service.update_deployment(
                 session,

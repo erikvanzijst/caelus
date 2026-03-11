@@ -32,7 +32,7 @@ resource "helm_release" "oauth2_proxy" {
         # whitelist-domain  = ".dev.deprutser.be"
         pass-user-headers    = true
         set-xauthrequest     = true
-        user-id-claim        = "sub"  # Keycloak's immutable user UUID
+        oidc-email-claim     = "email"
         reverse-proxy        = true
         skip-provider-button = true
         upstream             = "static://202"

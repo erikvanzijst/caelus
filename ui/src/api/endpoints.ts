@@ -37,11 +37,18 @@ export function deleteProduct(productId: number) {
   return requestJson<null>(`/products/${productId}`, { method: 'DELETE' })
 }
 
-export function updateProductTemplate(productId: number, templateId: number) {
+export function updateProduct(
+  productId: number,
+  payload: { name?: string; description?: string | null; template_id?: number },
+) {
   return requestJson<Product>(`/products/${productId}`, {
     method: 'PUT',
-    body: JSON.stringify({ template_id: templateId }),
+    body: JSON.stringify(payload),
   })
+}
+
+export function updateProductTemplate(productId: number, templateId: number) {
+  return updateProduct(productId, { template_id: templateId })
 }
 
 export function listTemplates(productId: number) {

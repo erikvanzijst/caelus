@@ -25,6 +25,7 @@ import {
   deleteTemplate,
   listProducts,
   listTemplates,
+  updateProduct,
   updateProductTemplate,
 } from '../api/endpoints'
 import { resolveApiPath } from '../api/client'
@@ -54,6 +55,10 @@ function Admin() {
   const [expandedSchemaId, setExpandedSchemaId] = useState<number | null>(null)
   const [expandedDefaultsId, setExpandedDefaultsId] = useState<number | null>(null)
   const [adminError, setAdminError] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState(false)
+  const [editingDesc, setEditingDesc] = useState(false)
+  const [draftName, setDraftName] = useState('')
+  const [draftDesc, setDraftDesc] = useState('')
 
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -156,6 +161,29 @@ function Admin() {
     onError: (error: Error) => setAdminError(error.message),
   })
 
+  const updateProductMutation = useMutation({
+    mutationFn: (payload: { name?: string; description?: string | null }) =>
+      updateProduct(selectedProductId!, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
+    onError: (error: Error) => setAdminError(error.message),
+  })
+
+  function saveName() {
+    const trimmed = draftName.trim()
+    if (trimmed && trimmed !== selectedProduct?.name) {
+      updateProductMutation.mutate({ name: trimmed })
+    }
+    setEditingName(false)
+  }
+
+  function saveDescription() {
+    const trimmed = draftDesc.trim()
+    if (trimmed !== (selectedProduct?.description ?? '')) {
+      updateProductMutation.mutate({ description: trimmed || null })
+    }
+    setEditingDesc(false)
+  }
+
   return (
     <Stack spacing={4}>
       <Box>
@@ -179,7 +207,7 @@ function Admin() {
                   {productsQuery.data?.map((product) => (
                     <Box
                       key={product.id}
-                      onClick={() => setSelectedProductId(product.id)}
+                      onClick={() => { setSelectedProductId(product.id); setEditingName(false); setEditingDesc(false) }}
                       sx={{
                         p: 2,
                         borderRadius: 2,
@@ -228,11 +256,60 @@ function Admin() {
                     >
                       {selectedProduct?.name?.[0] ?? '?'}
                     </Avatar>
-                    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-                      <Typography variant="h5">{selectedProduct?.name ?? 'Pick a product'}</Typography>
-                      <Typography color="text.secondary">
-                        {selectedProduct?.description || 'No description provided.'}
-                      </Typography>
+                    <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
+                      {editingName ? (
+                        <TextField
+                          value={draftName}
+                          onChange={(e) => setDraftName(e.target.value)}
+                          onBlur={saveName}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveName()
+                            if (e.key === 'Escape') setEditingName(false)
+                          }}
+                          variant="standard"
+                          autoFocus
+                          slotProps={{ input: { sx: { fontSize: '1.5rem', fontWeight: 500 } } }}
+                        />
+                      ) : (
+                        <Typography
+                          variant="h5"
+                          onClick={() => {
+                            if (!selectedProduct) return
+                            setDraftName(selectedProduct.name)
+                            setEditingName(true)
+                          }}
+                          sx={{ cursor: selectedProduct ? 'pointer' : 'default', '&:hover': selectedProduct ? { color: 'primary.main' } : {} }}
+                        >
+                          {selectedProduct?.name ?? 'Pick a product'}
+                        </Typography>
+                      )}
+                      {editingDesc ? (
+                        <TextField
+                          value={draftDesc}
+                          onChange={(e) => setDraftDesc(e.target.value)}
+                          onBlur={saveDescription}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) saveDescription()
+                            if (e.key === 'Escape') setEditingDesc(false)
+                          }}
+                          variant="standard"
+                          autoFocus
+                          multiline
+                          placeholder="No description provided."
+                        />
+                      ) : (
+                        <Typography
+                          color="text.secondary"
+                          onClick={() => {
+                            if (!selectedProduct) return
+                            setDraftDesc(selectedProduct.description ?? '')
+                            setEditingDesc(true)
+                          }}
+                          sx={{ cursor: selectedProduct ? 'pointer' : 'default', '&:hover': selectedProduct ? { color: 'primary.main' } : {} }}
+                        >
+                          {selectedProduct?.description || 'No description provided.'}
+                        </Typography>
+                      )}
                       <Typography variant="body2" color="text.secondary">
                         Created {formatDateTime(selectedProduct?.created_at)}
                       </Typography>

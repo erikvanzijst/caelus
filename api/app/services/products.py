@@ -126,7 +126,9 @@ def update_product(session: Session, *, product: ProductUpdate) -> ProductRead:
             session, product_id=product.id, template_id=product.template_id
         )
         product_orm.template_id = product.template_id
-    if product.description:
+    if product.name is not None:
+        product_orm.name = product.name
+    if product.description is not None:
         product_orm.description = product.description
 
     session.add(product_orm)

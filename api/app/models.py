@@ -85,6 +85,7 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(SQLModel):
     id: Optional[int] = None
+    name: str | None = None
     template_id: Optional[int] = None
     description: str | None = None
 

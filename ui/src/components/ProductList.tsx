@@ -47,7 +47,16 @@ export function ProductList({ products, selectedProductId, onSelectProduct }: Pr
                 </Avatar>
                 <Box sx={{ minWidth: 0, width: '100%' }}>
                   <Typography variant="subtitle2" noWrap>{product.name}</Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
                     {product.description || 'No description'}
                   </Typography>
                 </Box>

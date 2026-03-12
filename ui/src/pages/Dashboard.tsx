@@ -8,6 +8,7 @@ import {
   CardContent,
   Chip,
   Grid,
+  LinearProgress,
   MenuItem,
   Select,
   Stack,
@@ -236,9 +237,6 @@ function Dashboard() {
             <Card>
               <CardContent>
                 <Stack spacing={1.5}>
-                  {deletePendingIds.has(deployment.id) && deployment.status !== 'deleted' && (
-                    <Alert severity="info">Delete requested. Waiting for controller update.</Alert>
-                  )}
                   <Stack direction="row" spacing={2} alignItems="flex-start">
                     <Stack spacing={1} sx={{ minWidth: 0, flex: 1 }}>
                       <Typography variant="h6" noWrap>{deployment.domainname}</Typography>
@@ -276,21 +274,22 @@ function Dashboard() {
                   )}
                 </Stack>
               </CardContent>
+              {isTransitionalStatus(deployment.status) && (
+                <LinearProgress
+                  color={deployment.status === 'deleting' ? 'secondary' : 'primary'}
+                  sx={{ mx: 2, borderRadius: 1 }}
+                />
+              )}
               <CardActions sx={{ px: 2, pb: 2 }}>
-                {deployment.domainname ? (
-                  <Button
-                    href={ensureUrl(deployment.domainname)}
-                    target="_blank"
-                    rel="noreferrer"
-                    variant="contained"
-                  >
-                    Open
-                  </Button>
-                ) : (
-                  <Button variant="contained" disabled>
-                    Open
-                  </Button>
-                )}
+                <Button
+                  href={deployment.domainname && !isTransitionalStatus(deployment.status) ? ensureUrl(deployment.domainname) : undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="contained"
+                  disabled={!deployment.domainname || isTransitionalStatus(deployment.status)}
+                >
+                  Open
+                </Button>
                 {deployment.status !== 'deleting' && deployment.status !== 'deleted' && (
                   <Button
                     variant="outlined"

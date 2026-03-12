@@ -37,6 +37,7 @@ resource "helm_release" "oauth2_proxy" {
         skip-provider-button = true
         upstream             = "static://202"
         skip-auth-route      = "GET=^/oauth2/.*"
+        backend-logout-url   = "https://keycloak.app.deprutser.be/realms/master/protocol/openid-connect/logout?id_token_hint={id_token}"
       }
       service = {
         enabled    = true
@@ -75,6 +76,28 @@ resource "kubernetes_manifest" "oauth2_proxy_middleware" {
           "Cookie"
         ]
       }
+    }
+  }
+}
+
+resource "kubernetes_manifest" "oauth2_signout_route" {
+  manifest = {
+    apiVersion = "traefik.io/v1alpha1"
+    kind       = "IngressRoute"
+    metadata = {
+      name      = "oauth2-signout"
+      namespace = var.namespace
+    }
+    spec = {
+      entryPoints = ["web", "websecure"]
+      routes = [{
+        match    = "Host(`${var.domain}`) && PathPrefix(`/oauth2/sign_out`)"
+        kind     = "Rule"
+        services = [{
+          name = "oauth2-proxy"
+          port = 8080
+        }]
+      }]
     }
   }
 }

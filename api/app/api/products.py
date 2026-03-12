@@ -12,6 +12,7 @@ from fastapi import (
 )
 from fastapi.requests import Request
 from fastapi.responses import RedirectResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from sqlmodel import Session
 
@@ -92,7 +93,13 @@ async def create_product(
     session: Session = Depends(get_session),
 ) -> ProductRead:
     payload, icon_data = await parse_product_request(request)
-    product = product_service.create_product(session, payload, icon_data)
+    # Wrap the blocking DB/file-I/O service call in run_in_threadpool so it
+    # doesn't block the event loop. This endpoint must be async def for the
+    # multipart form parsing above, but without this wrapper the sync service
+    # call would stall all other concurrent request handling.
+    product = await run_in_threadpool(
+        product_service.create_product, session, payload, icon_data
+    )
     return product
 
 

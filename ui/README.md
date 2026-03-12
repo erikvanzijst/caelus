@@ -209,6 +209,20 @@ Use these checks after UI/API contract changes:
    - trigger invalid create payload (for example empty required template fields)
    - expected alert text is readable and not `[object Object]`
 
+## Product Icon Sizes
+
+Product icons use a deliberate size hierarchy across contexts to reflect visual
+importance and available space:
+
+| Context                          | Size | Variant   | Notes                                           |
+|----------------------------------|------|-----------|-------------------------------------------------|
+| Product list (Admin)             | 48px | `rounded` | Compact list — scannable                        |
+| Selected product detail (Admin)  | 64px | `rounded` | Detail view with edit badge overlay             |
+| Deployment card (Dashboard)      | 64px | `rounded` | Primary dashboard content — instant recognition |
+
+When adding icons to new contexts, pick a size that fits this hierarchy. List
+items should stay at 48px or below; detail/card views should use 64px.
+
 ## Responsive Behavior
 - Dashboard create form uses column layout on small screens, row layout on medium+.
 - Admin left/right columns collapse into a single vertical flow on small screens.

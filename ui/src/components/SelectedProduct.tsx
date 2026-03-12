@@ -86,42 +86,14 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
       <CardContent>
         <Stack spacing={1}>
           <Typography variant="h6">Selected product</Typography>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <input
-              ref={iconInputRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={handleIconChange}
-            />
-            <Badge
-              overlap="circular"
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-              badgeContent={
-                product ? (
-                  <EditIcon
-                    sx={{
-                      width: 16,
-                      height: 16,
-                      bgcolor: 'primary.main',
-                      color: 'white',
-                      borderRadius: '50%',
-                      p: 0.3,
-                    }}
-                  />
-                ) : null
-              }
-              sx={{ cursor: product ? 'pointer' : 'default' }}
-              onClick={handleIconClick}
-            >
-              <Avatar
-                src={product?.icon_url ? resolveApiPath(product.icon_url) : undefined}
-                alt={product?.name}
-                sx={{ width: 56, height: 56 }}
-              >
-                {product?.name?.[0] ?? '?'}
-              </Avatar>
-            </Badge>
+          <input
+            ref={iconInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleIconChange}
+          />
+          <Stack direction="row" spacing={2} alignItems="flex-start">
             <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
               {editingName ? (
                 <TextField
@@ -180,6 +152,35 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
                 Created {formatDateTime(product?.created_at)}
               </Typography>
             </Stack>
+            <Badge
+              overlap="circular"
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              badgeContent={
+                product ? (
+                  <EditIcon
+                    sx={{
+                      width: 18,
+                      height: 18,
+                      bgcolor: 'primary.main',
+                      color: 'white',
+                      borderRadius: '50%',
+                      p: 0.3,
+                    }}
+                  />
+                ) : null
+              }
+              sx={{ cursor: product ? 'pointer' : 'default', flexShrink: 0 }}
+              onClick={handleIconClick}
+            >
+              <Avatar
+                src={product?.icon_url ? resolveApiPath(product.icon_url) : undefined}
+                alt={product?.name}
+                variant="rounded"
+                sx={{ width: 64, height: 64 }}
+              >
+                {product?.name?.[0] ?? '?'}
+              </Avatar>
+            </Badge>
           </Stack>
         </Stack>
       </CardContent>

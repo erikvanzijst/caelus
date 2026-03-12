@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, Any
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, model_validator
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String, func
 
@@ -91,13 +91,34 @@ class ProductUpdate(SQLModel):
 
 
 class ProductReadBase(ProductBase):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     created_at: datetime
+    icon_url: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _compute_icon_url(cls, data: Any) -> Any:
+        """Derive icon_url from rel_icon_path when serializing from ORM."""
+        from app.config import get_static_url_base
+
+        if isinstance(data, dict):
+            rel = data.get("rel_icon_path")
+        else:
+            rel = getattr(data, "rel_icon_path", None)
+        if rel:
+            if isinstance(data, dict):
+                data.setdefault("icon_url", f"{get_static_url_base()}/{rel}")
+            else:
+                # For ORM objects, we need to return a dict so we can inject icon_url
+                d = {k: getattr(data, k) for k in cls.model_fields if hasattr(data, k)}
+                d["icon_url"] = f"{get_static_url_base()}/{rel}"
+                return d
+        return data
 
 
 class ProductRead(ProductReadBase):
     template: Optional["ProductTemplateVersionRead"]
-    icon_url: Optional[str] = None
 
 
 class ProductTemplateVersionBase(SQLModel):

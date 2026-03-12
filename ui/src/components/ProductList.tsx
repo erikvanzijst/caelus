@@ -3,7 +3,6 @@ import {
   Box,
   Card,
   CardContent,
-  Chip,
   Stack,
   Typography,
 } from '@mui/material'
@@ -35,31 +34,21 @@ export function ProductList({ products, selectedProductId, onSelectProduct }: Pr
                   selectedProductId === product.id ? 'rgba(37,99,235,0.08)' : 'transparent',
               }}
             >
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <Avatar
-                  src={product.icon_url ? resolveApiPath(product.icon_url) : undefined}
-                  alt={product.name}
-                  sx={{ width: 36, height: 36 }}
-                >
-                  {product.name[0]}
-                </Avatar>
-                <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+              <Stack direction="row" spacing={2} alignItems="flex-start">
+                <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
                   <Typography variant="subtitle1">{product.name}</Typography>
                   <Typography variant="body2" color="text.secondary">
                     {product.description || 'No description'}
                   </Typography>
-                  <Chip
-                    label={
-                      product.template_id
-                        ? `Canonical template #${product.template_id}`
-                        : 'No canonical template'
-                    }
-                    size="small"
-                    color={product.template_id ? 'primary' : 'default'}
-                    variant="outlined"
-                    sx={{ alignSelf: 'flex-start' }}
-                  />
                 </Stack>
+                <Avatar
+                  src={product.icon_url ? resolveApiPath(product.icon_url) : undefined}
+                  alt={product.name}
+                  variant="rounded"
+                  sx={{ width: 48, height: 48, flexShrink: 0 }}
+                >
+                  {product.name[0]}
+                </Avatar>
               </Stack>
             </Box>
           ))}

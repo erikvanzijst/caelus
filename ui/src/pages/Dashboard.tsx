@@ -1,5 +1,6 @@
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
@@ -22,6 +23,7 @@ import {
   listTemplates,
 } from '../api/endpoints'
 import type { Product, ProductTemplate } from '../api/types'
+import { resolveApiPath } from '../api/client'
 import { useAuth } from '../state/AuthContext'
 import { isTransitionalStatus, statusColor } from '../utils/deploymentStatus'
 import { ensureUrl, formatDateTime } from '../utils/format'
@@ -237,31 +239,36 @@ function Dashboard() {
                   {deletePendingIds.has(deployment.id) && deployment.status !== 'deleted' && (
                     <Alert severity="info">Delete requested. Waiting for controller update.</Alert>
                   )}
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography variant="h6">{deployment.domainname}</Typography>
-                    <Chip
-                      label={deployment.desired_template?.product?.name ?? 'Unknown product'}
-                      color="primary"
-                      variant="outlined"
-                    />
+                  <Stack direction="row" spacing={2} alignItems="flex-start">
+                    <Stack spacing={1} sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography variant="h6" noWrap>{deployment.domainname}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {deployment.desired_template?.product?.name ?? 'Unknown product'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Created {formatDateTime(deployment.created_at)}
+                      </Typography>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        <Chip
+                          size="small"
+                          label={`Status: ${deployment.status ?? 'unknown'}`}
+                          color={statusColor(deployment.status)}
+                          variant="outlined"
+                        />
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        Last reconcile {formatDateTime(deployment.last_reconcile_at)}
+                      </Typography>
+                    </Stack>
+                    <Avatar
+                      src={deployment.desired_template?.product?.icon_url ? resolveApiPath(deployment.desired_template.product.icon_url) : undefined}
+                      alt={deployment.desired_template?.product?.name}
+                      variant="rounded"
+                      sx={{ width: 64, height: 64, flexShrink: 0 }}
+                    >
+                      {deployment.desired_template?.product?.name?.[0] ?? '?'}
+                    </Avatar>
                   </Stack>
-                  <Typography color="text.secondary">
-                    Created {formatDateTime(deployment.created_at)}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Desired template #{deployment.desired_template_id}
-                  </Typography>
-                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                    <Chip
-                      size="small"
-                      label={`Status: ${deployment.status ?? 'unknown'}`}
-                      color={statusColor(deployment.status)}
-                      variant="outlined"
-                    />
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary">
-                    Last reconcile {formatDateTime(deployment.last_reconcile_at)}
-                  </Typography>
                   {deployment.last_error && (
                     <Alert severity="error" sx={{ mt: 0.5 }}>
                       {deployment.last_error}

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
-from typing import BinaryIO
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -10,23 +8,7 @@ from sqlmodel import Session, select
 from app.models import ProductRead, ProductORM, ProductCreate, ProductUpdate
 from app.services import templates as template_service
 from app.services.errors import NotFoundException, IntegrityException, ValidationException
-from app.config import get_static_url_base
 from app.services.images import process_icon, generate_icon_filename, save_icon, MAX_ICON_SIZE
-
-
-def _product_orm_to_read(product_orm: ProductORM) -> ProductRead:
-    """Convert ProductORM to ProductRead with computed icon_url."""
-    data = {
-        "id": product_orm.id,
-        "name": product_orm.name,
-        "description": product_orm.description,
-        "template_id": product_orm.template_id,
-        "created_at": product_orm.created_at,
-        "template": product_orm.template,
-    }
-    if product_orm.rel_icon_path:
-        data["icon_url"] = f"{get_static_url_base()}/{product_orm.rel_icon_path}"
-    return ProductRead(**data)
 
 
 def create_product(
@@ -63,7 +45,7 @@ def create_product(
 
         session.commit()
         session.refresh(product)
-        return _product_orm_to_read(product)
+        return ProductRead.model_validate(product)
     except IntegrityError as exc:
         session.rollback()
         raise IntegrityException(
@@ -76,7 +58,7 @@ def create_product(
 
 def list_products(session: Session) -> list[ProductRead]:
     return [
-        _product_orm_to_read(p)
+        ProductRead.model_validate(p)
         for p in session.exec(select(ProductORM).where(ProductORM.deleted_at == None)).all()
     ]
 
@@ -88,7 +70,7 @@ def get_product(session: Session, product_id: int) -> ProductRead:
         ).one_or_none()
     ):
         raise NotFoundException("Product not found")
-    return _product_orm_to_read(product)
+    return ProductRead.model_validate(product)
 
 
 def delete_product(session: Session, *, product_id: int) -> ProductRead:
@@ -105,7 +87,7 @@ def delete_product(session: Session, *, product_id: int) -> ProductRead:
         raise NotFoundException("Product not found")
     product.deleted_at = datetime.utcnow()
     session.commit()
-    return _product_orm_to_read(product)
+    return ProductRead.model_validate(product)
 
 
 def update_product(
@@ -150,7 +132,7 @@ def update_product(
     session.add(product_orm)
     session.commit()
     session.refresh(product_orm)
-    return _product_orm_to_read(product_orm)
+    return ProductRead.model_validate(product_orm)
 
 
 def upload_product_icon(session: Session, product_id: int, icon_data: bytes) -> ProductRead:
@@ -191,7 +173,7 @@ def upload_product_icon(session: Session, product_id: int, icon_data: bytes) -> 
     session.add(product_orm)
     session.commit()
     session.refresh(product_orm)
-    return _product_orm_to_read(product_orm)
+    return ProductRead.model_validate(product_orm)
 
 
 def get_product_icon_path(session: Session, product_id: int) -> str | None:

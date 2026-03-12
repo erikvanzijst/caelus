@@ -5,18 +5,33 @@ import {
   Button,
   Chip,
   Container,
+  Menu,
+  MenuItem,
   Stack,
   Toolbar,
   Typography,
 } from '@mui/material'
-import type { PropsWithChildren } from 'react'
+import { useState, type PropsWithChildren } from 'react'
 import { NavLink } from 'react-router-dom'
 import EmailDialog from './EmailDialog'
 import { useAuth } from '../state/AuthContext'
+import { clearStoredAuthHeaders, getStoredAuthHeaders } from '../state/useAuthEmail'
+
+function handleLogout() {
+  const headers = getStoredAuthHeaders()
+  if (Object.keys(headers).length > 0) {
+    clearStoredAuthHeaders()
+    window.location.reload()
+  } else {
+    window.location.href =
+      '/oauth2/sign_out?rd=' + encodeURIComponent(window.location.origin + '/')
+  }
+}
 
 function AppShell({ children }: PropsWithChildren) {
   const { user, loading, email, setEmail } = useAuth()
   const showDialog = !loading && !user
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)
 
   return (
     <Box sx={{ minHeight: '100vh', position: 'relative' }}>
@@ -90,8 +105,16 @@ function AppShell({ children }: PropsWithChildren) {
             <Chip
               label={user ? `Signed in as ${user.email}` : 'No email set'}
               variant="outlined"
-              sx={{ bgcolor: 'rgba(15, 23, 42, 0.04)' }}
+              onClick={(e) => setMenuAnchor(e.currentTarget)}
+              sx={{ bgcolor: 'rgba(15, 23, 42, 0.04)', cursor: 'pointer' }}
             />
+            <Menu
+              anchorEl={menuAnchor}
+              open={Boolean(menuAnchor)}
+              onClose={() => setMenuAnchor(null)}
+            >
+              <MenuItem onClick={handleLogout}>Logout</MenuItem>
+            </Menu>
           </Stack>
         </Toolbar>
       </AppBar>

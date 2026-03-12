@@ -2,7 +2,7 @@ import { createContext, useContext, useCallback, useEffect, useState } from 'rea
 import type { PropsWithChildren } from 'react'
 import type { User } from '../api/types'
 import { getMe } from '../api/endpoints'
-import { useAuthHeaders } from './useAuthEmail'
+import { useAuthHeaders, getStoredAuthHeaders } from './useAuthEmail'
 
 interface AuthState {
   user: User | null
@@ -32,7 +32,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
     try {
       const me = await getMe()
       setUser(me)
+      sessionStorage.removeItem('caelus.auth.reloading')
     } catch {
+      // In production (no localStorage auth headers), a failed /api/me means
+      // the session cookie is missing or invalid. Reload to trigger Traefik's
+      // forward-auth middleware which will redirect to Keycloak login.
+      // Guard with sessionStorage to prevent infinite reloads if the page is
+      // served from a stale browser cache.
+      const isProduction = Object.keys(getStoredAuthHeaders()).length === 0
+      const reloadKey = 'caelus.auth.reloading'
+      if (isProduction && !sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, '1')
+        window.location.reload()
+        return
+      }
+      sessionStorage.removeItem(reloadKey)
       setUser(null)
     } finally {
       setLoading(false)

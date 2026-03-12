@@ -4,6 +4,12 @@ const HEADERS_KEY = 'caelus.auth.headers'
 
 export type AuthHeaders = Record<string, string>
 
+export function clearStoredAuthHeaders(): void {
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(HEADERS_KEY)
+  }
+}
+
 export function getStoredAuthHeaders(): AuthHeaders {
   if (typeof window === 'undefined') return {}
   try {

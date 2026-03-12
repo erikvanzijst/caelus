@@ -16,9 +16,9 @@
 
 ## 3. Keycloak — client configuration (manual)
 
-- [ ] 3.1 (manual) In Keycloak admin console, open the `caelus-dev` client
+- [x] 3.1 (manual) In Keycloak admin console, open the `caelus-dev` client
       under the `master` realm
-- [ ] 3.2 (manual) Add `https://app.deprutser.be/` and
+- [x] 3.2 (manual) Add `https://app.deprutser.be/` and
       `https://dev.deprutser.be/` to **Valid Post Logout Redirect URIs**
 
 ## 4. Frontend — useAuthEmail clearHeaders

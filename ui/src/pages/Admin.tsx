@@ -1,5 +1,6 @@
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
@@ -26,6 +27,7 @@ import {
   listTemplates,
   updateProductTemplate,
 } from '../api/endpoints'
+import { resolveApiPath } from '../api/client'
 import type { Product } from '../api/types'
 import { useAuth } from '../state/AuthContext'
 import { formatDateTime } from '../utils/format'
@@ -218,13 +220,24 @@ function Admin() {
               <CardContent>
                 <Stack spacing={1}>
                   <Typography variant="h6">Selected product</Typography>
-                  <Typography variant="h5">{selectedProduct?.name ?? 'Pick a product'}</Typography>
-                  <Typography color="text.secondary">
-                    {selectedProduct?.description || 'No description provided.'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Created {formatDateTime(selectedProduct?.created_at)}
-                  </Typography>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Avatar
+                      src={selectedProduct?.icon_url ? resolveApiPath(selectedProduct.icon_url) : undefined}
+                      alt={selectedProduct?.name}
+                      sx={{ width: 56, height: 56 }}
+                    >
+                      {selectedProduct?.name?.[0] ?? '?'}
+                    </Avatar>
+                    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+                      <Typography variant="h5">{selectedProduct?.name ?? 'Pick a product'}</Typography>
+                      <Typography color="text.secondary">
+                        {selectedProduct?.description || 'No description provided.'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Created {formatDateTime(selectedProduct?.created_at)}
+                      </Typography>
+                    </Stack>
+                  </Stack>
                 </Stack>
               </CardContent>
               <CardActions sx={{ px: 2, pb: 2 }}>

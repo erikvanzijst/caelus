@@ -4,6 +4,12 @@ const envUrl = import.meta.env.VITE_API_URL as string | undefined
 
 export const API_URL = envUrl ?? '/api'
 
+/** Resolve an absolute API path (e.g. /api/static/icons/foo.png) to a full URL. */
+export function resolveApiPath(absolutePath: string): string {
+  const origin = API_URL.replace(/\/api\/?$/, '')
+  return `${origin}${absolutePath}`
+}
+
 function toErrorMessage(detail: unknown, fallback: string) {
   if (typeof detail === 'string' && detail.trim()) return detail
   if (Array.isArray(detail)) {

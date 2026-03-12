@@ -1,6 +1,5 @@
 import {
   Alert,
-  Avatar,
   Box,
   Button,
   Card,
@@ -21,18 +20,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import {
   createTemplate,
-  deleteProduct,
   deleteTemplate,
   listProducts,
   listTemplates,
-  updateProduct,
   updateProductTemplate,
 } from '../api/endpoints'
-import { resolveApiPath } from '../api/client'
 import type { Product } from '../api/types'
 import { useAuth } from '../state/AuthContext'
 import { formatDateTime } from '../utils/format'
 import { NewProduct } from '../components/NewProduct'
+import { SelectedProduct } from '../components/SelectedProduct'
 
 const DEFAULT_VALUES_SCHEMA = `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -55,10 +52,6 @@ function Admin() {
   const [expandedSchemaId, setExpandedSchemaId] = useState<number | null>(null)
   const [expandedDefaultsId, setExpandedDefaultsId] = useState<number | null>(null)
   const [adminError, setAdminError] = useState<string | null>(null)
-  const [editingName, setEditingName] = useState(false)
-  const [editingDesc, setEditingDesc] = useState(false)
-  const [draftName, setDraftName] = useState('')
-  const [draftDesc, setDraftDesc] = useState('')
 
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -81,11 +74,6 @@ function Admin() {
     queryKey: ['templates', selectedProductId],
     queryFn: () => listTemplates(selectedProductId!),
     enabled: Boolean(selectedProductId),
-  })
-
-  const deleteProductMutation = useMutation({
-    mutationFn: (productId: number) => deleteProduct(productId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
   })
 
   const createTemplateMutation = useMutation({
@@ -161,29 +149,6 @@ function Admin() {
     onError: (error: Error) => setAdminError(error.message),
   })
 
-  const updateProductMutation = useMutation({
-    mutationFn: (payload: { name?: string; description?: string | null }) =>
-      updateProduct(selectedProductId!, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
-    onError: (error: Error) => setAdminError(error.message),
-  })
-
-  function saveName() {
-    const trimmed = draftName.trim()
-    if (trimmed && trimmed !== selectedProduct?.name) {
-      updateProductMutation.mutate({ name: trimmed })
-    }
-    setEditingName(false)
-  }
-
-  function saveDescription() {
-    const trimmed = draftDesc.trim()
-    if (trimmed !== (selectedProduct?.description ?? '')) {
-      updateProductMutation.mutate({ description: trimmed || null })
-    }
-    setEditingDesc(false)
-  }
-
   return (
     <Stack spacing={4}>
       <Box>
@@ -207,7 +172,7 @@ function Admin() {
                   {productsQuery.data?.map((product) => (
                     <Box
                       key={product.id}
-                      onClick={() => { setSelectedProductId(product.id); setEditingName(false); setEditingDesc(false) }}
+                      onClick={() => setSelectedProductId(product.id)}
                       sx={{
                         p: 2,
                         borderRadius: 2,
@@ -244,95 +209,11 @@ function Admin() {
         </Grid>
         <Grid size={{ xs: 12, md: 7 }}>
           <Stack spacing={2}>
-            <Card>
-              <CardContent>
-                <Stack spacing={1}>
-                  <Typography variant="h6">Selected product</Typography>
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <Avatar
-                      src={selectedProduct?.icon_url ? resolveApiPath(selectedProduct.icon_url) : undefined}
-                      alt={selectedProduct?.name}
-                      sx={{ width: 56, height: 56 }}
-                    >
-                      {selectedProduct?.name?.[0] ?? '?'}
-                    </Avatar>
-                    <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
-                      {editingName ? (
-                        <TextField
-                          value={draftName}
-                          onChange={(e) => setDraftName(e.target.value)}
-                          onBlur={saveName}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') saveName()
-                            if (e.key === 'Escape') setEditingName(false)
-                          }}
-                          variant="standard"
-                          autoFocus
-                          slotProps={{ input: { sx: { fontSize: '1.5rem', fontWeight: 500 } } }}
-                        />
-                      ) : (
-                        <Typography
-                          variant="h5"
-                          onClick={() => {
-                            if (!selectedProduct) return
-                            setDraftName(selectedProduct.name)
-                            setEditingName(true)
-                          }}
-                          sx={{ cursor: selectedProduct ? 'pointer' : 'default', '&:hover': selectedProduct ? { color: 'primary.main' } : {} }}
-                        >
-                          {selectedProduct?.name ?? 'Pick a product'}
-                        </Typography>
-                      )}
-                      {editingDesc ? (
-                        <TextField
-                          value={draftDesc}
-                          onChange={(e) => setDraftDesc(e.target.value)}
-                          onBlur={saveDescription}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) saveDescription()
-                            if (e.key === 'Escape') setEditingDesc(false)
-                          }}
-                          variant="standard"
-                          autoFocus
-                          multiline
-                          placeholder="No description provided."
-                        />
-                      ) : (
-                        <Typography
-                          color="text.secondary"
-                          onClick={() => {
-                            if (!selectedProduct) return
-                            setDraftDesc(selectedProduct.description ?? '')
-                            setEditingDesc(true)
-                          }}
-                          sx={{ cursor: selectedProduct ? 'pointer' : 'default', '&:hover': selectedProduct ? { color: 'primary.main' } : {} }}
-                        >
-                          {selectedProduct?.description || 'No description provided.'}
-                        </Typography>
-                      )}
-                      <Typography variant="body2" color="text.secondary">
-                        Created {formatDateTime(selectedProduct?.created_at)}
-                      </Typography>
-                    </Stack>
-                  </Stack>
-                </Stack>
-              </CardContent>
-              <CardActions sx={{ px: 2, pb: 2 }}>
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  disabled={!selectedProduct}
-                  onClick={() => {
-                    if (!selectedProduct) return
-                    if (window.confirm(`Delete ${selectedProduct.name}?`)) {
-                      deleteProductMutation.mutate(selectedProduct.id)
-                    }
-                  }}
-                >
-                  Delete product
-                </Button>
-              </CardActions>
-            </Card>
+            <SelectedProduct
+              key={selectedProductId}
+              product={selectedProduct}
+              onError={(error: Error) => setAdminError(error.message)}
+            />
 
             <Card>
               <CardContent>

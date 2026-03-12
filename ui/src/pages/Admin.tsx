@@ -77,6 +77,34 @@ function Admin() {
     enabled: Boolean(selectedProductId),
   })
 
+  const canonicalTemplate = useMemo(() => {
+    if (!selectedProduct?.template_id || !templatesQuery.data) return undefined
+    return templatesQuery.data.find((t) => t.id === selectedProduct.template_id)
+  }, [selectedProduct?.template_id, templatesQuery.data])
+
+  // Prefill form fields from canonical template when switching products
+  useEffect(() => {
+    if (canonicalTemplate) {
+      setTemplateChartRef(canonicalTemplate.chart_ref)
+      setTemplateChartVersion('')
+      setDefaultValuesJson(
+        canonicalTemplate.default_values_json
+          ? JSON.stringify(canonicalTemplate.default_values_json, null, 2)
+          : '',
+      )
+      setValuesSchemaJson(
+        canonicalTemplate.values_schema_json
+          ? JSON.stringify(canonicalTemplate.values_schema_json, null, 2)
+          : DEFAULT_VALUES_SCHEMA,
+      )
+    } else {
+      setTemplateChartRef('')
+      setTemplateChartVersion('')
+      setDefaultValuesJson('')
+      setValuesSchemaJson(DEFAULT_VALUES_SCHEMA)
+    }
+  }, [canonicalTemplate])
+
   const createTemplateMutation = useMutation({
     mutationFn: () => {
       let parsedSchema: object | undefined
@@ -110,10 +138,7 @@ function Admin() {
       )
     },
     onSuccess: (template) => {
-      setTemplateChartRef('')
       setTemplateChartVersion('')
-      setValuesSchemaJson(DEFAULT_VALUES_SCHEMA)
-      setDefaultValuesJson('')
       queryClient.invalidateQueries({ queryKey: ['templates', selectedProductId] })
       queryClient.invalidateQueries({ queryKey: ['products'] })
       if (!selectedProduct?.template_id) {

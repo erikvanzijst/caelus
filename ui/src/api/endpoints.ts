@@ -40,7 +40,17 @@ export function deleteProduct(productId: number) {
 export function updateProduct(
   productId: number,
   payload: { name?: string; description?: string | null; template_id?: number },
+  iconFile?: File,
 ) {
+  if (iconFile) {
+    return requestMultipart<Product>(
+      `/products/${productId}`,
+      payload,
+      { field: 'icon', file: iconFile },
+      {},
+      'PUT',
+    )
+  }
   return requestJson<Product>(`/products/${productId}`, {
     method: 'PUT',
     body: JSON.stringify(payload),

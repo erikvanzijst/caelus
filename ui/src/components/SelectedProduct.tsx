@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import {
   Avatar,
+  Badge,
   Button,
   Card,
   CardActions,
@@ -9,6 +10,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import EditIcon from '@mui/icons-material/Edit'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { deleteProduct, updateProduct } from '../api/endpoints'
 import { resolveApiPath } from '../api/client'
@@ -26,6 +28,7 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
   const [editingDesc, setEditingDesc] = useState(false)
   const [draftName, setDraftName] = useState('')
   const [draftDesc, setDraftDesc] = useState('')
+  const iconInputRef = useRef<HTMLInputElement>(null)
 
   const updateProductMutation = useMutation({
     mutationFn: (payload: { name?: string; description?: string | null }) =>
@@ -33,6 +36,28 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
     onError,
   })
+
+  const uploadIconMutation = useMutation({
+    mutationFn: (file: File) => updateProduct(product!.id, {}, file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
+    onError,
+  })
+
+  const handleIconClick = useCallback(() => {
+    if (!product) return
+    iconInputRef.current?.click()
+  }, [product])
+
+  const handleIconChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      if (!file) return
+      if (iconInputRef.current) iconInputRef.current.value = ''
+      if (!file.type.startsWith('image/')) return
+      uploadIconMutation.mutate(file)
+    },
+    [uploadIconMutation],
+  )
 
   const deleteProductMutation = useMutation({
     mutationFn: () => deleteProduct(product!.id),
@@ -62,13 +87,41 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
         <Stack spacing={1}>
           <Typography variant="h6">Selected product</Typography>
           <Stack direction="row" spacing={2} alignItems="center">
-            <Avatar
-              src={product?.icon_url ? resolveApiPath(product.icon_url) : undefined}
-              alt={product?.name}
-              sx={{ width: 56, height: 56 }}
+            <input
+              ref={iconInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleIconChange}
+            />
+            <Badge
+              overlap="circular"
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              badgeContent={
+                product ? (
+                  <EditIcon
+                    sx={{
+                      width: 16,
+                      height: 16,
+                      bgcolor: 'primary.main',
+                      color: 'white',
+                      borderRadius: '50%',
+                      p: 0.3,
+                    }}
+                  />
+                ) : null
+              }
+              sx={{ cursor: product ? 'pointer' : 'default' }}
+              onClick={handleIconClick}
             >
-              {product?.name?.[0] ?? '?'}
-            </Avatar>
+              <Avatar
+                src={product?.icon_url ? resolveApiPath(product.icon_url) : undefined}
+                alt={product?.name}
+                sx={{ width: 56, height: 56 }}
+              >
+                {product?.name?.[0] ?? '?'}
+              </Avatar>
+            </Badge>
             <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
               {editingName ? (
                 <TextField

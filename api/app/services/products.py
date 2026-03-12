@@ -108,11 +108,14 @@ def delete_product(session: Session, *, product_id: int) -> ProductRead:
     return _product_orm_to_read(product)
 
 
-def update_product(session: Session, *, product: ProductUpdate) -> ProductRead:
-    """Update a product's template_id and/or description.
+def update_product(
+    session: Session, *, product: ProductUpdate, icon_data: bytes | None = None
+) -> ProductRead:
+    """Update a product's fields and/or icon.
 
     Validates that the product exists and that the template belongs to the product.
     Raises NotFoundException if either is missing.
+    Raises ValidationException if icon processing fails.
     """
     if not (
         product_orm := session.exec(
@@ -130,6 +133,19 @@ def update_product(session: Session, *, product: ProductUpdate) -> ProductRead:
         product_orm.name = product.name
     if product.description is not None:
         product_orm.description = product.description
+
+    if icon_data is not None:
+        if len(icon_data) > MAX_ICON_SIZE:
+            raise ValidationException(
+                f"Image file too large. Maximum size is {MAX_ICON_SIZE // (1024 * 1024)}MB"
+            )
+        try:
+            processed_icon = process_icon(icon_data)
+            rel_icon_path = generate_icon_filename(processed_icon)
+        except ValueError as e:
+            raise ValidationException(str(e)) from e
+        save_icon(processed_icon, rel_icon_path)
+        product_orm.rel_icon_path = rel_icon_path
 
     session.add(product_orm)
     session.commit()

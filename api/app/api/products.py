@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import TypeVar
 
 from fastapi import (
     APIRouter,
@@ -14,7 +15,7 @@ from fastapi.requests import Request
 from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
-from sqlmodel import Session
+from sqlmodel import SQLModel, Session
 
 from app.db import get_session
 from app.deps import get_current_user, require_admin
@@ -28,10 +29,12 @@ from app.models import (
 )
 from app.services import templates as template_service, products as product_service
 
+T = TypeVar("T", bound=SQLModel)
+
 router = APIRouter(prefix="/products", tags=["products"])
 
 
-async def parse_product_request(request: Request) -> tuple[ProductCreate, bytes | None]:
+async def parse_product_request(request: Request, model_cls: type[T] = ProductCreate) -> tuple[T, bytes | None]:
     content_type = request.headers.get("content-type", "")
     body = await request.body()
 
@@ -53,7 +56,7 @@ async def parse_product_request(request: Request) -> tuple[ProductCreate, bytes 
                 detail=f"Invalid product JSON: {e}",
             ) from e
 
-        payload = ProductCreate(**payload_dict)
+        payload = model_cls(**payload_dict)
 
         icon_data: bytes | None = None
         icon_file = form.get("icon")
@@ -75,9 +78,9 @@ async def parse_product_request(request: Request) -> tuple[ProductCreate, bytes 
     else:
         try:
             if body:
-                payload = ProductCreate.model_validate(json.loads(body))
+                payload = model_cls.model_validate(json.loads(body))
             else:
-                payload = ProductCreate.model_validate({})
+                payload = model_cls.model_validate({})
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -97,9 +100,7 @@ async def create_product(
     # doesn't block the event loop. This endpoint must be async def for the
     # multipart form parsing above, but without this wrapper the sync service
     # call would stall all other concurrent request handling.
-    product = await run_in_threadpool(
-        product_service.create_product, session, payload, icon_data
-    )
+    product = await run_in_threadpool(product_service.create_product, session, payload, icon_data)
     return product
 
 
@@ -121,14 +122,15 @@ def get_product(
 
 
 @router.put("/{product_id}", response_model=ProductRead)
-def update_product(
+async def update_product(
     product_id: int,
-    product: ProductUpdate,
+    request: Request,
     current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> ProductRead:
-    product.id = product_id
-    return product_service.update_product(session, product=product)
+    payload, icon_data = await parse_product_request(request, ProductUpdate)
+    payload.id = product_id
+    return await run_in_threadpool(product_service.update_product, session, product=payload, icon_data=icon_data)
 
 
 @router.delete("/{product_id}", status_code=204)

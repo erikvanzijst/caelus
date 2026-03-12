@@ -214,5 +214,37 @@ Use these checks after UI/API contract changes:
 - Admin left/right columns collapse into a single vertical flow on small screens.
 - App bar content remains a single row; at very narrow widths it compresses tightly.
 
+## Playwright Browser Testing (Local Dev)
+
+In production (Kubernetes), authentication is handled by Keycloak via Traefik's
+forward-auth middleware — no manual email setup is needed. In local dev mode,
+however, the UI relies on a localStorage key for auth headers. When automating
+the browser with Playwright MCP, use this sequence to establish an authenticated
+session:
+
+```
+1. browser_navigate  →  http://localhost:5173
+2. browser_evaluate  →  () => {
+     localStorage.setItem('caelus.auth.headers',
+       JSON.stringify({"X-Auth-Request-Email": "user@example.com"}));
+     window.location.reload();
+   }
+3. browser_wait_for  →  text: "Signed in as"
+4. browser_navigate  →  http://localhost:5173/admin  (or any target page)
+5. browser_wait_for  →  text: "Signed in as"
+```
+
+**Why the wait is required:** Playwright's `goto()` resolves on the browser
+`load` event, but React's auth cycle is async (mount → read localStorage →
+`GET /api/me` → re-render). Without the wait, snapshots will show the
+pre-auth state ("No email set", empty product lists, missing Admin link).
+The `wait_for` on "Signed in as" ensures the full auth round-trip has
+completed and the UI has re-rendered with user data.
+
+**Why step 2 uses `reload()` instead of a second `navigate`:** Setting
+localStorage after the React tree has mounted does not update the
+`useState(getStoredAuthHeaders)` initializer. The reload forces a fresh
+mount that picks up the new value synchronously.
+
 ## Known UI Caveats
 - Auth email state is not globally shared; see the reload caveat in `Auth Email Behavior`.

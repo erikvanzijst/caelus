@@ -66,6 +66,7 @@ export async function requestMultipart<T>(
   payload: object,
   file?: { field: string; file: File | Blob },
   options: RequestInit = {},
+  method: string = 'POST',
 ): Promise<T> {
   const { headers, ...rest } = options
   const authHeaders = getStoredAuthHeaders()
@@ -77,7 +78,7 @@ export async function requestMultipart<T>(
 
   const response = await fetch(`${API_URL}${path}`, {
     ...rest,
-    method: 'POST',
+    method,
     body: formData,
     headers: {
       ...authHeaders,

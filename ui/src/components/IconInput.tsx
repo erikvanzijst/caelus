@@ -5,6 +5,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 interface IconInputProps {
   value: File | null
   onChange: (file: File | null) => void
+  inputId?: string
 }
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
@@ -60,7 +61,7 @@ async function scaleImageFile(file: File): Promise<File> {
   }
 }
 
-export function IconInput({ value, onChange }: IconInputProps) {
+export function IconInput({ value, onChange, inputId = 'icon-input' }: IconInputProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -117,11 +118,11 @@ export function IconInput({ value, onChange }: IconInputProps) {
         ref={inputRef}
         accept="image/*"
         style={{ display: 'none' }}
-        id="icon-input"
+        id={inputId}
         type="file"
         onChange={handleFileChange}
       />
-      <label htmlFor="icon-input">
+      <label htmlFor={inputId}>
         <Button variant="outlined" component="span" startIcon={<CloudUploadIcon />}>
           Choose icon
         </Button>

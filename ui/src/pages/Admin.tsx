@@ -184,6 +184,11 @@ function Admin() {
         </Typography>
       </Box>
       {adminError && <Alert severity="error">{adminError}</Alert>}
+      <ProductList
+        products={productsQuery.data}
+        selectedProductId={selectedProductId}
+        onSelectProduct={setSelectedProductId}
+      />
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 5 }}>
           <Stack spacing={2}>
@@ -191,20 +196,15 @@ function Admin() {
               onSuccess={() => queryClient.invalidateQueries({ queryKey: ['products'] })}
               onError={(error: Error) => setAdminError(error.message)}
             />
-            <ProductList
-              products={productsQuery.data}
-              selectedProductId={selectedProductId}
-              onSelectProduct={setSelectedProductId}
-            />
-          </Stack>
-        </Grid>
-        <Grid size={{ xs: 12, md: 7 }}>
-          <Stack spacing={2}>
             <SelectedProduct
               key={selectedProductId}
               product={selectedProduct}
               onError={(error: Error) => setAdminError(error.message)}
             />
+          </Stack>
+        </Grid>
+        <Grid size={{ xs: 12, md: 7 }}>
+          <Stack spacing={2}>
 
             <Card>
               <CardContent>

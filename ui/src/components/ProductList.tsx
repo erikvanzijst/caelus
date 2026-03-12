@@ -2,8 +2,9 @@ import {
   Avatar,
   Box,
   Card,
+  CardActionArea,
   CardContent,
-  Stack,
+  Grid,
   Typography,
 } from '@mui/material'
 import { resolveApiPath } from '../api/client'
@@ -17,43 +18,44 @@ interface ProductListProps {
 
 export function ProductList({ products, selectedProductId, onSelectProduct }: ProductListProps) {
   return (
-    <Card>
-      <CardContent>
-        <Stack spacing={2}>
-          <Typography variant="h6">Products</Typography>
-          {products?.map((product) => (
-            <Box
-              key={product.id}
+    <Grid container spacing={2}>
+      {products?.map((product) => (
+        <Grid key={product.id} size={{ xs: 6, sm: 4, md: 3 }}>
+          <Card
+            sx={{
+              height: '100%',
+              border: selectedProductId === product.id
+                ? '2px solid'
+                : '2px solid transparent',
+              borderColor: selectedProductId === product.id
+                ? 'primary.main'
+                : 'transparent',
+            }}
+          >
+            <CardActionArea
               onClick={() => onSelectProduct(product.id)}
-              sx={{
-                p: 2,
-                borderRadius: 2,
-                border: '1px solid rgba(148, 163, 184, 0.2)',
-                cursor: 'pointer',
-                bgcolor:
-                  selectedProductId === product.id ? 'rgba(37,99,235,0.08)' : 'transparent',
-              }}
+              sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
             >
-              <Stack direction="row" spacing={2} alignItems="flex-start">
-                <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography variant="subtitle1">{product.name}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {product.description || 'No description'}
-                  </Typography>
-                </Stack>
+              <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 1 }}>
                 <Avatar
                   src={product.icon_url ? resolveApiPath(product.icon_url) : undefined}
                   alt={product.name}
                   variant="rounded"
-                  sx={{ width: 48, height: 48, flexShrink: 0 }}
+                  sx={{ width: 48, height: 48 }}
                 >
                   {product.name[0]}
                 </Avatar>
-              </Stack>
-            </Box>
-          ))}
-        </Stack>
-      </CardContent>
-    </Card>
+                <Box sx={{ minWidth: 0, width: '100%' }}>
+                  <Typography variant="subtitle2" noWrap>{product.name}</Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {product.description || 'No description'}
+                  </Typography>
+                </Box>
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        </Grid>
+      ))}
+    </Grid>
   )
 }

@@ -29,6 +29,7 @@ import type { Product } from '../api/types'
 import { useAuth } from '../state/AuthContext'
 import { formatDateTime } from '../utils/format'
 import { NewProduct } from '../components/NewProduct'
+import { ProductList } from '../components/ProductList'
 import { SelectedProduct } from '../components/SelectedProduct'
 
 const DEFAULT_VALUES_SCHEMA = `{
@@ -165,46 +166,11 @@ function Admin() {
               onSuccess={() => queryClient.invalidateQueries({ queryKey: ['products'] })}
               onError={(error: Error) => setAdminError(error.message)}
             />
-            <Card>
-              <CardContent>
-                <Stack spacing={2}>
-                  <Typography variant="h6">Products</Typography>
-                  {productsQuery.data?.map((product) => (
-                    <Box
-                      key={product.id}
-                      onClick={() => setSelectedProductId(product.id)}
-                      sx={{
-                        p: 2,
-                        borderRadius: 2,
-                        border: '1px solid rgba(148, 163, 184, 0.2)',
-                        cursor: 'pointer',
-                        bgcolor:
-                          selectedProductId === product.id ? 'rgba(37,99,235,0.08)' : 'transparent',
-                      }}
-                    >
-                      <Stack spacing={0.5}>
-                        <Typography variant="subtitle1">{product.name}</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {product.description || 'No description'}
-                        </Typography>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Chip
-                            label={
-                              product.template_id
-                                ? `Canonical template #${product.template_id}`
-                                : 'No canonical template'
-                            }
-                            size="small"
-                            color={product.template_id ? 'primary' : 'default'}
-                            variant="outlined"
-                          />
-                        </Stack>
-                      </Stack>
-                    </Box>
-                  ))}
-                </Stack>
-              </CardContent>
-            </Card>
+            <ProductList
+              products={productsQuery.data}
+              selectedProductId={selectedProductId}
+              onSelectProduct={setSelectedProductId}
+            />
           </Stack>
         </Grid>
         <Grid size={{ xs: 12, md: 7 }}>

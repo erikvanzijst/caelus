@@ -281,15 +281,20 @@ function Dashboard() {
                 />
               )}
               <CardActions sx={{ px: 2, pb: 2 }}>
-                <Button
-                  href={deployment.domainname && !isTransitionalStatus(deployment.status) ? ensureUrl(deployment.domainname) : undefined}
-                  target="_blank"
-                  rel="noreferrer"
-                  variant="contained"
-                  disabled={!deployment.domainname || isTransitionalStatus(deployment.status)}
-                >
-                  Open
-                </Button>
+                {deployment.domainname && !isTransitionalStatus(deployment.status) ? (
+                  <Button
+                    href={ensureUrl(deployment.domainname)}
+                    target="_blank"
+                    rel="noreferrer"
+                    variant="contained"
+                  >
+                    Open
+                  </Button>
+                ) : (
+                  <Button variant="contained" disabled>
+                    Open
+                  </Button>
+                )}
                 {deployment.status !== 'deleting' && deployment.status !== 'deleted' && (
                   <Button
                     variant="outlined"

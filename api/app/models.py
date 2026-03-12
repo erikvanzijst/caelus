@@ -68,7 +68,8 @@ class ProductORM(ProductBase, table=True):
     # Relative path to product icon under STATIC_PATH (e.g., "icons/<sha1>.png")
     rel_icon_path: Optional[str] = Field(default=None, nullable=True)
     template: "ProductTemplateVersionORM" = Relationship(
-        back_populates="products", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"}
+        back_populates="products",
+        sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id", "lazy": "joined"},
     )
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     templates: list["ProductTemplateVersionORM"] = Relationship(
@@ -131,7 +132,7 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     )
     product: ProductORM = Relationship(
         back_populates="templates",
-        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"},
+        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id", "lazy": "joined"},
     )
     products: list["ProductORM"] = Relationship(
         back_populates="template", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"}
@@ -214,12 +215,12 @@ class DeploymentORM(DeploymentBase, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     deleted_at: Optional[datetime] = Field(default=None)
     reconcile_jobs: list["DeploymentReconcileJobORM"] = Relationship(back_populates="deployment")
-    user: UserORM = Relationship(back_populates="deployments")
+    user: UserORM = Relationship(back_populates="deployments", sa_relationship_kwargs={"lazy": "joined"})
     desired_template: Optional[ProductTemplateVersionORM] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.desired_template_id"}
+        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.desired_template_id", "lazy": "joined"}
     )
     applied_template: Optional[ProductTemplateVersionORM] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id"}
+        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id", "lazy": "joined"}
     )
 
 

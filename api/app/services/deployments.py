@@ -4,7 +4,6 @@ import logging
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.models import (
@@ -42,15 +41,7 @@ def _get_deployment_orm(
     deployment_id: int,
     user_id: int | None = None,
 ) -> DeploymentORM:
-    stmt = (
-        select(DeploymentORM)
-        .options(
-            selectinload(DeploymentORM.user),
-            selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
-            selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
-        )
-        .where(DeploymentORM.id == deployment_id)
-    )
+    stmt = select(DeploymentORM).where(DeploymentORM.id == deployment_id)
     if user_id is not None:
         stmt = stmt.where(DeploymentORM.user_id == user_id)
     if not (deployment := session.exec(stmt).one_or_none()):
@@ -163,7 +154,7 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
         assert deployment.id is not None, "Deployment ID should not be None after flush"
         _enqueue_reconcile_job(session, deployment_id=deployment.id, reason=JOB_REASON_CREATE)
         session.commit()
-        session.refresh(deployment)
+        deployment = _get_deployment_orm(session, deployment_id=deployment.id)
         logger.info(
             "Created deployment id=%s user_id=%s desired_template_id=%s",
             deployment.id,
@@ -183,11 +174,7 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
 
 def list_deployments(session: Session, *, user_id: int | None = None) -> list[DeploymentRead]:
     # Return deployments for the given user if provided, otherwise all deployments
-    stmt = select(DeploymentORM).options(
-        selectinload(DeploymentORM.user),
-        selectinload(DeploymentORM.desired_template).selectinload(ProductTemplateVersionORM.product),
-        selectinload(DeploymentORM.applied_template).selectinload(ProductTemplateVersionORM.product),
-    )
+    stmt = select(DeploymentORM)
     if user_id is not None:
         stmt = stmt.where(DeploymentORM.user_id == user_id)  # noqa: E712
     return [DeploymentRead.model_validate(d) for d in session.exec(stmt).all()]
@@ -226,6 +213,7 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
         logger.info("Marked deployment id=%s user_id=%s for deletion", deployment_id, user_id)
     else:
         logger.info("Deployment id=%s user_id=%s is already marked for deletion or deleted", deployment_id, user_id)
+    deployment = _get_deployment_orm(session, deployment_id=deployment_id)
     return DeploymentRead.model_validate(deployment)
 
 
@@ -267,7 +255,7 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
         session.rollback()
         logger.warning("Update deployment blocked by in-progress reconcile job deployment_id=%s", update.id)
         raise
-    session.refresh(deployment)
+    deployment = _get_deployment_orm(session, deployment_id=update.id)
     logger.info(
         "Updated deployment id=%s user_id=%s desired_template_id=%s",
         deployment.id,

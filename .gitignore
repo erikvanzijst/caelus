@@ -20,7 +20,9 @@ pytest.xml
 # Virtualenv
 .venv/
 venv/
-.env.*
+
+# Local env overrides (may contain secrets)
+.env.local
 
 # SQLite
 *.db

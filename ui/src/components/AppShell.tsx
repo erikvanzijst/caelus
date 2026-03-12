@@ -5,6 +5,7 @@ import {
   Button,
   Chip,
   Container,
+  Divider,
   Menu,
   MenuItem,
   Stack,
@@ -16,6 +17,10 @@ import { NavLink } from 'react-router-dom'
 import EmailDialog from './EmailDialog'
 import { useAuth } from '../state/AuthContext'
 import { clearStoredAuthHeaders, getStoredAuthHeaders } from '../state/useAuthEmail'
+
+const keycloakAccountUrl = import.meta.env.VITE_KEYCLOAK_ACCOUNT_URL as
+  | string
+  | undefined
 
 function handleLogout() {
   const headers = getStoredAuthHeaders()
@@ -113,6 +118,18 @@ function AppShell({ children }: PropsWithChildren) {
               open={Boolean(menuAnchor)}
               onClose={() => setMenuAnchor(null)}
             >
+              {keycloakAccountUrl && (
+                <MenuItem
+                  component="a"
+                  href={keycloakAccountUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMenuAnchor(null)}
+                >
+                  Profile
+                </MenuItem>
+              )}
+              {keycloakAccountUrl && <Divider />}
               <MenuItem onClick={handleLogout}>Logout</MenuItem>
             </Menu>
           </Stack>

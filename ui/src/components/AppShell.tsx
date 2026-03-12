@@ -1,6 +1,5 @@
 import {
   AppBar,
-  Avatar,
   Box,
   Button,
   Chip,
@@ -74,7 +73,12 @@ function AppShell({ children }: PropsWithChildren) {
       <AppBar elevation={0} position="sticky">
         <Toolbar sx={{ gap: 2 }}>
           <Stack direction="row" alignItems="center" spacing={1.5}>
-            <Avatar sx={{ bgcolor: 'primary.main', width: 36, height: 36 }}>C</Avatar>
+            <Box
+              component="img"
+              src="/caelus.svg"
+              alt="Caelus"
+              sx={{ width: 36, height: 36, borderRadius: '8px' }}
+            />
             <Box>
               <Typography variant="h6">Caelus Control</Typography>
               <Typography variant="caption" color="text.secondary">

@@ -25,7 +25,7 @@ def _seed_deployment(db_session):
             chart_version="1.0.0",
             values_schema_json={
                 "type": "object",
-                "properties": {"domain": {"type": "string", "title": "domainname"}},
+                "properties": {"domain": {"type": "string", "title": "hostname"}},
             },
         ),
     )

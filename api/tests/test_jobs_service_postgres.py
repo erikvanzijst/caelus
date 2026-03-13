@@ -36,7 +36,7 @@ def _seed_jobs(engine, *, job_count: int) -> None:
                 chart_version="1.0.0",
                 values_schema_json={
                     "type": "object",
-                    "properties": {"domain": {"type": "string", "title": "domainname"}},
+                    "properties": {"domain": {"type": "string", "title": "hostname"}},
                 },
             ),
         )

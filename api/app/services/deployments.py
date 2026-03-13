@@ -53,43 +53,43 @@ def _validate_user_values(template: ProductTemplateVersionORM, user_values_json:
     template_values.validate_user_values(user_values_json or {}, template.values_schema_json)
 
 
-def _iter_domainname_paths(schema: Any, path: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+def _iter_hostname_paths(schema: Any, path: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
     paths: list[tuple[str, ...]] = []
     if isinstance(schema, dict):
         title = schema.get("title")
-        if path and isinstance(title, str) and title.lower() == "domainname":
+        if path and isinstance(title, str) and title.lower() == "hostname":
             paths.append(path)
 
         properties = schema.get("properties")
         if isinstance(properties, dict):
             for key, child_schema in properties.items():
                 if isinstance(key, str):
-                    paths.extend(_iter_domainname_paths(child_schema, path + (key,)))
+                    paths.extend(_iter_hostname_paths(child_schema, path + (key,)))
 
         items = schema.get("items")
         if isinstance(items, dict):
-            paths.extend(_iter_domainname_paths(items, path + ("*",)))
+            paths.extend(_iter_hostname_paths(items, path + ("*",)))
         elif isinstance(items, list):
             for child_schema in items:
-                paths.extend(_iter_domainname_paths(child_schema, path + ("*",)))
+                paths.extend(_iter_hostname_paths(child_schema, path + ("*",)))
 
         for schema_key in ("allOf", "anyOf", "oneOf", "prefixItems"):
             variants = schema.get(schema_key)
             if isinstance(variants, list):
                 for child_schema in variants:
-                    paths.extend(_iter_domainname_paths(child_schema, path))
+                    paths.extend(_iter_hostname_paths(child_schema, path))
 
         additional = schema.get("additionalProperties")
         if isinstance(additional, dict):
-            paths.extend(_iter_domainname_paths(additional, path))
+            paths.extend(_iter_hostname_paths(additional, path))
 
         definitions = schema.get("$defs") or schema.get("definitions")
         if isinstance(definitions, dict):
             for child_schema in definitions.values():
-                paths.extend(_iter_domainname_paths(child_schema, path))
+                paths.extend(_iter_hostname_paths(child_schema, path))
     elif isinstance(schema, list):
         for child_schema in schema:
-            paths.extend(_iter_domainname_paths(child_schema, path))
+            paths.extend(_iter_hostname_paths(child_schema, path))
     return paths
 
 
@@ -107,14 +107,14 @@ def _value_for_path(user_values_json: dict[str, Any] | None, path: tuple[str, ..
     return current
 
 
-def _derive_domainname(
+def _derive_hostname(
     *,
     values_schema_json: dict[str, Any] | None,
     user_values_json: dict[str, Any] | None,
 ) -> str | None:
     if not isinstance(values_schema_json, dict):
         return None
-    for path in _iter_domainname_paths(values_schema_json):
+    for path in _iter_hostname_paths(values_schema_json):
         value = _value_for_path(user_values_json, path)
         if value is None:
             return None
@@ -134,7 +134,7 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
 
     # Pre-flight the user-provided values against the template's schema:
     _validate_user_values(template, payload.user_values_json)
-    derived_domainname = _derive_domainname(
+    derived_hostname = _derive_hostname(
         values_schema_json=template.values_schema_json,
         user_values_json=payload.user_values_json,
     )
@@ -143,7 +143,7 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     deployment: DeploymentORM = DeploymentORM.model_validate(
         dict(
             deployment_uid=deployment_uid,
-            domainname=derived_domainname,
+            hostname=derived_hostname,
             status=DEPLOYMENT_STATUS_PROVISIONING,
             **payload.model_dump(),
         )
@@ -238,7 +238,7 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
 
     # Pre-flight the user-provided values against the template's schema:
     _validate_user_values(target_template, deployment.user_values_json)
-    deployment.domainname = _derive_domainname(
+    deployment.hostname = _derive_hostname(
         values_schema_json=target_template.values_schema_json,
         user_values_json=deployment.user_values_json,
     )

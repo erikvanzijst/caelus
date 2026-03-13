@@ -239,7 +239,7 @@ function Dashboard() {
                 <Stack spacing={1.5}>
                   <Stack direction="row" spacing={2} alignItems="flex-start">
                     <Stack spacing={1} sx={{ minWidth: 0, flex: 1 }}>
-                      <Typography variant="h6" noWrap>{deployment.domainname}</Typography>
+                      <Typography variant="h6" noWrap>{deployment.hostname}</Typography>
                       <Typography variant="body2" color="text.secondary">
                         {deployment.desired_template?.product?.name ?? 'Unknown product'}
                       </Typography>
@@ -281,9 +281,9 @@ function Dashboard() {
                 />
               )}
               <CardActions sx={{ px: 2, pb: 2 }}>
-                {deployment.domainname && !isTransitionalStatus(deployment.status) ? (
+                {deployment.hostname && !isTransitionalStatus(deployment.status) ? (
                   <Button
-                    href={ensureUrl(deployment.domainname)}
+                    href={ensureUrl(deployment.hostname)}
                     target="_blank"
                     rel="noreferrer"
                     variant="contained"

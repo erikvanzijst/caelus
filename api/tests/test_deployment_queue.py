@@ -27,7 +27,7 @@ def _setup_user_and_templates(db_session):
             chart_version="1.0.0",
             values_schema_json={
                 "type": "object",
-                "properties": {"domain": {"type": "string", "title": "domainname"}},
+                "properties": {"domain": {"type": "string", "title": "hostname"}},
             },
         ),
     )
@@ -39,7 +39,7 @@ def _setup_user_and_templates(db_session):
             chart_version="2.0.0",
             values_schema_json={
                 "type": "object",
-                "properties": {"domain": {"type": "string", "title": "domainname"}},
+                "properties": {"domain": {"type": "string", "title": "hostname"}},
             },
         ),
     )

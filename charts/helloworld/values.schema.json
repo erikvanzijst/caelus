@@ -29,7 +29,7 @@
         "enabled": { "type": "boolean" },
         "className": { "type": "string" },
         "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
-        "host": { "type": "string" }
+        "host": { "type": "string", "title": "hostname" }
       },
       "additionalProperties": false
     },

@@ -11,19 +11,19 @@
 
 ## 2. Rename domainname to hostname — backend
 
-- [ ] 2.1 Create Alembic migration: rename column `domainname` → `hostname`, rename indexes `uq_domainname_active` → `uq_hostname_active`, `ix_deployment_domainname` → `ix_deployment_hostname`, update `uq_deployment_active` column reference
-- [ ] 2.2 Update `DeploymentORM` in `api/app/models.py`: rename field, update index definitions
-- [ ] 2.3 Update `DeploymentRead` in `api/app/models.py`: rename `domainname` → `hostname`
-- [ ] 2.4 Rename `_iter_domainname_paths()` → `_iter_hostname_paths()` and `_derive_domainname()` → `_derive_hostname()` in `api/app/services/deployments.py`. Change schema title check to `title.lower() == "hostname"`. Rename all local variables
-- [ ] 2.5 Update all Python test files: replace `domainname` with `hostname` in assertions, fixtures, schema definitions (`title: "domainname"` → `title: "hostname"`), and test function names (~15 files)
-- [ ] 2.6 Update chart `values.schema.json` files: add `"title": "hostname"` to the host/serverName fields in `charts/helloworld/`, `charts/matrix/`, `charts/immich/`
-- [ ] 2.7 Run full backend test suite and fix any remaining references
+- [x] 2.1 Create Alembic migration: rename column `domainname` → `hostname`, rename indexes `uq_domainname_active` → `uq_hostname_active`, `ix_deployment_domainname` → `ix_deployment_hostname`, update `uq_deployment_active` column reference
+- [x] 2.2 Update `DeploymentORM` in `api/app/models.py`: rename field, update index definitions
+- [x] 2.3 Update `DeploymentRead` in `api/app/models.py`: rename `domainname` → `hostname`
+- [x] 2.4 Rename `_iter_domainname_paths()` → `_iter_hostname_paths()` and `_derive_domainname()` → `_derive_hostname()` in `api/app/services/deployments.py`. Change schema title check to `title.lower() == "hostname"`. Rename all local variables
+- [x] 2.5 Update all Python test files: replace `domainname` with `hostname` in assertions, fixtures, schema definitions (`title: "domainname"` → `title: "hostname"`), and test function names (~15 files)
+- [x] 2.6 Update chart `values.schema.json` files: add `"title": "hostname"` to the host/serverName fields in `charts/helloworld/`, `charts/matrix/`, `charts/immich/`
+- [x] 2.7 Run full backend test suite and fix any remaining references
 
 ## 3. Rename domainname to hostname — frontend
 
-- [ ] 3.1 Update `Deployment` interface in `ui/src/api/types.ts`: rename `domainname` → `hostname`
-- [ ] 3.2 Update `ui/src/pages/Dashboard.tsx`: replace all `deployment.domainname` references with `deployment.hostname`
-- [ ] 3.3 Update `ui/src/api/endpoints.test.ts`: rename fixture data and assertions
+- [x] 3.1 Update `Deployment` interface in `ui/src/api/types.ts`: rename `domainname` → `hostname`
+- [x] 3.2 Update `ui/src/pages/Dashboard.tsx`: replace all `deployment.domainname` references with `deployment.hostname`
+- [x] 3.3 Update `ui/src/api/endpoints.test.ts`: rename fixture data and assertions (N/A — no UI test files exist)
 
 ## 4. Hostname validation service
 

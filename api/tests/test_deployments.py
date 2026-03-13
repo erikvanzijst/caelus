@@ -31,7 +31,7 @@ def test_delete_deployment_flow(client, db_session):
                 "properties": {
                     "ingress": {
                         "type": "object",
-                        "properties": {"host": {"type": "string", "title": "domainname"}},
+                        "properties": {"host": {"type": "string", "title": "hostname"}},
                     }
                 },
             },
@@ -107,7 +107,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
                 "properties": {
                     "user": {
                         "type": "object",
-                        "properties": {"domain": {"type": "string", "title": "domainname"}},
+                        "properties": {"domain": {"type": "string", "title": "hostname"}},
                     }
                 },
             },
@@ -126,7 +126,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
                 "properties": {
                     "user": {
                         "type": "object",
-                        "properties": {"domain": {"type": "string", "title": "domainname"}},
+                        "properties": {"domain": {"type": "string", "title": "hostname"}},
                     }
                 },
             },
@@ -246,7 +246,7 @@ def test_create_deployment_rejects_unknown_user_keys_against_schema(client):
     assert "invalid" in dep_resp.json()["detail"]
 
 
-def test_create_deployment_derives_domainname_recursively_case_insensitive_and_first_match(client):
+def test_create_deployment_derives_hostname_recursively_case_insensitive_and_first_match(client):
     user_resp = client.post("/api/users", json={"email": "recursive@example.com"})
     assert user_resp.status_code == 201
     user_id = user_resp.json()["id"]
@@ -265,11 +265,11 @@ def test_create_deployment_derives_domainname_recursively_case_insensitive_and_f
             "values_schema_json": {
                 "type": "object",
                 "properties": {
-                    "outer_first": {"type": "string", "title": "DomainName"},
+                    "outer_first": {"type": "string", "title": "Hostname"},
                     "nested": {
                         "type": "object",
                         "properties": {
-                            "inner": {"type": "string", "title": "domainname"},
+                            "inner": {"type": "string", "title": "hostname"},
                         },
                     },
                 },
@@ -287,10 +287,10 @@ def test_create_deployment_derives_domainname_recursively_case_insensitive_and_f
         },
     )
     assert dep_resp.status_code == 201
-    assert dep_resp.json()["domainname"] == "first.example.test"
+    assert dep_resp.json()["hostname"] == "first.example.test"
 
 
-def test_update_deployment_rederives_domainname_from_user_values(client, db_session):
+def test_update_deployment_rederives_hostname_from_user_values(client, db_session):
     user_resp = client.post("/api/users", json={"email": "rederive@example.com"})
     assert user_resp.status_code == 201
     user_id = user_resp.json()["id"]
@@ -304,7 +304,7 @@ def test_update_deployment_rederives_domainname_from_user_values(client, db_sess
     schema = {
         "type": "object",
         "properties": {
-            "domain": {"type": "string", "title": "domainname"},
+            "domain": {"type": "string", "title": "hostname"},
             "user": {"type": "object"},
         },
     }
@@ -341,4 +341,4 @@ def test_update_deployment_rederives_domainname_from_user_values(client, db_sess
         json={"desired_template_id": tmpl2_id, "user_values_json": {"domain": "after.example.test", "user": {}}},
     )
     assert update_resp.status_code == 200
-    assert update_resp.json()["domainname"] == "after.example.test"
+    assert update_resp.json()["hostname"] == "after.example.test"

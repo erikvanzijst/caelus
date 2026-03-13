@@ -142,7 +142,7 @@ def test_user_deployment_flow(client):
                 "properties": {
                     "user": {
                         "type": "object",
-                        "properties": {"host": {"type": "string", "title": "DomainName"}},
+                        "properties": {"host": {"type": "string", "title": "Hostname"}},
                     }
                 },
             },
@@ -167,7 +167,7 @@ def test_user_deployment_flow(client):
 
     fetched = client.get(f"/api/users/{user_id}/deployments/{deployment_id}")
     assert fetched.status_code == 200
-    assert fetched.json()["domainname"] == "cloud.example.com"
+    assert fetched.json()["hostname"] == "cloud.example.com"
 
 
 def test_user_deployment_flow_with_user_values(client):
@@ -193,7 +193,7 @@ def test_user_deployment_flow_with_user_values(client):
                         "type": "object",
                         "properties": {
                             "message": {"type": "string"},
-                            "domain": {"type": "string", "title": "domainname"},
+                            "domain": {"type": "string", "title": "hostname"},
                         },
                         "required": ["message"],
                         "additionalProperties": False,
@@ -215,11 +215,11 @@ def test_user_deployment_flow_with_user_values(client):
         },
     )
     assert deployment.status_code == 201
-    assert deployment.json()["domainname"] == "values.example.com"
+    assert deployment.json()["hostname"] == "values.example.com"
     assert deployment.json()["user_values_json"] == {"user": {"message": "hi", "domain": "values.example.com"}}
 
 
-def test_deployment_write_contract_rejects_domainname(client):
+def test_deployment_write_contract_rejects_hostname(client):
     user = client.post("/api/users", json={"email": "contract@example.com"})
     assert user.status_code == 201
     user_id = user.json()["id"]
@@ -260,7 +260,7 @@ def test_deployment_write_contract_rejects_domainname(client):
 
     bad_create = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_1_id, "domainname": "bad.example.com"},
+        json={"desired_template_id": template_1_id, "hostname": "bad.example.com"},
     )
     assert bad_create.status_code == 422
 
@@ -273,7 +273,7 @@ def test_deployment_write_contract_rejects_domainname(client):
 
     bad_update = client.put(
         f"/api/users/{user_id}/deployments/{deployment_id}",
-        json={"desired_template_id": template_2_id, "domainname": "bad.example.com"},
+        json={"desired_template_id": template_2_id, "hostname": "bad.example.com"},
     )
     assert bad_update.status_code == 422
 

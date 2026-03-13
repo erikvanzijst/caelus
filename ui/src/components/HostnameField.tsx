@@ -52,6 +52,15 @@ export function HostnameField({ value, onChange, wildcardDomains, required, erro
   const abortRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Sync wildcard domains into local state when they arrive asynchronously
+  const domainsInitializedRef = useRef(hasWildcard)
+  useEffect(() => {
+    if (domainsInitializedRef.current || !hasWildcard) return
+    domainsInitializedRef.current = true
+    setMode('wildcard')
+    setDomain(wildcardDomains[0])
+  }, [hasWildcard, wildcardDomains])
+
   // Sync initial value into local state on mount
   const initializedRef = useRef(false)
   useEffect(() => {
@@ -178,7 +187,7 @@ export function HostnameField({ value, onChange, wildcardDomains, required, erro
         {mode === 'wildcard' ? (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
             <TextField
-              label="Hostname prefix"
+              label="Hostname"
               value={prefix}
               onChange={(e) => setPrefix(e.target.value)}
               required={required}

@@ -177,6 +177,29 @@ describe('HostnameField', () => {
     })
   })
 
+  describe('async domain loading', () => {
+    it('switches to wildcard mode when domains arrive after mount', () => {
+      const onChange = vi.fn()
+      const { rerender } = render(
+        <HostnameField value="" onChange={onChange} wildcardDomains={[]} />,
+      )
+
+      // Initially in custom mode (no domains yet)
+      expect(screen.getByLabelText('Hostname')).toBeInTheDocument()
+      expect(screen.queryByText('Caelus domain')).not.toBeInTheDocument()
+
+      // Domains arrive asynchronously
+      rerender(
+        <HostnameField value="" onChange={onChange} wildcardDomains={['app.example.com']} />,
+      )
+
+      // Should switch to wildcard mode with domain pre-selected
+      expect(screen.getByLabelText('Hostname prefix')).toBeInTheDocument()
+      expect(screen.getByText('Caelus domain')).toBeInTheDocument()
+      expect(screen.getByText('app.example.com')).toBeInTheDocument()
+    })
+  })
+
   describe('initial value sync', () => {
     it('splits initial value into prefix and domain in wildcard mode', () => {
       const onChange = vi.fn()

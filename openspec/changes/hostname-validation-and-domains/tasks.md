@@ -45,16 +45,16 @@
 
 ## 6. Domains list API endpoint
 
-- [ ] 6.1 Add `GET /api/domains` endpoint to the hostnames router. Returns `settings.wildcard_domains` as `list[str]`. No auth dependency
-- [ ] 6.2 Write API test: configured domains returned, empty list when unconfigured
+- [x] 6.1 Add `GET /api/domains` endpoint to the hostnames router. Returns `settings.wildcard_domains` as `list[str]`. No auth dependency
+- [x] 6.2 Write API test: configured domains returned, empty list when unconfigured
 
 ## 7. Server-side hostname enforcement
 
-- [ ] 7.1 Wire `require_valid_hostname_for_deployment()` into `create_deployment()` in `api/app/services/deployments.py` — call after `_derive_hostname()`, before flush. Skip if hostname is `None`
-- [ ] 7.2 Wire `require_valid_hostname_for_deployment()` into `update_deployment()` — same pattern
-- [ ] 7.3 Register `HostnameException` in API exception handlers to map to appropriate HTTP status (e.g., 422 or 409)
-- [ ] 7.4 Update existing deployment tests: ensure `settings.lb_ips` is empty (or mock DNS) so hostname validation DNS check is skipped in test environments
-- [ ] 7.5 Write new tests: deployment creation rejected when hostname is reserved, in-use, or not resolving
+- [x] 7.1 Wire `require_valid_hostname_for_deployment()` into `create_deployment()` in `api/app/services/deployments.py` — call after `_derive_hostname()`, before flush. Skip if hostname is `None`
+- [x] 7.2 Wire `require_valid_hostname_for_deployment()` into `update_deployment()` — same pattern, with `exclude_deployment_id` to avoid self-conflict
+- [x] 7.3 Register `HostnameException` in API exception handlers to map to HTTP 409
+- [x] 7.4 Update existing deployment tests: constraint tests now expect `HostnameException` instead of `IntegrityException` since service-level validation fires first
+- [x] 7.5 Write new tests: deployment creation rejected when hostname is reserved, in-use, or not resolving
 
 ## 8. UI HostnameField component
 

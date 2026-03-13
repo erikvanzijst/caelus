@@ -5,7 +5,7 @@ from app.services import templates, deployments, products, users
 from app.services.jobs import JobService
 from sqlmodel import select
 from app.models import DeploymentORM, DeploymentReconcileJobORM, SQLModel
-from app.services.errors import IntegrityException
+from app.services.errors import HostnameException, IntegrityException
 from app.services.reconcile import DeploymentReconciler
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
 from tests.conftest import db_session
@@ -85,16 +85,14 @@ def test_deployment_unique_constraint(db_session):
             user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"}
         ),
     )
-    # Attempt duplicate deployment
-    with pytest.raises(IntegrityException):
+    # Attempt duplicate deployment — service-level validation catches hostname reuse
+    with pytest.raises(HostnameException, match="in_use"):
         deployments.create_deployment(
             db_session,
             payload=deployments.DeploymentCreate(
                 user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"}
             ),
         )
-    # rollback the failed transaction
-    db_session.rollback()
     create_job = db_session.exec(
         select(DeploymentReconcileJobORM).where(
             DeploymentReconcileJobORM.deployment_id == dep1.id,
@@ -163,7 +161,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
     )
     assert dep_a.hostname == "shared.example.com"
 
-    with pytest.raises(IntegrityException):
+    with pytest.raises(HostnameException, match="in_use"):
         deployments.create_deployment(
             db_session,
             payload=deployments.DeploymentCreate(
@@ -172,8 +170,6 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
                 user_values_json={"domain": "shared.example.com"},
             ),
         )
-
-    db_session.rollback()
     dep_a_orm = db_session.get(deployments.DeploymentORM, dep_a.id)
     assert dep_a_orm is not None
     dep_a_orm.status = DEPLOYMENT_STATUS_DELETED
@@ -217,7 +213,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
             user_values_json={"domain": "active.example.com"},
         ),
     )
-    with pytest.raises(IntegrityException):
+    with pytest.raises(HostnameException, match="in_use"):
         deployments.create_deployment(
             db_session,
             payload=deployments.DeploymentCreate(
@@ -226,7 +222,6 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
                 user_values_json={"domain": "active.example.com"},
             ),
         )
-    db_session.rollback()
 
     dep_a_orm = db_session.get(DeploymentORM, dep_a.id)
     assert dep_a_orm is not None

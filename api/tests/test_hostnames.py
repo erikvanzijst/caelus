@@ -13,11 +13,17 @@ from app.services.hostnames import (
     _check_resolving,
     require_valid_hostname_for_deployment,
 )
-from app.models import DeploymentORM, UserORM, ProductORM, ProductTemplateVersionORM
+from app.db import get_session
+from app.main import app as fastapi_app
+from app.models import DeploymentORM, DeploymentReconcileJobORM, UserORM, ProductORM, ProductTemplateVersionORM
+from app.services.jobs import JobService
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_PROVISIONING,
     DEPLOYMENT_STATUS_DELETED,
 )
+from sqlmodel import select
+from starlette.testclient import TestClient
+
 from tests.conftest import client, db_session
 
 
@@ -322,10 +328,6 @@ class TestHostnameCheckEndpoint:
         assert resp.json()["reason"] == "not_resolving"
 
     def test_unauthenticated_returns_404(self, db_session):
-        from starlette.testclient import TestClient
-        from app.db import get_session
-        from app.main import app as fastapi_app
-
         def override_get_db():
             yield db_session
 
@@ -339,3 +341,186 @@ class TestHostnameCheckEndpoint:
         resp = client.get("/api/hostnames/clean.example.com")
         assert resp.status_code == 200
         assert set(resp.json().keys()) == {"fqdn", "usable", "reason"}
+
+
+# ── Domains endpoint tests ────────────────────────────────────────────
+
+
+class TestDomainsEndpoint:
+    def test_returns_configured_domains(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.hostnames.get_settings",
+            lambda: _settings(wildcard_domains=["app.deprutser.be", "apps.example.com"]),
+        )
+        resp = client.get("/api/domains")
+        assert resp.status_code == 200
+        assert resp.json() == ["app.deprutser.be", "apps.example.com"]
+
+    def test_returns_empty_list_when_unconfigured(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.hostnames.get_settings",
+            lambda: _settings(wildcard_domains=[]),
+        )
+        resp = client.get("/api/domains")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_no_auth_required(self, db_session):
+        def override_get_db():
+            yield db_session
+
+        fastapi_app.dependency_overrides[get_session] = override_get_db
+        with TestClient(fastapi_app) as no_auth_client:
+            resp = no_auth_client.get("/api/domains")
+            assert resp.status_code == 200
+        fastapi_app.dependency_overrides.clear()
+
+
+# ── Server-side hostname enforcement tests ────────────────────────────
+
+
+class TestServerSideEnforcement:
+    def test_create_deployment_rejects_reserved_hostname(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "app.services.hostnames.get_settings",
+            lambda: _settings(reserved_hostnames=["reserved.example.com"]),
+        )
+        product = client.post("/api/products", json={"name": "enforce-prod", "description": "test"})
+        product_id = product.json()["id"]
+        template = client.post(
+            f"/api/products/{product_id}/templates",
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "1.0.0",
+                "values_schema_json": {
+                    "type": "object",
+                    "properties": {"host": {"type": "string", "title": "hostname"}},
+                },
+            },
+        )
+        template_id = template.json()["id"]
+        user = client.post("/api/users", json={"email": "enforce@example.com"})
+        user_id = user.json()["id"]
+
+        resp = client.post(
+            f"/api/users/{user_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "user_values_json": {"host": "reserved.example.com"},
+            },
+        )
+        assert resp.status_code == 409
+        assert "reserved" in resp.json()["detail"]
+
+    def test_create_deployment_rejects_in_use_hostname(self, client):
+        product = client.post("/api/products", json={"name": "enforce-inuse", "description": "test"})
+        product_id = product.json()["id"]
+        template = client.post(
+            f"/api/products/{product_id}/templates",
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "1.0.0",
+                "values_schema_json": {
+                    "type": "object",
+                    "properties": {"host": {"type": "string", "title": "hostname"}},
+                },
+            },
+        )
+        template_id = template.json()["id"]
+        user = client.post("/api/users", json={"email": "enforce-inuse@example.com"})
+        user_id = user.json()["id"]
+
+        # First deployment succeeds
+        resp1 = client.post(
+            f"/api/users/{user_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "user_values_json": {"host": "taken.enforce.example.com"},
+            },
+        )
+        assert resp1.status_code == 201
+
+        # Second deployment with same hostname is rejected
+        user2 = client.post("/api/users", json={"email": "enforce-inuse2@example.com"})
+        user2_id = user2.json()["id"]
+        resp2 = client.post(
+            f"/api/users/{user2_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "user_values_json": {"host": "taken.enforce.example.com"},
+            },
+        )
+        assert resp2.status_code == 409
+        assert "in_use" in resp2.json()["detail"]
+
+    def test_create_deployment_skips_validation_when_no_hostname(self, client):
+        """Templates without a hostname-titled field should not trigger validation."""
+        product = client.post("/api/products", json={"name": "enforce-nohost", "description": "test"})
+        product_id = product.json()["id"]
+        template = client.post(
+            f"/api/products/{product_id}/templates",
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "1.0.0",
+                "values_schema_json": {
+                    "type": "object",
+                    "properties": {"message": {"type": "string"}},
+                },
+            },
+        )
+        template_id = template.json()["id"]
+        user = client.post("/api/users", json={"email": "enforce-nohost@example.com"})
+        user_id = user.json()["id"]
+
+        resp = client.post(
+            f"/api/users/{user_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "user_values_json": {"message": "hello"},
+            },
+        )
+        assert resp.status_code == 201
+        assert resp.json()["hostname"] is None
+
+    def test_update_deployment_allows_same_hostname(self, client, db_session):
+        """Updating a deployment should not reject its own current hostname."""
+        product = client.post("/api/products", json={"name": "enforce-update", "description": "test"})
+        product_id = product.json()["id"]
+        schema = {
+            "type": "object",
+            "properties": {"host": {"type": "string", "title": "hostname"}},
+        }
+        tmpl1 = client.post(
+            f"/api/products/{product_id}/templates",
+            json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": schema},
+        )
+        tmpl2 = client.post(
+            f"/api/products/{product_id}/templates",
+            json={"chart_ref": "oci://example/chart", "chart_version": "2.0.0", "values_schema_json": schema},
+        )
+        user = client.post("/api/users", json={"email": "enforce-update@example.com"})
+        user_id = user.json()["id"]
+
+        dep = client.post(
+            f"/api/users/{user_id}/deployments",
+            json={"desired_template_id": tmpl1.json()["id"], "user_values_json": {"host": "same.example.com"}},
+        )
+        assert dep.status_code == 201
+        dep_id = dep.json()["id"]
+
+        # Mark create job done so update is allowed
+        create_job = db_session.exec(
+            select(DeploymentReconcileJobORM).where(
+                DeploymentReconcileJobORM.deployment_id == dep_id,
+                DeploymentReconcileJobORM.reason == "create",
+            )
+        ).one()
+        JobService(db_session).mark_job_done(job_id=create_job.id)
+
+        # Upgrade template but keep same hostname — should succeed
+        resp = client.put(
+            f"/api/users/{user_id}/deployments/{dep_id}",
+            json={"desired_template_id": tmpl2.json()["id"], "user_values_json": {"host": "same.example.com"}},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["hostname"] == "same.example.com"

@@ -34,11 +34,13 @@ def _check_reserved(fqdn: str, settings: CaelusSettings) -> None:
         raise HostnameException("reserved")
 
 
-def _check_available(session: Session, fqdn: str) -> None:
+def _check_available(session: Session, fqdn: str, *, exclude_deployment_id: int | None = None) -> None:
     stmt = select(DeploymentORM.id).where(
         DeploymentORM.hostname == fqdn,
         DeploymentORM.status != DEPLOYMENT_STATUS_DELETED,
     )
+    if exclude_deployment_id is not None:
+        stmt = stmt.where(DeploymentORM.id != exclude_deployment_id)
     if session.exec(stmt).first() is not None:
         raise HostnameException("in_use")
 
@@ -59,15 +61,22 @@ def _check_resolving(fqdn: str, settings: CaelusSettings) -> None:
 
 
 def require_valid_hostname_for_deployment(
-    session: Session, fqdn: str, *, settings: CaelusSettings | None = None,
+    session: Session,
+    fqdn: str,
+    *,
+    exclude_deployment_id: int | None = None,
+    settings: CaelusSettings | None = None,
 ) -> None:
     """Validate that *fqdn* can be used for a new or updated deployment.
 
     Raises ``HostnameException(reason=...)`` on the first failing check.
     Checks run in order: format → reserved → availability → DNS resolution.
+
+    Pass *exclude_deployment_id* when updating an existing deployment so its
+    own hostname doesn't trigger an "in_use" conflict.
     """
     settings = settings or get_settings()
     _check_format(fqdn)
     _check_reserved(fqdn, settings)
-    _check_available(session, fqdn)
+    _check_available(session, fqdn, exclude_deployment_id=exclude_deployment_id)
     _check_resolving(fqdn, settings)

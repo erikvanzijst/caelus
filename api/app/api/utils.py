@@ -6,12 +6,14 @@ from starlette.responses import JSONResponse
 from app.services.errors import (
     CaelusException,
     DeploymentInProgressException,
+    HostnameException,
     IntegrityException,
     NotFoundException,
     ValidationException,
 )
 
 ERROR_STATUS = {
+    HostnameException: 409,
     IntegrityException: 409,
     DeploymentInProgressException: 409,
     NotFoundException: 404,

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlmodel import Session
 
+from app.config import get_settings
 from app.db import get_session
 from app.deps import get_current_user
 from app.models import UserORM
@@ -30,3 +31,8 @@ def check_hostname(
         return HostnameCheck(fqdn=fqdn, usable=True)
     except HostnameException as exc:
         return HostnameCheck(fqdn=fqdn, usable=False, reason=exc.reason)
+
+
+@router.get("/domains", response_model=list[str])
+def list_domains() -> list[str]:
+    return get_settings().wildcard_domains

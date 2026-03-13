@@ -16,7 +16,8 @@ from app.models import (
 from app.services.jobs import JobService
 from app.services import template_values
 from app.services import users as user_service
-from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException
+from app.services.errors import DeploymentInProgressException, HostnameException, IntegrityException, NotFoundException
+from app.services.hostnames import require_valid_hostname_for_deployment
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETING,
     DEPLOYMENT_STATUS_PROVISIONING,
@@ -138,6 +139,8 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
         values_schema_json=template.values_schema_json,
         user_values_json=payload.user_values_json,
     )
+    if derived_hostname is not None:
+        require_valid_hostname_for_deployment(session, derived_hostname)
 
     deployment_uid = generate_deployment_uid(product_name=template.product.name, user_email=user.email)
     deployment: DeploymentORM = DeploymentORM.model_validate(
@@ -238,10 +241,15 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
 
     # Pre-flight the user-provided values against the template's schema:
     _validate_user_values(target_template, deployment.user_values_json)
-    deployment.hostname = _derive_hostname(
+    derived_hostname = _derive_hostname(
         values_schema_json=target_template.values_schema_json,
         user_values_json=deployment.user_values_json,
     )
+    if derived_hostname is not None:
+        require_valid_hostname_for_deployment(
+            session, derived_hostname, exclude_deployment_id=deployment.id,
+        )
+    deployment.hostname = derived_hostname
 
     deployment.desired_template_id = update.desired_template_id
     deployment.status = DEPLOYMENT_STATUS_PROVISIONING

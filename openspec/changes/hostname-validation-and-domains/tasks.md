@@ -27,21 +27,21 @@
 
 ## 4. Hostname validation service
 
-- [ ] 4.1 Add `HostnameException` class with `reason: str` attribute to `api/app/services/errors.py`
-- [ ] 4.2 Create `api/app/services/hostnames.py` with `require_valid_hostname_for_deployment(session, fqdn)` function
-- [ ] 4.3 Implement `_check_format(fqdn)` — RFC 952/1123 validation (max 253 chars, labels 1-63 chars, alphanumeric + hyphens, no leading/trailing hyphens per label)
-- [ ] 4.4 Implement `_check_reserved(fqdn, settings)` — lookup against `settings.reserved_hostnames`
-- [ ] 4.5 Implement `_check_available(session, fqdn)` — query `DeploymentORM` for active deployments with matching hostname
-- [ ] 4.6 Implement `_check_resolving(fqdn, settings)` — sync DNS resolution via `socket.getaddrinfo()`, verify all IPs ⊆ `settings.lb_ips`, skip when `lb_ips` is empty
-- [ ] 4.7 Write unit tests for each check function (format edge cases, reserved matching, availability queries, DNS resolution with mocked socket)
-- [ ] 4.8 Write integration test for `require_valid_hostname_for_deployment` orchestration and short-circuit behavior
+- [x] 4.1 Add `HostnameException` class with `reason: str` attribute to `api/app/services/errors.py`
+- [x] 4.2 Create `api/app/services/hostnames.py` with `require_valid_hostname_for_deployment(session, fqdn)` function
+- [x] 4.3 Implement `_check_format(fqdn)` — RFC 952/1123 validation (max 253 chars, labels 1-63 chars, alphanumeric + hyphens, no leading/trailing hyphens per label)
+- [x] 4.4 Implement `_check_reserved(fqdn, settings)` — lookup against `settings.reserved_hostnames`
+- [x] 4.5 Implement `_check_available(session, fqdn)` — query `DeploymentORM` for active deployments with matching hostname
+- [x] 4.6 Implement `_check_resolving(fqdn, settings)` — sync DNS resolution via `socket.getaddrinfo()`, verify all IPs ⊆ `settings.lb_ips`, skip when `lb_ips` is empty
+- [x] 4.7 Write unit tests for each check function (format edge cases, reserved matching, availability queries, DNS resolution with mocked socket)
+- [x] 4.8 Write integration test for `require_valid_hostname_for_deployment` orchestration and short-circuit behavior
 
 ## 5. Hostname check API endpoint
 
-- [ ] 5.1 Create `api/app/api/hostnames.py` with `GET /api/hostnames/{fqdn}` sync endpoint. Returns `HostnameCheck` response model (`fqdn: str`, `reason: str | None`)
-- [ ] 5.2 Register hostname router in `api/app/main.py` with `/api` prefix
-- [ ] 5.3 Register `HostnameException` handler in `api/app/api/utils.py` to return HTTP 200 with the reason (or consider returning it directly in the endpoint)
-- [ ] 5.4 Write API integration tests: usable hostname, invalid format, reserved, in-use, not-resolving
+- [x] 5.1 Create `api/app/api/hostnames.py` with `GET /api/hostnames/{fqdn}` sync endpoint. Returns `HostnameCheck` response model (`fqdn: str`, `reason: str | None`)
+- [x] 5.2 Register hostname router in `api/app/main.py` with `/api` prefix
+- [x] 5.3 Register `HostnameException` handler in `api/app/api/utils.py` to return HTTP 200 with the reason (or consider returning it directly in the endpoint)
+- [x] 5.4 Write API integration tests: usable hostname, invalid format, reserved, in-use, not-resolving
 
 ## 6. Domains list API endpoint
 

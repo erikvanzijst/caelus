@@ -87,6 +87,7 @@ def test_endpoints_return_404_without_auth_header(db_session):
             ("GET", "/api/products/1/templates"),
             ("GET", "/api/products/1/templates/1"),
             ("DELETE", "/api/products/1/templates/1"),
+            ("GET", "/api/hostnames/test.example.com"),
         ]
         for method, path in endpoints:
             resp = no_auth_client.request(method, path)

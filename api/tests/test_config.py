@@ -1,8 +1,14 @@
+import os
+
 import pytest
 from app.config import CaelusSettings
 
 
-def test_default_values():
+def test_default_values(monkeypatch):
+    # Remove any CAELUS_* env vars so we test true defaults
+    for key in list(os.environ):
+        if key.startswith("CAELUS_"):
+            monkeypatch.delenv(key)
     settings = CaelusSettings(
         _env_file=None,
     )

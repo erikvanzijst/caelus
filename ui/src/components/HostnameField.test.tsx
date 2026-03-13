@@ -24,7 +24,8 @@ describe('HostnameField', () => {
         <HostnameField value="" onChange={onChange} wildcardDomains={['app.example.com']} />,
       )
 
-      expect(screen.getByLabelText('Hostname prefix')).toBeInTheDocument()
+      expect(screen.getByLabelText('Hostname')).toBeInTheDocument()
+      expect(screen.getByText('app.example.com')).toBeInTheDocument()
       expect(screen.getByText('Caelus domain')).toBeInTheDocument()
       expect(screen.getByText('Custom domain')).toBeInTheDocument()
     })
@@ -47,7 +48,7 @@ describe('HostnameField', () => {
 
       fireEvent.click(screen.getByText('Custom domain'))
       fireEvent.click(screen.getByText('Caelus domain'))
-      expect(screen.getByLabelText('Hostname prefix')).toBeInTheDocument()
+      expect(screen.getByText('app.example.com')).toBeInTheDocument()
     })
   })
 
@@ -60,7 +61,7 @@ describe('HostnameField', () => {
         <HostnameField value="" onChange={onChange} wildcardDomains={['app.example.com']} />,
       )
 
-      fireEvent.change(screen.getByLabelText('Hostname prefix'), { target: { value: 'myapp' } })
+      fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'myapp' } })
 
       await waitFor(() => {
         expect(onChange).toHaveBeenCalledWith('myapp.app.example.com')
@@ -194,7 +195,6 @@ describe('HostnameField', () => {
       )
 
       // Should switch to wildcard mode with domain pre-selected
-      expect(screen.getByLabelText('Hostname prefix')).toBeInTheDocument()
       expect(screen.getByText('Caelus domain')).toBeInTheDocument()
       expect(screen.getByText('app.example.com')).toBeInTheDocument()
     })
@@ -211,7 +211,7 @@ describe('HostnameField', () => {
         />,
       )
 
-      expect(screen.getByLabelText('Hostname prefix')).toHaveValue('myapp')
+      expect(screen.getByLabelText('Hostname')).toHaveValue('myapp')
     })
 
     it('falls back to custom mode when value does not match any wildcard domain', () => {

@@ -5,9 +5,11 @@ resource "kubernetes_config_map" "api" {
   }
 
   data = {
+    CAELUS_STATIC_PATH  = "/var/static"
     CAELUS_DATABASE_URL = "postgresql+psycopg://${var.db_user}:${var.db_password}@caelus-postgres:5432/${var.db_name}"
-    # CAELUS_DATABASE_URL = "sqlite:////app/db/caelus.db"
+    CAELUS_LB_IPS = jsonencode(var.lb_ips)
+    CAELUS_WILDCARD_DOMAINS = jsonencode(var.wildcard_domains)
     # CAELUS_LOG_LEVEL    = "info"
-    PYTHONUNBUFFERED     = "1"
+    PYTHONUNBUFFERED    = "1"
   }
 }

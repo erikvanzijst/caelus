@@ -67,11 +67,6 @@ resource "kubernetes_deployment" "api" {
             protocol       = "TCP"
           }
 
-          env {
-            name  = "STATIC_PATH"
-            value = "/var/static"
-          }
-
           env_from {
             config_map_ref {
               name = "caelus-api-config"

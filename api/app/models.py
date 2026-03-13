@@ -189,15 +189,15 @@ class DeploymentORM(DeploymentBase, table=True):
         Index(
             "uq_deployment_active",
             "user_id",
-            "domainname",
+            "hostname",
             "desired_template_id",
             unique=True,
             sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
             postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
         ),
         Index(
-            "uq_domainname_active",
-            "domainname",
+            "uq_hostname_active",
+            "hostname",
             unique=True,
             sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
             postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
@@ -223,7 +223,7 @@ class DeploymentORM(DeploymentBase, table=True):
             index=True,
         ),
     )
-    domainname: Optional[str] = Field(
+    hostname: Optional[str] = Field(
         default=None, sa_column=Column(String(), nullable=True, index=True)
     )
     deployment_uid: str = Field(sa_column=Column(String(), nullable=False, index=True))
@@ -264,7 +264,7 @@ class DeploymentRead(DeploymentBase):
     id: int
     created_at: datetime
     user: UserRead
-    domainname: Optional[str] = None
+    hostname: Optional[str] = None
     desired_template: ProductTemplateVersionRead
     applied_template: Optional[ProductTemplateVersionRead]
     deployment_uid: Optional[str] = None

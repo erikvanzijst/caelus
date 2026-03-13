@@ -1,20 +1,26 @@
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class CaelusSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="CAELUS_", env_file=(".env", ".env.local"))
+
+    database_url: str = "postgresql+psycopg://caelus:caelus@localhost:5432/caelus"
+    static_path: Path = Path(__file__).parent.parent / "static"
+    log_level: str = "INFO"
+
+    lb_ips: list[str] = []
+    wildcard_domains: list[str] = []
+    reserved_hostnames: list[str] = []
 
 
 @lru_cache
-def get_static_path() -> Path:
-    """Get the static files root path.
-
-    Defaults to ./static in development, should be set to /var/static in production.
-    """
-    static_path = os.environ.get("STATIC_PATH")
-    if static_path:
-        return Path(static_path)
-    return Path(__file__).parent.parent / "static"
+def get_settings() -> CaelusSettings:
+    return CaelusSettings()
 
 
 def get_static_url_base() -> str:

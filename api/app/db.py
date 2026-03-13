@@ -1,28 +1,24 @@
 from __future__ import annotations
 
 import logging
-import os
 from contextlib import contextmanager
 from typing import Iterator, Generator
 
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
-from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-
-def _database_url() -> str:
-    return os.getenv("DATABASE_URL", "postgresql+psycopg://caelus:caelus@localhost:5432/caelus")
-
-
-DATABASE_URL = _database_url()
-is_sqlite = DATABASE_URL.startswith("sqlite")
+_settings = get_settings()
+_url = _settings.database_url
+is_sqlite = _url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
 poolclass = StaticPool if is_sqlite else None
 
 engine = create_engine(
-    DATABASE_URL,
+    _url,
     echo=False,
     connect_args=connect_args,
     poolclass=poolclass,

@@ -38,13 +38,13 @@ def test_deployment_create_supports_user_values_alias() -> None:
     assert payload.user_values_json == {"message": "hi"}
 
 
-def test_deployment_write_models_forbid_domainname_field() -> None:
+def test_deployment_write_models_forbid_hostname_field() -> None:
     with pytest.raises(ValidationError):
         DeploymentCreate.model_validate(
             {
                 "user_id": 1,
                 "desired_template_id": 2,
-                "domainname": "cloud.example.com",
+                "hostname": "cloud.example.com",
                 "user_values_json": {"message": "hi"},
             }
         )
@@ -55,7 +55,7 @@ def test_deployment_write_models_forbid_domainname_field() -> None:
                 "id": 1,
                 "user_id": 1,
                 "desired_template_id": 2,
-                "domainname": "cloud.example.com",
+                "hostname": "cloud.example.com",
             }
         )
 

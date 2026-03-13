@@ -98,9 +98,9 @@ def _create_test_image(size=(100, 100)):
 
 @pytest.fixture(autouse=True)
 def _setup_static_dir():
-    from app.config import get_static_path
+    from app.config import get_settings
 
-    static_path = get_static_path()
+    static_path = get_settings().static_path
     icons_dir = static_path / "icons"
     icons_dir.mkdir(parents=True, exist_ok=True)
     yield

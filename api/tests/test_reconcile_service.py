@@ -21,7 +21,7 @@ def _seed_deployment(db_session) -> int:
                 "type": "object",
                 "properties": {
                     "message": {"type": "string"},
-                    "domain": {"type": "string", "title": "domainname"},
+                    "domain": {"type": "string", "title": "hostname"},
                 },
                 "additionalProperties": False,
             },

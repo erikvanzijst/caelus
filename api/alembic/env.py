@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 from logging.config import fileConfig
@@ -13,14 +12,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
 from app import models  # noqa: E402,F401
-from app.db import DATABASE_URL
+from app.config import get_settings
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", DATABASE_URL))
+config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 
 target_metadata = SQLModel.metadata

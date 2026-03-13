@@ -6,16 +6,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import users, products
+from app.api import users, products, hostnames
 from app.api.utils import register_exception_handlers
 from app.logging_config import configure_logging
-from app.config import get_static_path
+from app.config import get_settings
 
 configure_logging()
 
+_settings = get_settings()
+
 
 def _init_static_dir() -> None:
-    (get_static_path() / "icons").mkdir(parents=True, exist_ok=True)
+    (_settings.static_path / "icons").mkdir(parents=True, exist_ok=True)
 
 
 app = FastAPI(
@@ -50,9 +52,10 @@ def redirect_to_docs() -> RedirectResponse:
 app.include_router(users.me_router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
+app.include_router(hostnames.router, prefix="/api")
 
 _init_static_dir()
-app.mount("/api/static", StaticFiles(directory=str(get_static_path())), name="static")
+app.mount("/api/static", StaticFiles(directory=str(_settings.static_path)), name="static")
 
 register_exception_handlers(app)
 

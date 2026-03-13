@@ -60,7 +60,7 @@ def authz_setup(db_session):
                     "properties": {
                         "user": {
                             "type": "object",
-                            "properties": {"host": {"type": "string", "title": "DomainName"}},
+                            "properties": {"host": {"type": "string", "title": "Hostname"}},
                         }
                     },
                 },

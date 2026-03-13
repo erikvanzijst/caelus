@@ -84,6 +84,16 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
 - **Check exit status** – after `git commit …` verify `$? == 0`; on error abort and report before retrying.
 - Explain why and what changed in the body.
 
+## UI Conventions
+- Extract React components into focused, single-responsibility files under
+  `ui/src/components/`. Avoid inlining complex functionality into page-level
+  components (`Dashboard.tsx`, `Admin.tsx`).
+- Form field components with specialized behavior (e.g., `HostnameField`)
+  should be their own component files, not inlined into the form.
+- Schema-driven fields in `UserValuesForm` can be overridden by matching on
+  `field.title` (case-insensitive) and rendering a custom component instead
+  of the default `<TextField>`.
+
 ## Contribution Checklist
 - Update or add tests for new behavior.
 - Keep API + CLI parity (same features and validations).

@@ -45,3 +45,14 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "lb_ips" {
+  description = "Load balancer IPs for hostname DNS validation"
+  type        = list(string)
+  default     = ["185.142.224.215"]
+}
+
+variable "wildcard_domains" {
+  description = "Freely available wildcard domains"
+  type        = list(string)
+}

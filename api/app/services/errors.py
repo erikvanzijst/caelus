@@ -19,5 +19,11 @@ class ValidationException(CaelusException):
     pass
 
 
+class HostnameException(CaelusException):
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
+
+
 # Backward‑compatible alias expected by the CLI tests
 NotFoundError = NotFoundException

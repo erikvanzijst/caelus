@@ -48,7 +48,7 @@ def _seed_deployment_via_services() -> tuple[int, int]:
                 chart_version="1.0.0",
                 values_schema_json={
                     "type": "object",
-                    "properties": {"domain": {"type": "string", "title": "domainname"}},
+                    "properties": {"domain": {"type": "string", "title": "hostname"}},
                 },
             ),
         )
@@ -72,9 +72,9 @@ def _get_template_from_services(product_id: int, template_id: int):
         )
 
 
-def _get_deployment_by_domain(domainname: str):
+def _get_deployment_by_domain(hostname: str):
     with session_scope() as session:
-        return session.exec(select(DeploymentORM).where(DeploymentORM.domainname == domainname)).one_or_none()
+        return session.exec(select(DeploymentORM).where(DeploymentORM.hostname == hostname)).one_or_none()
 
 
 def _get_job_reasons_for_deployment(deployment_id: int) -> list[str]:
@@ -429,7 +429,7 @@ def test_cli_get_deployment_command(cli_runner):
 
     get_dep_res = runner.invoke(app, ["get-deployment", str(user_id), str(deployment_id)])
     assert get_dep_res.exit_code == 0
-    assert _parse_yaml_stdout(get_dep_res)["domainname"] == "dep.example.com"
+    assert _parse_yaml_stdout(get_dep_res)["hostname"] == "dep.example.com"
 
     missing_dep_res = runner.invoke(app, ["get-deployment", str(user_id), "99999"])
     assert missing_dep_res.exit_code == 1
@@ -457,7 +457,7 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            '{"type":"object","properties":{"domain":{"type":"string","title":"domainname"}}}',
+            '{"type":"object","properties":{"domain":{"type":"string","title":"hostname"}}}',
         ],
     )
     assert template_res.exit_code == 0
@@ -477,7 +477,7 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
     )
     assert create_dep_res.exit_code == 0
     created_deployment = _parse_yaml_stdout(create_dep_res)
-    assert created_deployment["domainname"] == "cli-audit.example.test"
+    assert created_deployment["hostname"] == "cli-audit.example.test"
 
 
 def test_cli_create_deployment_accepts_user_values_json(cli_runner):
@@ -500,7 +500,7 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            '{"type":"object","properties":{"domain":{"type":"string","title":"domainname"},"message":{"type":"string"}}}',
+            '{"type":"object","properties":{"domain":{"type":"string","title":"hostname"},"message":{"type":"string"}}}',
         ],
     )
     assert template_res.exit_code == 0
@@ -520,7 +520,7 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
     )
     assert create_dep_res.exit_code == 0
     created_deployment = _parse_yaml_stdout(create_dep_res)
-    assert created_deployment["domainname"] == "cli-json.example.test"
+    assert created_deployment["hostname"] == "cli-json.example.test"
     assert created_deployment["user_values_json"] == {"domain": "cli-json.example.test", "message": "hi"}
 
 
@@ -544,7 +544,7 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            '{"type":"object","properties":{"domain":{"type":"string","title":"domainname"},"replicas":{"type":"integer"},"feature":{"type":"object"}}}',
+            '{"type":"object","properties":{"domain":{"type":"string","title":"hostname"},"replicas":{"type":"integer"},"feature":{"type":"object"}}}',
         ],
     )
     assert template_res.exit_code == 0
@@ -570,7 +570,7 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
     )
     assert create_dep_res.exit_code == 0
     created_deployment = _parse_yaml_stdout(create_dep_res)
-    assert created_deployment["domainname"] == "cli-file.example.test"
+    assert created_deployment["hostname"] == "cli-file.example.test"
     assert created_deployment["user_values_json"] == {
         "domain": "cli-file.example.test",
         "replicas": 2,
@@ -616,7 +616,7 @@ def test_cli_create_deployment_not_found_returns_stable_error(cli_runner):
     assert "Traceback" not in missing_user_res.output
 
 
-def test_cli_rejects_removed_domainname_write_option(cli_runner):
+def test_cli_rejects_removed_hostname_write_option(cli_runner):
     runner, app = cli_runner
 
     create_with_domain_option = runner.invoke(
@@ -627,12 +627,12 @@ def test_cli_rejects_removed_domainname_write_option(cli_runner):
             "1",
             "--desired-template-id",
             "1",
-            "--domainname",
+            "--hostname",
             "deprecated.example.test",
         ],
     )
     assert create_with_domain_option.exit_code != 0
-    assert "No such option: --domainname" in create_with_domain_option.output
+    assert "No such option: --hostname" in create_with_domain_option.output
 
     update_with_domain_option = runner.invoke(
         app,
@@ -644,12 +644,12 @@ def test_cli_rejects_removed_domainname_write_option(cli_runner):
             "1",
             "--desired-template-id",
             "2",
-            "--domainname",
+            "--hostname",
             "deprecated.example.test",
         ],
     )
     assert update_with_domain_option.exit_code != 0
-    assert "No such option: --domainname" in update_with_domain_option.output
+    assert "No such option: --hostname" in update_with_domain_option.output
 
 
 def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
@@ -672,7 +672,7 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
             "--chart-version",
             "1.0.0",
             "--values-schema-json",
-            '{"type":"object","properties":{"domain":{"type":"string","title":"domainname"}}}',
+            '{"type":"object","properties":{"domain":{"type":"string","title":"hostname"}}}',
         ],
     )
     assert tmpl1_res.exit_code == 0
@@ -689,7 +689,7 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
             "--chart-version",
             "2.0.0",
             "--values-schema-json",
-            '{"type":"object","properties":{"domain":{"type":"string","title":"domainname"}}}',
+            '{"type":"object","properties":{"domain":{"type":"string","title":"hostname"}}}',
         ],
     )
     assert tmpl2_res.exit_code == 0

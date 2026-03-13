@@ -31,9 +31,15 @@ export interface ProductTemplate {
   product: Product
 }
 
+export interface HostnameCheckResult {
+  fqdn: string
+  usable: boolean
+  reason: string | null
+}
+
 export interface Deployment {
   desired_template_id: number
-  domainname: string | null
+  hostname: string | null
   user_id: number
   user_values_json?: Record<string, unknown> | null
   id: number

@@ -15,6 +15,7 @@ module "caelus" {
   rbac_name   = "caelus-api-${kubernetes_namespace.caelus.metadata[0].name}"
   ns_login    = kubernetes_namespace.login.metadata[0].name
   db_password = var.db_password
+  wildcard_domains = [local.domain]
 
   depends_on = [kubernetes_namespace.caelus]
 }

@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class CaelusSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="CAELUS_")
+    model_config = SettingsConfigDict(env_prefix="CAELUS_", env_file=(".env", ".env.local"))
 
     database_url: str = "postgresql+psycopg://caelus:caelus@localhost:5432/caelus"
     static_path: Path = Path(__file__).parent.parent / "static"

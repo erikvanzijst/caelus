@@ -58,20 +58,20 @@
 
 ## 8. UI HostnameField component
 
-- [ ] 8.1 Add `checkHostname(fqdn)` and `listDomains()` functions to `ui/src/api/endpoints.ts`
-- [ ] 8.2 Add `HostnameCheckResult` type (`fqdn: string`, `reason: string | null`) to `ui/src/api/types.ts`
-- [ ] 8.3 Create `ui/src/components/HostnameField.tsx` with dual-mode input (Caelus wildcard prefix + domain dropdown, or custom FQDN text input)
-- [ ] 8.4 Implement debounced validation (~400ms) calling `GET /api/hostnames/{fqdn}` via React Query or `useEffect` + `AbortController`
-- [ ] 8.5 Implement status icon display: green CheckCircle, red Error with tooltip, CircularProgress spinner
-- [ ] 8.6 Handle edge cases: empty input (no API call, no icon), switching modes (reset state), no wildcard domains available (default to custom mode)
+- [x] 8.1 Add `checkHostname(fqdn)` and `listDomains()` functions to `ui/src/api/endpoints.ts`
+- [x] 8.2 Add `HostnameCheckResult` type (`fqdn: string`, `reason: string | null`) to `ui/src/api/types.ts`
+- [x] 8.3 Create `ui/src/components/HostnameField.tsx` with dual-mode input (Caelus wildcard prefix + domain dropdown, or custom FQDN text input)
+- [x] 8.4 Implement debounced validation (~400ms) calling `GET /api/hostnames/{fqdn}` via React Query or `useEffect` + `AbortController`
+- [x] 8.5 Implement status icon display: green CheckCircle, red Error with tooltip, CircularProgress spinner
+- [x] 8.6 Handle edge cases: empty input (no API call, no icon), switching modes (reset state), no wildcard domains available (default to custom mode)
 
 ## 9. Integrate HostnameField into UserValuesForm
 
-- [ ] 9.1 Modify `UserValuesForm.tsx` to detect fields where `field.title?.toLowerCase() === "hostname"` and render `<HostnameField>` instead of `<TextField>`
-- [ ] 9.2 Fetch wildcard domains via React Query in `UserValuesForm` (or in `HostnameField`) and pass as prop
-- [ ] 9.3 Ensure the `onChange` callback from `HostnameField` feeds into the form's flattened state at the correct dot-notation path
-- [ ] 9.4 Verify end-to-end: selecting a product with a hostname-titled schema field renders the HostnameField, typing triggers validation, and form submission includes the hostname in `user_values_json`
+- [x] 9.1 Modify `UserValuesForm.tsx` to detect fields where `field.title?.toLowerCase() === "hostname"` and render `<HostnameField>` instead of `<TextField>`
+- [x] 9.2 Fetch wildcard domains via React Query in `UserValuesForm` (or in `HostnameField`) and pass as prop
+- [x] 9.3 Ensure the `onChange` callback from `HostnameField` feeds into the form's flattened state at the correct dot-notation path
+- [x] 9.4 Verify end-to-end: selecting a product with a hostname-titled schema field renders the HostnameField, typing triggers validation, and form submission includes the hostname in `user_values_json`
 
 ## 10. Documentation
 
-- [ ] 10.1 Add "UI Conventions" section to AGENTS.md documenting React component extraction guidelines
+- [x] 10.1 Add "UI Conventions" section to AGENTS.md documenting React component extraction guidelines

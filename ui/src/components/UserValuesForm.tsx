@@ -11,6 +11,9 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { listDomains } from '../api/endpoints'
+import { HostnameField } from './HostnameField'
 
 const ajv = new Ajv2020({ allErrors: true, strict: false })
 addFormats(ajv)
@@ -145,6 +148,17 @@ export function UserValuesForm({
   const fields = useMemo(() => flattenSchema(valuesSchemaJson), [valuesSchemaJson])
   const defaults = useMemo(() => flattenDefaults(defaultValuesJson), [defaultValuesJson])
 
+  const hasHostnameField = useMemo(
+    () => fields.some((f) => f.title?.toLowerCase() === 'hostname'),
+    [fields],
+  )
+  const domainsQuery = useQuery({
+    queryKey: ['domains'],
+    queryFn: listDomains,
+    enabled: hasHostnameField,
+    staleTime: 5 * 60 * 1000,
+  })
+
   const [formData, setFormData] = useState<Record<string, unknown>>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
@@ -238,47 +252,62 @@ export function UserValuesForm({
           ))}
         </Box>
       )}
-      {fields.map((field) => (
-        <FormControl key={field.path} fullWidth error={!!fieldErrors[field.path]}>
-          {field.type === 'boolean' ? (
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={formData[field.path] === true}
-                  onChange={(e) => handleChange(field.path, e.target.checked, 'boolean')}
-                />
-              }
-              label={field.title || field.path}
-            />
-          ) : (
-            <TextField
-              label={field.title || field.path}
-              helperText={fieldErrors[field.path] || field.description}
-              value={
-                typeof formData[field.path] === 'string' || typeof formData[field.path] === 'number'
-                  ? formData[field.path]
-                  : ''
-              }
-              onChange={(e) => handleChange(field.path, e.target.value, field.type)}
-              type={
-                field.type === 'integer' || field.type === 'number'
-                  ? 'number'
-                  : field.pattern
-                    ? 'text'
-                    : 'text'
-              }
-              inputProps={
-                field.pattern
-                  ? { title: field.description || field.title || field.path }
-                  : undefined
-              }
+      {fields.map((field) => {
+        if (field.title?.toLowerCase() === 'hostname') {
+          return (
+            <HostnameField
+              key={field.path}
+              value={typeof formData[field.path] === 'string' ? (formData[field.path] as string) : ''}
+              onChange={(hostname) => handleChange(field.path, hostname, 'string')}
+              wildcardDomains={domainsQuery.data ?? []}
               required={field.required}
-              error={!!fieldErrors[field.path]}
+              error={fieldErrors[field.path]}
             />
-          )}
-          {fieldErrors[field.path] && <FormHelperText>{fieldErrors[field.path]}</FormHelperText>}
-        </FormControl>
-      ))}
+          )
+        }
+
+        return (
+          <FormControl key={field.path} fullWidth error={!!fieldErrors[field.path]}>
+            {field.type === 'boolean' ? (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={formData[field.path] === true}
+                    onChange={(e) => handleChange(field.path, e.target.checked, 'boolean')}
+                  />
+                }
+                label={field.title || field.path}
+              />
+            ) : (
+              <TextField
+                label={field.title || field.path}
+                helperText={fieldErrors[field.path] || field.description}
+                value={
+                  typeof formData[field.path] === 'string' || typeof formData[field.path] === 'number'
+                    ? formData[field.path]
+                    : ''
+                }
+                onChange={(e) => handleChange(field.path, e.target.value, field.type)}
+                type={
+                  field.type === 'integer' || field.type === 'number'
+                    ? 'number'
+                    : field.pattern
+                      ? 'text'
+                      : 'text'
+                }
+                inputProps={
+                  field.pattern
+                    ? { title: field.description || field.title || field.path }
+                    : undefined
+                }
+                required={field.required}
+                error={!!fieldErrors[field.path]}
+              />
+            )}
+            {fieldErrors[field.path] && <FormHelperText>{fieldErrors[field.path]}</FormHelperText>}
+          </FormControl>
+        )
+      })}
     </Stack>
   )
 }

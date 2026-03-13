@@ -1,6 +1,18 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import { UserValuesForm } from '../components/UserValuesForm'
+
+vi.mock('../api/endpoints', () => ({
+  listDomains: vi.fn().mockResolvedValue([]),
+  checkHostname: vi.fn().mockResolvedValue({ fqdn: '', usable: true, reason: null }),
+}))
+
+function Wrapper({ children }: { children: ReactNode }) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+}
 
 describe('UserValuesForm', () => {
   const schema = {
@@ -63,6 +75,7 @@ describe('UserValuesForm', () => {
         defaultValuesJson={null}
         onChange={onChange}
       />,
+      { wrapper: Wrapper },
     )
 
     expect(screen.getByText('Configure application values:')).toBeInTheDocument()
@@ -77,6 +90,7 @@ describe('UserValuesForm', () => {
         defaultValuesJson={defaults}
         onChange={onChange}
       />,
+      { wrapper: Wrapper },
     )
 
     await waitFor(() => {
@@ -94,6 +108,7 @@ describe('UserValuesForm', () => {
         defaultValuesJson={defaults}
         onChange={onChange}
       />,
+      { wrapper: Wrapper },
     )
 
     await waitFor(() => {
@@ -112,6 +127,7 @@ describe('UserValuesForm', () => {
         defaultValuesJson={null}
         onChange={onChange}
       />,
+      { wrapper: Wrapper },
     )
 
     expect(container.firstChild).toBeNull()
@@ -126,6 +142,7 @@ describe('UserValuesForm', () => {
         defaultValuesJson={null}
         onChange={onChange}
       />,
+      { wrapper: Wrapper },
     )
 
     expect(container.firstChild).toBeNull()
@@ -139,6 +156,7 @@ describe('UserValuesForm', () => {
         defaultValuesJson={{ federation: { enabled: false } }}
         onChange={onChange}
       />,
+      { wrapper: Wrapper },
     )
 
     await waitFor(() => {
@@ -156,6 +174,7 @@ describe('UserValuesForm', () => {
         defaultValuesJson={{ federation: { enabled: false } }}
         onChange={onChange}
       />,
+      { wrapper: Wrapper },
     )
 
     const checkbox = screen.getByRole('checkbox')
@@ -166,5 +185,78 @@ describe('UserValuesForm', () => {
         federation: { enabled: true },
       })
     })
+  })
+
+  it('renders HostnameField for fields with title "hostname"', () => {
+    const hostnameSchema = {
+      type: 'object',
+      properties: {
+        host: {
+          type: 'string',
+          title: 'hostname',
+        },
+      },
+    }
+    const onChange = vi.fn()
+    render(
+      <UserValuesForm
+        valuesSchemaJson={hostnameSchema}
+        defaultValuesJson={null}
+        onChange={onChange}
+      />,
+      { wrapper: Wrapper },
+    )
+
+    // HostnameField renders a "Hostname" labeled input in custom mode (no wildcard domains)
+    expect(screen.getByLabelText('Hostname')).toBeInTheDocument()
+    // It should NOT render a regular TextField with label "hostname"
+    expect(screen.queryByLabelText('hostname')).not.toBeInTheDocument()
+  })
+
+  it('renders HostnameField case-insensitively', () => {
+    const hostnameSchema = {
+      type: 'object',
+      properties: {
+        domain: {
+          type: 'string',
+          title: 'Hostname',
+        },
+      },
+    }
+    const onChange = vi.fn()
+    render(
+      <UserValuesForm
+        valuesSchemaJson={hostnameSchema}
+        defaultValuesJson={null}
+        onChange={onChange}
+      />,
+      { wrapper: Wrapper },
+    )
+
+    // HostnameField's custom-mode input has label "Hostname"
+    expect(screen.getByLabelText('Hostname')).toBeInTheDocument()
+  })
+
+  it('renders regular TextField for non-hostname fields', () => {
+    const regularSchema = {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          title: 'Message',
+        },
+      },
+    }
+    const onChange = vi.fn()
+    render(
+      <UserValuesForm
+        valuesSchemaJson={regularSchema}
+        defaultValuesJson={null}
+        onChange={onChange}
+      />,
+      { wrapper: Wrapper },
+    )
+
+    expect(screen.getByLabelText('Message')).toBeInTheDocument()
   })
 })

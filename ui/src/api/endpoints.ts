@@ -1,5 +1,5 @@
 import { requestJson, requestMultipart } from './client'
-import type { Deployment, Product, ProductTemplate, User } from './types'
+import type { Deployment, HostnameCheckResult, Product, ProductTemplate, User } from './types'
 
 export function getMe() {
   return requestJson<User>('/me')
@@ -99,4 +99,12 @@ export function deleteDeployment(userId: number, deploymentId: number) {
   return requestJson<null>(`/users/${userId}/deployments/${deploymentId}`, {
     method: 'DELETE',
   })
+}
+
+export function checkHostname(fqdn: string) {
+  return requestJson<HostnameCheckResult>(`/hostnames/${encodeURIComponent(fqdn)}`)
+}
+
+export function listDomains() {
+  return requestJson<string[]>('/domains')
 }

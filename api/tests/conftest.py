@@ -37,8 +37,11 @@ def cli_runner(tmp_path, monkeypatch):
     # Ensure a clean DB file
     if db_path.exists():
         db_path.unlink()
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+    monkeypatch.setenv("CAELUS_DATABASE_URL", f"sqlite:///{db_path}")
     monkeypatch.setenv("CAELUS_USER_EMAIL", "cli-test@example.com")
+
+    from app.config import get_settings
+    get_settings.cache_clear()
 
     import app.db as db
 

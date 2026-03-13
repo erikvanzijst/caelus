@@ -1,13 +1,13 @@
 ## 1. Pydantic Settings
 
-- [ ] 1.1 Add `pydantic-settings` to `api/pyproject.toml` dependencies and run `uv sync`
-- [ ] 1.2 Replace `api/app/config.py` with `CaelusSettings(BaseSettings)` class using `env_prefix="CAELUS_"`. Include fields: `database_url`, `static_path`, `log_level`, `lb_ips`, `wildcard_domains`, `reserved_hostnames`. Add `get_settings()` with `@lru_cache`
-- [ ] 1.3 Update `api/app/db.py` to use `get_settings().database_url` instead of `os.environ.get("DATABASE_URL")`
-- [ ] 1.4 Update `api/app/logging_config.py` to use `get_settings().log_level` instead of `os.environ.get("CAELUS_LOG_LEVEL")`
-- [ ] 1.5 Update `api/app/main.py` to use `get_settings().static_path` instead of `get_static_path()`. Remove old `get_static_url_base()` if no longer needed
-- [ ] 1.6 Update Terraform env var references in `tf/` from `DATABASE_URL` → `CAELUS_DATABASE_URL`, `STATIC_PATH` → `CAELUS_STATIC_PATH`
-- [ ] 1.7 Write tests for `CaelusSettings` — default values, env var loading, list field parsing
-- [ ] 1.8 Run existing test suite and fix any breakage from config changes
+- [x] 1.1 Add `pydantic-settings` to `api/pyproject.toml` dependencies and run `uv sync`
+- [x] 1.2 Replace `api/app/config.py` with `CaelusSettings(BaseSettings)` class using `env_prefix="CAELUS_"`. Include fields: `database_url`, `static_path`, `log_level`, `lb_ips`, `wildcard_domains`, `reserved_hostnames`. Add `get_settings()` with `@lru_cache`
+- [x] 1.3 Update `api/app/db.py` to use `get_settings().database_url` instead of `os.environ.get("DATABASE_URL")`
+- [x] 1.4 Update `api/app/logging_config.py` to use `get_settings().log_level` instead of `os.environ.get("CAELUS_LOG_LEVEL")`
+- [x] 1.5 Update `api/app/main.py` to use `get_settings().static_path` instead of `get_static_path()`. Remove old `get_static_url_base()` if no longer needed
+- [x] 1.6 Update Terraform env var references in `tf/` from `DATABASE_URL` → `CAELUS_DATABASE_URL`, `STATIC_PATH` → `CAELUS_STATIC_PATH`
+- [x] 1.7 Write tests for `CaelusSettings` — default values, env var loading, list field parsing
+- [x] 1.8 Run existing test suite and fix any breakage from config changes
 
 ## 2. Rename domainname to hostname — backend
 

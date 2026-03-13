@@ -87,9 +87,9 @@ def save_icon(processed_data: bytes, rel_path: str) -> Path:
     Returns:
         Absolute path to saved file
     """
-    from app.config import get_static_path
+    from app.config import get_settings
 
-    static_path = get_static_path()
+    static_path = get_settings().static_path
     file_path = static_path / rel_path
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(processed_data)

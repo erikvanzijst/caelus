@@ -25,7 +25,7 @@ services:
       - "8000:8000"
       - "5173:5173"
     environment:
-      - DATABASE_URL=postgresql+psycopg://caelus:caelus@postgres:5432/caelus
+      - CAELUS_DATABASE_URL=postgresql+psycopg://caelus:caelus@postgres:5432/caelus
       - KUBECONFIG=/workspace/k8s/kubeconfigs/dev-k3s.yaml
     volumes:
       - .:/workspace

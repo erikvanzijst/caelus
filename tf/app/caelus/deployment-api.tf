@@ -68,7 +68,7 @@ resource "kubernetes_deployment" "api" {
           }
 
           env {
-            name  = "STATIC_PATH"
+            name  = "CAELUS_STATIC_PATH"
             value = "/var/static"
           }
 

@@ -4,6 +4,8 @@ import logging
 import os
 import sys
 
+from app.config import get_settings
+
 _DEFAULT_LOG_LEVEL = "INFO"
 _RESET = "\x1b[0m"
 _LEVEL_COLORS = {
@@ -40,7 +42,10 @@ def _should_use_color() -> bool:
 def _resolve_level(level: str | int | None) -> int:
     if isinstance(level, int):
         return level
-    candidate = (level or os.getenv("CAELUS_LOG_LEVEL", _DEFAULT_LOG_LEVEL)).upper()
+    if level:
+        candidate = level.upper()
+    else:
+        candidate = get_settings().log_level.upper()
     resolved = logging.getLevelName(candidate)
     if isinstance(resolved, int):
         return resolved

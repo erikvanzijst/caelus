@@ -35,6 +35,7 @@ type ValidationState =
 interface HostnameFieldProps {
   value: string
   onChange: (hostname: string) => void
+  onValidationChange?: (valid: boolean) => void
   wildcardDomains: string[]
   required?: boolean
   error?: string
@@ -43,7 +44,7 @@ interface HostnameFieldProps {
 
 type Mode = 'wildcard' | 'custom'
 
-export function HostnameField({ value, onChange, wildcardDomains, required, error, description }: HostnameFieldProps) {
+export function HostnameField({ value, onChange, onValidationChange, wildcardDomains, required, error, description }: HostnameFieldProps) {
   const hasWildcard = wildcardDomains.length > 0
   const [mode, setMode] = useState<Mode>(hasWildcard ? 'wildcard' : 'custom')
   const [prefix, setPrefix] = useState('')
@@ -120,6 +121,11 @@ export function HostnameField({ value, onChange, wildcardDomains, required, erro
     onChange(currentFqdn)
     validate(currentFqdn)
   }, [currentFqdn, onChange, validate])
+
+  // Notify parent of validation state changes
+  useEffect(() => {
+    onValidationChange?.(validation.status === 'valid')
+  }, [validation.status, onValidationChange])
 
   // Cleanup on unmount
   useEffect(() => {

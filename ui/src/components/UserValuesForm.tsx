@@ -136,6 +136,7 @@ interface UserValuesFormProps {
   valuesSchemaJson: Record<string, unknown> | null
   defaultValuesJson: Record<string, unknown> | null
   onChange: (userValues: Record<string, unknown> | null) => void
+  onHostnameValidationChange?: (valid: boolean) => void
   errors?: string[]
 }
 
@@ -143,6 +144,7 @@ export function UserValuesForm({
   valuesSchemaJson,
   defaultValuesJson,
   onChange,
+  onHostnameValidationChange,
   errors = [],
 }: UserValuesFormProps) {
   const fields = useMemo(() => flattenSchema(valuesSchemaJson), [valuesSchemaJson])
@@ -259,6 +261,7 @@ export function UserValuesForm({
               key={field.path}
               value={typeof formData[field.path] === 'string' ? (formData[field.path] as string) : ''}
               onChange={(hostname) => handleChange(field.path, hostname, 'string')}
+              onValidationChange={onHostnameValidationChange}
               wildcardDomains={domainsQuery.data ?? []}
               required={field.required}
               error={fieldErrors[field.path]}

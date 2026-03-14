@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import subprocess
 
 import pytest
@@ -46,14 +45,10 @@ def test_kube_namespace_exists_bubbles_non_not_found_errors_as_classified() -> N
 
 def test_helm_upgrade_install_passes_values_and_returns_status() -> None:
     calls: list[list[str]] = []
-    seen_values: dict | None = None
 
     def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-        nonlocal seen_values
         calls.append(cmd)
         if cmd[:3] == ["helm", "upgrade", "--install"]:
-            values_path = Path(cmd[cmd.index("--values") + 1])
-            seen_values = json.loads(values_path.read_text())
             return _result(args=cmd, returncode=0, stdout="Release upgraded")
         if cmd[:2] == ["helm", "status"]:
             payload = {"info": {"status": "deployed"}, "version": 7}
@@ -76,8 +71,11 @@ def test_helm_upgrade_install_passes_values_and_returns_status() -> None:
     assert out.changed is True
     assert out.status == "deployed"
     assert out.revision == 7
-    assert seen_values == {"user": {"message": "hello"}}
     upgrade_cmd = calls[0]
+    assert "--values" not in upgrade_cmd
+    assert "--set" in upgrade_cmd
+    set_idx = upgrade_cmd.index("--set")
+    assert upgrade_cmd[set_idx + 1] == "user.message=hello"
     assert "oci://example/chart@sha256:abc" in upgrade_cmd
     assert "--version" not in upgrade_cmd
     assert "--atomic" in upgrade_cmd

@@ -119,34 +119,33 @@ class HelmAdapter:
             chart_digest,
         )
         resolved_chart = _with_optional_digest(chart_ref=chart_ref, chart_digest=chart_digest)
-        with _values_file(values) as values_file:
-            cmd = [
-                "helm",
-                "upgrade",
-                "--install",
-                release_name,
-                resolved_chart,
-                "--namespace",
-                namespace,
-                "--timeout",
-                f"{timeout}s",
-                "--values",
-                str(values_file),
-            ]
-            if not chart_digest:
-                cmd.extend(["--version", chart_version])
-            if resolved_chart.startswith("oci://"):
-                cmd.append("--plain-http")
-            if atomic:
-                cmd.append("--atomic")
-            if wait:
-                cmd.append("--wait")
+        cmd = [
+            "helm",
+            "upgrade",
+            "--install",
+            release_name,
+            resolved_chart,
+            "--namespace",
+            namespace,
+            "--timeout",
+            f"{timeout}s",
+        ]
+        for key, value in _flatten_values(values):
+            cmd.extend(["--set", f"{key}={value}"])
+        if not chart_digest:
+            cmd.extend(["--version", chart_version])
+        if resolved_chart.startswith("oci://"):
+            cmd.append("--plain-http")
+        if atomic:
+            cmd.append("--atomic")
+        if wait:
+            cmd.append("--wait")
 
-            run_command(
-                cmd,
-                runner=self._runner,
-                error_message=f"Failed to upgrade/install release {release_name}",
-            )
+        run_command(
+            cmd,
+            runner=self._runner,
+            error_message=f"Failed to upgrade/install release {release_name}",
+        )
 
         status = self.helm_get_release_status(release_name=release_name, namespace=namespace)
         return HelmReleaseOperationResult(
@@ -253,6 +252,35 @@ def _with_optional_digest(*, chart_ref: str, chart_digest: str | None) -> str:
     if not chart_digest or "@" in chart_ref:
         return chart_ref
     return f"{chart_ref}@{chart_digest}"
+
+
+def _flatten_values(
+    values: dict[str, Any], prefix: str = ""
+) -> list[tuple[str, str]]:
+    """Flatten a nested dict into Helm --set compatible (key, value) pairs.
+
+    Uses dot-notation for nested dicts and bracket-indexing for lists,
+    matching Helm's --set parsing rules.
+    """
+    items: list[tuple[str, str]] = []
+    for k, v in values.items():
+        key = f"{prefix}{k}" if not prefix else f"{prefix}.{k}"
+        if isinstance(v, dict):
+            items.extend(_flatten_values(v, prefix=key))
+        elif isinstance(v, list):
+            for i, elem in enumerate(v):
+                indexed = f"{key}[{i}]"
+                if isinstance(elem, dict):
+                    items.extend(_flatten_values(elem, prefix=indexed))
+                else:
+                    items.append((indexed, str(elem)))
+        elif isinstance(v, bool):
+            items.append((key, str(v).lower()))
+        elif v is None:
+            items.append((key, "null"))
+        else:
+            items.append((key, str(v)))
+    return items
 
 
 class _values_file:

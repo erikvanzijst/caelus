@@ -1,0 +1,8 @@
+{
+  "persistence": {
+    "enabled": true
+  },
+  "ingress": {
+    "enabled": true
+  }
+}

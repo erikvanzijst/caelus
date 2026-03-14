@@ -262,6 +262,7 @@ export function UserValuesForm({
               wildcardDomains={domainsQuery.data ?? []}
               required={field.required}
               error={fieldErrors[field.path]}
+              description={field.description}
             />
           )
         }
@@ -269,15 +270,20 @@ export function UserValuesForm({
         return (
           <FormControl key={field.path} fullWidth error={!!fieldErrors[field.path]}>
             {field.type === 'boolean' ? (
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={formData[field.path] === true}
-                    onChange={(e) => handleChange(field.path, e.target.checked, 'boolean')}
-                  />
-                }
-                label={field.title || field.path}
-              />
+              <>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={formData[field.path] === true}
+                      onChange={(e) => handleChange(field.path, e.target.checked, 'boolean')}
+                    />
+                  }
+                  label={field.title || field.path}
+                />
+                {field.description && !fieldErrors[field.path] && (
+                  <FormHelperText>{field.description}</FormHelperText>
+                )}
+              </>
             ) : (
               <TextField
                 label={field.title || field.path}

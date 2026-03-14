@@ -38,11 +38,12 @@ interface HostnameFieldProps {
   wildcardDomains: string[]
   required?: boolean
   error?: string
+  description?: string
 }
 
 type Mode = 'wildcard' | 'custom'
 
-export function HostnameField({ value, onChange, wildcardDomains, required, error }: HostnameFieldProps) {
+export function HostnameField({ value, onChange, wildcardDomains, required, error, description }: HostnameFieldProps) {
   const hasWildcard = wildcardDomains.length > 0
   const [mode, setMode] = useState<Mode>(hasWildcard ? 'wildcard' : 'custom')
   const [prefix, setPrefix] = useState('')
@@ -168,30 +169,13 @@ export function HostnameField({ value, onChange, wildcardDomains, required, erro
 
   const helperText =
     error ??
-    (validation.status === 'error' ? REASON_LABELS[validation.reason] ?? validation.reason : undefined)
+    (validation.status === 'error' ? REASON_LABELS[validation.reason] ?? validation.reason : undefined) ??
+    description
 
   return (
     <FormControl fullWidth error={!!error || validation.status === 'error'}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {hasWildcard && (
-          <ToggleButtonGroup
-            value={mode}
-            exclusive
-            onChange={handleModeChange}
-            size="small"
-            sx={{ alignSelf: 'flex-end' }}
-          >
-            <ToggleButton value="wildcard">
-              <Typography variant="caption">Free domain</Typography>
-            </ToggleButton>
-            <ToggleButton value="custom">
-              <Typography variant="caption">Custom domain</Typography>
-            </ToggleButton>
-          </ToggleButtonGroup>
-        )}
-
         {mode === 'wildcard' ? (
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
             <TextField
               label="Hostname"
               value={prefix}
@@ -201,34 +185,68 @@ export function HostnameField({ value, onChange, wildcardDomains, required, erro
               slotProps={{ input: { endAdornment: statusAdornment } }}
               sx={{ flex: 1 }}
             />
-            <Typography sx={{ mt: 2 }}>.</Typography>
-            <Select
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              sx={{ minWidth: 180 }}
-            >
-              {wildcardDomains.map((d) => (
-                <MenuItem key={d} value={d}>
-                  {d}
-                </MenuItem>
-              ))}
-            </Select>
+            <Typography sx={{ mb: 2 }}>.</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 180 }}>
+              {hasWildcard && (
+                <ToggleButtonGroup
+                  value={mode}
+                  exclusive
+                  onChange={handleModeChange}
+                  size="small"
+                  fullWidth
+                >
+                  <ToggleButton value="wildcard" sx={{ whiteSpace: 'nowrap' }}>
+                    <Typography variant="caption">Free domain</Typography>
+                  </ToggleButton>
+                  <ToggleButton value="custom" sx={{ whiteSpace: 'nowrap' }}>
+                    <Typography variant="caption">Custom domain</Typography>
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              )}
+              <Select
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+              >
+                {wildcardDomains.map((d) => (
+                  <MenuItem key={d} value={d}>
+                    {d}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Box>
           </Box>
         ) : (
-          <TextField
-            label="Hostname"
-            value={customFqdn}
-            onChange={(e) => setCustomFqdn(e.target.value)}
-            placeholder="myapp.example.com"
-            required={required}
-            error={!!error || validation.status === 'error'}
-            slotProps={{ input: { endAdornment: statusAdornment } }}
-            fullWidth
-          />
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            {hasWildcard && (
+              <ToggleButtonGroup
+                value={mode}
+                exclusive
+                onChange={handleModeChange}
+                size="small"
+                sx={{ alignSelf: 'flex-end' }}
+              >
+                <ToggleButton value="wildcard">
+                  <Typography variant="caption">Free domain</Typography>
+                </ToggleButton>
+                <ToggleButton value="custom">
+                  <Typography variant="caption">Custom domain</Typography>
+                </ToggleButton>
+              </ToggleButtonGroup>
+            )}
+            <TextField
+              label="Hostname"
+              value={customFqdn}
+              onChange={(e) => setCustomFqdn(e.target.value)}
+              placeholder="myapp.example.com"
+              required={required}
+              error={!!error || validation.status === 'error'}
+              slotProps={{ input: { endAdornment: statusAdornment } }}
+              fullWidth
+            />
+          </Box>
         )}
 
         {helperText && <FormHelperText>{helperText}</FormHelperText>}
-      </Box>
     </FormControl>
   )
 }

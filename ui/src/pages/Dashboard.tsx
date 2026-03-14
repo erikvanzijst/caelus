@@ -29,6 +29,7 @@ import { useAuth } from '../state/AuthContext'
 import { isTransitionalStatus, statusColor } from '../utils/deploymentStatus'
 import { ensureUrl, formatDateTime } from '../utils/format'
 import { UserValuesForm, validateUserValues } from '../components/UserValuesForm'
+import { ProductList } from '../components/ProductList'
 
 function Dashboard() {
   const queryClient = useQueryClient()
@@ -279,6 +280,18 @@ function Dashboard() {
           </Grid>
         )}
       </Grid>
+
+      <Box>
+        <Typography variant="h5">Available applications</Typography>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>
+          Click an app to launch your own instance.
+        </Typography>
+        <ProductList
+          products={productsQuery.data}
+          selectedProductId={selectedProductId || null}
+          onSelectProduct={(id) => setSelectedProductId(id)}
+        />
+      </Box>
 
       <Card sx={{ p: 1 }}>
         <CardContent>

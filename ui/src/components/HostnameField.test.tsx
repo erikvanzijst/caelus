@@ -15,7 +15,7 @@ describe('HostnameField', () => {
       render(<HostnameField value="" onChange={onChange} wildcardDomains={[]} />)
 
       expect(screen.getByLabelText('Hostname')).toBeInTheDocument()
-      expect(screen.queryByText('Caelus domain')).not.toBeInTheDocument()
+      expect(screen.queryByText('Free domain')).not.toBeInTheDocument()
     })
 
     it('defaults to wildcard mode when wildcard domains are provided', () => {
@@ -26,7 +26,7 @@ describe('HostnameField', () => {
 
       expect(screen.getByLabelText('Hostname')).toBeInTheDocument()
       expect(screen.getByText('app.example.com')).toBeInTheDocument()
-      expect(screen.getByText('Caelus domain')).toBeInTheDocument()
+      expect(screen.getByText('Free domain')).toBeInTheDocument()
       expect(screen.getByText('Custom domain')).toBeInTheDocument()
     })
 
@@ -47,7 +47,7 @@ describe('HostnameField', () => {
       )
 
       fireEvent.click(screen.getByText('Custom domain'))
-      fireEvent.click(screen.getByText('Caelus domain'))
+      fireEvent.click(screen.getByText('Free domain'))
       expect(screen.getByText('app.example.com')).toBeInTheDocument()
     })
   })
@@ -187,7 +187,7 @@ describe('HostnameField', () => {
 
       // Initially in custom mode (no domains yet)
       expect(screen.getByLabelText('Hostname')).toBeInTheDocument()
-      expect(screen.queryByText('Caelus domain')).not.toBeInTheDocument()
+      expect(screen.queryByText('Free domain')).not.toBeInTheDocument()
 
       // Domains arrive asynchronously
       rerender(
@@ -195,7 +195,7 @@ describe('HostnameField', () => {
       )
 
       // Should switch to wildcard mode with domain pre-selected
-      expect(screen.getByText('Caelus domain')).toBeInTheDocument()
+      expect(screen.getByText('Free domain')).toBeInTheDocument()
       expect(screen.getByText('app.example.com')).toBeInTheDocument()
     })
   })

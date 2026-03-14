@@ -237,6 +237,75 @@ describe('UserValuesForm', () => {
     expect(screen.getByLabelText('Hostname')).toBeInTheDocument()
   })
 
+  it('prefills form with schema default values', async () => {
+    const schemaWithDefaults = {
+      type: 'object',
+      properties: {
+        host: {
+          type: 'string',
+          title: 'hostname',
+        },
+        mattermost: {
+          type: 'object',
+          properties: {
+            extraEnv: {
+              type: 'object',
+              properties: {
+                TZ: {
+                  type: 'string',
+                  title: 'Timezone',
+                  default: 'Europe/Amsterdam',
+                },
+              },
+            },
+          },
+        },
+      },
+      required: ['host'],
+    }
+    const onChange = vi.fn()
+    render(
+      <UserValuesForm
+        valuesSchemaJson={schemaWithDefaults}
+        defaultValuesJson={null}
+        onChange={onChange}
+      />,
+      { wrapper: Wrapper },
+    )
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith({
+        mattermost: { extraEnv: { TZ: 'Europe/Amsterdam' } },
+      })
+    })
+  })
+
+  it('prefers defaultValuesJson over schema defaults', async () => {
+    const schemaWithDefaults = {
+      type: 'object',
+      properties: {
+        region: {
+          type: 'string',
+          title: 'Region',
+          default: 'us-east-1',
+        },
+      },
+    }
+    const onChange = vi.fn()
+    render(
+      <UserValuesForm
+        valuesSchemaJson={schemaWithDefaults}
+        defaultValuesJson={{ region: 'eu-west-1' }}
+        onChange={onChange}
+      />,
+      { wrapper: Wrapper },
+    )
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith({ region: 'eu-west-1' })
+    })
+  })
+
   it('renders regular TextField for non-hostname fields', () => {
     const regularSchema = {
       type: 'object',

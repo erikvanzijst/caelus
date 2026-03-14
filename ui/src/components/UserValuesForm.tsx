@@ -29,6 +29,7 @@ export interface SchemaField {
   maxLength?: number
   minimum?: number
   maximum?: number
+  default?: unknown
   required: boolean
 }
 
@@ -81,6 +82,7 @@ export function flattenSchema(
       maxLength: propSchema.maxLength as number | undefined,
       minimum: propSchema.minimum as number | undefined,
       maximum: propSchema.maximum as number | undefined,
+      default: propSchema.default,
       required: requiredPaths.includes(currentPath),
     })
   }
@@ -167,11 +169,12 @@ export function UserValuesForm({
   useEffect(() => {
     const initialData: Record<string, unknown> = {}
     for (const field of fields) {
-      if (field.path in defaults) {
+      const defaultValue = field.path in defaults ? defaults[field.path] : field.default
+      if (defaultValue !== undefined) {
         if (field.type === 'boolean') {
-          initialData[field.path] = Boolean(defaults[field.path])
+          initialData[field.path] = Boolean(defaultValue)
         } else {
-          initialData[field.path] = defaults[field.path]
+          initialData[field.path] = defaultValue
         }
       } else if (field.type === 'boolean') {
         initialData[field.path] = false

@@ -174,9 +174,15 @@ export function HostnameField({ value, onChange, wildcardDomains, required, erro
     <FormControl fullWidth error={!!error || validation.status === 'error'}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {hasWildcard && (
-          <ToggleButtonGroup value={mode} exclusive onChange={handleModeChange} size="small">
+          <ToggleButtonGroup
+            value={mode}
+            exclusive
+            onChange={handleModeChange}
+            size="small"
+            sx={{ alignSelf: 'flex-end' }}
+          >
             <ToggleButton value="wildcard">
-              <Typography variant="caption">Caelus domain</Typography>
+              <Typography variant="caption">Free domain</Typography>
             </ToggleButton>
             <ToggleButton value="custom">
               <Typography variant="caption">Custom domain</Typography>

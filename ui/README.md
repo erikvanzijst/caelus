@@ -233,8 +233,8 @@ items should stay at 48px or below; detail/card views should use 64px.
 In production (Kubernetes), authentication is handled by Keycloak via Traefik's
 forward-auth middleware — no manual email setup is needed. In local dev mode,
 however, the UI relies on a localStorage key for auth headers. When automating
-the browser with Playwright MCP, use this sequence to establish an authenticated
-session:
+the browser with Playwright MCP, always use `user@example.com` as the dev
+email and follow this sequence to establish an authenticated session:
 
 ```
 1. browser_navigate  →  http://localhost:5173

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mattermost
+  labels:
+    app.kubernetes.io/name: mattermost
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8065
+      targetPort: http
+      name: http
+  selector:
+    app.kubernetes.io/name: mattermost
+    app.kubernetes.io/instance: {{ .Release.Name }}

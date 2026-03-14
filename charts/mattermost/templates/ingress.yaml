@@ -1,25 +1,23 @@
-{{- $host := .Values.host }}
-{{- $mm := index .Values "mattermost-team-edition" }}
-{{- if and $host $mm.enabled }}
+{{- if .Values.host }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .Release.Name }}-mattermost-ingress
+  name: {{ .Release.Name }}-mattermost
   labels:
-    app.kubernetes.io/name: mattermost-team-edition
+    app.kubernetes.io/name: mattermost
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
-  ingressClassName: {{ $mm.ingress.className }}
+  ingressClassName: {{ .Values.mattermost.ingress.className }}
   rules:
-    - host: {{ $host | quote }}
+    - host: {{ .Values.host | quote }}
       http:
         paths:
-          - path: {{ $mm.ingress.path | default "/" }}
+          - path: {{ .Values.mattermost.ingress.path | default "/" }}
             pathType: Prefix
             backend:
               service:
-                name: {{ .Release.Name }}-team-edition
+                name: {{ .Release.Name }}-mattermost
                 port:
                   number: 8065
 {{- end }}

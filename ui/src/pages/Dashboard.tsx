@@ -179,56 +179,6 @@ function Dashboard() {
         </Typography>
       </Box>
 
-      <Card sx={{ p: 1 }}>
-        <CardContent>
-          <Stack spacing={2}>
-            <Typography variant="h5">Deploy an application</Typography>
-            {formError && <Alert severity="error">{formError}</Alert>}
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-              <Select
-                fullWidth
-                value={selectedProductId}
-                onChange={(event) => setSelectedProductId(Number(event.target.value))}
-                displayEmpty
-                disabled={!availableProducts.length}
-              >
-                {availableProducts.map((product) => (
-                  <MenuItem value={product.id} key={product.id}>
-                    {product.name}
-                  </MenuItem>
-                ))}
-              </Select>
-              <Button
-                variant="contained"
-                onClick={handleCreateDeployment}
-                disabled={createDeploymentMutation.isPending || !user || !availableProducts.length}
-              >
-                Launch
-              </Button>
-            </Stack>
-            {selectedProduct && canonicalTemplate && (
-              <>
-                {canonicalTemplateQuery.isLoading ? (
-                  <Typography color="text.secondary">Loading template...</Typography>
-                ) : (
-                  <UserValuesForm
-                    valuesSchemaJson={canonicalTemplate.values_schema_json as Record<string, unknown> | null}
-                    defaultValuesJson={canonicalTemplate.default_values_json as Record<string, unknown> | null}
-                    onChange={setUserValues}
-                    errors={userValuesErrors}
-                  />
-                )}
-              </>
-            )}
-            {!availableProducts.length && (
-              <Alert severity="info">
-                No products are available for deployment yet. Set a canonical template in Admin.
-              </Alert>
-            )}
-          </Stack>
-        </CardContent>
-      </Card>
-
       <Grid container spacing={2}>
         {deploymentsQuery.data
           ?.filter((deployment) => deployment.status !== 'deleted')
@@ -328,6 +278,56 @@ function Dashboard() {
           </Grid>
         )}
       </Grid>
+
+      <Card sx={{ p: 1 }}>
+        <CardContent>
+          <Stack spacing={2}>
+            <Typography variant="h5">Deploy an application</Typography>
+            {formError && <Alert severity="error">{formError}</Alert>}
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              <Select
+                fullWidth
+                value={selectedProductId}
+                onChange={(event) => setSelectedProductId(Number(event.target.value))}
+                displayEmpty
+                disabled={!availableProducts.length}
+              >
+                {availableProducts.map((product) => (
+                  <MenuItem value={product.id} key={product.id}>
+                    {product.name}
+                  </MenuItem>
+                ))}
+              </Select>
+              <Button
+                variant="contained"
+                onClick={handleCreateDeployment}
+                disabled={createDeploymentMutation.isPending || !user || !availableProducts.length}
+              >
+                Launch
+              </Button>
+            </Stack>
+            {selectedProduct && canonicalTemplate && (
+              <>
+                {canonicalTemplateQuery.isLoading ? (
+                  <Typography color="text.secondary">Loading template...</Typography>
+                ) : (
+                  <UserValuesForm
+                    valuesSchemaJson={canonicalTemplate.values_schema_json as Record<string, unknown> | null}
+                    defaultValuesJson={canonicalTemplate.default_values_json as Record<string, unknown> | null}
+                    onChange={setUserValues}
+                    errors={userValuesErrors}
+                  />
+                )}
+              </>
+            )}
+            {!availableProducts.length && (
+              <Alert severity="info">
+                No products are available for deployment yet. Set a canonical template in Admin.
+              </Alert>
+            )}
+          </Stack>
+        </CardContent>
+      </Card>
     </Stack>
   )
 }

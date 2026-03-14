@@ -20,6 +20,7 @@ RUN apt-get update -y && \
       neovim \
       btop \
       httpie \
+      imagemagick \
       sqlite3 \
       curl \
       wget \

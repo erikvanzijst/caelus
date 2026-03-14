@@ -15,27 +15,27 @@ import { useState, type PropsWithChildren } from 'react'
 import { NavLink } from 'react-router-dom'
 import EmailDialog from './EmailDialog'
 import { useAuth } from '../state/AuthContext'
-import { clearStoredAuthHeaders, getStoredAuthHeaders } from '../state/useAuthEmail'
 
 const keycloakAccountUrl = import.meta.env.VITE_KEYCLOAK_ACCOUNT_URL as
   | string
   | undefined
 
-function handleLogout() {
-  const headers = getStoredAuthHeaders()
-  if (Object.keys(headers).length > 0) {
-    clearStoredAuthHeaders()
-    window.location.reload()
-  } else {
-    window.location.href =
-      '/oauth2/sign_out?rd=' + encodeURIComponent(window.location.origin + '/')
-  }
-}
-
 function AppShell({ children }: PropsWithChildren) {
   const { user, loading, email, setEmail } = useAuth()
   const showDialog = !loading && !user
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)
+
+  function handleLogout() {
+    if (keycloakAccountUrl) {
+      // Production: sign out through oauth2-proxy → Keycloak
+      window.location.href =
+        '/oauth2/sign_out?rd=' + encodeURIComponent(window.location.origin + '/')
+    } else {
+      // No Keycloak configured: clear email via React state to show the
+      // email dialog without a page reload.
+      setEmail('')
+    }
+  }
 
   return (
     <Box sx={{ minHeight: '100vh', position: 'relative' }}>

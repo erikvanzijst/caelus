@@ -2,7 +2,10 @@ import { createContext, useContext, useCallback, useEffect, useState } from 'rea
 import type { PropsWithChildren } from 'react'
 import type { User } from '../api/types'
 import { getMe } from '../api/endpoints'
-import { useAuthHeaders, getStoredAuthHeaders } from './useAuthEmail'
+import { useAuthHeaders } from './useAuthEmail'
+
+/** True when running behind Keycloak/oauth2-proxy (auth handled by proxy). */
+const proxyAuth = Boolean(import.meta.env.VITE_KEYCLOAK_ACCOUNT_URL)
 
 interface AuthState {
   user: User | null
@@ -32,29 +35,34 @@ export function AuthProvider({ children }: PropsWithChildren) {
     try {
       const me = await getMe()
       setUser(me)
-      sessionStorage.removeItem('caelus.auth.reloading')
     } catch {
-      // In production (no localStorage auth headers), a failed /api/me means
-      // the session cookie is missing or invalid. Reload to trigger Traefik's
-      // forward-auth middleware which will redirect to Keycloak login.
-      // Guard with sessionStorage to prevent infinite reloads if the page is
-      // served from a stale browser cache.
-      const isProduction = Object.keys(getStoredAuthHeaders()).length === 0
-      const reloadKey = 'caelus.auth.reloading'
-      if (isProduction && !sessionStorage.getItem(reloadKey)) {
-        sessionStorage.setItem(reloadKey, '1')
-        window.location.reload()
-        return
+      if (proxyAuth) {
+        // Production: session cookie is missing or expired. Reload once
+        // so Traefik's forward-auth redirects to Keycloak login.
+        // sessionStorage guard prevents an infinite reload loop if the
+        // redirect itself fails (e.g. stale browser cache).
+        const reloadKey = 'caelus.auth.reloading'
+        if (!sessionStorage.getItem(reloadKey)) {
+          sessionStorage.setItem(reloadKey, '1')
+          window.location.reload()
+          return
+        }
       }
-      sessionStorage.removeItem(reloadKey)
+      // Local dev (no proxy): fall through to show the email dialog.
       setUser(null)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  // On mount and whenever email changes, try /api/me
+  // On mount and whenever email changes, try /api/me.
+  // Without proxy auth, skip the call when no email is set — show the dialog.
   useEffect(() => {
+    if (!proxyAuth && !email) {
+      setUser(null)
+      setLoading(false)
+      return
+    }
     tryGetMe()
   }, [email, tryGetMe])
 

@@ -38,3 +38,6 @@ venv/
 Thumbs.db
 
 var/
+
+# Playwright MCP artifacts
+.playwright-mcp/

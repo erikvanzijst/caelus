@@ -37,6 +37,10 @@ spec:
                 secretKeyRef:
                   name: {{ include "mattermost.fullname" . }}-db
                   key: MM_CONFIG
+            {{- if .Values.host }}
+            - name: MM_SERVICESETTINGS_SITEURL
+              value: {{ printf "https://%s" .Values.host | quote }}
+            {{- end }}
             {{- range $name, $value := .Values.mattermost.extraEnv }}
             - name: {{ $name }}
               value: {{ $value | quote }}

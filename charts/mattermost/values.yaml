@@ -12,6 +12,7 @@ mattermost:
     className: "traefik"
     path: /
   extraEnv:
+    # https://docs.mattermost.com/administration-guide/configure/environment-configuration-settings.html
     TZ: Europe/Amsterdam
     MM_CALLS_GROUP_CALLS_ALLOWED: "true"
     MM_PLUGINSETTINGS_ENABLEUPLOADS: "true"

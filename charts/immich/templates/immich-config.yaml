@@ -1,0 +1,21 @@
+{{- if .Values.ingress.host }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: immich-config
+  labels:
+    {{- include "immich-wrapper.labels" . | nindent 4 }}
+data:
+  immich-config.yaml: |
+    server:
+      externalDomain: {{ printf "https://%s" .Values.ingress.host | quote }}
+    {{- if .Values.smtp.host }}
+    notifications:
+      smtp:
+        enabled: true
+        from: {{ .Values.smtp.from | quote }}
+        transport:
+          host: {{ .Values.smtp.host | quote }}
+          port: {{ .Values.smtp.port }}
+    {{- end }}
+{{- end }}

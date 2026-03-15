@@ -5,6 +5,11 @@ ingress:
   annotations: {}
   host: "immich.local"
 
+smtp:
+  host: ""
+  port: 25
+  from: ""
+
 storage:
   library:
     accessMode: ReadWriteOnce
@@ -57,6 +62,20 @@ immich:
         size: 5Gi
 
   server:
+    controllers:
+      main:
+        containers:
+          main:
+            env:
+              IMMICH_CONFIG_FILE: /config/immich-config.yaml
+    persistence:
+      immich-config:
+        enabled: true
+        type: configMap
+        name: immich-config
+        globalMounts:
+          - path: /config
+            readOnly: true
     ingress:
       main:
         enabled: false

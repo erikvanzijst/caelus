@@ -73,7 +73,7 @@ For the Caelus Admin product template, use the following values schema:
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^((?!-)(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]?\\.)+(xn--)?[a-z0-9-]{2,}$",
-          "description": "The domainname for your Immich instance"
+          "description": "The hostname for your Immich instance"
         }
       },
       "required": [
@@ -86,5 +86,17 @@ For the Caelus Admin product template, use the following values schema:
     "ingress"
   ],
   "additionalProperties": false
+}
+```
+
+For the default Helm values in Admin, supply the SMTP configuration:
+
+```json
+{
+  "smtp": {
+    "host": "smtp.mailer.svc.cluster.local",
+    "port": 25,
+    "from": "immich@deprutser.be"
+  }
 }
 ```

@@ -82,12 +82,22 @@
       "required": ["enabled", "image", "auth", "persistence"],
       "additionalProperties": false
     },
+    "smtp": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer" },
+        "from": { "type": "string" }
+      },
+      "required": ["host", "port", "from"],
+      "additionalProperties": false
+    },
     "immich": {
       "type": "object",
       "description": "Pass-through values for upstream dependency chart"
     }
   },
-  "required": ["ingress", "storage", "postgresql", "immich"],
+  "required": ["ingress", "smtp", "storage", "postgresql", "immich"],
   "allOf": [
     {
       "if": {

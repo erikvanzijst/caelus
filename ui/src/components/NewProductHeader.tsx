@@ -5,7 +5,6 @@ import {
   Button,
   Stack,
   TextField,
-  Typography,
 } from '@mui/material'
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
 import { useMutation, useQueryClient } from '@tanstack/react-query'

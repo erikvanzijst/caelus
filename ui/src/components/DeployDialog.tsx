@@ -1,21 +1,10 @@
-import {
-  Alert,
-  Avatar,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  Typography,
-} from '@mui/material'
+import { Dialog, DialogContent } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo, useState } from 'react'
 import { createDeployment, listTemplates } from '../api/endpoints'
-import { resolveApiPath } from '../api/client'
 import type { Product, ProductTemplate } from '../api/types'
-import { UserValuesForm, validateUserValues } from './UserValuesForm'
+import { validateUserValues } from './UserValuesForm'
+import { DeployDialogContent } from './DeployDialogContent'
 
 interface DeployDialogProps {
   product: Product
@@ -87,56 +76,27 @@ export function DeployDialog({ product, userId, onClose }: DeployDialogProps) {
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Avatar
-            src={product.icon_url ? resolveApiPath(product.icon_url) : undefined}
-            alt={product.name}
-            variant="rounded"
-            sx={{ width: 48, height: 48 }}
-          >
-            {product.name[0]}
-          </Avatar>
-          <Box>
-            <Typography variant="h6">{product.name}</Typography>
-            {product.description && (
-              <Typography variant="body2" color="text.secondary">
-                {product.description}
-              </Typography>
-            )}
-          </Box>
-        </Stack>
-      </DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          {formError && <Alert severity="error">{formError}</Alert>}
-          {templatesQuery.isLoading ? (
-            <Typography color="text.secondary">Loading template...</Typography>
-          ) : canonicalTemplate ? (
-            <UserValuesForm
-              valuesSchemaJson={canonicalTemplate.values_schema_json as Record<string, unknown> | null}
-              defaultValuesJson={canonicalTemplate.default_values_json as Record<string, unknown> | null}
-              onChange={setUserValues}
-              onHostnameValidationChange={setHostnameValid}
-              errors={userValuesErrors}
-            />
-          ) : (
-            <Alert severity="warning">
-              This product has no template configured yet.
-            </Alert>
-          )}
-        </Stack>
+      <DialogContent sx={{ pt: 3 }}>
+        <DeployDialogContent
+          product={product}
+          valuesSchemaJson={
+            (canonicalTemplate?.values_schema_json as Record<string, unknown> | null) ?? null
+          }
+          defaultValuesJson={
+            (canonicalTemplate?.default_values_json as Record<string, unknown> | null) ?? null
+          }
+          onChange={setUserValues}
+          onHostnameValidationChange={setHostnameValid}
+          onLaunch={handleLaunch}
+          onCancel={onClose}
+          launchDisabled={createMutation.isPending || !canonicalTemplate || !hostnameValid}
+          launchPending={createMutation.isPending}
+          formError={formError}
+          userValuesErrors={userValuesErrors}
+          noTemplateWarning={!templatesQuery.isLoading && !canonicalTemplate}
+          loading={templatesQuery.isLoading}
+        />
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 3 }}>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button
-          variant="contained"
-          onClick={handleLaunch}
-          disabled={createMutation.isPending || !canonicalTemplate || !hostnameValid}
-        >
-          {createMutation.isPending ? 'Launching...' : 'Launch'}
-        </Button>
-      </DialogActions>
     </Dialog>
   )
 }

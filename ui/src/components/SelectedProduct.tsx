@@ -3,9 +3,6 @@ import {
   Avatar,
   Badge,
   Button,
-  Card,
-  CardActions,
-  CardContent,
   Stack,
   TextField,
   Typography,
@@ -18,7 +15,7 @@ import type { Product } from '../api/types'
 import { formatDateTime } from '../utils/format'
 
 interface SelectedProductProps {
-  product?: Product
+  product: Product
   onError: (error: Error) => void
 }
 
@@ -32,21 +29,20 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
 
   const updateProductMutation = useMutation({
     mutationFn: (payload: { name?: string; description?: string | null }) =>
-      updateProduct(product!.id, payload),
+      updateProduct(product.id, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
     onError,
   })
 
   const uploadIconMutation = useMutation({
-    mutationFn: (file: File) => updateProduct(product!.id, {}, file),
+    mutationFn: (file: File) => updateProduct(product.id, {}, file),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
     onError,
   })
 
   const handleIconClick = useCallback(() => {
-    if (!product) return
     iconInputRef.current?.click()
-  }, [product])
+  }, [])
 
   const handleIconChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,14 +56,14 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
   )
 
   const deleteProductMutation = useMutation({
-    mutationFn: () => deleteProduct(product!.id),
+    mutationFn: () => deleteProduct(product.id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
     onError,
   })
 
   function saveName() {
     const trimmed = draftName.trim()
-    if (trimmed && trimmed !== product?.name) {
+    if (trimmed && trimmed !== product.name) {
       updateProductMutation.mutate({ name: trimmed })
     }
     setEditingName(false)
@@ -75,130 +71,120 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
 
   function saveDescription() {
     const trimmed = draftDesc.trim()
-    if (trimmed !== (product?.description ?? '')) {
+    if (trimmed !== (product.description ?? '')) {
       updateProductMutation.mutate({ description: trimmed || null })
     }
     setEditingDesc(false)
   }
 
   return (
-    <Card>
-      <CardContent>
-        <Stack spacing={1}>
-          <Typography variant="h6">Selected product</Typography>
-          <input
-            ref={iconInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={handleIconChange}
-          />
-          <Stack direction="row" spacing={2} alignItems="flex-start">
-            <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
-              {editingName ? (
-                <TextField
-                  value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  onBlur={saveName}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') saveName()
-                    if (e.key === 'Escape') setEditingName(false)
-                  }}
-                  variant="standard"
-                  autoFocus
-                  slotProps={{ input: { sx: { fontSize: '1.5rem', fontWeight: 500 } } }}
-                />
-              ) : (
-                <Typography
-                  variant="h5"
-                  onClick={() => {
-                    if (!product) return
-                    setDraftName(product.name)
-                    setEditingName(true)
-                  }}
-                  sx={{ cursor: product ? 'pointer' : 'default', '&:hover': product ? { color: 'primary.main' } : {} }}
-                >
-                  {product?.name ?? 'Pick a product'}
-                </Typography>
-              )}
-              {editingDesc ? (
-                <TextField
-                  value={draftDesc}
-                  onChange={(e) => setDraftDesc(e.target.value)}
-                  onBlur={saveDescription}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) saveDescription()
-                    if (e.key === 'Escape') setEditingDesc(false)
-                  }}
-                  variant="standard"
-                  autoFocus
-                  multiline
-                  placeholder="No description provided."
-                />
-              ) : (
-                <Typography
-                  color="text.secondary"
-                  onClick={() => {
-                    if (!product) return
-                    setDraftDesc(product.description ?? '')
-                    setEditingDesc(true)
-                  }}
-                  sx={{ cursor: product ? 'pointer' : 'default', '&:hover': product ? { color: 'primary.main' } : {} }}
-                >
-                  {product?.description || 'No description provided.'}
-                </Typography>
-              )}
-              <Typography variant="body2" color="text.secondary">
-                Created {formatDateTime(product?.created_at)}
-              </Typography>
-            </Stack>
-            <Badge
-              overlap="circular"
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-              badgeContent={
-                product ? (
-                  <EditIcon
-                    sx={{
-                      width: 18,
-                      height: 18,
-                      bgcolor: 'primary.main',
-                      color: 'white',
-                      borderRadius: '50%',
-                      p: 0.3,
-                    }}
-                  />
-                ) : null
-              }
-              sx={{ cursor: product ? 'pointer' : 'default', flexShrink: 0 }}
-              onClick={handleIconClick}
+    <Stack spacing={1} sx={{ p: 2 }}>
+      <input
+        ref={iconInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleIconChange}
+      />
+      <Stack direction="row" spacing={2} alignItems="flex-start">
+        <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
+          {editingName ? (
+            <TextField
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              onBlur={saveName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveName()
+                if (e.key === 'Escape') setEditingName(false)
+              }}
+              variant="standard"
+              autoFocus
+              slotProps={{ input: { sx: { fontSize: '1.5rem', fontWeight: 500 } } }}
+            />
+          ) : (
+            <Typography
+              variant="h5"
+              onClick={() => {
+                setDraftName(product.name)
+                setEditingName(true)
+              }}
+              sx={{ cursor: 'pointer', '&:hover': { color: 'primary.main' } }}
             >
-              <Avatar
-                src={product?.icon_url ? resolveApiPath(product.icon_url) : undefined}
-                alt={product?.name}
-                variant="rounded"
-                sx={{ width: 64, height: 64 }}
-              >
-                {product?.name?.[0] ?? '?'}
-              </Avatar>
-            </Badge>
+              {product.name}
+            </Typography>
+          )}
+          {editingDesc ? (
+            <TextField
+              value={draftDesc}
+              onChange={(e) => setDraftDesc(e.target.value)}
+              onBlur={saveDescription}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) saveDescription()
+                if (e.key === 'Escape') setEditingDesc(false)
+              }}
+              variant="standard"
+              autoFocus
+              multiline
+              placeholder="No description provided."
+            />
+          ) : (
+            <Typography
+              color="text.secondary"
+              onClick={() => {
+                setDraftDesc(product.description ?? '')
+                setEditingDesc(true)
+              }}
+              sx={{ cursor: 'pointer', '&:hover': { color: 'primary.main' } }}
+            >
+              {product.description || 'No description provided.'}
+            </Typography>
+          )}
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Typography variant="body2" color="text.secondary">
+              Created {formatDateTime(product.created_at)}
+            </Typography>
+            <Button
+              variant="outlined"
+              color="secondary"
+              size="small"
+              onClick={() => {
+                if (window.confirm(`Delete ${product.name}?`)) {
+                  deleteProductMutation.mutate()
+                }
+              }}
+            >
+              Delete
+            </Button>
           </Stack>
         </Stack>
-      </CardContent>
-      <CardActions sx={{ px: 2, pb: 2 }}>
-        <Button
-          variant="outlined"
-          color="secondary"
-          disabled={!product}
-          onClick={() => {
-            if (!product) return
-            if (window.confirm(`Delete ${product.name}?`)) {
-              deleteProductMutation.mutate()
-            }
-          }}
+        <Badge
+          overlap="circular"
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          badgeContent={
+            <EditIcon
+              sx={{
+                width: 18,
+                height: 18,
+                bgcolor: 'primary.main',
+                color: 'white',
+                borderRadius: '50%',
+                p: 0.3,
+              }}
+            />
+          }
+          sx={{ cursor: 'pointer', flexShrink: 0 }}
+          onClick={handleIconClick}
         >
-          Delete product
-        </Button>
-      </CardActions>
-    </Card>
+          <Avatar
+            src={product.icon_url ? resolveApiPath(product.icon_url) : undefined}
+            alt={product.name}
+            variant="rounded"
+            sx={{ width: 64, height: 64 }}
+          >
+            {product.name[0]}
+          </Avatar>
+        </Badge>
+      </Stack>
+    </Stack>
   )
 }

@@ -7,16 +7,18 @@ import {
   Grid,
   Typography,
 } from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
 import { resolveApiPath } from '../api/client'
 import type { Product } from '../api/types'
 
 interface ProductListProps {
   products?: Product[]
-  selectedProductId: number | null
-  onSelectProduct: (productId: number) => void
+  selectedProductId: number | 'new' | null
+  onSelectProduct: (productId: number | 'new') => void
+  showNewCard?: boolean
 }
 
-export function ProductList({ products, selectedProductId, onSelectProduct }: ProductListProps) {
+export function ProductList({ products, selectedProductId, onSelectProduct, showNewCard }: ProductListProps) {
   return (
     <Grid container spacing={2}>
       {products?.map((product) => (
@@ -65,6 +67,38 @@ export function ProductList({ products, selectedProductId, onSelectProduct }: Pr
           </Card>
         </Grid>
       ))}
+      {showNewCard && (
+        <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+          <Card
+            sx={{
+              height: '100%',
+              border: selectedProductId === 'new'
+                ? '2px solid'
+                : '2px dashed',
+              borderColor: selectedProductId === 'new'
+                ? 'primary.main'
+                : 'divider',
+            }}
+          >
+            <CardActionArea
+              onClick={() => onSelectProduct('new')}
+              sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
+            >
+              <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 1 }}>
+                <Avatar
+                  variant="rounded"
+                  sx={{ width: 48, height: 48, bgcolor: 'action.hover' }}
+                >
+                  <AddIcon />
+                </Avatar>
+                <Typography variant="subtitle2" color="text.secondary">
+                  New product
+                </Typography>
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        </Grid>
+      )}
     </Grid>
   )
 }

@@ -3,6 +3,11 @@
 
 host: ""
 
+smtp:
+  host: ""
+  port: "25"
+  from: "caelus@deprutser.be"
+
 mattermost:
   image:
     repository: mattermost/mattermost-team-edition

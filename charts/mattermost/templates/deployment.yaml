@@ -41,6 +41,14 @@ spec:
             - name: MM_SERVICESETTINGS_SITEURL
               value: {{ printf "https://%s" .Values.host | quote }}
             {{- end }}
+            {{- if .Values.smtp.host }}
+            - name: MM_EMAILSETTINGS_SMTPSERVER
+              value: {{ .Values.smtp.host | quote }}
+            - name: MM_EMAILSETTINGS_SMTPPORT
+              value: {{ .Values.smtp.port | quote }}
+            - name: MM_EMAILSETTINGS_FEEDBACKEMAIL
+              value: {{ .Values.smtp.from | quote }}
+            {{- end }}
             {{- range $name, $value := .Values.mattermost.extraEnv }}
             - name: {{ $name }}
               value: {{ $value | quote }}

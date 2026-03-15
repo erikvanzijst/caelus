@@ -1,15 +1,15 @@
-variable "keycloak_admin_password" {
-  description = "Keycloak admin password (use secrets.auto.tfvars)"
-  type        = string
-  sensitive   = true
+variable "namespace" {
+  description = "Namespace to deploy into"
+  type = string
 }
+
 variable "smtp_host" {
   description = "SMTP server (e.g. smtp.example.com)"
   type        = string
 }
 
 variable "smtp_port" {
-  description = "SMTP server port (e.g. 587)"
+  description = "SMTP server port"
   type        = string
 }
 

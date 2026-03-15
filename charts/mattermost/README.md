@@ -171,7 +171,7 @@ helm upgrade --install mattermost ./charts/mattermost \
 ```bash
 helm upgrade --install mattermost oci://registry.home:80/helm/mattermost \
   --plain-http \
-  --version 1.0.0 \
+  --version 1.0.1 \
   --namespace mattermost \
   --create-namespace \
   --set host=mattermost.app.deprutser.be
@@ -202,7 +202,7 @@ before Caelus can reference it:
 ```bash
 cd charts/mattermost
 helm package .
-helm push mattermost-1.0.0.tgz oci://registry.home:80/helm --plain-http
+helm push mattermost-1.0.1.tgz oci://registry.home:80/helm --plain-http
 ```
 
 ### 2. Register as a Product Template
@@ -213,7 +213,7 @@ template version to an existing one) with:
 | Field | Value |
 |---|---|
 | Chart ref | `oci://registry.home:80/helm/mattermost` |
-| Chart version | `1.0.0` |
+| Chart version | `1.0.1` |
 | User values schema | Contents of `charts/mattermost/user.schema.json` |
 
 The schema (`user.schema.json`) declares the values that

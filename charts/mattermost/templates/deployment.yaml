@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-mattermost
+  name: {{ include "mattermost.fullname" . }}
   labels:
     app.kubernetes.io/name: mattermost
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -26,7 +26,7 @@ spec:
           command:
             - sh
             - -c
-            - until nc -z {{ .Release.Name }}-postgresql 5432; do echo "waiting for postgresql"; sleep 2; done
+            - until nc -z {{ include "mattermost.postgresql.fullname" . }} 5432; do echo "waiting for postgresql"; sleep 2; done
       containers:
         - name: mattermost
           image: "{{ .Values.mattermost.image.repository }}:{{ .Values.mattermost.image.tag }}"
@@ -35,7 +35,7 @@ spec:
             - name: MM_CONFIG
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-mattermost-db
+                  name: {{ include "mattermost.fullname" . }}-db
                   key: MM_CONFIG
             {{- range $name, $value := .Values.mattermost.extraEnv }}
             - name: {{ $name }}
@@ -78,9 +78,9 @@ spec:
       volumes:
         - name: mattermost-data
           persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-mattermost-data
+            claimName: {{ include "mattermost.fullname" . }}-data
         - name: mattermost-config
           emptyDir: {}
         - name: mattermost-plugins
           persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-mattermost-plugins
+            claimName: {{ include "mattermost.fullname" . }}-plugins

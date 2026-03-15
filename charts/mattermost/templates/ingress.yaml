@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .Release.Name }}-mattermost
+  name: {{ include "mattermost.fullname" . }}
   labels:
     app.kubernetes.io/name: mattermost
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -17,7 +17,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ .Release.Name }}-mattermost
+                name: {{ include "mattermost.fullname" . }}
                 port:
                   number: 8065
 {{- end }}

@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-mattermost
+  name: {{ include "mattermost.fullname" . }}
   labels:
     app.kubernetes.io/name: mattermost
     app.kubernetes.io/instance: {{ .Release.Name }}

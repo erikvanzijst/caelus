@@ -1,7 +1,7 @@
 from app.services import reconcile_constants as c
 from app.services.reconcile_naming import (
     BASE_MAX_LEN,
-    MAX_DNS_LABEL_LEN,
+    MAX_UID_LEN,
     generate_deployment_uid,
     is_valid_dns_label,
     namespace_name_for_deployment_uid,
@@ -36,7 +36,7 @@ def test_generate_deployment_uid_format_and_length() -> None:
         suffix="abc123",
     )
     assert uid.endswith("-abc123")
-    assert len(uid) <= MAX_DNS_LABEL_LEN
+    assert len(uid) <= MAX_UID_LEN
     assert is_valid_dns_label(uid)
 
 
@@ -47,7 +47,7 @@ def test_generate_deployment_uid_truncates_base_safely() -> None:
     base, suffix = uid.rsplit("-", 1)
     assert suffix == "zzzzzz"
     assert len(base) <= BASE_MAX_LEN
-    assert len(uid) <= MAX_DNS_LABEL_LEN
+    assert len(uid) <= MAX_UID_LEN
     assert is_valid_dns_label(uid)
 
 

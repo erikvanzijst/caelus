@@ -10,7 +10,14 @@ _HYPHEN_RUN_RE = re.compile(r"-+")
 
 MAX_DNS_LABEL_LEN = 63
 RANDOM_SUFFIX_LEN = 6
-BASE_MAX_LEN = MAX_DNS_LABEL_LEN - (RANDOM_SUFFIX_LEN + 1)
+
+# The deployment UID is used as the Helm release name. Charts append suffixes
+# to create resource names (e.g. "<release>-postgresql"), and Kubernetes
+# further appends a controller-revision-hash label ("<resource>-<10-char-hash>")
+# that must fit in 63 characters. Capping the UID at 40 leaves 23 characters
+# of headroom for chart resource suffixes and K8s-generated hash labels.
+MAX_UID_LEN = 40
+BASE_MAX_LEN = MAX_UID_LEN - (RANDOM_SUFFIX_LEN + 1)
 
 _BASE36 = "0123456789abcdefghijklmnopqrstuvwxyz"
 
@@ -53,7 +60,7 @@ def generate_deployment_uid(product_name: str, user_email: str, *, suffix: str |
     candidate_suffix = _normalize_suffix(suffix) if suffix is not None else generate_suffix6()
     deployment_uid = f"{base}-{candidate_suffix}"
 
-    if len(deployment_uid) > MAX_DNS_LABEL_LEN or not is_valid_dns_label(deployment_uid):
+    if len(deployment_uid) > MAX_UID_LEN or not is_valid_dns_label(deployment_uid):
         raise ValueError("generated deployment_uid is not a valid DNS label")
     return deployment_uid
 

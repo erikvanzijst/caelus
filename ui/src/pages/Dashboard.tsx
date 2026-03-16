@@ -148,7 +148,7 @@ function Dashboard() {
                 />
               )}
               <CardActions sx={{ px: 2, pb: 2 }}>
-                {deployment.hostname && !isTransitionalStatus(deployment.status) ? (
+                {deployment.hostname && !(deployment.status === 'deleting' || (deployment.status === 'provisioning' && deployment.generation === 1)) ? (
                   <Button
                     href={ensureUrl(deployment.hostname)}
                     target="_blank"

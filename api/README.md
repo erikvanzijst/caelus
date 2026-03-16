@@ -200,7 +200,8 @@ This works for any `caelus` command that returns a YAML list or object.
 - Scoped to one user.
 - Points to desired template (`desired_template_id`) and last applied template
   (`applied_template_id`).
-- Stable runtime identity: `deployment_uid` (DNS-label-safe, max 63 chars).
+- Stable runtime identity: `name` (Helm release name, max 27 chars) and
+  `namespace` (K8s namespace, max 30 chars), both DNS-label-safe.
 - User values are stored in `user_values_json`.
 - Tracks workflow metadata: `status`, `generation`, `last_error`,
   `last_reconcile_at`, `deleted_at`.
@@ -221,9 +222,10 @@ This works for any `caelus` command that returns a YAML list or object.
   unique.
 - Only one open reconcile job (`queued` or `running`) may exist per deployment.
 - Domain names are unique for deployments that are not in `deleted` status.
-- Deployment identity contract requires a DNS-safe `deployment_uid` with max
-  length 63.
-- Kubernetes namespace and Helm release name are exactly `deployment_uid`.
+- Deployment identity requires DNS-safe `name` (max 27 chars) and `namespace`
+  (max 30 chars). Active deployments have a unique `(namespace, name)` pair.
+- Kubernetes namespace is `deployment.namespace`; Helm release name is
+  `deployment.name`.
 
 ## Deployment Lifecycle and State Transitions
 
@@ -234,7 +236,8 @@ This works for any `caelus` command that returns a YAML list or object.
 - Service derives persisted `domainname` from `user_values_json` by recursively
   scanning template `values_schema_json` for the first field whose `title`
   matches `domainname` case-insensitively.
-- Generates `deployment_uid` from product name + user email + random suffix.
+- Generates `name` from product name + random suffix, and `namespace` from
+  user email + random suffix.
 - Persists deployment with status `provisioning`.
 - Enqueues job with reason `create`.
 

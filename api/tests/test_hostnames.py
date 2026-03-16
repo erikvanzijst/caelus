@@ -139,7 +139,8 @@ class TestCheckAvailable:
             desired_template_id=seed_parents["template_id"],
             hostname="taken.example.com",
             status=DEPLOYMENT_STATUS_PROVISIONING,
-            deployment_uid="test-uid",
+            name="test-name",
+            namespace="test-namespace",
         )
         db_session.add(dep)
         db_session.flush()
@@ -152,7 +153,8 @@ class TestCheckAvailable:
             desired_template_id=seed_parents["template_id"],
             hostname="recycled.example.com",
             status=DEPLOYMENT_STATUS_DELETED,
-            deployment_uid="test-uid-2",
+            name="test-name-2",
+            namespace="test-namespace-2",
         )
         db_session.add(dep)
         db_session.flush()
@@ -239,7 +241,8 @@ class TestRequireValidHostname:
             desired_template_id=seed_parents["template_id"],
             hostname="taken.example.com",
             status=DEPLOYMENT_STATUS_PROVISIONING,
-            deployment_uid="test-uid",
+            name="test-name-3",
+            namespace="test-namespace-3",
         )
         db_session.add(dep)
         db_session.flush()

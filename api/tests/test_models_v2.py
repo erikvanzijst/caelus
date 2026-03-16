@@ -63,7 +63,8 @@ def test_deployment_write_models_forbid_hostname_field() -> None:
 def test_deployment_read_has_new_state_fields() -> None:
     fields = set(DeploymentRead.model_fields.keys())
     for expected in (
-        "deployment_uid",
+        "name",
+        "namespace",
         "desired_template",
         "applied_template",
         "status",

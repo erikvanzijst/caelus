@@ -126,9 +126,9 @@ dep_out="$(uv run --no-sync python -m app.cli create-deployment \
   --domainname "$DOMAIN" \
   --user-values-json "{\"message\":\"$MESSAGE\"}")"
 printf '%s\n' "$dep_out"
-NS="$(grep -o "deployment_uid='[^']*'" <<<"$dep_out" | head -n1 | sed "s/deployment_uid='//;s/'$//")"
+NS="$(grep -o "namespace='[^']*'" <<<"$dep_out" | head -n1 | sed "s/namespace='//;s/'$//")"
 if [[ -z "${NS:-}" ]]; then
-  echo "Unable to parse deployment_uid from create-deployment output" >&2
+  echo "Unable to parse namespace from create-deployment output" >&2
   exit 1
 fi
 

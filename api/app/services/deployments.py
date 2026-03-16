@@ -28,7 +28,7 @@ from app.services.reconcile_constants import (
     JOB_REASON_UPDATE,
     DEPLOYMENT_STATUS_DELETED,
 )
-from app.services.reconcile_naming import generate_deployment_uid
+from app.services.reconcile_naming import generate_deployment_name, generate_deployment_namespace
 
 logger = logging.getLogger(__name__)
 
@@ -153,10 +153,12 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     if derived_hostname is not None:
         require_valid_hostname_for_deployment(session, derived_hostname)
 
-    deployment_uid = generate_deployment_uid(product_name=template.product.name, user_email=user.email)
+    deployment_name = generate_deployment_name(template.product.name)
+    deployment_namespace = generate_deployment_namespace(user.email)
     deployment: DeploymentORM = DeploymentORM.model_validate(
         dict(
-            deployment_uid=deployment_uid,
+            name=deployment_name,
+            namespace=deployment_namespace,
             hostname=derived_hostname,
             status=DEPLOYMENT_STATUS_PROVISIONING,
             **payload.model_dump(),

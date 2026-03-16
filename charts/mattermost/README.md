@@ -202,7 +202,7 @@ before Caelus can reference it:
 ```bash
 cd charts/mattermost
 helm package .
-helm push mattermost-1.0.1.tgz oci://registry.home:80/helm --plain-http
+helm push mattermost-1.0.2.tgz oci://registry.home:80/helm --plain-http
 ```
 
 ### 2. Register as a Product Template
@@ -213,16 +213,22 @@ template version to an existing one) with:
 | Field | Value |
 |---|---|
 | Chart ref | `oci://registry.home:80/helm/mattermost` |
-| Chart version | `1.0.1` |
-| User values schema | Contents of `charts/mattermost/user.schema.json` |
+| Chart version | `1.0.2` |
+| User values schema | See [values schema](#values-schema) below |
+| Default Helm values | See [system values](#system-values) below |
 
-The schema (`user.schema.json`) declares the values that
-end users configure when deploying Mattermost through
-Caelus:
+The schema declares the values that end users configure
+when deploying Mattermost through Caelus:
 
 - **host** (required) -- rendered as the special
   `HostnameField` component because its `title` is
   `"hostname"`.
+- **mattermost.siteName** (optional) -- overrides the
+  name shown in the Mattermost UI and login screen
+  (maps to `MM_TEAMSETTINGS_SITENAME`).
+- **mattermost.siteDescription** (optional) -- text
+  displayed above the login form (maps to
+  `MM_TEAMSETTINGS_CUSTOMDESCRIPTIONTEXT`).
 - **mattermost.extraEnv.TZ** (optional, default
   `Europe/Amsterdam`) -- rendered as a regular text field
   for the IANA timezone.
@@ -231,6 +237,64 @@ At deploy time, Caelus deep-merges the schema defaults
 with the user-provided values and any system overrides,
 then passes the result as Helm values to
 `helm upgrade --install`.
+
+### Values Schema
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "host": {
+      "type": "string",
+      "title": "hostname",
+      "description": "The public hostname where Mattermost will be accessible."
+    },
+    "mattermost": {
+      "type": "object",
+      "properties": {
+        "siteName": {
+          "type": "string",
+          "title": "Site name",
+          "description": "Name shown in the Mattermost UI and login screen.",
+          "maxLength": 30
+        },
+        "siteDescription": {
+          "type": "string",
+          "title": "Site description",
+          "description": "Text displayed above the login form.",
+          "maxLength": 500
+        },
+        "extraEnv": {
+          "type": "object",
+          "properties": {
+            "TZ": {
+              "type": "string",
+              "title": "Timezone",
+              "description": "IANA timezone for Mattermost (e.g. Europe/Amsterdam, America/New_York).",
+              "default": "Europe/Amsterdam"
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "host"
+  ]
+}
+```
+
+### System Values
+
+```json
+{
+  "smtp": {
+    "host": "smtp.mailer.svc.cluster.local",
+    "port": 25,
+    "from": "mattermost@deprutser.be"
+  }
+}
+```
 
 ## Values Reference
 
@@ -247,6 +311,8 @@ then passes the result as Helm values to
 | `mattermost.image.repository` | `mattermost/mattermost-team-edition` | Mattermost image |
 | `mattermost.image.tag` | `11.4.2` | Mattermost version |
 | `mattermost.image.imagePullPolicy` | `IfNotPresent` | Image pull policy |
+| `mattermost.siteName` | _(unset)_ | Overrides `MM_TEAMSETTINGS_SITENAME` (Mattermost default: "Mattermost") |
+| `mattermost.siteDescription` | _(unset)_ | Overrides `MM_TEAMSETTINGS_CUSTOMDESCRIPTIONTEXT` (shown above login form) |
 | `mattermost.ingress.className` | `traefik` | Ingress class |
 | `mattermost.ingress.path` | `/` | Ingress path |
 

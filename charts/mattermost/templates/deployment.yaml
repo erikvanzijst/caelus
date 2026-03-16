@@ -41,6 +41,14 @@ spec:
             - name: MM_SERVICESETTINGS_SITEURL
               value: {{ printf "https://%s" .Values.host | quote }}
             {{- end }}
+            {{- if .Values.mattermost.siteName }}
+            - name: MM_TEAMSETTINGS_SITENAME
+              value: {{ .Values.mattermost.siteName | quote }}
+            {{- end }}
+            {{- if .Values.mattermost.siteDescription }}
+            - name: MM_TEAMSETTINGS_CUSTOMDESCRIPTIONTEXT
+              value: {{ .Values.mattermost.siteDescription | quote }}
+            {{- end }}
             {{- if .Values.smtp.host }}
             - name: MM_EMAILSETTINGS_SMTPSERVER
               value: {{ .Values.smtp.host | quote }}

@@ -508,7 +508,7 @@ class TestServerSideEnforcement:
         assert dep.status_code == 201
         dep_id = dep.json()["id"]
 
-        # Mark create job done so update is allowed
+        # Mark create job done and set status to ready so update is allowed
         create_job = db_session.exec(
             select(DeploymentReconcileJobORM).where(
                 DeploymentReconcileJobORM.deployment_id == dep_id,
@@ -516,6 +516,11 @@ class TestServerSideEnforcement:
             )
         ).one()
         JobService(db_session).mark_job_done(job_id=create_job.id)
+        from app.models import DeploymentORM
+        dep_orm = db_session.get(DeploymentORM, dep_id)
+        dep_orm.status = "ready"
+        db_session.add(dep_orm)
+        db_session.commit()
 
         # Upgrade template but keep same hostname — should succeed
         resp = client.put(

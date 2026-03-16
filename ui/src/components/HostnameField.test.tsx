@@ -243,4 +243,81 @@ describe('HostnameField', () => {
       expect(screen.getByText('Server rejected hostname')).toBeInTheDocument()
     })
   })
+
+  describe('initialHostname bypass', () => {
+    it('skips API validation when hostname matches initialHostname', async () => {
+      const onChange = vi.fn()
+      checkHostnameMock.mockClear()
+
+      render(
+        <HostnameField
+          value="existing.example.com"
+          onChange={onChange}
+          wildcardDomains={[]}
+          initialHostname="existing.example.com"
+        />,
+      )
+
+      // Wait for mount effects to settle
+      await waitFor(() => {
+        expect(screen.getByTestId('CheckCircleIcon')).toBeInTheDocument()
+      })
+
+      // API should not have been called
+      expect(checkHostnameMock).not.toHaveBeenCalled()
+    })
+
+    it('calls API when hostname differs from initialHostname', async () => {
+      const onChange = vi.fn()
+      checkHostnameMock.mockClear()
+      checkHostnameMock.mockResolvedValue({ fqdn: 'changed.example.com', usable: true, reason: null })
+
+      render(
+        <HostnameField
+          value=""
+          onChange={onChange}
+          wildcardDomains={[]}
+          initialHostname="existing.example.com"
+        />,
+      )
+
+      fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'changed.example.com' } })
+
+      await waitFor(() => {
+        expect(checkHostnameMock).toHaveBeenCalledWith('changed.example.com')
+      })
+    })
+
+    it('skips API again when hostname reverts to initialHostname', async () => {
+      const onChange = vi.fn()
+      checkHostnameMock.mockClear()
+      checkHostnameMock.mockResolvedValue({ fqdn: 'different.example.com', usable: true, reason: null })
+
+      render(
+        <HostnameField
+          value=""
+          onChange={onChange}
+          wildcardDomains={[]}
+          initialHostname="original.example.com"
+        />,
+      )
+
+      // Change away from initial
+      fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'different.example.com' } })
+      await waitFor(() => {
+        expect(checkHostnameMock).toHaveBeenCalledWith('different.example.com')
+      })
+
+      checkHostnameMock.mockClear()
+
+      // Revert to initial
+      fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'original.example.com' } })
+      await waitFor(() => {
+        expect(screen.getByTestId('CheckCircleIcon')).toBeInTheDocument()
+      })
+
+      // API should not have been called for the revert
+      expect(checkHostnameMock).not.toHaveBeenCalled()
+    })
+  })
 })

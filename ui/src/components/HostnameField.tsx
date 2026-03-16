@@ -40,11 +40,12 @@ interface HostnameFieldProps {
   required?: boolean
   error?: string
   description?: string
+  initialHostname?: string
 }
 
 type Mode = 'wildcard' | 'custom'
 
-export function HostnameField({ value, onChange, onValidationChange, wildcardDomains, required, error, description }: HostnameFieldProps) {
+export function HostnameField({ value, onChange, onValidationChange, wildcardDomains, required, error, description, initialHostname }: HostnameFieldProps) {
   const hasWildcard = wildcardDomains.length > 0
   const [mode, setMode] = useState<Mode>(hasWildcard ? 'wildcard' : 'custom')
   const [prefix, setPrefix] = useState('')
@@ -54,14 +55,28 @@ export function HostnameField({ value, onChange, onValidationChange, wildcardDom
   const abortRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Sync wildcard domains into local state when they arrive asynchronously
+  // Sync wildcard domains into local state when they arrive asynchronously.
+  // If a value was already set (e.g. edit mode), split it into prefix + domain.
   const domainsInitializedRef = useRef(hasWildcard)
   useEffect(() => {
     if (domainsInitializedRef.current || !hasWildcard) return
     domainsInitializedRef.current = true
+
+    // Check if the current custom FQDN matches one of the new wildcard domains
+    if (customFqdn) {
+      const matchingDomain = wildcardDomains.find((d) => customFqdn.endsWith(`.${d}`))
+      if (matchingDomain) {
+        setPrefix(customFqdn.slice(0, -(matchingDomain.length + 1)))
+        setDomain(matchingDomain)
+        setCustomFqdn('')
+        setMode('wildcard')
+        return
+      }
+    }
+
     setMode('wildcard')
     setDomain(wildcardDomains[0])
-  }, [hasWildcard, wildcardDomains])
+  }, [hasWildcard, wildcardDomains, customFqdn])
 
   // Sync initial value into local state on mount
   const initializedRef = useRef(false)
@@ -93,6 +108,12 @@ export function HostnameField({ value, onChange, onValidationChange, wildcardDom
       return
     }
 
+    // Skip API check when hostname matches the initial value (edit mode)
+    if (initialHostname && fqdn === initialHostname) {
+      setValidation({ status: 'valid' })
+      return
+    }
+
     setValidation({ status: 'checking' })
     const controller = new AbortController()
     abortRef.current = controller
@@ -111,7 +132,7 @@ export function HostnameField({ value, onChange, onValidationChange, wildcardDom
         setValidation({ status: 'error', reason: 'invalid' })
       }
     }, DEBOUNCE_MS)
-  }, [])
+  }, [initialHostname])
 
   // Trigger validation and propagate value when the computed FQDN changes
   const prevFqdnRef = useRef(currentFqdn)

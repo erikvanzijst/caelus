@@ -95,6 +95,17 @@ export function createDeployment(
   })
 }
 
+export function updateDeployment(
+  userId: number,
+  deploymentId: number,
+  payload: { desired_template_id: number; user_values_json?: object },
+) {
+  return requestJson<Deployment>(`/users/${userId}/deployments/${deploymentId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function deleteDeployment(userId: number, deploymentId: number) {
   return requestJson<null>(`/users/${userId}/deployments/${deploymentId}`, {
     method: 'DELETE',

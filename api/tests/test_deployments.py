@@ -1,12 +1,28 @@
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_PROVISIONING,
     DEPLOYMENT_STATUS_DELETING,
+    DEPLOYMENT_STATUS_READY,
 )
 from tests.conftest import client, db_session
 from sqlmodel import select
 
 from app.models import DeploymentORM, DeploymentReconcileJobORM
 from app.services.jobs import JobService
+
+
+def _finish_create_job(db_session, deployment_id):
+    """Mark the create job as done and set deployment to ready (simulates reconciler)."""
+    create_job = db_session.exec(
+        select(DeploymentReconcileJobORM).where(
+            DeploymentReconcileJobORM.deployment_id == deployment_id,
+            DeploymentReconcileJobORM.reason == "create",
+        )
+    ).one()
+    JobService(db_session).mark_job_done(job_id=create_job.id)
+    deployment = db_session.get(DeploymentORM, deployment_id)
+    deployment.status = DEPLOYMENT_STATUS_READY
+    db_session.add(deployment)
+    db_session.commit()
 
 
 def test_delete_deployment_flow(client, db_session):
@@ -144,13 +160,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
     )
     assert dep_resp.status_code == 201
     dep_id = dep_resp.json()["id"]
-    create_job = db_session.exec(
-        select(DeploymentReconcileJobORM).where(
-            DeploymentReconcileJobORM.deployment_id == dep_id,
-            DeploymentReconcileJobORM.reason == "create",
-        )
-    ).one()
-    JobService(db_session).mark_job_done(job_id=create_job.id)
+    _finish_create_job(db_session, dep_id)
 
     upgrade_resp = client.put(
         f"/api/users/{user_id}/deployments/{dep_id}",
@@ -328,13 +338,7 @@ def test_update_deployment_rederives_hostname_from_user_values(client, db_sessio
     )
     assert dep_resp.status_code == 201
     dep_id = dep_resp.json()["id"]
-    create_job = db_session.exec(
-        select(DeploymentReconcileJobORM).where(
-            DeploymentReconcileJobORM.deployment_id == dep_id,
-            DeploymentReconcileJobORM.reason == "create",
-        )
-    ).one()
-    JobService(db_session).mark_job_done(job_id=create_job.id)
+    _finish_create_job(db_session, dep_id)
 
     update_resp = client.put(
         f"/api/users/{user_id}/deployments/{dep_id}",
@@ -342,3 +346,119 @@ def test_update_deployment_rederives_hostname_from_user_values(client, db_sessio
     )
     assert update_resp.status_code == 200
     assert update_resp.json()["hostname"] == "after.example.test"
+
+
+def test_same_version_update_with_new_values(client, db_session):
+    """Updating user_values_json without changing template version should succeed."""
+    user_resp = client.post("/api/users", json={"email": "same-ver@example.com"})
+    user_id = user_resp.json()["id"]
+
+    product_resp = client.post(
+        "/api/products", json={"name": "same-ver-prod", "description": "desc"}
+    )
+    product_id = product_resp.json()["id"]
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "domain": {"type": "string", "title": "hostname"},
+            "color": {"type": "string"},
+        },
+    }
+    tmpl_resp = client.post(
+        f"/api/products/{product_id}/templates",
+        json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": schema},
+    )
+    tmpl_id = tmpl_resp.json()["id"]
+
+    dep_resp = client.post(
+        f"/api/users/{user_id}/deployments",
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "same.example.test", "color": "red"}},
+    )
+    dep_id = dep_resp.json()["id"]
+    _finish_create_job(db_session, dep_id)
+
+    # Same template, different values
+    update_resp = client.put(
+        f"/api/users/{user_id}/deployments/{dep_id}",
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "same.example.test", "color": "blue"}},
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["desired_template_id"] == tmpl_id
+    assert update_resp.json()["user_values_json"]["color"] == "blue"
+    assert update_resp.json()["generation"] == 2
+    assert update_resp.json()["status"] == DEPLOYMENT_STATUS_PROVISIONING
+
+
+def test_update_deployment_rejects_non_ready_status(client, db_session):
+    """Update should return 409 when deployment is not in ready state."""
+    user_resp = client.post("/api/users", json={"email": "notready@example.com"})
+    user_id = user_resp.json()["id"]
+
+    product_resp = client.post(
+        "/api/products", json={"name": "notready-prod", "description": "desc"}
+    )
+    product_id = product_resp.json()["id"]
+
+    schema = {
+        "type": "object",
+        "properties": {"domain": {"type": "string", "title": "hostname"}},
+    }
+    tmpl_resp = client.post(
+        f"/api/products/{product_id}/templates",
+        json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": schema},
+    )
+    tmpl_id = tmpl_resp.json()["id"]
+
+    dep_resp = client.post(
+        f"/api/users/{user_id}/deployments",
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "notready.example.test"}},
+    )
+    dep_id = dep_resp.json()["id"]
+
+    # Deployment is still in 'provisioning' — update should fail
+    update_resp = client.put(
+        f"/api/users/{user_id}/deployments/{dep_id}",
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "notready.example.test"}},
+    )
+    assert update_resp.status_code == 409
+    assert "not in ready state" in update_resp.json()["detail"]
+
+
+def test_update_deployment_rejects_non_ready_error_status(client, db_session):
+    """Update should return 409 when deployment is in error state."""
+    user_resp = client.post("/api/users", json={"email": "errstate@example.com"})
+    user_id = user_resp.json()["id"]
+
+    product_resp = client.post(
+        "/api/products", json={"name": "errstate-prod", "description": "desc"}
+    )
+    product_id = product_resp.json()["id"]
+
+    schema = {
+        "type": "object",
+        "properties": {"domain": {"type": "string", "title": "hostname"}},
+    }
+    tmpl_resp = client.post(
+        f"/api/products/{product_id}/templates",
+        json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": schema},
+    )
+    tmpl_id = tmpl_resp.json()["id"]
+
+    dep_resp = client.post(
+        f"/api/users/{user_id}/deployments",
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "errstate.example.test"}},
+    )
+    dep_id = dep_resp.json()["id"]
+
+    # Simulate error state
+    deployment = db_session.get(DeploymentORM, dep_id)
+    deployment.status = "error"
+    db_session.add(deployment)
+    db_session.commit()
+
+    update_resp = client.put(
+        f"/api/users/{user_id}/deployments/{dep_id}",
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "errstate.example.test"}},
+    )
+    assert update_resp.status_code == 409

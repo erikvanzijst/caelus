@@ -28,6 +28,8 @@ services:
     environment:
       - CAELUS_DATABASE_URL=postgresql+psycopg://caelus:caelus@postgres:5432/caelus
       - KUBECONFIG=/workspace/k8s/kubeconfigs/dev-k3s.yaml
+      # https://github.com/anthropics/claude-code/issues/1736#issuecomment-3170502150
+      - CLAUDE_CONFIG_DIR=/home/vscode/.claude
     volumes:
       - .:/workspace
     depends_on:

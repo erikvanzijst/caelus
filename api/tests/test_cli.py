@@ -106,6 +106,17 @@ def _mark_first_open_job_done(deployment_id: int) -> None:
         JobService(session).mark_job_done(job_id=job.id)
 
 
+def _finish_reconcile(deployment_id: int) -> None:
+    """Mark the first open job done and set deployment to ready (simulates reconciler)."""
+    _mark_first_open_job_done(deployment_id)
+    with session_scope() as session:
+        dep = session.get(DeploymentORM, deployment_id)
+        assert dep is not None
+        dep.status = "ready"
+        session.add(dep)
+        session.commit()
+
+
 def _mark_first_open_job_failed(deployment_id: int, error: str = "boom") -> None:
     with session_scope() as session:
         job = session.exec(
@@ -714,7 +725,7 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
     assert deployment is not None
     dep_id = deployment.id
     assert dep_id is not None
-    _mark_first_open_job_done(dep_id)
+    _finish_reconcile(dep_id)
 
     upgrade_res = runner.invoke(
         app,

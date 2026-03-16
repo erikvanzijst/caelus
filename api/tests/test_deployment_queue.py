@@ -6,10 +6,11 @@ from sqlmodel import select
 from app.models import DeploymentReconcileJobORM
 from app.services import deployments, products, templates, users
 from app.services.jobs import JobService
-from app.services.errors import DeploymentInProgressException, IntegrityException
+from app.services.errors import IntegrityException
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_PROVISIONING,
     DEPLOYMENT_STATUS_DELETING,
+    DEPLOYMENT_STATUS_READY,
 )
 
 
@@ -115,6 +116,10 @@ def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
         .where(DeploymentReconcileJobORM.deployment_id == dep.id, DeploymentReconcileJobORM.reason == "create")
     ).one()
     JobService(db_session).mark_job_done(job_id=create_job.id)
+    dep_orm = db_session.get(deployments.DeploymentORM, dep.id)
+    dep_orm.status = DEPLOYMENT_STATUS_READY
+    db_session.add(dep_orm)
+    db_session.commit()
 
     upgraded = deployments.update_deployment(
         db_session,
@@ -138,7 +143,8 @@ def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
         )
 
 
-def test_update_rolls_back_when_open_job_exists(db_session):
+def test_update_rejects_non_ready_deployment(db_session):
+    """Update is rejected when deployment is not in 'ready' state (e.g. still provisioning)."""
     user, template_v1, template_v2 = _setup_user_and_templates(db_session)
     dep = deployments.create_deployment(
         db_session,
@@ -149,7 +155,8 @@ def test_update_rolls_back_when_open_job_exists(db_session):
         ),
     )
 
-    with pytest.raises(DeploymentInProgressException):
+    # Deployment is still in 'provisioning' — update should be rejected
+    with pytest.raises(IntegrityException, match="not in ready state"):
         deployments.update_deployment(
             db_session,
             update=deployments.DeploymentUpdate(

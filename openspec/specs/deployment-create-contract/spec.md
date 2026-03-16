@@ -69,3 +69,11 @@ The UI Dashboard MUST not render a dedicated `Domain name` TextField and MUST no
 #### Scenario: User submits deployment form
 - **WHEN** the user completes and submits the deployment create form
 - **THEN** the generated request payload excludes `hostname`
+
+## Requirements from edit-deployment-config
+
+### Requirement: Update payload allows same template version
+
+#### Scenario: Update payload allows same template version
+- **WHEN** a client sends a `PUT /deployments` request with `desired_template_id` equal to the current value
+- **THEN** the API accepts the request (previously rejected with "Can only upgrade to newer versions")

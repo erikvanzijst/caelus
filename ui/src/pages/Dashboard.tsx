@@ -19,7 +19,7 @@ import {
   listDeployments,
   listProducts,
 } from '../api/endpoints'
-import type { Product } from '../api/types'
+import type { Deployment, Product } from '../api/types'
 import { resolveApiPath } from '../api/client'
 import { useAuth } from '../state/AuthContext'
 import { isTransitionalStatus, statusColor } from '../utils/deploymentStatus'
@@ -32,6 +32,7 @@ function Dashboard() {
   const { user } = useAuth()
   const [deletePendingIds, setDeletePendingIds] = useState<Set<number>>(new Set())
   const [deployProduct, setDeployProduct] = useState<Product | null>(null)
+  const [editDeployment, setEditDeployment] = useState<Deployment | null>(null)
 
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -161,6 +162,14 @@ function Dashboard() {
                     Open
                   </Button>
                 )}
+                {deployment.status === 'ready' && (
+                  <Button
+                    variant="outlined"
+                    onClick={() => setEditDeployment(deployment)}
+                  >
+                    Edit
+                  </Button>
+                )}
                 {deployment.status !== 'deleting' && deployment.status !== 'deleted' && (
                   <Button
                     variant="outlined"
@@ -215,6 +224,15 @@ function Dashboard() {
           product={deployProduct}
           userId={user.id}
           onClose={() => setDeployProduct(null)}
+        />
+      )}
+
+      {editDeployment && user && editDeployment.desired_template?.product && (
+        <DeployDialog
+          product={editDeployment.desired_template.product}
+          userId={user.id}
+          deployment={editDeployment}
+          onClose={() => setEditDeployment(null)}
         />
       )}
     </Stack>

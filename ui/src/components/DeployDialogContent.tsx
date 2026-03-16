@@ -24,6 +24,8 @@ interface DeployDialogContentProps {
   userValuesErrors?: string[]
   noTemplateWarning?: boolean
   loading?: boolean
+  initialHostname?: string
+  submitLabel?: string
 }
 
 export function DeployDialogContent({
@@ -40,6 +42,8 @@ export function DeployDialogContent({
   userValuesErrors = [],
   noTemplateWarning,
   loading,
+  initialHostname,
+  submitLabel = 'Launch',
 }: DeployDialogContentProps) {
   return (
     <>
@@ -76,6 +80,7 @@ export function DeployDialogContent({
             onChange={onChange}
             onHostnameValidationChange={onHostnameValidationChange}
             errors={userValuesErrors}
+            initialHostname={initialHostname}
           />
         )}
       </Stack>
@@ -88,7 +93,7 @@ export function DeployDialogContent({
               onClick={onLaunch}
               disabled={launchDisabled}
             >
-              {launchPending ? 'Launching...' : 'Launch'}
+              {launchPending ? `${submitLabel === 'Launch' ? 'Launching' : 'Updating'}...` : submitLabel}
             </Button>
           )}
         </Stack>

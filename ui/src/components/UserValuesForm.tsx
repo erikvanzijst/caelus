@@ -140,6 +140,7 @@ interface UserValuesFormProps {
   onChange: (userValues: Record<string, unknown> | null) => void
   onHostnameValidationChange?: (valid: boolean) => void
   errors?: string[]
+  initialHostname?: string
 }
 
 export function UserValuesForm({
@@ -148,6 +149,7 @@ export function UserValuesForm({
   onChange,
   onHostnameValidationChange,
   errors = [],
+  initialHostname,
 }: UserValuesFormProps) {
   const fields = useMemo(() => flattenSchema(valuesSchemaJson), [valuesSchemaJson])
   const defaults = useMemo(() => flattenDefaults(defaultValuesJson), [defaultValuesJson])
@@ -269,6 +271,7 @@ export function UserValuesForm({
               required={field.required}
               error={fieldErrors[field.path]}
               description={field.description}
+              initialHostname={initialHostname}
             />
           )
         }

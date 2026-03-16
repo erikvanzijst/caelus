@@ -16,11 +16,12 @@ from app.models import (
 from app.services.jobs import JobService
 from app.services import template_values
 from app.services import users as user_service
-from app.services.errors import DeploymentInProgressException, HostnameException, IntegrityException, NotFoundException
+from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException
 from app.services.hostnames import require_valid_hostname_for_deployment
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETING,
     DEPLOYMENT_STATUS_PROVISIONING,
+    DEPLOYMENT_STATUS_READY,
     JOB_REASON_CREATE,
     JOB_REASON_DELETE,
     JOB_REASON_UPDATE,
@@ -226,7 +227,7 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
         user_id=update.user_id,
         deployment_id=update.id,
     )
-    if update.desired_template_id <= deployment.desired_template_id:
+    if update.desired_template_id < deployment.desired_template_id:
         raise IntegrityException("Can only upgrade to newer versions, not downgrade")
 
     if not (target_template := session.get(ProductTemplateVersionORM, update.desired_template_id)):
@@ -236,26 +237,48 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
     if current_template and target_template.product_id != current_template.product_id:
         raise IntegrityException("Upgrade template must belong to the same product")
 
-    if update.user_values_json is not None:
-        deployment.user_values_json = update.user_values_json
+    # Determine the effective user values for validation
+    new_user_values = update.user_values_json if update.user_values_json is not None else deployment.user_values_json
 
     # Pre-flight the user-provided values against the template's schema:
-    _validate_user_values(target_template, deployment.user_values_json)
+    _validate_user_values(target_template, new_user_values)
     derived_hostname = _derive_hostname(
         values_schema_json=target_template.values_schema_json,
-        user_values_json=deployment.user_values_json,
+        user_values_json=new_user_values,
     )
     if derived_hostname is not None:
         require_valid_hostname_for_deployment(
             session, derived_hostname, exclude_deployment_id=deployment.id,
         )
-    deployment.hostname = derived_hostname
 
-    deployment.desired_template_id = update.desired_template_id
-    deployment.status = DEPLOYMENT_STATUS_PROVISIONING
-    deployment.generation += 1
-    deployment.last_error = None
-    session.add(deployment)
+    # Atomic status guard: only update if deployment is in 'ready' state.
+    # This prevents races with the reconciler and concurrent updates.
+    # Uses session.execute (not session.exec) because this is a DML UPDATE,
+    # not a SELECT — we need result.rowcount, not model instances.
+    from sqlalchemy import update as sa_update
+    result = session.execute(
+        sa_update(DeploymentORM)
+        .where(
+            DeploymentORM.id == update.id,
+            DeploymentORM.status == DEPLOYMENT_STATUS_READY,
+        )
+        .values(
+            desired_template_id=update.desired_template_id,
+            user_values_json=new_user_values,
+            hostname=derived_hostname,
+            status=DEPLOYMENT_STATUS_PROVISIONING,
+            # SQL expression: generates SET generation = generation + 1
+            # evaluated atomically by the database, not from Python state.
+            generation=DeploymentORM.generation + 1,
+            last_error=None,
+        )
+    )
+    if result.rowcount == 0:
+        raise IntegrityException("Deployment is not in ready state")
+
+    # Expire the ORM instance so subsequent reads see the updated row
+    session.expire(deployment)
+
     try:
         _enqueue_reconcile_job(session, deployment_id=update.id, reason=JOB_REASON_UPDATE)
         session.commit()

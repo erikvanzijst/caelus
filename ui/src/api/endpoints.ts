@@ -67,7 +67,7 @@ export function listTemplates(productId: number) {
 
 export function createTemplate(
   productId: number,
-  payload: { chart_ref: string; chart_version: string; values_schema_json?: object; default_values_json?: object },
+  payload: { chart_ref: string; chart_version: string; values_schema_json?: object; system_values_json?: object },
 ) {
   return requestJson<ProductTemplate>(`/products/${productId}/templates`, {
     method: 'POST',

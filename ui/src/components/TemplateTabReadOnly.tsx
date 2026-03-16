@@ -102,9 +102,7 @@ export function TemplateTabReadOnly({
                 valuesSchemaJson={
                   (template.values_schema_json as Record<string, unknown> | null) ?? null
                 }
-                defaultValuesJson={
-                  (template.default_values_json as Record<string, unknown> | null) ?? null
-                }
+                initialValuesJson={null}
                 onChange={() => {}}
               />
             </Box>
@@ -114,15 +112,15 @@ export function TemplateTabReadOnly({
 
       <Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Default values
+          System values
         </Typography>
         <Box sx={editorBoxSx}>
           <Editor
             height="100%"
             defaultLanguage="json"
             value={
-              template.default_values_json
-                ? JSON.stringify(template.default_values_json, null, 2)
+              template.system_values_json
+                ? JSON.stringify(template.system_values_json, null, 2)
                 : ''
             }
             options={editorOptions}

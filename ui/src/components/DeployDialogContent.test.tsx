@@ -37,7 +37,7 @@ describe('DeployDialogContent', () => {
       <DeployDialogContent
         product={product}
         valuesSchemaJson={null}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={vi.fn()}
       />,
     )
@@ -51,7 +51,7 @@ describe('DeployDialogContent', () => {
       <DeployDialogContent
         product={product}
         valuesSchemaJson={schema}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={vi.fn()}
       />,
     )
@@ -64,7 +64,7 @@ describe('DeployDialogContent', () => {
       <DeployDialogContent
         product={product}
         valuesSchemaJson={null}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={vi.fn()}
       />,
     )
@@ -77,7 +77,7 @@ describe('DeployDialogContent', () => {
       <DeployDialogContent
         product={product}
         valuesSchemaJson={null}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={vi.fn()}
       />,
     )
@@ -90,7 +90,7 @@ describe('DeployDialogContent', () => {
       <DeployDialogContent
         product={product}
         valuesSchemaJson={null}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={vi.fn()}
         onLaunch={vi.fn()}
         onCancel={vi.fn()}
@@ -106,7 +106,7 @@ describe('DeployDialogContent', () => {
       <DeployDialogContent
         product={product}
         valuesSchemaJson={null}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={vi.fn()}
         onLaunch={vi.fn()}
         launchDisabled
@@ -121,7 +121,7 @@ describe('DeployDialogContent', () => {
       <DeployDialogContent
         product={product}
         valuesSchemaJson={null}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={vi.fn()}
         onLaunch={vi.fn()}
         launchPending
@@ -136,7 +136,7 @@ describe('DeployDialogContent', () => {
       <DeployDialogContent
         product={product}
         valuesSchemaJson={null}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={vi.fn()}
         noTemplateWarning
       />,
@@ -150,7 +150,7 @@ describe('DeployDialogContent', () => {
       <DeployDialogContent
         product={product}
         valuesSchemaJson={null}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={vi.fn()}
         loading
       />,
@@ -164,7 +164,7 @@ describe('DeployDialogContent', () => {
       <DeployDialogContent
         product={product}
         valuesSchemaJson={null}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={vi.fn()}
         formError="Something went wrong"
       />,

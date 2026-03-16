@@ -72,7 +72,7 @@ describe('UserValuesForm', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={schema}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -87,7 +87,7 @@ describe('UserValuesForm', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={schema}
-        defaultValuesJson={defaults}
+        initialValuesJson={defaults}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -105,7 +105,7 @@ describe('UserValuesForm', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={schema}
-        defaultValuesJson={defaults}
+        initialValuesJson={defaults}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -124,7 +124,7 @@ describe('UserValuesForm', () => {
     const { container } = render(
       <UserValuesForm
         valuesSchemaJson={null}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -139,7 +139,7 @@ describe('UserValuesForm', () => {
     const { container } = render(
       <UserValuesForm
         valuesSchemaJson={{ type: 'object', properties: {} }}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -153,7 +153,7 @@ describe('UserValuesForm', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={booleanSchema}
-        defaultValuesJson={{ federation: { enabled: false } }}
+        initialValuesJson={{ federation: { enabled: false } }}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -171,7 +171,7 @@ describe('UserValuesForm', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={booleanSchema}
-        defaultValuesJson={{ federation: { enabled: false } }}
+        initialValuesJson={{ federation: { enabled: false } }}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -201,7 +201,7 @@ describe('UserValuesForm', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={hostnameSchema}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -227,7 +227,7 @@ describe('UserValuesForm', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={hostnameSchema}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -267,7 +267,7 @@ describe('UserValuesForm', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={schemaWithDefaults}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -280,7 +280,7 @@ describe('UserValuesForm', () => {
     })
   })
 
-  it('prefers defaultValuesJson over schema defaults', async () => {
+  it('prefers initialValuesJson over schema default annotations', async () => {
     const schemaWithDefaults = {
       type: 'object',
       properties: {
@@ -295,7 +295,7 @@ describe('UserValuesForm', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={schemaWithDefaults}
-        defaultValuesJson={{ region: 'eu-west-1' }}
+        initialValuesJson={{ region: 'eu-west-1' }}
         onChange={onChange}
       />,
       { wrapper: Wrapper },
@@ -320,7 +320,7 @@ describe('UserValuesForm', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={regularSchema}
-        defaultValuesJson={null}
+        initialValuesJson={null}
         onChange={onChange}
       />,
       { wrapper: Wrapper },

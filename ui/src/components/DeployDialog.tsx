@@ -106,10 +106,11 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
     })
   }, [product.template_id, deployment, isEditMode, canonicalTemplate, userValues, activeMutation])
 
-  // In edit mode, pre-populate the form with the deployment's current user values
-  const defaultValuesJson = isEditMode
+  // In edit mode, pre-populate the form with the deployment's current user values.
+  // In create mode, pass null — form defaults come from JSON Schema annotations.
+  const initialValuesJson = isEditMode
     ? (deployment!.user_values_json as Record<string, unknown> | null) ?? null
-    : (canonicalTemplate?.default_values_json as Record<string, unknown> | null) ?? null
+    : null
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -119,7 +120,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
           valuesSchemaJson={
             (canonicalTemplate?.values_schema_json as Record<string, unknown> | null) ?? null
           }
-          defaultValuesJson={defaultValuesJson}
+          initialValuesJson={initialValuesJson}
           onChange={setUserValues}
           onHostnameValidationChange={setHostnameValid}
           onLaunch={handleLaunch}

@@ -35,7 +35,7 @@ def _seed_deployment(db_session) -> int:
             product_id=product.id,
             chart_ref="oci://example/chart",
             chart_version="1.2.3",
-            default_values_json={"replicas": 1},
+            system_values_json={"replicas": 1},
             values_schema_json=schema,
             health_timeout_sec=120,
         ),

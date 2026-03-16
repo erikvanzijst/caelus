@@ -39,7 +39,7 @@ const existingTemplate: ProductTemplate = {
   product_id: 1,
   chart_ref: 'oci://registry/test',
   chart_version: '1.0.0',
-  default_values_json: { key: 'value' },
+  system_values_json: { key: 'value' },
   values_schema_json: {
     type: 'object',
     properties: { name: { type: 'string', title: 'Name' } },
@@ -151,7 +151,7 @@ describe('TemplateTabNew', () => {
       chart_ref: 'oci://registry/test',
       chart_version: '2.0.0',
       values_schema_json: existingTemplate.values_schema_json,
-      default_values_json: existingTemplate.default_values_json,
+      system_values_json: existingTemplate.system_values_json,
     })
   })
 

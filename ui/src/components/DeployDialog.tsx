@@ -84,7 +84,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
   const activeMutation = isEditMode ? updateMutation : createMutation
 
   const handleLaunch = useCallback(() => {
-    const templateId = isEditMode ? deployment!.desired_template_id : product.template_id
+    const templateId = product.template_id
     if (!templateId) return
 
     if (canonicalTemplate?.values_schema_json) {
@@ -104,7 +104,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
       templateId,
       userValuesJson: valuesToSend,
     })
-  }, [product.template_id, deployment, isEditMode, canonicalTemplate, userValues, activeMutation])
+  }, [product.template_id, canonicalTemplate, userValues, activeMutation])
 
   // In edit mode, pre-populate the form with the deployment's current user values.
   // In create mode, pass null — form defaults come from JSON Schema annotations.

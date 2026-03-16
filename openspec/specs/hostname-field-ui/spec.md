@@ -93,3 +93,19 @@ The `HostnameField` component MUST integrate with the existing `UserValuesForm` 
 #### Scenario: Hostname value flows into form submission
 - **WHEN** the user enters `myapp.app.deprutser.be` in the HostnameField for a field at path `ingress.host`
 - **THEN** the form's unflattened output includes `{"ingress": {"host": "myapp.app.deprutser.be"}}`
+
+## Requirements from edit-deployment-config
+
+### Requirement: HostnameField skips validation for unchanged hostname
+
+#### Scenario: Initial hostname skips API validation
+- **WHEN** `HostnameField` receives an `initialHostname` prop and the current FQDN equals `initialHostname`
+- **THEN** the component sets validation status to `valid` without calling `GET /api/hostnames/{fqdn}`
+
+#### Scenario: Changed hostname triggers normal validation
+- **WHEN** `HostnameField` receives an `initialHostname` prop and the current FQDN differs from `initialHostname`
+- **THEN** the component calls `GET /api/hostnames/{fqdn}` with the normal debounce behavior
+
+#### Scenario: Reverted hostname skips validation again
+- **WHEN** the user changes the hostname away from `initialHostname` and then changes it back
+- **THEN** the component sets validation status to `valid` without calling the API

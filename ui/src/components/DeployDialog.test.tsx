@@ -2,16 +2,18 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 import { DeployDialog } from './DeployDialog'
-import type { Product } from '../api/types'
+import type { Deployment, Product, ProductTemplate } from '../api/types'
 
 const listTemplatesMock = vi.fn()
 const createDeploymentMock = vi.fn()
+const updateDeploymentMock = vi.fn()
 const checkHostnameMock = vi.fn()
 const listDomainsMock = vi.fn()
 
 vi.mock('../api/endpoints', () => ({
   listTemplates: (...args: unknown[]) => listTemplatesMock(...args),
   createDeployment: (...args: unknown[]) => createDeploymentMock(...args),
+  updateDeployment: (...args: unknown[]) => updateDeploymentMock(...args),
   checkHostname: (...args: unknown[]) => checkHostnameMock(...args),
   listDomains: (...args: unknown[]) => listDomainsMock(...args),
 }))
@@ -174,5 +176,79 @@ describe('DeployDialog', () => {
     await waitFor(() => {
       expect(screen.getByText('Server error')).toBeInTheDocument()
     })
+  })
+
+  it('edit mode uses deployment template, not product canonical template', async () => {
+    // The deployment was created with template 5, but the product's canonical
+    // template has since moved to 10. The edit dialog must use template 5.
+    const oldTemplate: ProductTemplate = {
+      id: 5,
+      product_id: 1,
+      chart_ref: 'oci://registry/hello',
+      chart_version: '0.0.9',
+      system_values_json: null,
+      values_schema_json: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          hostname: {
+            title: 'hostname',
+            type: 'string',
+            minLength: 1,
+          },
+        },
+        required: ['hostname'],
+        additionalProperties: false,
+      },
+      created_at: '2025-12-01T00:00:00Z',
+      product: helloWorld,
+    }
+
+    const deployment: Deployment = {
+      id: 42,
+      user_id: 1,
+      desired_template_id: 5,
+      hostname: 'edit-test.example.com',
+      user_values_json: { hostname: 'edit-test.example.com' },
+      desired_template: oldTemplate,
+      status: 'ready',
+      generation: 1,
+      created_at: '2026-01-15T00:00:00Z',
+      user: { id: 1, email: 'test@example.com', is_admin: false, created_at: '2026-01-01T00:00:00Z' },
+    }
+
+    listDomainsMock.mockResolvedValue([])
+    listTemplatesMock.mockClear()
+    updateDeploymentMock.mockResolvedValue({ id: 42 })
+    const onClose = vi.fn()
+
+    renderWithQuery(
+      <DeployDialog product={helloWorld} userId={1} onClose={onClose} deployment={deployment} />,
+    )
+
+    // The form should render using the deployment's template schema
+    await waitFor(() => {
+      expect(screen.getByText('Configure application values:')).toBeInTheDocument()
+    })
+
+    // Hostname should be pre-populated from deployment.user_values_json
+    expect(screen.getByRole('textbox', { name: /hostname/i })).toHaveValue('edit-test.example.com')
+
+    // Button should say "Update" not "Launch"
+    const updateBtn = screen.getByRole('button', { name: 'Update' })
+    expect(updateBtn).toBeEnabled()
+
+    fireEvent.click(updateBtn)
+
+    // Must send deployment's template ID (5), NOT the product's canonical (10)
+    await waitFor(() => {
+      expect(updateDeploymentMock).toHaveBeenCalledWith(1, 42, {
+        desired_template_id: 5,
+        user_values_json: { hostname: 'edit-test.example.com' },
+      })
+    })
+
+    // Should NOT have fetched templates (not needed in edit mode)
+    expect(listTemplatesMock).not.toHaveBeenCalled()
   })
 })

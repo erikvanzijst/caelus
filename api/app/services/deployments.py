@@ -3,6 +3,7 @@ from datetime import datetime
 import logging
 from typing import Any
 
+from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -255,7 +256,6 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
     # This prevents races with the reconciler and concurrent updates.
     # Uses session.execute (not session.exec) because this is a DML UPDATE,
     # not a SELECT — we need result.rowcount, not model instances.
-    from sqlalchemy import update as sa_update
     result = session.execute(
         sa_update(DeploymentORM)
         .where(

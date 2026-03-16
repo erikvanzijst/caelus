@@ -202,6 +202,14 @@ class DeploymentORM(DeploymentBase, table=True):
             sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
             postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
         ),
+        Index(
+            "uq_deployment_ns_name_active",
+            "namespace",
+            "name",
+            unique=True,
+            sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
+            postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -226,7 +234,8 @@ class DeploymentORM(DeploymentBase, table=True):
     hostname: Optional[str] = Field(
         default=None, sa_column=Column(String(), nullable=True, index=True)
     )
-    deployment_uid: str = Field(sa_column=Column(String(), nullable=False, index=True))
+    name: str = Field(sa_column=Column(String(), nullable=False, index=True))
+    namespace: str = Field(sa_column=Column(String(), nullable=False, index=True))
     user_values_json: Optional[dict[str, Any]] = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
@@ -267,7 +276,8 @@ class DeploymentRead(DeploymentBase):
     hostname: Optional[str] = None
     desired_template: ProductTemplateVersionRead
     applied_template: Optional[ProductTemplateVersionRead]
-    deployment_uid: Optional[str] = None
+    name: Optional[str] = None
+    namespace: Optional[str] = None
     status: str = Field(default="pending")
     generation: int = Field(default=1)
     last_error: Optional[str] = None

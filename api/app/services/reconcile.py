@@ -68,8 +68,10 @@ class DeploymentReconciler:
 
     @staticmethod
     def _validate_input_state(deployment: DeploymentORM) -> None:
-        if not deployment.deployment_uid:
-            raise IntegrityException("Deployment is missing deployment_uid")
+        if not deployment.name:
+            raise IntegrityException("Deployment is missing name")
+        if not deployment.namespace:
+            raise IntegrityException("Deployment is missing namespace")
         if deployment.user is None:
             raise IntegrityException("Deployment is missing loaded user relationship")
         if deployment.desired_template is None:
@@ -85,20 +87,19 @@ class DeploymentReconciler:
     def _reconcile_apply(self, deployment: DeploymentORM) -> ReconcileResult:
         template = deployment.desired_template
         assert template is not None
-        release_name, namespace = self._resolve_identity(deployment)
         merged_values = self._build_merged_values(deployment, template)
         logger.debug(
             "Applying deployment_id=%s release=%s namespace=%s template_id=%s",
             deployment.id,
-            release_name,
-            namespace,
+            deployment.name,
+            deployment.namespace,
             deployment.desired_template_id,
         )
 
-        self._provisioner.ensure_namespace(name=namespace)
+        self._provisioner.ensure_namespace(name=deployment.namespace)
         self._provisioner.helm_upgrade_install(
-            release_name=release_name,
-            namespace=namespace,
+            release_name=deployment.name,
+            namespace=deployment.namespace,
             chart_ref=template.chart_ref,
             chart_version=template.chart_version,
             chart_digest=template.chart_digest,
@@ -116,22 +117,21 @@ class DeploymentReconciler:
         )
 
     def _reconcile_delete(self, deployment: DeploymentORM) -> ReconcileResult:
-        release_name, namespace = self._resolve_identity(deployment)
         logger.debug(
             "Deleting deployment_id=%s release=%s namespace=%s",
             deployment.id,
-            release_name,
-            namespace,
+            deployment.name,
+            deployment.namespace,
         )
         timeout = (deployment.desired_template.health_timeout_sec or 300) if deployment.desired_template else 300
 
         self._provisioner.helm_uninstall(
-            release_name=release_name,
-            namespace=namespace,
+            release_name=deployment.name,
+            namespace=deployment.namespace,
             timeout=timeout,
             wait=True,
         )
-        self._provisioner.delete_namespace(name=namespace)
+        self._provisioner.delete_namespace(name=deployment.namespace)
 
         return ReconcileResult(
             status=DEPLOYMENT_STATUS_DELETED,
@@ -139,11 +139,6 @@ class DeploymentReconciler:
             last_error=None,
             last_reconcile_at=datetime.utcnow(),
         )
-
-    @staticmethod
-    def _resolve_identity(deployment: DeploymentORM) -> tuple[str, str]:
-        identity = deployment.deployment_uid
-        return identity, identity
 
     def _build_merged_values(
         self,

@@ -47,7 +47,8 @@ export interface Deployment {
   user: User
   desired_template: ProductTemplate
   applied_template?: ProductTemplate | null
-  deployment_uid?: string | null
+  name?: string | null
+  namespace?: string | null
   status?: DeploymentStatus
   generation?: number
   last_error?: string | null

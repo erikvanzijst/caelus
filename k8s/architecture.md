@@ -35,21 +35,28 @@ Per deployment, it ensures:
 
 Use immutable identity fields, never domain name, for Kubernetes naming:
 
-- `deployment.deployment_uid` (immutable slug id, not a UUID)
+- `deployment.name` (Helm release name, immutable slug)
+- `deployment.namespace` (Kubernetes namespace, immutable slug)
 
-`deployment.domainname` is mutable config injected into Helm values.
+`deployment.hostname` is mutable config injected into Helm values.
 
 ### 1.2.1 Naming contract
 
-Requested format for `deployment_uid`:
+**Release name** (`deployment.name`):
 
-`{product_slug}-{user_slug}-{suffix6}`
+`{product_slug[:20]}-{suffix6}`
 
-Where:
+- `product_slug`: product name slugified to lowercase `[a-z0-9-]`, truncated to 20 chars.
+- `suffix6`: six random base36 chars (`[0-9a-z]{6}`) for uniqueness.
+- Max length: 27 chars (leaving 36 chars headroom for chart resource suffixes within the 63-char DNS label limit).
 
-1. `product_slug`: product name slugified to lowercase `[a-z0-9-]`.
-2. `user_slug`: user email slugified to lowercase `[a-z0-9-]` (replace non-alnum with `-`).
-3. `suffix6`: six random base36 chars (`[0-9a-z]{6}`) for uniqueness.
+**Namespace** (`deployment.namespace`):
+
+`{email_slug[:20]}-{suffix9}`
+
+- `email_slug`: user email slugified to lowercase `[a-z0-9-]`, truncated to 20 chars.
+- `suffix9`: nine random base36 chars (`[0-9a-z]{9}`) for uniqueness.
+- Max length: 30 chars.
 
 Kubernetes DNS-label constraints require:
 
@@ -57,18 +64,14 @@ Kubernetes DNS-label constraints require:
 - charset `[a-z0-9-]`
 - must start/end with alphanumeric
 
-So generation must enforce:
+Both generators enforce:
 
-1. Build base: `{product_slug}-{user_slug}`.
-2. Reserve 7 chars for `-{suffix6}`.
-3. Truncate base to at most 56 chars.
-4. Trim leading/trailing `-` after truncation.
-5. If base is empty after trimming, fallback to `dep`.
-6. Final value: `{base}-{suffix6}`.
+1. Slugify the input (lowercase, replace non-alnum with `-`, collapse runs, strip leading/trailing `-`).
+2. Truncate to 20 chars, strip any trailing `-` after truncation.
+3. If base is empty after trimming, fallback to `dep`.
+4. Append `-{suffix}`.
 
-V1 rule:
-
-- `namespace_name = deployment_uid`
+A partial unique index `uq_deployment_ns_name_active` enforces uniqueness of `(namespace, name)` among non-deleted deployments.
 
 ## 1.3 Reconciler pseudocode
 
@@ -167,12 +170,9 @@ build_desired_state(dep):
   if tmpl is null or tmpl.deleted_at is not null:
     raise FatalError("desired template missing")
 
-  # Ensure immutable identity fields exist
-  deployment_uid = dep.deployment_uid or generate_deployment_uid(
-    product_name = dep.template.product.name,
-    user_email   = dep.user.email
-  )
-  namespace_name = dep.namespace_name or deployment_uid
+  # Immutable identity fields (set at creation time)
+  release_name = dep.name
+  namespace    = dep.namespace
 
   # Build values in deterministic precedence
   # 1) template defaults
@@ -187,8 +187,8 @@ build_desired_state(dep):
     },
     "caelus": {
       "deploymentId": dep.id,
-      "deploymentUid": deployment_uid,
-      "namespace": namespace_name
+      "deploymentName": release_name,
+      "namespace": namespace
     }
   }
 
@@ -581,9 +581,10 @@ The full demo chart is committed at `k8s/hello-static-chart/`.
 2. API transaction:
    - validates user exists
    - validates template exists and is active
-   - allocates immutable `deployment_uid` using `{product_slug}-{user_slug}-{suffix6}` contract
-   - sets `namespace_name = deployment_uid`
-   - sets `release_name = deployment_uid`
+   - allocates immutable `name` using `{product_slug[:20]}-{suffix6}` contract
+   - allocates immutable `namespace` using `{email_slug[:20]}-{suffix9}` contract
+   - sets Helm release name = `deployment.name`
+   - sets K8s namespace = `deployment.namespace`
    - sets `desired_template_id = template_id`, `status = pending`
    - inserts deployment row
    - enqueues reconcile job (`reason=create`)

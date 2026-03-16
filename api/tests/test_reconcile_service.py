@@ -106,7 +106,7 @@ def test_reconcile_validation_failure_returns_error_and_persists(db_session) -> 
     deployment_id = _seed_deployment(db_session)
     deployment = db_session.get(DeploymentORM, deployment_id)
     assert deployment is not None
-    deployment.deployment_uid = ""
+    deployment.name = ""
     db_session.add(deployment)
     db_session.commit()
 
@@ -118,10 +118,10 @@ def test_reconcile_validation_failure_returns_error_and_persists(db_session) -> 
     assert deployment is not None
 
     assert result.status == "error"
-    assert "deployment_uid" in (result.last_error or "")
+    assert "name" in (result.last_error or "")
     assert fake_provisioner.calls == []
     assert deployment.status == "error"
-    assert "deployment_uid" in (deployment.last_error or "")
+    assert "name" in (deployment.last_error or "")
 
 
 def test_reconcile_schema_validation_failure_returns_error_result(db_session) -> None:

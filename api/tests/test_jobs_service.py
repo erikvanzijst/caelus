@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import pytest
 from sqlmodel import select
 
-from app.models import DeploymentReconcileJobORM
+from app.models import DeploymentReconcileJobORM, ProductORM
 from app.services import deployments, products, templates, users
 from app.services.jobs import JobService
 from app.services.errors import DeploymentInProgressException, NotFoundException
@@ -29,6 +29,10 @@ def _seed_deployment(db_session):
             },
         ),
     )
+    product_orm = db_session.get(ProductORM, product.id)
+    product_orm.template_id = template.id
+    db_session.add(product_orm)
+    db_session.commit()
     deployment = deployments.create_deployment(
         db_session,
         payload=deployments.DeploymentCreate(

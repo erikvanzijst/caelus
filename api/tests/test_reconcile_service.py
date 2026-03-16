@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.models import DeploymentCreate, DeploymentORM
+from app.models import DeploymentCreate, DeploymentORM, ProductORM
 from app.services import deployments, products, templates, users
 from app.services.reconcile import DeploymentReconciler
 from tests.provisioner_utils import FakeProvisioner
@@ -40,6 +40,10 @@ def _seed_deployment(db_session) -> int:
             health_timeout_sec=120,
         ),
     )
+    product_orm = db_session.get(ProductORM, product.id)
+    product_orm.template_id = template.id
+    db_session.add(product_orm)
+    db_session.commit()
     deployment = deployments.create_deployment(
         db_session,
         payload=DeploymentCreate(

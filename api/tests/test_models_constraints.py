@@ -4,7 +4,7 @@ from datetime import datetime
 from app.services import templates, deployments, products, users
 from app.services.jobs import JobService
 from sqlmodel import select
-from app.models import DeploymentORM, DeploymentReconcileJobORM, SQLModel
+from app.models import DeploymentORM, DeploymentReconcileJobORM, ProductORM, SQLModel
 from app.services.errors import HostnameException, IntegrityException
 from app.services.reconcile import DeploymentReconciler
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
@@ -78,6 +78,10 @@ def test_deployment_unique_constraint(db_session):
             },
         )
     )
+    product_orm = db_session.get(ProductORM, product.id)
+    product_orm.template_id = template.id
+    db_session.add(product_orm)
+    db_session.commit()
     # Create first deployment
     dep1 = deployments.create_deployment(
         db_session,
@@ -151,6 +155,11 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
         ),
     )
 
+    product_orm = db_session.get(ProductORM, product.id)
+    product_orm.template_id = template_v1.id
+    db_session.add(product_orm)
+    db_session.commit()
+
     dep_a = deployments.create_deployment(
         db_session,
         payload=deployments.DeploymentCreate(
@@ -160,6 +169,11 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
         ),
     )
     assert dep_a.hostname == "shared.example.com"
+
+    product_orm = db_session.get(ProductORM, product.id)
+    product_orm.template_id = template_v2.id
+    db_session.add(product_orm)
+    db_session.commit()
 
     with pytest.raises(HostnameException, match="in_use"):
         deployments.create_deployment(
@@ -174,6 +188,11 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
     assert dep_a_orm is not None
     dep_a_orm.status = DEPLOYMENT_STATUS_DELETED
     db_session.add(dep_a_orm)
+    db_session.commit()
+
+    product_orm = db_session.get(ProductORM, product.id)
+    product_orm.template_id = template_v2.id
+    db_session.add(product_orm)
     db_session.commit()
 
     dep_b = deployments.create_deployment(
@@ -204,6 +223,11 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
             },
         ),
     )
+
+    product_orm = db_session.get(ProductORM, product.id)
+    product_orm.template_id = template.id
+    db_session.add(product_orm)
+    db_session.commit()
 
     dep_a = deployments.create_deployment(
         db_session,

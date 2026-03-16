@@ -299,6 +299,8 @@ class TestHostnameCheckEndpoint:
             },
         )
         template_id = template.json()["id"]
+        # Make it the canonical template
+        client.put(f"/api/products/{product_id}", json={"template_id": template_id})
         user = client.post("/api/users", json={"email": "hn-test@example.com"})
         user_id = user.json()["id"]
         client.post(
@@ -399,6 +401,8 @@ class TestServerSideEnforcement:
             },
         )
         template_id = template.json()["id"]
+        # Make it the canonical template
+        client.put(f"/api/products/{product_id}", json={"template_id": template_id})
         user = client.post("/api/users", json={"email": "enforce@example.com"})
         user_id = user.json()["id"]
 
@@ -427,6 +431,8 @@ class TestServerSideEnforcement:
             },
         )
         template_id = template.json()["id"]
+        # Make it the canonical template
+        client.put(f"/api/products/{product_id}", json={"template_id": template_id})
         user = client.post("/api/users", json={"email": "enforce-inuse@example.com"})
         user_id = user.json()["id"]
 
@@ -469,6 +475,8 @@ class TestServerSideEnforcement:
             },
         )
         template_id = template.json()["id"]
+        # Make it the canonical template
+        client.put(f"/api/products/{product_id}", json={"template_id": template_id})
         user = client.post("/api/users", json={"email": "enforce-nohost@example.com"})
         user_id = user.json()["id"]
 
@@ -494,6 +502,8 @@ class TestServerSideEnforcement:
             f"/api/products/{product_id}/templates",
             json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": schema},
         )
+        # Make it the canonical template
+        client.put(f"/api/products/{product_id}", json={"template_id": tmpl1.json()["id"]})
         tmpl2 = client.post(
             f"/api/products/{product_id}/templates",
             json={"chart_ref": "oci://example/chart", "chart_version": "2.0.0", "values_schema_json": schema},

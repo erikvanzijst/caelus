@@ -56,6 +56,9 @@ def test_delete_deployment_flow(client, db_session):
     assert template_resp.status_code == 201
     template_id = template_resp.json()["id"]
 
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+
     deployment_resp = client.post(
         f"/api/users/{user_id}/deployments",
         json={"desired_template_id": template_id, "user_values_json": {"ingress": {"host": "cloud.example.com"}}},
@@ -132,6 +135,9 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
     assert tmpl1_resp.status_code == 201
     tmpl1_id = tmpl1_resp.json()["id"]
 
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": tmpl1_id})
+
     tmpl2_resp = client.post(
         f"/api/products/{product_id}/templates",
         json={
@@ -202,6 +208,9 @@ def test_create_deployment_user_values_with_empty_schema(client):
     assert tmpl_resp.status_code == 201
     tmpl_id = tmpl_resp.json()["id"]
 
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
         json={
@@ -244,6 +253,9 @@ def test_create_deployment_rejects_unknown_user_keys_against_schema(client):
     )
     assert tmpl_resp.status_code == 201
     tmpl_id = tmpl_resp.json()["id"]
+
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
 
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
@@ -289,6 +301,9 @@ def test_create_deployment_derives_hostname_recursively_case_insensitive_and_fir
     assert tmpl_resp.status_code == 201
     tmpl_id = tmpl_resp.json()["id"]
 
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
         json={
@@ -324,6 +339,9 @@ def test_update_deployment_rederives_hostname_from_user_values(client, db_sessio
     )
     assert tmpl1_resp.status_code == 201
     tmpl1_id = tmpl1_resp.json()["id"]
+
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": tmpl1_id})
 
     tmpl2_resp = client.post(
         f"/api/products/{product_id}/templates",
@@ -371,6 +389,9 @@ def test_same_version_update_with_new_values(client, db_session):
     )
     tmpl_id = tmpl_resp.json()["id"]
 
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
         json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "same.example.test", "color": "red"}},
@@ -410,6 +431,9 @@ def test_update_deployment_rejects_non_ready_status(client, db_session):
     )
     tmpl_id = tmpl_resp.json()["id"]
 
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
         json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "notready.example.test"}},
@@ -444,6 +468,9 @@ def test_update_deployment_rejects_non_ready_error_status(client, db_session):
         json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": schema},
     )
     tmpl_id = tmpl_resp.json()["id"]
+
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
 
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",

@@ -135,6 +135,15 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     if not template:
         raise NotFoundException("Template not found")
 
+    # The client must submit the product's current canonical template ID.
+    # This acts as a CAS (Compare-And-Swap) guard: the client declares which
+    # template schema it built the user_values_json against, and we verify that
+    # it's still canonical. Rejects stale submissions if the canonical moved.
+    if template.product.template_id != template.id:
+        raise IntegrityException(
+            "Template is not the current canonical for this product"
+        )
+
     # Pre-flight the user-provided values against the template's schema:
     _validate_user_values(template, payload.user_values_json)
     derived_hostname = _derive_hostname(

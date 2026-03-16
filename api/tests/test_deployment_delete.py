@@ -29,6 +29,8 @@ def test_delete_deployment_flow(client, db_session):
     )
     assert tmpl_resp.status_code == 201
     tmpl_id = tmpl_resp.json()["id"]
+    # Make it the canonical template
+    client.put(f"/api/products/{prod_id}", json={"template_id": tmpl_id})
     # create deployment
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",

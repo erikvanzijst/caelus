@@ -68,6 +68,9 @@ def authz_setup(db_session):
         )
         template_id = template.json()["id"]
 
+        # Make it the canonical template
+        admin_client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+
         # Create a deployment for the regular user (as admin)
         deployment = admin_client.post(
             f"/api/users/{user.id}/deployments",

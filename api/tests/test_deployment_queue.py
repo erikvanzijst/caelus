@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlmodel import select
 
-from app.models import DeploymentReconcileJobORM
+from app.models import DeploymentReconcileJobORM, ProductORM
 from app.services import deployments, products, templates, users
 from app.services.jobs import JobService
 from app.services.errors import IntegrityException
@@ -44,6 +44,10 @@ def _setup_user_and_templates(db_session):
             },
         ),
     )
+    product_orm = db_session.get(ProductORM, product.id)
+    product_orm.template_id = template_v1.id
+    db_session.add(product_orm)
+    db_session.commit()
     return user, template_v1, template_v2
 
 

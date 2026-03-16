@@ -152,6 +152,9 @@ def test_user_deployment_flow(client):
     assert template.status_code == 201
     template_id = template.json()["id"]
 
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+
     deployment = client.post(
         f"/api/users/{user_id}/deployments",
         json={
@@ -208,6 +211,9 @@ def test_user_deployment_flow_with_user_values(client):
     assert template.status_code == 201
     template_id = template.json()["id"]
 
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+
     deployment = client.post(
         f"/api/users/{user_id}/deployments",
         json={
@@ -244,6 +250,9 @@ def test_deployment_write_contract_rejects_hostname(client):
     )
     assert template_1.status_code == 201
     template_1_id = template_1.json()["id"]
+
+    # Make it the canonical template
+    client.put(f"/api/products/{product_id}", json={"template_id": template_1_id})
 
     template_2 = client.post(
         f"/api/products/{product_id}/templates",

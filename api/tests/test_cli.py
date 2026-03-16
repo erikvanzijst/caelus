@@ -52,6 +52,11 @@ def _seed_deployment_via_services() -> tuple[int, int]:
                 },
             ),
         )
+        from app.models import ProductORM
+        product_orm = session.get(ProductORM, product.id)
+        product_orm.template_id = template.id
+        session.add(product_orm)
+        session.commit()
         deployment = deployment_service.create_deployment(
             session,
             payload=DeploymentCreate(
@@ -474,6 +479,9 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
     assert template_res.exit_code == 0
     template_id = _parse_yaml_stdout(template_res)["id"]
 
+    update_prod_res = runner.invoke(app, ["update-product", "1", "--template-id", str(template_id)])
+    assert update_prod_res.exit_code == 0
+
     create_dep_res = runner.invoke(
         app,
         [
@@ -516,6 +524,9 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
     )
     assert template_res.exit_code == 0
     template_id = _parse_yaml_stdout(template_res)["id"]
+
+    update_prod_res = runner.invoke(app, ["update-product", "1", "--template-id", str(template_id)])
+    assert update_prod_res.exit_code == 0
 
     create_dep_res = runner.invoke(
         app,
@@ -560,6 +571,9 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
     )
     assert template_res.exit_code == 0
     template_id = _parse_yaml_stdout(template_res)["id"]
+
+    update_prod_res = runner.invoke(app, ["update-product", "1", "--template-id", str(template_id)])
+    assert update_prod_res.exit_code == 0
 
     # TODO: use `with NamedTemporaryFile()`
     values_file = tmp_path / "user-values.json"
@@ -705,6 +719,9 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
     )
     assert tmpl2_res.exit_code == 0
     tmpl2_id = _parse_yaml_stdout(tmpl2_res)["id"]
+
+    update_prod_res = runner.invoke(app, ["update-product", "1", "--template-id", str(tmpl1_id)])
+    assert update_prod_res.exit_code == 0
 
     domain = "upgrade-cli.example.test"
     create_dep_res = runner.invoke(

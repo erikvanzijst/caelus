@@ -25,11 +25,18 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
   const templatesQuery = useQuery({
     queryKey: ['templates', product.id],
     queryFn: () => listTemplates(product.id),
+    // In edit mode the deployment already carries its template; skip fetch
+    enabled: !isEditMode,
   })
 
   const canonicalTemplate: ProductTemplate | undefined = useMemo(() => {
     return templatesQuery.data?.find((t) => t.id === product.template_id)
   }, [templatesQuery.data, product.template_id])
+
+  // In edit mode, use the deployment's own template; in create mode, use the canonical
+  const activeTemplate: ProductTemplate | undefined = isEditMode
+    ? deployment!.desired_template
+    : canonicalTemplate
 
   const createMutation = useMutation({
     mutationFn: (payload: { templateId: number; userValuesJson?: object }) =>
@@ -45,7 +52,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
       const errorMsg = error.message
       if (errorMsg.includes('user_values_json') || errorMsg.includes('validation')) {
         const validationErrors = validateUserValues(
-          canonicalTemplate?.values_schema_json ?? null,
+          activeTemplate?.values_schema_json ?? null,
           userValues,
         )
         setUserValuesErrors(validationErrors.length > 0 ? validationErrors : [errorMsg])
@@ -71,7 +78,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
         setFormError('This deployment cannot be updated right now. It may be provisioning or was modified by another process.')
       } else if (errorMsg.includes('user_values_json') || errorMsg.includes('validation')) {
         const validationErrors = validateUserValues(
-          canonicalTemplate?.values_schema_json ?? null,
+          activeTemplate?.values_schema_json ?? null,
           userValues,
         )
         setUserValuesErrors(validationErrors.length > 0 ? validationErrors : [errorMsg])
@@ -84,12 +91,12 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
   const activeMutation = isEditMode ? updateMutation : createMutation
 
   const handleLaunch = useCallback(() => {
-    const templateId = product.template_id
+    const templateId = isEditMode ? deployment!.desired_template_id : product.template_id
     if (!templateId) return
 
-    if (canonicalTemplate?.values_schema_json) {
+    if (activeTemplate?.values_schema_json) {
       const validationErrors = validateUserValues(
-        canonicalTemplate.values_schema_json as Record<string, unknown>,
+        activeTemplate.values_schema_json as Record<string, unknown>,
         userValues,
       )
       if (validationErrors.length > 0) {
@@ -104,7 +111,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
       templateId,
       userValuesJson: valuesToSend,
     })
-  }, [product.template_id, canonicalTemplate, userValues, activeMutation])
+  }, [product.template_id, deployment, isEditMode, activeTemplate, userValues, activeMutation])
 
   // In edit mode, pre-populate the form with the deployment's current user values.
   // In create mode, pass null — form defaults come from JSON Schema annotations.
@@ -118,19 +125,19 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
         <DeployDialogContent
           product={product}
           valuesSchemaJson={
-            (canonicalTemplate?.values_schema_json as Record<string, unknown> | null) ?? null
+            (activeTemplate?.values_schema_json as Record<string, unknown> | null) ?? null
           }
           initialValuesJson={initialValuesJson}
           onChange={setUserValues}
           onHostnameValidationChange={setHostnameValid}
           onLaunch={handleLaunch}
           onCancel={onClose}
-          launchDisabled={activeMutation.isPending || !canonicalTemplate || !hostnameValid}
+          launchDisabled={activeMutation.isPending || !activeTemplate || !hostnameValid}
           launchPending={activeMutation.isPending}
           formError={formError}
           userValuesErrors={userValuesErrors}
-          noTemplateWarning={!templatesQuery.isLoading && !canonicalTemplate}
-          loading={templatesQuery.isLoading}
+          noTemplateWarning={!isEditMode && !templatesQuery.isLoading && !canonicalTemplate}
+          loading={!isEditMode && templatesQuery.isLoading}
           initialHostname={deployment?.hostname ?? undefined}
           submitLabel={isEditMode ? 'Update' : 'Launch'}
         />

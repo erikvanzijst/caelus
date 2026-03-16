@@ -17,14 +17,14 @@ def test_product_template_v2_fields_supported() -> None:
             "version_label": "hello-static-0.1.0",
             "chart_ref": "oci://registry.example.com/hello-static",
             "chart_version": "0.1.0",
-            "default_values_json": {"user": {"message": "hello"}},
+            "system_values_json": {"user": {"message": "hello"}},
             "values_schema_json": {"type": "object"},
             "capabilities_json": {"requires_admin_upgrade": True},
             "health_timeout_sec": 600,
         }
     )
     assert payload.chart_ref == "oci://registry.example.com/hello-static"
-    assert payload.default_values_json == {"user": {"message": "hello"}}
+    assert payload.system_values_json == {"user": {"message": "hello"}}
 
 
 def test_deployment_create_supports_user_values_alias() -> None:

@@ -40,7 +40,7 @@ const helloTemplate = {
   product_id: 1,
   chart_ref: 'oci://registry/hello',
   chart_version: '0.1.0',
-  default_values_json: null,
+  system_values_json: null,
   values_schema_json: {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     type: 'object',

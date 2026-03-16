@@ -32,7 +32,7 @@ describe('endpoints payload contracts', () => {
     })
   })
 
-  it('creates templates with default_values_json payload', async () => {
+  it('creates templates with system_values_json payload', async () => {
     vi.mocked(requestJson).mockResolvedValueOnce({} as never)
 
     const defaults = {
@@ -43,7 +43,7 @@ describe('endpoints payload contracts', () => {
 
     await createTemplate(
       4,
-      { chart_ref: 'ghcr.io/org/chart', chart_version: '1.2.3', default_values_json: defaults },
+      { chart_ref: 'ghcr.io/org/chart', chart_version: '1.2.3', system_values_json: defaults },
     )
 
     expect(requestJson).toHaveBeenCalledWith('/products/4/templates', {
@@ -51,7 +51,7 @@ describe('endpoints payload contracts', () => {
       body: JSON.stringify({
         chart_ref: 'ghcr.io/org/chart',
         chart_version: '1.2.3',
-        default_values_json: defaults,
+        system_values_json: defaults,
       }),
     })
   })

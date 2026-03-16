@@ -13,7 +13,7 @@ import { UserValuesForm } from './UserValuesForm'
 interface DeployDialogContentProps {
   product: Product
   valuesSchemaJson: Record<string, unknown> | null
-  defaultValuesJson: Record<string, unknown> | null
+  initialValuesJson: Record<string, unknown> | null
   onChange: (userValues: Record<string, unknown> | null) => void
   onHostnameValidationChange?: (valid: boolean) => void
   onLaunch?: () => void
@@ -31,7 +31,7 @@ interface DeployDialogContentProps {
 export function DeployDialogContent({
   product,
   valuesSchemaJson,
-  defaultValuesJson,
+  initialValuesJson,
   onChange,
   onHostnameValidationChange,
   onLaunch,
@@ -76,7 +76,7 @@ export function DeployDialogContent({
         ) : (
           <UserValuesForm
             valuesSchemaJson={valuesSchemaJson}
-            defaultValuesJson={defaultValuesJson}
+            initialValuesJson={initialValuesJson}
             onChange={onChange}
             onHostnameValidationChange={onHostnameValidationChange}
             errors={userValuesErrors}

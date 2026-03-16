@@ -127,7 +127,7 @@ class ProductTemplateVersionBase(SQLModel):
     chart_version: str = None
     chart_digest: Optional[str] = None
     version_label: Optional[str] = None
-    default_values_json: Optional[dict[str, Any]] = None
+    system_values_json: Optional[dict[str, Any]] = None
     values_schema_json: Optional[dict[str, Any]] = None
     capabilities_json: Optional[dict[str, Any]] = None
 
@@ -139,7 +139,7 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     version_label: Optional[str] = Field(default=None)
     chart_ref: str
     chart_version: str
-    default_values_json: Optional[dict[str, Any]] = Field(
+    system_values_json: Optional[dict[str, Any]] = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
     values_schema_json: Optional[dict[str, Any]] = Field(

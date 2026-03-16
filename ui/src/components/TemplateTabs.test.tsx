@@ -34,7 +34,7 @@ const makeTemplate = (id: number, createdAt: string): ProductTemplate => ({
   product_id: 1,
   chart_ref: 'oci://registry/test',
   chart_version: '1.0.0',
-  default_values_json: null,
+  system_values_json: null,
   values_schema_json: null,
   created_at: createdAt,
   product,

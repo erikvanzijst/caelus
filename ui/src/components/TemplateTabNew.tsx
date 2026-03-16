@@ -43,7 +43,7 @@ interface TemplateTabNewProps {
     chart_ref: string
     chart_version: string
     values_schema_json?: object
-    default_values_json?: object
+    system_values_json?: object
   }) => void
   saving?: boolean
 }
@@ -88,8 +88,8 @@ export function TemplateTabNew({
         setValidSchema(null)
         setSchemaValid(false)
       }
-      const defaults = newest.default_values_json
-        ? JSON.stringify(newest.default_values_json, null, 2)
+      const defaults = newest.system_values_json
+        ? JSON.stringify(newest.system_values_json, null, 2)
         : ''
       setDefaultsText(defaults)
       if (defaults.trim()) {
@@ -169,13 +169,13 @@ export function TemplateTabNew({
       chart_ref: string
       chart_version: string
       values_schema_json?: object
-      default_values_json?: object
+      system_values_json?: object
     } = {
       chart_ref: chartRef.trim(),
       chart_version: chartVersion.trim(),
     }
     if (validSchema) payload.values_schema_json = validSchema
-    if (validDefaults) payload.default_values_json = validDefaults
+    if (validDefaults) payload.system_values_json = validDefaults
     onSave(payload)
   }, [chartRef, chartVersion, validSchema, validDefaults, onSave])
 
@@ -245,7 +245,7 @@ export function TemplateTabNew({
               <DeployDialogContent
                 product={product}
                 valuesSchemaJson={validSchema}
-                defaultValuesJson={validDefaults}
+                initialValuesJson={null}
                 onChange={() => {}}
               />
             </Box>
@@ -255,7 +255,7 @@ export function TemplateTabNew({
 
       <Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Default values
+          System values
         </Typography>
         <Box sx={{ ...editorBoxSx, height: 150 }}>
           <Editor

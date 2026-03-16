@@ -90,7 +90,7 @@ export function flattenSchema(
   return fields
 }
 
-export function flattenDefaults(
+export function flattenValues(
   defaults: Record<string, unknown> | null,
   prefix = '',
 ): Record<string, unknown> {
@@ -104,7 +104,7 @@ export function flattenDefaults(
     const currentPath = prefix ? `${prefix}.${key}` : key
 
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      Object.assign(result, flattenDefaults(value as Record<string, unknown>, currentPath))
+      Object.assign(result, flattenValues(value as Record<string, unknown>, currentPath))
     } else {
       result[currentPath] = value
     }
@@ -136,7 +136,7 @@ export function unflatten(values: Record<string, unknown>): Record<string, unkno
 
 interface UserValuesFormProps {
   valuesSchemaJson: Record<string, unknown> | null
-  defaultValuesJson: Record<string, unknown> | null
+  initialValuesJson?: Record<string, unknown> | null
   onChange: (userValues: Record<string, unknown> | null) => void
   onHostnameValidationChange?: (valid: boolean) => void
   errors?: string[]
@@ -145,14 +145,14 @@ interface UserValuesFormProps {
 
 export function UserValuesForm({
   valuesSchemaJson,
-  defaultValuesJson,
+  initialValuesJson,
   onChange,
   onHostnameValidationChange,
   errors = [],
   initialHostname,
 }: UserValuesFormProps) {
   const fields = useMemo(() => flattenSchema(valuesSchemaJson), [valuesSchemaJson])
-  const defaults = useMemo(() => flattenDefaults(defaultValuesJson), [defaultValuesJson])
+  const initialValues = useMemo(() => flattenValues(initialValuesJson ?? null), [initialValuesJson])
 
   const hasHostnameField = useMemo(
     () => fields.some((f) => f.title?.toLowerCase() === 'hostname'),
@@ -171,7 +171,7 @@ export function UserValuesForm({
   useEffect(() => {
     const initialData: Record<string, unknown> = {}
     for (const field of fields) {
-      const defaultValue = field.path in defaults ? defaults[field.path] : field.default
+      const defaultValue = field.path in initialValues ? initialValues[field.path] : field.default
       if (defaultValue !== undefined) {
         if (field.type === 'boolean') {
           initialData[field.path] = Boolean(defaultValue)
@@ -183,7 +183,7 @@ export function UserValuesForm({
       }
     }
     setFormData(initialData)
-  }, [fields, defaults])
+  }, [fields, initialValues])
 
   useEffect(() => {
     if (fields.length === 0) {

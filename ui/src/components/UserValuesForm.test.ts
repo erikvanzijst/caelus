@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { flattenSchema, flattenDefaults, unflatten, validateUserValues } from '../components/UserValuesForm'
+import { flattenSchema, flattenValues, unflatten, validateUserValues } from '../components/UserValuesForm'
 
 describe('flattenSchema', () => {
   it('flattens simple schema with single field', () => {
@@ -96,10 +96,10 @@ describe('flattenSchema', () => {
   })
 })
 
-describe('flattenDefaults', () => {
+describe('flattenValues', () => {
   it('flattens simple defaults', () => {
     const defaults = { name: 'test' }
-    expect(flattenDefaults(defaults)).toEqual({ name: 'test' })
+    expect(flattenValues(defaults)).toEqual({ name: 'test' })
   })
 
   it('flattens nested defaults with dot notation', () => {
@@ -112,14 +112,14 @@ describe('flattenDefaults', () => {
       },
     }
 
-    expect(flattenDefaults(defaults)).toEqual({
+    expect(flattenValues(defaults)).toEqual({
       'ingress.host': 'example.com',
       'user.message': 'Hello',
     })
   })
 
   it('returns empty object for null defaults', () => {
-    expect(flattenDefaults(null)).toEqual({})
+    expect(flattenValues(null)).toEqual({})
   })
 })
 
@@ -226,7 +226,7 @@ describe('schema flattening integration', () => {
       },
     }
 
-    const flattened = flattenDefaults(defaults)
+    const flattened = flattenValues(defaults)
     const unflattened = unflatten(flattened)
 
     expect(unflattened).toEqual(defaults)
@@ -263,7 +263,7 @@ describe('schema flattening integration', () => {
     }
 
     const fields = flattenSchema(schema)
-    const flatDefaults = flattenDefaults(defaults)
+    const flatDefaults = flattenValues(defaults)
 
     expect(fields).toHaveLength(2)
     expect(flatDefaults['ingress.host']).toBe('example.com')

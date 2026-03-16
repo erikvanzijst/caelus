@@ -254,7 +254,7 @@ def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
             "sha256:abc123",
             "--version-label",
             "stable-2.1.0",
-            "--default-values-json",
+            "--system-values-json",
             '{"message":"hello"}',
             "--values-schema-file",
             str(values_schema_file),
@@ -268,7 +268,7 @@ def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
     template = _get_template_from_services(1, template_id)
     assert template.chart_digest == "sha256:abc123"
     assert template.version_label == "stable-2.1.0"
-    assert template.default_values_json == {"message": "hello"}
+    assert template.system_values_json == {"message": "hello"}
     assert template.values_schema_json == {"type": "object", "properties": {"message": {"type": "string"}}}
     assert template.capabilities_json == {"requires_admin_upgrade": True}
 
@@ -289,12 +289,12 @@ def test_cli_create_template_invalid_json_returns_stable_error(cli_runner):
             "oci://example/chart",
             "--chart-version",
             "1.0.0",
-            "--default-values-json",
+            "--system-values-json",
             "{not-json}",
         ],
     )
     assert result.exit_code == 1
-    assert "Error: Invalid JSON for --default-values-json" in result.output
+    assert "Error: Invalid JSON for --system-values-json" in result.output
     assert "Traceback" not in result.output
 
 
@@ -304,8 +304,8 @@ def test_cli_create_template_rejects_both_json_and_file_for_same_field(cli_runne
     create_res = runner.invoke(app, ["create-product", "template-both-inputs", "desc"])
     assert create_res.exit_code == 0
 
-    default_values_file = tmp_path / "default-values.json"
-    default_values_file.write_text(json.dumps({"message": "from-file"}))
+    system_values_file = tmp_path / "system-values.json"
+    system_values_file.write_text(json.dumps({"message": "from-file"}))
 
     result = runner.invoke(
         app,
@@ -317,14 +317,14 @@ def test_cli_create_template_rejects_both_json_and_file_for_same_field(cli_runne
             "oci://example/chart",
             "--chart-version",
             "1.0.0",
-            "--default-values-json",
+            "--system-values-json",
             '{"message":"from-inline"}',
-            "--default-values-file",
-            str(default_values_file),
+            "--system-values-file",
+            str(system_values_file),
         ],
     )
     assert result.exit_code == 1
-    assert "Error: Provide only one of --default-values-json or --default-values-file" in result.output
+    assert "Error: Provide only one of --system-values-json or --system-values-file" in result.output
     assert "Traceback" not in result.output
 
 

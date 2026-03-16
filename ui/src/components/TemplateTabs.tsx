@@ -52,7 +52,7 @@ export function TemplateTabs({ product, templates, onError }: TemplateTabsProps)
       chart_ref: string
       chart_version: string
       values_schema_json?: object
-      default_values_json?: object
+      system_values_json?: object
     }) => createTemplate(product.id, payload),
     onSuccess: (template) => {
       queryClient.invalidateQueries({ queryKey: ['templates', product.id] })

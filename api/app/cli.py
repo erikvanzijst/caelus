@@ -276,15 +276,15 @@ def create_template(
     version_label: str | None = typer.Option(
         None, "--version-label", help="Optional human-readable version label."
     ),
-    default_values_json: str | None = typer.Option(
+    system_values_json: str | None = typer.Option(
         None,
-        "--default-values-json",
-        help="JSON object string for template default values.",
+        "--system-values-json",
+        help="JSON object string for template system values.",
     ),
-    default_values_file: Path | None = typer.Option(
+    system_values_file: Path | None = typer.Option(
         None,
-        "--default-values-file",
-        help="Path to JSON file containing template default values object.",
+        "--system-values-file",
+        help="Path to JSON file containing template system values object.",
     ),
     values_schema_json: str | None = typer.Option(
         None,
@@ -308,11 +308,11 @@ def create_template(
     ),
 ) -> None:
     try:
-        parsed_default_values = _parse_json_object_input(
-            json_text=default_values_json,
-            json_file=default_values_file,
-            json_option_name="--default-values-json",
-            file_option_name="--default-values-file",
+        parsed_system_values = _parse_json_object_input(
+            json_text=system_values_json,
+            json_file=system_values_file,
+            json_option_name="--system-values-json",
+            file_option_name="--system-values-file",
         )
         parsed_values_schema = _parse_json_object_input(
             json_text=values_schema_json,
@@ -342,7 +342,7 @@ def create_template(
                     chart_version=chart_version,
                     chart_digest=chart_digest,
                     version_label=version_label,
-                    default_values_json=parsed_default_values,
+                    system_values_json=parsed_system_values,
                     values_schema_json=parsed_values_schema,
                     capabilities_json=parsed_capabilities,
                 ),

@@ -54,3 +54,8 @@ The "New" template tab SHALL include a Monaco editor for the template's `default
 #### Scenario: Invalid defaults JSON
 - **WHEN** the defaults editor contains invalid JSON
 - **THEN** the Save/Add button SHALL be disabled
+
+## Requirements from rename-system-values
+
+### Requirement: Template editors use system_values_json
+The admin template UI MUST use the label "System values" instead of "Default values" for the system values Monaco editor. The `onSave` payload MUST use the field name `system_values_json` instead of `default_values_json`. The deploy dialog preview in both `TemplateTabNew` and `TemplateTabReadOnly` MUST NOT pass system values to `DeployDialogContent` (it no longer accepts the prop).

@@ -94,6 +94,19 @@ The `HostnameField` component MUST integrate with the existing `UserValuesForm` 
 - **WHEN** the user enters `myapp.app.deprutser.be` in the HostnameField for a field at path `ingress.host`
 - **THEN** the form's unflattened output includes `{"ingress": {"host": "myapp.app.deprutser.be"}}`
 
+## Requirements from rename-system-values
+
+### Requirement: UserValuesForm seeds form fields from JSON Schema defaults only
+The `UserValuesForm` component MUST NOT accept a `defaultValuesJson` prop. The `flattenDefaults()` function MUST be removed. Form field initial values MUST come from the JSON Schema `default` annotation on each field (`field.default`) only.
+
+#### Scenario: Schema field with default annotation pre-populates
+- **WHEN** a schema field has `"default": "some-value"` in the JSON Schema
+- **THEN** the form field is pre-populated with `"some-value"`
+
+#### Scenario: Schema field without default annotation starts empty
+- **WHEN** a schema field has no `default` annotation
+- **THEN** the form field starts empty (or `false` for booleans)
+
 ## Requirements from edit-deployment-config
 
 ### Requirement: HostnameField skips validation for unchanged hostname

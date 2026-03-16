@@ -12,7 +12,7 @@ The system SHALL provide a `DeployDialogContent` component that renders the depl
 - **THEN** it SHALL render `DeployDialogContent` inline (not in a Dialog), passing the schema directly from the editor state, with action buttons disabled or hidden
 
 ### Requirement: DeployDialogContent props interface
-The `DeployDialogContent` component SHALL accept: product (for header display), `valuesSchemaJson`, `defaultValuesJson`, an `onLaunch` callback (optional), an `onCancel` callback (optional), and a `disabled` boolean to control the Launch button state. When `onLaunch` is not provided, the Launch button SHALL not be rendered.
+The `DeployDialogContent` component SHALL accept: product (for header display), `valuesSchemaJson`, an `onLaunch` callback (optional), an `onCancel` callback (optional), and a `disabled` boolean to control the Launch button state. When `onLaunch` is not provided, the Launch button SHALL not be rendered. The `DeployDialogContent` component MUST NOT accept a `defaultValuesJson` prop. Callers that previously passed `defaultValuesJson` MUST stop passing it.
 
 #### Scenario: Launch button visibility
 - **WHEN** `onLaunch` is not provided

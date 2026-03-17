@@ -2,9 +2,11 @@ import { Box } from '@mui/material'
 import { CheckCircleOutline, WarningAmberOutlined } from '@mui/icons-material'
 import { DataGrid, type GridColDef } from '@mui/x-data-grid'
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { listAllDeployments } from '../api/endpoints'
 import { useAuth } from '../state/AuthContext'
 import type { Deployment } from '../api/types'
+import { DeploymentDialog } from './DeploymentDialog'
 
 const columns: GridColDef<Deployment>[] = [
   {
@@ -70,6 +72,7 @@ const columns: GridColDef<Deployment>[] = [
 
 export function DeploymentsPanel() {
   const { user } = useAuth()
+  const [selectedDeployment, setSelectedDeployment] = useState<Deployment | null>(null)
 
   const { data: deployments, isLoading } = useQuery({
     queryKey: ['admin-deployments'],
@@ -85,6 +88,10 @@ export function DeploymentsPanel() {
         loading={isLoading}
         autoHeight
         disableRowSelectionOnClick
+        onRowClick={(params, event) => {
+          if ((event.target as HTMLElement).closest('a')) return
+          setSelectedDeployment(params.row)
+        }}
         initialState={{
           sorting: { sortModel: [{ field: 'created_at', sort: 'desc' }] },
         }}
@@ -94,7 +101,14 @@ export function DeploymentsPanel() {
           '& .MuiDataGrid-columnHeaders': {
             bgcolor: 'action.hover',
           },
+          '& .MuiDataGrid-row': {
+            cursor: 'pointer',
+          },
         }}
+      />
+      <DeploymentDialog
+        deployment={selectedDeployment}
+        onClose={() => setSelectedDeployment(null)}
       />
     </Box>
   )

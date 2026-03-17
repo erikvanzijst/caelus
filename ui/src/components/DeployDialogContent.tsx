@@ -26,6 +26,7 @@ interface DeployDialogContentProps {
   loading?: boolean
   initialHostname?: string
   submitLabel?: string
+  readOnly?: boolean
 }
 
 export function DeployDialogContent({
@@ -44,6 +45,7 @@ export function DeployDialogContent({
   loading,
   initialHostname,
   submitLabel = 'Launch',
+  readOnly,
 }: DeployDialogContentProps) {
   return (
     <>
@@ -81,6 +83,7 @@ export function DeployDialogContent({
             onHostnameValidationChange={onHostnameValidationChange}
             errors={userValuesErrors}
             initialHostname={initialHostname}
+            readOnly={readOnly}
           />
         )}
       </Stack>

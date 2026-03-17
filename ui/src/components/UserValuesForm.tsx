@@ -141,6 +141,7 @@ interface UserValuesFormProps {
   onHostnameValidationChange?: (valid: boolean) => void
   errors?: string[]
   initialHostname?: string
+  readOnly?: boolean
 }
 
 export function UserValuesForm({
@@ -150,6 +151,7 @@ export function UserValuesForm({
   onHostnameValidationChange,
   errors = [],
   initialHostname,
+  readOnly,
 }: UserValuesFormProps) {
   const fields = useMemo(() => flattenSchema(valuesSchemaJson), [valuesSchemaJson])
   const initialValues = useMemo(() => flattenValues(initialValuesJson ?? null), [initialValuesJson])
@@ -272,6 +274,7 @@ export function UserValuesForm({
               error={fieldErrors[field.path]}
               description={field.description}
               initialHostname={initialHostname}
+              readOnly={readOnly}
             />
           )
         }
@@ -285,6 +288,7 @@ export function UserValuesForm({
                     <Checkbox
                       checked={formData[field.path] === true}
                       onChange={(e) => handleChange(field.path, e.target.checked, 'boolean')}
+                      disabled={readOnly}
                     />
                   }
                   label={field.title || field.path}
@@ -317,6 +321,7 @@ export function UserValuesForm({
                 }
                 required={field.required}
                 error={!!fieldErrors[field.path]}
+                slotProps={readOnly ? { input: { readOnly: true } } : undefined}
               />
             )}
             {fieldErrors[field.path] && <FormHelperText>{fieldErrors[field.path]}</FormHelperText>}

@@ -18,23 +18,23 @@ helm template matrix ./charts/matrix --set serverName=matrix.app.example.com
 
 ## Key values
 
-| Value | Description | Default |
-|---|---|---|
-| `serverName` | Matrix homeserver name and ingress host | `matrix.example.com` |
-| `image.repository` | Tuwunel image repository | `ghcr.io/matrix-construct/tuwunel` |
-| `image.tag` | Tuwunel image tag | `v1.5.0` |
-| `service.port` | Kubernetes Service port | `80` |
-| `service.targetPort` | Tuwunel container listen port | `6167` |
-| `ingress.enabled` | Enable ingress creation | `true` |
-| `ingress.className` | Ingress class | `traefik` |
-| `persistence.enabled` | Enable persistent data | `true` |
-| `persistence.size` | Data PVC size | `10Gi` |
-| `persistence.storageClassName` | StorageClass (`null` = cluster default) | `null` |
-| `registration.token` | Static registration token | `""` |
-| `registration.tokenSecretRef.*` | Existing secret reference for token | empty |
-| `federation.enabled` | Enable federation behavior in Tuwunel | `true` |
-| `trustedServers` | Notary trusted key servers | `["matrix.org"]` |
-| `extraEnv` | Extra container env entries | `[]` |
+| Value                           | Description                             | Default                            |
+|---------------------------------|-----------------------------------------|------------------------------------|
+| `serverName`                    | Matrix homeserver name and ingress host | `matrix.example.com`               |
+| `image.repository`              | Tuwunel image repository                | `ghcr.io/matrix-construct/tuwunel` |
+| `image.tag`                     | Tuwunel image tag                       | `v1.5.0`                           |
+| `service.port`                  | Kubernetes Service port                 | `80`                               |
+| `service.targetPort`            | Tuwunel container listen port           | `6167`                             |
+| `ingress.enabled`               | Enable ingress creation                 | `true`                             |
+| `ingress.className`             | Ingress class                           | `traefik`                          |
+| `persistence.enabled`           | Enable persistent data                  | `true`                             |
+| `persistence.size`              | Data PVC size                           | `10Gi`                             |
+| `persistence.storageClassName`  | StorageClass (`null` = cluster default) | `null`                             |
+| `registration.token`            | Static registration token               | `""`                               |
+| `registration.tokenSecretRef.*` | Existing secret reference for token     | empty                              |
+| `federation.enabled`            | Enable federation behavior in Tuwunel   | `true`                             |
+| `trustedServers`                | Notary trusted key servers              | `["matrix.org"]`                   |
+| `extraEnv`                      | Extra container env entries             | `[]`                               |
 
 ## Registration behavior
 

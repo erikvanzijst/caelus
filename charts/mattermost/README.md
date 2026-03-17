@@ -300,32 +300,32 @@ then passes the result as Helm values to
 
 ### Required Values
 
-| Value | Description | Example |
-|---|---|---|
+| Value  | Description                         | Example                       |
+|--------|-------------------------------------|-------------------------------|
 | `host` | Hostname for the Mattermost ingress | `mattermost.app.deprutser.be` |
 
 ### Mattermost Configuration
 
-| Value | Default | Description |
-|---|---|---|
-| `mattermost.image.repository` | `mattermost/mattermost-team-edition` | Mattermost image |
-| `mattermost.image.tag` | `11.4.2` | Mattermost version |
-| `mattermost.image.imagePullPolicy` | `IfNotPresent` | Image pull policy |
-| `mattermost.siteName` | _(unset)_ | Overrides `MM_TEAMSETTINGS_SITENAME` (Mattermost default: "Mattermost") |
-| `mattermost.siteDescription` | _(unset)_ | Overrides `MM_TEAMSETTINGS_CUSTOMDESCRIPTIONTEXT` (shown above login form) |
-| `mattermost.ingress.className` | `traefik` | Ingress class |
-| `mattermost.ingress.path` | `/` | Ingress path |
+| Value                              | Default                              | Description                                                                |
+|------------------------------------|--------------------------------------|----------------------------------------------------------------------------|
+| `mattermost.image.repository`      | `mattermost/mattermost-team-edition` | Mattermost image                                                           |
+| `mattermost.image.tag`             | `11.4.2`                             | Mattermost version                                                         |
+| `mattermost.image.imagePullPolicy` | `IfNotPresent`                       | Image pull policy                                                          |
+| `mattermost.siteName`              | _(unset)_                            | Overrides `MM_TEAMSETTINGS_SITENAME` (Mattermost default: "Mattermost")    |
+| `mattermost.siteDescription`       | _(unset)_                            | Overrides `MM_TEAMSETTINGS_CUSTOMDESCRIPTIONTEXT` (shown above login form) |
+| `mattermost.ingress.className`     | `traefik`                            | Ingress class                                                              |
+| `mattermost.ingress.path`          | `/`                                  | Ingress path                                                               |
 
 ### PostgreSQL Configuration
 
-| Value | Default | Description |
-|---|---|---|
-| `postgresql.image` | `postgres` | PostgreSQL image |
-| `postgresql.imageTag` | `18` | PostgreSQL version |
-| `postgresql.username` | `postgres` | Database username |
-| `postgresql.password` | `postgres` | Database password |
-| `postgresql.database` | `postgres` | Database name |
-| `postgresql.size` | `10Gi` | PVC storage size |
+| Value                 | Default    | Description        |
+|-----------------------|------------|--------------------|
+| `postgresql.image`    | `postgres` | PostgreSQL image   |
+| `postgresql.imageTag` | `18`       | PostgreSQL version |
+| `postgresql.username` | `postgres` | Database username  |
+| `postgresql.password` | `postgres` | Database password  |
+| `postgresql.database` | `postgres` | Database name      |
+| `postgresql.size`     | `10Gi`     | PVC storage size   |
 
 ### Connection String
 

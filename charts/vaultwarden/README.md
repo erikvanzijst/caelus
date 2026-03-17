@@ -11,6 +11,15 @@ Default values json:
 
 ```json
 {
+  "vaultwarden": {
+    "smtp": {
+      "host": "smtp.mailer.svc.cluster.local",
+      "port": "25",
+      "from": "vaultwarden@deprutser.be",
+      "enabled": true,
+      "security": "off"
+    }
+  },
   "persistence": {
     "enabled": true
   },

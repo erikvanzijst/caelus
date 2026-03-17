@@ -68,7 +68,16 @@ RUN chmod 700 ~/.ssh ~/.docker
 RUN ssh-keyscan github.com >> ~/.ssh/known_hosts
 RUN echo '' >> ~/.bashrc && \
     echo '# Auto-activate Caelus virtualenv' >> ~/.bashrc && \
-    echo 'if [ -f $UV_PROJECT_ENVIRONMENT/bin/activate ]; then source $UV_PROJECT_ENVIRONMENT/bin/activate; fi' >> ~/.bashrc
+    echo 'if [ -f $UV_PROJECT_ENVIRONMENT/bin/activate ]; then source $UV_PROJECT_ENVIRONMENT/bin/activate; fi' >> ~/.bashrc && \
+    echo '' >> ~/.bashrc && \
+    echo '# Export individual PG* vars from CAELUS_DATABASE_URL' >> ~/.bashrc && \
+    echo 'eval $(echo $CAELUS_DATABASE_URL | awk -F'"'"'[/:@]'"'"' '"'"'{' >> ~/.bashrc && \
+    echo '  print "export PGUSER="$4' >> ~/.bashrc && \
+    echo '  print "export PGPASSWORD="$5' >> ~/.bashrc && \
+    echo '  print "export PGHOST="$6' >> ~/.bashrc && \
+    echo '  print "export PGPORT="$7' >> ~/.bashrc && \
+    echo '  print "export PGDATABASE="$8' >> ~/.bashrc && \
+    echo '}'"'"')' >> ~/.bashrc
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN curl -fsSL https://claude.ai/install.sh | bash

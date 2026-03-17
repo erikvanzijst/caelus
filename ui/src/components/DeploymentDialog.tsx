@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { Box, Button, Dialog, DialogActions, DialogContent, Divider, LinearProgress, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Deployment } from '../api/types'
-import { getDeployment, updateDeployment } from '../api/endpoints'
+import { ApiError } from '../api/client'
+import { deleteDeployment, getDeployment, updateDeployment } from '../api/endpoints'
 import { isTransitionalStatus } from '../utils/deploymentStatus'
 import { formatLocalIso } from '../utils/formatDate'
 import { DeployDialogContent } from './DeployDialogContent'
@@ -41,16 +42,29 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
   const queryClient = useQueryClient()
 
   // Poll the single deployment while the dialog is open
-  const { data: polledDeployment } = useQuery({
+  const { data: polledDeployment, error: pollError } = useQuery({
     queryKey: ['deployment', initialDeployment?.user_id, initialDeployment?.id],
     queryFn: () => getDeployment(initialDeployment!.user_id, initialDeployment!.id),
     enabled: Boolean(initialDeployment),
     initialData: initialDeployment ?? undefined,
+    retry: (_count, error) => !(error instanceof ApiError && error.status === 404),
     refetchInterval: (query) => {
+      if (query.state.error) return false
       const d = query.state.data
       return d && isTransitionalStatus(d.status) ? 1000 : false
     },
   })
+
+  // Handle 404 — deployment was deleted, remove from list and close
+  useEffect(() => {
+    if (!(pollError instanceof ApiError && pollError.status === 404)) return
+    if (initialDeployment) {
+      queryClient.setQueryData<Deployment[]>(['admin-deployments'], (old) =>
+        old?.filter((d) => d.id !== initialDeployment.id),
+      )
+    }
+    onClose()
+  }, [pollError, initialDeployment, queryClient, onClose])
 
   // Patch the admin-deployments list cache whenever the polled deployment changes
   useEffect(() => {
@@ -68,6 +82,7 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
   const canonicalId = deployment?.applied_template?.product?.template_id
   const isUpToDate = appliedId != null && canonicalId != null && appliedId === canonicalId
   const isTransitioning = isTransitionalStatus(deployment?.status)
+  const isDeleting = deployment?.status === 'deleting'
 
   const upgradeMutation = useMutation({
     mutationFn: () =>
@@ -80,6 +95,14 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
       queryClient.setQueryData<Deployment[]>(['admin-deployments'], (old) =>
         old?.map((d) => d.id === updated.id ? updated : d),
       )
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteDeployment(deployment!.user_id, deployment!.id),
+    onSuccess: () => {
+      // Refetch the single deployment to pick up the 'deleting' status and start polling
+      queryClient.invalidateQueries({ queryKey: ['deployment', deployment!.user_id, deployment!.id] })
     },
   })
 
@@ -99,7 +122,10 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
           />
         )}
         {isTransitioning && (
-          <LinearProgress sx={{ my: 2, borderRadius: 1 }} />
+          <LinearProgress
+            color={isDeleting ? 'secondary' : 'primary'}
+            sx={{ my: 2, borderRadius: 1 }}
+          />
         )}
         <Divider sx={{ my: 2 }} />
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -112,6 +138,14 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
         </Box>
       </DialogContent>
       <DialogActions>
+        <Button
+          color="error"
+          disabled={isTransitioning || deleteMutation.isPending}
+          onClick={() => deleteMutation.mutate()}
+        >
+          {deleteMutation.isPending || isDeleting ? 'Deleting...' : 'Delete'}
+        </Button>
+        <Box sx={{ flex: 1 }} />
         <Button onClick={onClose}>Cancel</Button>
         <Button
           variant="contained"
@@ -119,7 +153,7 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
           disabled={isUpToDate || isTransitioning || upgradeMutation.isPending}
           onClick={() => upgradeMutation.mutate()}
         >
-          {upgradeMutation.isPending || isTransitioning
+          {upgradeMutation.isPending || (isTransitioning && !isDeleting)
             ? 'Upgrading...'
             : isUpToDate
               ? 'Up to date'

@@ -203,6 +203,8 @@ def get_deployment(session: Session, *, deployment_id: int, user_id: int | None 
         user_id=user_id,
         deployment_id=deployment_id,
     )
+    if deployment.status == DEPLOYMENT_STATUS_DELETED:
+        raise NotFoundException("Deployment not found")
     return DeploymentRead.model_validate(deployment)
 
 

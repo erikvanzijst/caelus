@@ -1007,3 +1007,36 @@ def test_cli_auth_missing_email_errors(cli_runner, monkeypatch):
     assert result.exit_code == 1
     assert "No user email configured" in result.output
     assert "CAELUS_USER_EMAIL" in result.output
+
+
+def test_cli_list_deployments_all_as_admin(cli_runner):
+    """Admin can list all deployments across users with --all."""
+    runner, app = cli_runner
+
+    # Trigger auto-creation of the CLI user by running any command
+    runner.invoke(app, ["list-users"])
+
+    # Make the CLI user an admin
+    from app.models import UserORM
+    with session_scope() as session:
+        user = session.exec(select(UserORM).where(UserORM.email == "cli-test@example.com")).one()
+        user.is_admin = True
+        session.add(user)
+        session.commit()
+
+    # Seed a deployment under a different user
+    _seed_deployment_via_services()
+
+    result = runner.invoke(app, ["list-deployments", "--all"])
+    assert result.exit_code == 0
+    deployments = _parse_yaml_stdout(result)
+    assert len(deployments) >= 1
+
+
+def test_cli_list_deployments_all_forbidden_for_non_admin(cli_runner):
+    """Non-admin user gets an error when using --all."""
+    runner, app = cli_runner
+
+    result = runner.invoke(app, ["list-deployments", "--all"])
+    assert result.exit_code == 1
+    assert "admin" in result.output.lower()

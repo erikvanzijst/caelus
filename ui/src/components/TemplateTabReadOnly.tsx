@@ -20,7 +20,7 @@ const editorOptions = {
   minimap: { enabled: false },
   lineNumbers: 'on' as const,
   folding: false,
-  wordWrap: 'on' as const,
+  wordWrap: 'off' as const,
   scrollBeyondLastLine: false,
   fontSize: 13,
   renderLineHighlight: 'none' as const,

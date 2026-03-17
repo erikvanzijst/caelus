@@ -139,7 +139,7 @@ function AppShell({ children }: PropsWithChildren) {
           </Stack>
         </Toolbar>
       </AppBar>
-      <Container maxWidth="lg" sx={{ py: 6, position: 'relative', zIndex: 1 }}>
+      <Container maxWidth="xl" sx={{ py: 6, position: 'relative', zIndex: 1 }}>
         {children}
       </Container>
       <EmailDialog

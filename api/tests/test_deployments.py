@@ -1,12 +1,13 @@
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_PROVISIONING,
     DEPLOYMENT_STATUS_DELETING,
+    DEPLOYMENT_STATUS_DELETED,
     DEPLOYMENT_STATUS_READY,
 )
-from tests.conftest import client, db_session
+from tests.conftest import client, db_session, user_client, USER_AUTH_HEADER
 from sqlmodel import select
 
-from app.models import DeploymentORM, DeploymentReconcileJobORM
+from app.models import DeploymentORM, DeploymentReconcileJobORM, UserORM
 from app.services.jobs import JobService
 
 
@@ -489,3 +490,106 @@ def test_update_deployment_rejects_non_ready_error_status(client, db_session):
         json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "errstate.example.test"}},
     )
     assert update_resp.status_code == 409
+
+
+def _create_deployment_for_user(client, user_id, product_suffix=""):
+    """Helper: create a product, template, and deployment for a user."""
+    product_resp = client.post(
+        "/api/products",
+        json={"name": f"prod{product_suffix}", "description": "desc"},
+    )
+    product_id = product_resp.json()["id"]
+    tmpl_resp = client.post(
+        f"/api/products/{product_id}/templates",
+        json={
+            "chart_ref": "oci://example/chart",
+            "chart_version": "1.0.0",
+            "values_schema_json": {"type": "object"},
+        },
+    )
+    tmpl_id = tmpl_resp.json()["id"]
+    client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
+    dep_resp = client.post(
+        f"/api/users/{user_id}/deployments",
+        json={"desired_template_id": tmpl_id},
+    )
+    assert dep_resp.status_code == 201
+    return dep_resp.json()["id"]
+
+
+def test_list_deployments_excludes_deleted(client, db_session):
+    """User-scoped list should not include deleted deployments."""
+    user_resp = client.post("/api/users", json={"email": "excl@example.com"})
+    user_id = user_resp.json()["id"]
+
+    dep_id = _create_deployment_for_user(client, user_id, "-excl")
+
+    # Mark deployment as deleted
+    deployment = db_session.get(DeploymentORM, dep_id)
+    deployment.status = DEPLOYMENT_STATUS_DELETED
+    db_session.add(deployment)
+    db_session.commit()
+
+    list_resp = client.get(f"/api/users/{user_id}/deployments")
+    assert list_resp.status_code == 200
+    assert len(list_resp.json()) == 0
+
+
+def test_list_deployments_includes_deleting(client, db_session):
+    """User-scoped list should still include deployments with status 'deleting'."""
+    user_resp = client.post("/api/users", json={"email": "deleting@example.com"})
+    user_id = user_resp.json()["id"]
+
+    dep_id = _create_deployment_for_user(client, user_id, "-deleting")
+
+    deployment = db_session.get(DeploymentORM, dep_id)
+    deployment.status = DEPLOYMENT_STATUS_DELETING
+    db_session.add(deployment)
+    db_session.commit()
+
+    list_resp = client.get(f"/api/users/{user_id}/deployments")
+    assert list_resp.status_code == 200
+    ids = [d["id"] for d in list_resp.json()]
+    assert dep_id in ids
+
+
+def test_admin_list_all_deployments(client, db_session):
+    """Admin endpoint returns deployments from multiple users."""
+    user1_resp = client.post("/api/users", json={"email": "admin-list1@example.com"})
+    user1_id = user1_resp.json()["id"]
+    user2_resp = client.post("/api/users", json={"email": "admin-list2@example.com"})
+    user2_id = user2_resp.json()["id"]
+
+    dep1_id = _create_deployment_for_user(client, user1_id, "-admin1")
+    dep2_id = _create_deployment_for_user(client, user2_id, "-admin2")
+
+    resp = client.get("/api/deployments")
+    assert resp.status_code == 200
+    ids = [d["id"] for d in resp.json()]
+    assert dep1_id in ids
+    assert dep2_id in ids
+
+
+def test_admin_list_deployments_excludes_deleted(client, db_session):
+    """Admin endpoint should not include deleted deployments."""
+    user_resp = client.post("/api/users", json={"email": "admin-excl@example.com"})
+    user_id = user_resp.json()["id"]
+
+    dep_id = _create_deployment_for_user(client, user_id, "-admin-excl")
+
+    deployment = db_session.get(DeploymentORM, dep_id)
+    deployment.status = DEPLOYMENT_STATUS_DELETED
+    db_session.add(deployment)
+    db_session.commit()
+
+    resp = client.get("/api/deployments")
+    assert resp.status_code == 200
+    ids = [d["id"] for d in resp.json()]
+    assert dep_id not in ids
+
+
+def test_admin_list_deployments_forbidden_for_non_admin(user_client):
+    """Non-admin user gets 403 from the admin deployments endpoint."""
+    client, _ = user_client
+    resp = client.get("/api/deployments")
+    assert resp.status_code == 403

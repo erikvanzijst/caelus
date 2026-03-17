@@ -41,11 +41,24 @@ interface HostnameFieldProps {
   error?: string
   description?: string
   initialHostname?: string
+  readOnly?: boolean
 }
 
 type Mode = 'wildcard' | 'custom'
 
-export function HostnameField({ value, onChange, onValidationChange, wildcardDomains, required, error, description, initialHostname }: HostnameFieldProps) {
+export function HostnameField({ value, onChange, onValidationChange, wildcardDomains, required, error, description, initialHostname, readOnly }: HostnameFieldProps) {
+  if (readOnly) {
+    return (
+      <TextField
+        label="Hostname"
+        value={value}
+        fullWidth
+        slotProps={{ input: { readOnly: true } }}
+        helperText={description}
+      />
+    )
+  }
+
   const hasWildcard = wildcardDomains.length > 0
   const [mode, setMode] = useState<Mode>(hasWildcard ? 'wildcard' : 'custom')
   const [prefix, setPrefix] = useState('')

@@ -21,6 +21,7 @@ from app.services.errors import DeploymentInProgressException, IntegrityExceptio
 from app.services.hostnames import require_valid_hostname_for_deployment
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETING,
+    DEPLOYMENT_STATUS_ERROR,
     DEPLOYMENT_STATUS_PROVISIONING,
     DEPLOYMENT_STATUS_READY,
     JOB_REASON_CREATE,
@@ -189,10 +190,10 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
 
 
 def list_deployments(session: Session, *, user_id: int | None = None) -> list[DeploymentRead]:
-    # Return deployments for the given user if provided, otherwise all deployments
-    stmt = select(DeploymentORM)
+    # Return non-deleted deployments for the given user if provided, otherwise all
+    stmt = select(DeploymentORM).where(DeploymentORM.status != DEPLOYMENT_STATUS_DELETED)
     if user_id is not None:
-        stmt = stmt.where(DeploymentORM.user_id == user_id)  # noqa: E712
+        stmt = stmt.where(DeploymentORM.user_id == user_id)
     return [DeploymentRead.model_validate(d) for d in session.exec(stmt).all()]
 
 
@@ -202,6 +203,8 @@ def get_deployment(session: Session, *, deployment_id: int, user_id: int | None 
         user_id=user_id,
         deployment_id=deployment_id,
     )
+    if deployment.status == DEPLOYMENT_STATUS_DELETED:
+        raise NotFoundException("Deployment not found")
     return DeploymentRead.model_validate(deployment)
 
 
@@ -271,7 +274,7 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
         sa_update(DeploymentORM)
         .where(
             DeploymentORM.id == update.id,
-            DeploymentORM.status == DEPLOYMENT_STATUS_READY,
+            DeploymentORM.status.in_([DEPLOYMENT_STATUS_READY, DEPLOYMENT_STATUS_ERROR]),
         )
         .values(
             desired_template_id=update.desired_template_id,

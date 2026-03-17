@@ -1,5 +1,14 @@
 import { getStoredAuthHeaders } from '../state/useAuthEmail'
 
+export class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
 const envUrl = import.meta.env.VITE_API_URL as string | undefined
 
 export const API_URL = envUrl ?? '/api'
@@ -51,12 +60,12 @@ export async function requestJson<T>(
     data = (await response.json()) as { detail?: unknown } & T
   } catch {
     if (!response.ok) {
-      throw new Error(response.statusText || 'Request failed')
+      throw new ApiError(response.statusText || 'Request failed', response.status)
     }
     throw new Error('Invalid JSON response')
   }
   if (!response.ok) {
-    throw new Error(toErrorMessage(data?.detail, response.statusText || 'Request failed'))
+    throw new ApiError(toErrorMessage(data?.detail, response.statusText || 'Request failed'), response.status)
   }
   return data as T
 }
@@ -91,12 +100,12 @@ export async function requestMultipart<T>(
     data = (await response.json()) as { detail?: unknown } & T
   } catch {
     if (!response.ok) {
-      throw new Error(response.statusText || 'Request failed')
+      throw new ApiError(response.statusText || 'Request failed', response.status)
     }
     throw new Error('Invalid JSON response')
   }
   if (!response.ok) {
-    throw new Error(toErrorMessage(data?.detail, response.statusText || 'Request failed'))
+    throw new ApiError(toErrorMessage(data?.detail, response.statusText || 'Request failed'), response.status)
   }
   return data as T
 }

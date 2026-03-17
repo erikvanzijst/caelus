@@ -98,8 +98,7 @@ function Dashboard() {
 
       <Grid container spacing={2}>
         {deploymentsQuery.data
-          ?.filter((deployment) => deployment.status !== 'deleted')
-          .map((deployment) => (
+          ?.map((deployment) => (
           <Grid size={{ xs: 12, md: 6 }} key={deployment.id}>
             <Card>
               <CardContent>
@@ -189,8 +188,7 @@ function Dashboard() {
           </Grid>
         ))}
         {!deploymentsQuery.isLoading &&
-          (deploymentsQuery.data?.filter((deployment) => deployment.status !== 'deleted').length ??
-            0) === 0 && (
+          (deploymentsQuery.data?.length ?? 0) === 0 && (
           <Grid size={{ xs: 12 }}>
             <Card sx={{ p: 4 }}>
               <Stack spacing={1}>

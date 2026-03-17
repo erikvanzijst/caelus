@@ -119,33 +119,33 @@ class HelmAdapter:
             chart_digest,
         )
         resolved_chart = _with_optional_digest(chart_ref=chart_ref, chart_digest=chart_digest)
-        cmd = [
-            "helm",
-            "upgrade",
-            "--install",
-            release_name,
-            resolved_chart,
-            "--namespace",
-            namespace,
-            "--timeout",
-            f"{timeout}s",
-        ]
-        for key, value in _flatten_values(values):
-            cmd.extend(["--set", f"{key}={value}"])
-        if not chart_digest:
-            cmd.extend(["--version", chart_version])
-        if resolved_chart.startswith("oci://"):
-            cmd.append("--plain-http")
-        if atomic:
-            cmd.append("--atomic")
-        if wait:
-            cmd.append("--wait")
+        with NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json") as f:
+            f.write(json.dumps(values, indent=2))
+            f.flush()
 
-        run_command(
-            cmd,
-            runner=self._runner,
-            error_message=f"Failed to upgrade/install release {release_name}",
-        )
+            cmd = [
+                "helm",
+                "upgrade",
+                "--install", release_name, resolved_chart,
+                "--namespace", namespace,
+                "--timeout", f"{timeout}s",
+                "-f", f.name,
+            ]
+            if not chart_digest:
+                cmd.extend(["--version", chart_version])
+            if resolved_chart.startswith("oci://"):
+                cmd.append("--plain-http")
+            if atomic:
+                cmd.append("--atomic")
+            if wait:
+                cmd.append("--wait")
+
+            logger.info(f"Helm values for deployment {namespace}/{release_name}:\n{json.dumps(values, indent=2)}")
+            run_command(
+                cmd,
+                runner=self._runner,
+                error_message=f"Failed to upgrade/install release {release_name}",
+            )
 
         status = self.helm_get_release_status(release_name=release_name, namespace=namespace)
         return HelmReleaseOperationResult(

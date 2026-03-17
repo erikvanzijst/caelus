@@ -1,5 +1,9 @@
-import { Box, Button, Dialog, DialogActions, DialogContent, Divider, Typography } from '@mui/material'
+import { useEffect } from 'react'
+import { Box, Button, Dialog, DialogActions, DialogContent, Divider, LinearProgress, Typography } from '@mui/material'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Deployment } from '../api/types'
+import { getDeployment, updateDeployment } from '../api/endpoints'
+import { isTransitionalStatus } from '../utils/deploymentStatus'
 import { DeployDialogContent } from './DeployDialogContent'
 
 interface DeploymentDialogProps {
@@ -37,14 +41,53 @@ function MetadataRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function DeploymentDialog({ deployment, onClose }: DeploymentDialogProps) {
-  if (!deployment) return null
+export function DeploymentDialog({ deployment: initialDeployment, onClose }: DeploymentDialogProps) {
+  const queryClient = useQueryClient()
 
-  const template = deployment.applied_template ?? deployment.desired_template
+  // Poll the single deployment while the dialog is open
+  const { data: polledDeployment } = useQuery({
+    queryKey: ['deployment', initialDeployment?.user_id, initialDeployment?.id],
+    queryFn: () => getDeployment(initialDeployment!.user_id, initialDeployment!.id),
+    enabled: Boolean(initialDeployment),
+    initialData: initialDeployment ?? undefined,
+    refetchInterval: (query) => {
+      const d = query.state.data
+      return d && isTransitionalStatus(d.status) ? 1000 : false
+    },
+  })
+
+  // Patch the admin-deployments list cache whenever the polled deployment changes
+  useEffect(() => {
+    if (!polledDeployment) return
+    queryClient.setQueryData<Deployment[]>(['admin-deployments'], (old) =>
+      old?.map((d) => d.id === polledDeployment.id ? polledDeployment : d),
+    )
+  }, [polledDeployment, queryClient])
+
+  const deployment = polledDeployment ?? initialDeployment
+
+  const template = deployment?.applied_template ?? deployment?.desired_template
   const product = template?.product
-  const appliedId = deployment.applied_template?.id
-  const canonicalId = deployment.applied_template?.product?.template_id
+  const appliedId = deployment?.applied_template?.id
+  const canonicalId = deployment?.applied_template?.product?.template_id
   const isUpToDate = appliedId != null && canonicalId != null && appliedId === canonicalId
+  const isTransitioning = isTransitionalStatus(deployment?.status)
+
+  const upgradeMutation = useMutation({
+    mutationFn: () =>
+      updateDeployment(deployment!.user_id, deployment!.id, {
+        desired_template_id: canonicalId!,
+        user_values_json: deployment!.user_values_json ?? undefined,
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['deployment', updated.user_id, updated.id], updated)
+      queryClient.setQueryData<Deployment[]>(['admin-deployments'], (old) =>
+        old?.map((d) => d.id === updated.id ? updated : d),
+      )
+    },
+  })
+
+  if (!deployment) return null
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -59,6 +102,9 @@ export function DeploymentDialog({ deployment, onClose }: DeploymentDialogProps)
             readOnly
           />
         )}
+        {isTransitioning && (
+          <LinearProgress sx={{ my: 2, borderRadius: 1 }} />
+        )}
         <Divider sx={{ my: 2 }} />
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <MetadataRow label="Owner" value={deployment.user?.email ?? '—'} />
@@ -71,8 +117,17 @@ export function DeploymentDialog({ deployment, onClose }: DeploymentDialogProps)
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" color="primary" disabled={isUpToDate}>
-          {isUpToDate ? 'Up to date' : `Upgrade to #${canonicalId}`}
+        <Button
+          variant="contained"
+          color="primary"
+          disabled={isUpToDate || isTransitioning || upgradeMutation.isPending}
+          onClick={() => upgradeMutation.mutate()}
+        >
+          {upgradeMutation.isPending || isTransitioning
+            ? 'Upgrading...'
+            : isUpToDate
+              ? 'Up to date'
+              : `Upgrade to #${canonicalId}`}
         </Button>
       </DialogActions>
     </Dialog>

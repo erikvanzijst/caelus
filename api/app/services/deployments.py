@@ -21,6 +21,7 @@ from app.services.errors import DeploymentInProgressException, IntegrityExceptio
 from app.services.hostnames import require_valid_hostname_for_deployment
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETING,
+    DEPLOYMENT_STATUS_ERROR,
     DEPLOYMENT_STATUS_PROVISIONING,
     DEPLOYMENT_STATUS_READY,
     JOB_REASON_CREATE,
@@ -271,7 +272,7 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
         sa_update(DeploymentORM)
         .where(
             DeploymentORM.id == update.id,
-            DeploymentORM.status == DEPLOYMENT_STATUS_READY,
+            DeploymentORM.status.in_([DEPLOYMENT_STATUS_READY, DEPLOYMENT_STATUS_ERROR]),
         )
         .values(
             desired_template_id=update.desired_template_id,

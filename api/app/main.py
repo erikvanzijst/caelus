@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import users, products, hostnames
+from app.api import users, products, deployments, hostnames
 from app.api.utils import register_exception_handlers
 from app.logging_config import configure_logging
 from app.config import get_settings
@@ -51,7 +51,7 @@ def redirect_to_docs() -> RedirectResponse:
 
 app.include_router(users.me_router, prefix="/api")
 app.include_router(users.router, prefix="/api")
-app.include_router(users.deployments_router, prefix="/api")
+app.include_router(deployments.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
 app.include_router(hostnames.router, prefix="/api")
 

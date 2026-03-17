@@ -18,8 +18,6 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 me_router = APIRouter(tags=["users"])
 
-deployments_router = APIRouter(prefix="/deployments", tags=["deployments"])
-
 
 @me_router.get("/me", response_model=UserRead)
 def get_me(current_user: UserORM = Depends(get_current_user)) -> UserRead:
@@ -119,11 +117,3 @@ def delete_deployment_endpoint(
     session: Session = Depends(get_session),
 ) -> None:
     deployment_service.delete_deployment(session, user_id=user_id, deployment_id=deployment_id)
-
-
-@deployments_router.get("", response_model=list[DeploymentRead])
-def list_all_deployments(
-    current_user: UserORM = Depends(require_admin),
-    session: Session = Depends(get_session),
-) -> list[DeploymentRead]:
-    return deployment_service.list_deployments(session)

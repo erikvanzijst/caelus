@@ -81,6 +81,10 @@ export function deleteTemplate(productId: number, templateId: number) {
   })
 }
 
+export function listAllDeployments() {
+  return requestJson<Deployment[]>('/deployments')
+}
+
 export function listDeployments(userId: number) {
   return requestJson<Deployment[]>(`/users/${userId}/deployments`)
 }

@@ -1,4 +1,4 @@
-import { Alert, Box, Card, Stack, Typography } from '@mui/material'
+import { Alert, Card, Stack } from '@mui/material'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { listProducts } from '../api/endpoints'

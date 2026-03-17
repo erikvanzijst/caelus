@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { listAllDeployments } from '../api/endpoints'
 import { useAuth } from '../state/AuthContext'
 import type { Deployment } from '../api/types'
+import { formatLocalIso } from '../utils/formatDate'
 import { DeploymentDialog } from './DeploymentDialog'
 
 const columns: GridColDef<Deployment>[] = [
@@ -43,7 +44,7 @@ const columns: GridColDef<Deployment>[] = [
     flex: 1,
     minWidth: 160,
     valueGetter: (_value, row) => row.created_at ? new Date(row.created_at) : null,
-    renderCell: ({ value }) => value ? (value as Date).toISOString().replace('T', ' ').slice(0, 19) : '',
+    renderCell: ({ value }) => value ? formatLocalIso(value as Date) : '',
   },
   {
     field: 'status',

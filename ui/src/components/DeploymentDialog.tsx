@@ -4,16 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Deployment } from '../api/types'
 import { getDeployment, updateDeployment } from '../api/endpoints'
 import { isTransitionalStatus } from '../utils/deploymentStatus'
+import { formatLocalIso } from '../utils/formatDate'
 import { DeployDialogContent } from './DeployDialogContent'
 
 interface DeploymentDialogProps {
   deployment: Deployment | null
   onClose: () => void
-}
-
-function formatIso(value: string | null | undefined): string {
-  if (!value) return '—'
-  return new Date(value).toISOString().replace('T', ' ').slice(0, 19)
 }
 
 function formatAge(value: string | null | undefined): string {
@@ -108,9 +104,9 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
         <Divider sx={{ my: 2 }} />
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <MetadataRow label="Owner" value={deployment.user?.email ?? '—'} />
-          <MetadataRow label="Created" value={formatIso(deployment.created_at)} />
+          <MetadataRow label="Created" value={formatLocalIso(deployment.created_at)} />
           <MetadataRow label="Age" value={formatAge(deployment.created_at)} />
-          <MetadataRow label="Last reconciliation" value={formatIso(deployment.last_reconcile_at)} />
+          <MetadataRow label="Last reconciliation" value={formatLocalIso(deployment.last_reconcile_at)} />
           <MetadataRow label="Current template" value={deployment.applied_template ? `#${deployment.applied_template.id}` : '—'} />
           <MetadataRow label="Status" value={deployment.status ?? '—'} />
         </Box>

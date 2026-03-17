@@ -139,6 +139,7 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
       </DialogContent>
       <DialogActions>
         <Button
+          variant="outlined"
           color="error"
           disabled={isTransitioning || deleteMutation.isPending}
           onClick={() => deleteMutation.mutate()}
@@ -146,7 +147,7 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
           {deleteMutation.isPending || isDeleting ? 'Deleting...' : 'Delete'}
         </Button>
         <Box sx={{ flex: 1 }} />
-        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="outlined" onClick={onClose}>Cancel</Button>
         <Button
           variant="contained"
           color="primary"

@@ -60,7 +60,7 @@ resource "kubernetes_deployment" "worker" {
         container {
           image   = var.api_image
           name    = "worker"
-          command = ["caelus", "worker", "--follow"]
+          command = ["caelus", "worker", "--concurrency", "4"]
 
           env_from {
             config_map_ref {

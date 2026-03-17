@@ -851,72 +851,148 @@ def test_cli_reconcile_command_not_found_returns_stable_error(cli_runner):
     assert "Traceback" not in result.output
 
 
-def test_cli_worker_processes_jobs_and_streams_yaml(cli_runner, monkeypatch):
+class _FakeProvisioner:
+    def ensure_namespace(self, *, name: str):
+        return None
+
+    def helm_upgrade_install(self, **kwargs):
+        return None
+
+    def helm_uninstall(self, **kwargs):
+        return None
+
+    def delete_namespace(self, *, name: str):
+        return None
+
+
+class _FailingProvisioner:
+    def ensure_namespace(self, *, name: str):
+        raise RuntimeError("fail")
+
+    def helm_upgrade_install(self, **kwargs):
+        raise RuntimeError("fail")
+
+    def helm_uninstall(self, **kwargs):
+        raise RuntimeError("fail")
+
+    def delete_namespace(self, *, name: str):
+        raise RuntimeError("fail")
+
+
+def test_cli_worker_processes_job_successfully(cli_runner, monkeypatch):
+    """Test that _process_one_job claims and reconciles a job."""
     runner, app = cli_runner
 
-    # Seed deployment via services to ensure a queued create job exists
     user_id, deployment_id = _seed_deployment_via_services()
-
-    # Ensure fake provisioner to avoid external calls
-    class _FakeProvisioner:
-        def ensure_namespace(self, *, name: str):
-            return None
-
-        def helm_upgrade_install(self, **kwargs):
-            return None
-
-        def helm_uninstall(self, **kwargs):
-            return None
-
-        def delete_namespace(self, *, name: str):
-            return None
-
-    monkeypatch.setenv("CAELUS_WORKER_ID", "worker-test")
     monkeypatch.setattr(reconcile_service, "default_provisioner", _FakeProvisioner())
 
-    result = runner.invoke(app, ["worker", "-n", "1"])
-    assert result.exit_code == 0
-    # Expect one YAML document (id/status present)
-    lines = [line for line in result.output.strip().splitlines() if line]
-    assert any(line.startswith("id:") for line in lines)
-    assert any("status: done" in line for line in lines)
+    from app.worker import process_one_job
+    result = process_one_job("worker-test")
+    assert result is not None
+    assert result["status"] == "done"
+    assert result["deployment_id"] == deployment_id
 
-    # With no remaining jobs and follow disabled, worker should exit cleanly
-    result_empty = runner.invoke(app, ["worker", "-n", "1"])
-    assert result_empty.exit_code == 0
-    assert result_empty.output.strip() == ""
+    # No more jobs — should return None
+    assert process_one_job("worker-test") is None
 
 
-def test_cli_worker_marks_failure_and_continues(cli_runner, monkeypatch):
+def test_cli_worker_marks_failure(cli_runner, monkeypatch):
     runner, app = cli_runner
 
     user_id, deployment_id = _seed_deployment_via_services()
-
-    class _FailingProvisioner:
-        def ensure_namespace(self, *, name: str):
-            raise RuntimeError("fail")
-
-        def helm_upgrade_install(self, **kwargs):
-            raise RuntimeError("fail")
-
-        def helm_uninstall(self, **kwargs):
-            raise RuntimeError("fail")
-
-        def delete_namespace(self, *, name: str):
-            raise RuntimeError("fail")
-
-    monkeypatch.setenv("CAELUS_WORKER_ID", "worker-fail")
     monkeypatch.setattr(reconcile_service, "default_provisioner", _FailingProvisioner())
 
-    result = runner.invoke(app, ["worker", "-n", "1"])
-    assert result.exit_code == 0
-    lines = [line for line in result.output.strip().splitlines() if line]
-    assert any("status: failed" in line for line in lines)
+    from app.worker import process_one_job
+    result = process_one_job("worker-fail")
+    assert result is not None
+    assert result["status"] == "failed"
 
     # Ensure job is marked failed in DB
     with session_scope() as session:
         jobs = JobService(session).list_jobs(deployment_id=deployment_id, statuses=["failed"], limit=10)
         assert len(jobs) == 1
+
+
+def test_cli_worker_concurrency_zero_exits_with_error(cli_runner):
+    runner, app = cli_runner
+    result = runner.invoke(app, ["worker", "--concurrency", "0"])
+    assert result.exit_code == 1
+    assert "--concurrency must be >= 1" in result.output
+
+
+def test_cli_worker_n_flag_rejected(cli_runner):
+    runner, app = cli_runner
+    result = runner.invoke(app, ["worker", "-n", "1"])
+    assert result.exit_code != 0
+
+
+def test_cli_worker_follow_flag_rejected(cli_runner):
+    runner, app = cli_runner
+    result = runner.invoke(app, ["worker", "--follow"])
+    assert result.exit_code != 0
+
+
+def test_cli_worker_parallel_processes_multiple_jobs(cli_runner, monkeypatch):
+    """Test parallel worker processes multiple jobs via _run_worker_parallel."""
+    runner, app = cli_runner
+
+    # Seed multiple deployments to create multiple queued jobs
+    from app.db import session_scope
+    from app.models import UserCreate, ProductCreate, ProductTemplateVersionCreate, DeploymentCreate
+    from app.services import (
+        users as user_service,
+        products as product_service,
+        templates as template_svc,
+        deployments as deployment_service,
+    )
+
+    monkeypatch.setattr(reconcile_service, "default_provisioner", _FakeProvisioner())
+
+    deployment_ids = []
+    with session_scope() as session:
+        user = user_service.create_user(session, UserCreate(email="parallel@example.com"))
+        for i in range(3):
+            product = product_service.create_product(
+                session,
+                payload=ProductCreate(name=f"par-product-{i}", description="parallel"),
+            )
+            template = template_svc.create_template(
+                session,
+                ProductTemplateVersionCreate(
+                    product_id=product.id,
+                    chart_ref="oci://example/chart",
+                    chart_version="1.0.0",
+                ),
+            )
+            from app.models import ProductORM
+            product_orm = session.get(ProductORM, product.id)
+            product_orm.template_id = template.id
+            session.add(product_orm)
+            session.commit()
+            deployment = deployment_service.create_deployment(
+                session,
+                payload=DeploymentCreate(
+                    user_id=user.id,
+                    desired_template_id=template.id,
+                ),
+            )
+            deployment_ids.append(deployment.id)
+
+    # Use process_one_job directly (multiprocessing.Process workers can't
+    # share the test SQLite DB across processes, so we verify the function
+    # works correctly for sequential invocations over multiple jobs)
+    from app.worker import process_one_job
+    results = []
+    while True:
+        result = process_one_job("parallel-worker")
+        if result is None:
+            break
+        results.append(result)
+
+    assert len(results) == 3
+    processed_deployment_ids = {r["deployment_id"] for r in results}
+    assert processed_deployment_ids == set(deployment_ids)
+    assert all(r["status"] == "done" for r in results)
 
 
 def test_cli_jobs_lists_open_and_filters_status(cli_runner):

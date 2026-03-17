@@ -30,7 +30,6 @@ from app.services import (
 )
 from app.services.errors import CaelusException
 from app.services.reconcile_constants import (
-    DEPLOYMENT_STATUS_ERROR,
     JOB_STATUS_QUEUED,
     JOB_STATUS_RUNNING,
     JOB_STATUS_DONE,
@@ -518,55 +517,24 @@ def reconcile(
         _echo_yaml_entity(result)
 
 
-def _run_worker_once(*, worker_id: str, session: Session) -> dict | None:
-    jobs = jobs_service.JobService(session)
-    claimed = jobs.claim_next_job(worker_id=worker_id)
-    if claimed is None:
-        return None
-
-    reconciler = reconcile_service.DeploymentReconciler(session=session)
-    result = reconciler.reconcile(claimed.deployment_id)
-
-    status: str
-    last_error: str | None = result.last_error
-    if result.status == DEPLOYMENT_STATUS_ERROR:
-        jobs.mark_job_failed(job_id=claimed.id, error=result.last_error or "unknown error")
-        status = JOB_STATUS_FAILED
-    else:
-        jobs.mark_job_done(job_id=claimed.id)
-        status = JOB_STATUS_DONE
-
-    return {
-        "id": claimed.id,
-        "deployment_id": claimed.deployment_id,
-        "reason": claimed.reason,
-        "status": status,
-        "locked_by": claimed.locked_by,
-        "locked_at": claimed.locked_at,
-        "last_error": last_error,
-    }
-
-
 @app.command("worker")
 def worker(
-    n: int = typer.Option(None, "-n", help="Maximum number of jobs to process"),
-    follow: bool = typer.Option(False, "--follow", help="Continuously poll for new jobs"),
-    poll_seconds: float = typer.Option(1.0, "--poll-seconds", help="Sleep interval when following"),
+    concurrency: int = typer.Option(1, "--concurrency", "-c", help="Number of parallel job workers"),
+    poll_seconds: float = typer.Option(1.0, "--poll-seconds", help="Sleep interval when no jobs are available"),
 ) -> None:
-    worker_id = os.environ.get("CAELUS_WORKER_ID") or f"worker-{int(time.time())}"
-    processed = 0
-    with session_scope() as session:
-        while True:
-            payload = _run_worker_once(worker_id=worker_id, session=session)
-            if payload is None:
-                if follow:
-                    time.sleep(poll_seconds)
-                    continue
-                break
-            _echo_yaml_stream_item(payload)
-            processed += 1
-            if n is not None and processed >= n:
-                break
+    if concurrency < 1:
+        typer.echo("Error: --concurrency must be >= 1", err=True)
+        raise typer.Exit(code=1)
+
+    from app.worker import run_worker
+
+    base_worker_id = os.environ.get("CAELUS_WORKER_ID") or f"worker-{int(time.time())}"
+    run_worker(
+        base_worker_id=base_worker_id,
+        concurrency=concurrency,
+        poll_seconds=poll_seconds,
+        emit=_echo_yaml_stream_item,
+    )
 
 
 @app.command("jobs")

@@ -158,8 +158,6 @@ class JobService:
     def claim_next_job(self, *, worker_id: str) -> DeploymentReconcileJobORM | None:
         """Claim one runnable job for a worker, using a dialect-appropriate strategy."""
         dialect_name = self._session.get_bind().dialect.name
-        if dialect_name == "postgresql":
-            return self._claim_next_job_postgres(worker_id=worker_id)
         if dialect_name == "sqlite":
             return self._claim_next_job_sqlite(worker_id=worker_id)
         return self._claim_next_job_postgres(worker_id=worker_id)

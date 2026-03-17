@@ -93,6 +93,19 @@ For the default Helm values in Admin, supply the SMTP configuration:
 
 ```json
 {
+  "immich": {
+    "controllers": {
+      "main": {
+        "containers": {
+          "main": {
+            "image": {
+              "tag": "v2.5.6"
+            }
+          }
+        }
+      }
+    }
+  },
   "smtp": {
     "host": "smtp.mailer.svc.cluster.local",
     "port": 25,

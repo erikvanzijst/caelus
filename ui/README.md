@@ -9,7 +9,8 @@ This README is intentionally behavior-heavy so future agents can quickly orient 
 - Vite
 - MUI v7 (with custom theme)
 - TanStack React Query
-- React Router (`/`, `/admin`)
+- MUI X DataGrid (community)
+- React Router (`/`, `/admin/products`, `/admin/deployments`)
 
 ## Local Run
 Requirements:
@@ -34,15 +35,22 @@ npm run build
 ```
 
 ## App Structure
-- `src/App.tsx`: route switch (`/` Dashboard, `/admin` Admin).
+- `src/App.tsx`: route switch (`/` Dashboard, `/admin` with nested routes for `products` and `deployments`).
 - `src/components/AppShell.tsx`: global layout shell, top app bar, nav buttons, signed-in chip, email switch button, decorative radial background, and email dialog gating.
 - `src/components/EmailDialog.tsx`: modal to capture local dev email.
+- `src/components/AdminSidebar.tsx`: left sidebar navigation for Admin page (Products, Deployments).
+- `src/components/ProductsPanel.tsx`: product/template management (extracted from Admin page).
+- `src/components/DeploymentsPanel.tsx`: admin deployments table using MUI DataGrid with sortable columns.
+- `src/components/DeploymentDialog.tsx`: deployment detail dialog with read-only form, metadata, upgrade, and delete actions with live polling.
 - `src/components/NewProduct.tsx`: extracted component for product creation form with icon upload support.
 - `src/components/IconInput.tsx`: icon upload component with preview and automatic client-side downscaling for oversized images.
 - `src/pages/Dashboard.tsx`: user deployment creation + deployment cards.
-- `src/pages/Admin.tsx`: product/template management and canonical template management.
-- `src/api/*`: request helpers and endpoint wrappers.
+- `src/pages/Admin.tsx`: admin layout shell with sidebar and `<Outlet>` for nested routes.
+- `src/api/client.ts`: request helpers with `ApiError` class carrying HTTP status codes.
+- `src/api/endpoints.ts`: endpoint wrappers.
 - `src/state/useAuthEmail.ts`: localStorage-backed auth email hook.
+- `src/utils/formatDate.ts`: local-time ISO timestamp formatting.
+- `src/utils/deploymentStatus.ts`: deployment status color and transitional state helpers.
 - `src/theme.ts`: color/typography/shape/component overrides.
 
 ## Global Layout And Visuals
@@ -51,7 +59,7 @@ npm run build
   - Left: avatar `C`, title `Caelus Control`, subtitle `Provisioning cockpit`
   - Center: `Dashboard` and `Admin` nav buttons
   - Right: signed-in email chip + `Switch` button
-- Main content is wrapped in `Container maxWidth="lg"` with generous vertical spacing.
+- Main content is wrapped in `Container maxWidth="xl"` with generous vertical spacing.
 - Global background is a soft radial gradient; shell also adds two blurred radial accent circles.
 - Typography uses Space Grotesk / Space Mono, rounded controls, pill-shaped buttons.
 
@@ -114,14 +122,12 @@ Headline:
 - `Admin`
 - Subtext: products, template versions, canonical selection
 
-Two-column desktop layout (stacks on small screens):
-- Left column:
-  - `Create product` form
-  - `Products` list (click to select product)
-- Right column:
-  - `Selected product` summary + `Delete product`
-  - `Create template version` form
-  - `Template versions` list for selected product
+Layout:
+- Left sidebar navigation with two sections: **Products** and **Deployments**.
+- `/admin` redirects to `/admin/products` by default.
+- Content area renders via React Router `<Outlet>`.
+
+### Products (`/admin/products`)
 
 Create product:
 - Requires non-empty product name.
@@ -159,16 +165,43 @@ Template versions list:
 Empty templates state:
 - `No templates yet. Add the first version to unlock deployments.`
 
+### Deployments (`/admin/deployments`)
+
+Sortable DataGrid table listing all non-deleted deployments via `GET /api/deployments`.
+
+Columns:
+- **Product**: product name from applied or desired template
+- **Hostname**: clickable link (`https://{hostname}`, opens in new tab)
+- **Email**: deployment owner's email
+- **Created**: local-time ISO timestamp
+- **Status**: deployment status string
+- **Up to date**: green check if `applied_template.id === applied_template.product.template_id`, yellow warning otherwise
+
+Default sort: Created descending.
+
+Row click opens a **DeploymentDialog** with:
+- Read-only `DeployDialogContent` showing the deployment's user values (hostname field renders as plain text, no Free/Custom domain toggle)
+- Metadata section: Owner, Created, Age (human-readable), Last reconciliation, Current template, Status
+- **Delete** button (left, red): triggers `DELETE /users/{id}/deployments/{id}`, shows progress bar during `deleting` state, closes dialog and removes row when API returns 404
+- **Upgrade** button (right): disabled when up to date, otherwise shows `Upgrade to #{canonicalId}`. Calls `PUT /users/{id}/deployments/{id}` with the product's canonical template ID. Shows progress bar during `provisioning` state.
+
+Live polling:
+- Dialog polls `GET /users/{id}/deployments/{id}` at 1s intervals while deployment is in a transitional state (`provisioning` or `deleting`).
+- Each poll result patches the `admin-deployments` query cache via `setQueryData`, keeping the table row in sync without polling the full list.
+- Polling stops when deployment reaches a terminal state.
+- 404 response (deleted deployment) removes the row from cache and closes the dialog.
+
 ## API And Query Notes
 - API base URL: `VITE_API_URL` or default `http://localhost:8000`.
 - `requestJson` always sends `Content-Type: application/json`.
 - `204` responses map to `null`.
-- Error handling normalizes FastAPI `detail` values (including validation arrays) into readable messages.
+- Error handling normalizes FastAPI `detail` values (including validation arrays) into readable messages. Errors throw `ApiError` (extends `Error`) with an `status` property carrying the HTTP status code.
 - Query defaults:
   - `refetchOnWindowFocus: false`
   - `retry: 1`
   - `staleTime: 5000ms`
-- Deployments query auto-polls every 3s while any deployment is in transitional states (`provisioning` or `deleting`).
+- Dashboard deployments query auto-polls every 3s while any deployment is in transitional states (`provisioning` or `deleting`).
+- Admin deployment dialog polls a single deployment at 1s intervals during transitions, patching the list cache via `setQueryData`.
 
 ## Manual QA Matrix
 Use these checks after UI/API contract changes:
@@ -205,7 +238,26 @@ Use these checks after UI/API contract changes:
    - expected button becomes `Deleting...` and disabled
    - expected polling refreshes card state while deleting
 
-7. Validation error readability:
+7. Admin deployments table:
+   - open `/admin/deployments`
+   - expected: sortable table with all non-deleted deployments
+   - click a row: expected deployment dialog opens with read-only form and metadata
+   - hostname links should open in new tab without triggering the dialog
+
+8. Admin deployment upgrade:
+   - open dialog for an outdated deployment (yellow warning icon)
+   - expected: button shows `Upgrade to #N`
+   - click upgrade: expected progress bar, status changes to `provisioning`, button disabled
+   - expected: table row status updates in real time
+   - on completion: button changes to `Up to date` (disabled)
+
+9. Admin deployment delete:
+   - open dialog, click Delete
+   - expected: progress bar (secondary color), button shows `Deleting...`
+   - expected: table row status updates to `deleting`
+   - on completion: dialog closes, row removed from table
+
+10. Validation error readability:
    - trigger invalid create payload (for example empty required template fields)
    - expected alert text is readable and not `[object Object]`
 

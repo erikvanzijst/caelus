@@ -189,10 +189,10 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
 
 
 def list_deployments(session: Session, *, user_id: int | None = None) -> list[DeploymentRead]:
-    # Return deployments for the given user if provided, otherwise all deployments
-    stmt = select(DeploymentORM)
+    # Return non-deleted deployments for the given user if provided, otherwise all
+    stmt = select(DeploymentORM).where(DeploymentORM.status != DEPLOYMENT_STATUS_DELETED)
     if user_id is not None:
-        stmt = stmt.where(DeploymentORM.user_id == user_id)  # noqa: E712
+        stmt = stmt.where(DeploymentORM.user_id == user_id)
     return [DeploymentRead.model_validate(d) for d in session.exec(stmt).all()]
 
 

@@ -434,10 +434,17 @@ def create_deployment(
 @app.command("list-deployments")
 def list_deployments(
     user_id: int | None = typer.Argument(None, help="Filter deployments by user ID"),
+    all_users: bool = typer.Option(False, "--all", help="List deployments for all users (admin only)"),
 ) -> None:
     with session_scope() as session:
-        _require_cli_user(session)
-        _echo_yaml_entity(deployment_service.list_deployments(session, user_id=user_id))
+        user = _require_cli_user(session)
+        if all_users:
+            if not user.is_admin:
+                typer.echo("Error: --all requires admin privileges", err=True)
+                raise typer.Exit(code=1)
+            _echo_yaml_entity(deployment_service.list_deployments(session))
+        else:
+            _echo_yaml_entity(deployment_service.list_deployments(session, user_id=user_id))
 
 
 @app.command("get-deployment")

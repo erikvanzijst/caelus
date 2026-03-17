@@ -106,6 +106,7 @@ REST routes:
 - Users: `POST/GET /users`, `GET/DELETE /users/{user_id}`
 - Deployments: `POST/GET /users/{user_id}/deployments`,
   `GET/PUT/DELETE /users/{user_id}/deployments/{deployment_id}`
+- Admin: `GET /deployments` (admin-only, all non-deleted deployments)
 
 CLI equivalents (`caelus ...`):
 - `create-user`, `list-users`, `get-user`, `delete-user`
@@ -244,6 +245,7 @@ This works for any `caelus` command that returns a YAML list or object.
 ### Update (Upgrade)
 
 - Only allows forward template changes (`desired_template_id` must increase).
+- Allowed from `ready` or `error` status (not during `provisioning` or `deleting`).
 - Requires same product lineage between current and target template.
 - REST/CLI update inputs do not accept top-level `domainname`.
 - Service re-derives persisted `domainname` from effective
@@ -256,6 +258,7 @@ This works for any `caelus` command that returns a YAML list or object.
 - Marks status `deleting`, sets `deleted_at`, increments `generation`.
 - Enqueues `delete` job.
 - Repeated delete is idempotent if already `deleting`/`deleted`.
+- `GET` on a deleted deployment returns `404`.
 
 ### Reconcile Outcome
 

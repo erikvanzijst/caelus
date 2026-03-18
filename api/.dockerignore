@@ -25,5 +25,4 @@ docs
 .gitlab-ci.yml
 .DS_Store
 *.log
-.env
 .env.*

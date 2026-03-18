@@ -56,3 +56,9 @@ variable "wildcard_domains" {
   description = "Freely available wildcard domains"
   type        = list(string)
 }
+
+# NOTE: These are currently configured in api/.env
+# variable "reserved_hostnames" {
+#   description = "Hostnames that cannot be claimed by users"
+#   type        = list(string)
+# }

@@ -3,7 +3,7 @@
 ### Requirement: Email chip is a dropdown menu trigger
 The email display in the AppBar top-right corner SHALL be a clickable element
 that opens a dropdown menu. It SHALL display the text
-`Signed in as <user.email>` when a user is authenticated, or `No email set`
+`<user.email>` when a user is authenticated, or `No email set`
 when no user is loaded.
 
 #### Scenario: User clicks the email element

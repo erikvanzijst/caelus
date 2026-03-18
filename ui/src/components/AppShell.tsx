@@ -112,7 +112,7 @@ function AppShell({ children }: PropsWithChildren) {
           <Box sx={{ flex: 1 }} />
           <Stack direction="row" spacing={1} alignItems="center">
             <Chip
-              label={user ? `Signed in as ${user.email}` : 'No email set'}
+              label={user ? user.email : 'No email set'}
               variant="outlined"
               onClick={(e) => setMenuAnchor(e.currentTarget)}
               sx={{ bgcolor: 'rgba(15, 23, 42, 0.04)', cursor: 'pointer' }}

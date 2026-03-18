@@ -295,16 +295,16 @@ email and follow this sequence to establish an authenticated session:
        JSON.stringify({"X-Auth-Request-Email": "user@example.com"}));
      window.location.reload();
    }
-3. browser_wait_for  →  text: "Signed in as"
+3. browser_wait_for  →  text: "user@example.com"
 4. browser_navigate  →  http://localhost:5173/admin  (or any target page)
-5. browser_wait_for  →  text: "Signed in as"
+5. browser_wait_for  →  text: "user@example.com"
 ```
 
 **Why the wait is required:** Playwright's `goto()` resolves on the browser
 `load` event, but React's auth cycle is async (mount → read localStorage →
 `GET /api/me` → re-render). Without the wait, snapshots will show the
 pre-auth state ("No email set", empty product lists, missing Admin link).
-The `wait_for` on "Signed in as" ensures the full auth round-trip has
+The `wait_for` on the email address ensures the full auth round-trip has
 completed and the UI has re-rendered with user data.
 
 **Why step 2 uses `reload()` instead of a second `navigate`:** Setting

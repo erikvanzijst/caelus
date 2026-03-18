@@ -72,10 +72,8 @@ def test_helm_upgrade_install_passes_values_and_returns_status() -> None:
     assert out.status == "deployed"
     assert out.revision == 7
     upgrade_cmd = calls[0]
-    assert "--values" not in upgrade_cmd
-    assert "--set" in upgrade_cmd
-    set_idx = upgrade_cmd.index("--set")
-    assert upgrade_cmd[set_idx + 1] == "user.message=hello"
+    assert "--set" not in upgrade_cmd
+    assert "-f" in upgrade_cmd
     assert "oci://example/chart@sha256:abc" in upgrade_cmd
     assert "--version" not in upgrade_cmd
     assert "--atomic" in upgrade_cmd

@@ -25,7 +25,7 @@ spec:
             - -ec
             - |
               cat > /data/index.html <<'HTML'
-              <html><body><h1>{{ .Values.user.message }}</h1></body></html>
+              <html><body>{{ .Values.user.message }}</body></html>
               HTML
           volumeMounts:
             - name: data

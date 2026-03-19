@@ -1,4 +1,4 @@
-# hello-static-chart
+# helloworld
 
 Demo Helm chart for Caelus architecture work.
 
@@ -14,7 +14,7 @@ Demo Helm chart for Caelus architecture work.
 ## Quick test
 
 ```bash
-helm template demo ./k8s/hello-static-chart \
+helm template demo ./charts/helloworld \
   --set ingress.enabled=true \
   --set ingress.className=traefik \
   --set ingress.host=hello.example.com \
@@ -24,19 +24,19 @@ helm template demo ./k8s/hello-static-chart \
 ## Publish to docker registry
 
 ```bash
-helm lint ./k8s/hello-static-chart
-helm package ./k8s/hello-static-chart --destination ./build
-helm push ./build/hello-static-0.1.1.tgz oci://registry.home:80/helm --plain-http
+helm lint ./charts/helloworld
+helm package ./charts/helloworld --destination ./build
+helm push ./build/helloworld-0.1.4.tgz oci://registry.home:80/helm --plain-http
 ```
 
-Optionally pull to verify: `helm pull oci://registry.home:80/helm/hello-static --version 0.1.1 --plain-http --destination /tmp`
+Optionally pull to verify: `helm pull oci://registry.home:80/helm/helloworld --version 0.1.4 --plain-http --destination /tmp`
 
 ## Deploy to k3s
 
 ```bash
-helm install hello-static oci://registry.home:80/helm/hello-static \
+helm install helloworld oci://registry.home:80/helm/helloworld \
   --kubeconfig ./kubeconfigs/k3s-dev.yaml \
-  --version 0.1.1 \
+  --version 0.1.4 \
   --namespace hello2 \
   --create-namespace \
   --plain-http \

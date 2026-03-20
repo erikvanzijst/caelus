@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "naas.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "naas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "naas.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "naas.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: nas
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "/app/server.py"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.port }}
+          env:
+            - name: PORT
+              value: {{ .Values.server.port | quote }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          volumeMounts:
+            - name: server-script
+              mountPath: /app
+            - name: images
+              mountPath: /images
+      volumes:
+        - name: server-script
+          configMap:
+            name: {{ include "naas.fullname" . }}-server
+        - name: images
+          configMap:
+            name: {{ include "naas.fullname" . }}-images

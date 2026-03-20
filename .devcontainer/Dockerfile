@@ -21,6 +21,7 @@ RUN apt-get update -y && \
       btop \
       httpie \
       imagemagick \
+      iputils-ping \
       sqlite3 \
       curl \
       wget \

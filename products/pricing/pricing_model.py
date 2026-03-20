@@ -433,7 +433,9 @@ with tab_immich:
         immich_cpu = st.number_input("CPU cores (Immich)", value=0.25, step=0.05, key="immich_cpu",
                                      help="Avg CPU per instance. ML tasks (thumbnails, face detection) are bursty.")
         immich_ram = st.number_input("RAM GB (Immich)", value=2.0, step=0.25, key="immich_ram",
-                                     help="Server + ML worker + Redis + PostgreSQL per instance.")
+                                     help="Based on capacity analysis (91k-asset instance): ~1.6GiB after "
+                                     "restart, rising to ~2.1GiB from V8 heap fragmentation. 2.0GiB is the "
+                                     "recommended budget (server + ML worker + Redis + PostgreSQL).")
     with immich_col2:
         immich_bw = st.number_input("Bandwidth GB/mo (Immich)", value=20.0, step=5.0, key="immich_bw",
                                     help="Photo uploads + thumbnail views + sharing.")

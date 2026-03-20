@@ -24,8 +24,8 @@ This chart wraps the official Immich chart and adds resources the upstream chart
 Minimal install (only required override is `ingress.host`):
 
 ```bash
-helm dependency build charts/immich
-helm upgrade --install immich charts/immich \
+helm dependency build products/immich/chart
+helm upgrade --install immich products/immich/chart \
   --namespace immich \
   --create-namespace \
   --set ingress.host=photos.example.com
@@ -42,7 +42,7 @@ helm uninstall immich --namespace immich
 Build dependencies, package the chart, and push to the Caelus OCI registry:
 
 ```bash
-cd charts/immich
+cd products/immich/chart
 helm dependency build
 helm package .
 helm registry login registry.home:80

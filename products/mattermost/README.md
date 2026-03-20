@@ -160,7 +160,7 @@ connections, preventing startup race conditions.
 ### From Local Chart
 
 ```bash
-helm upgrade --install mattermost ./charts/mattermost \
+helm upgrade --install mattermost ./products/mattermost/chart \
   --namespace mattermost \
   --create-namespace \
   --set host=mattermost.app.deprutser.be
@@ -186,7 +186,7 @@ host: mattermost.app.deprutser.be
 ```
 
 ```bash
-helm upgrade --install mattermost ./charts/mattermost \
+helm upgrade --install mattermost ./products/mattermost/chart \
   --namespace mattermost \
   --create-namespace \
   -f values.yaml
@@ -200,7 +200,7 @@ The chart must be packaged and pushed to the OCI registry
 before Caelus can reference it:
 
 ```bash
-cd charts/mattermost
+cd products/mattermost/chart
 helm package .
 helm push mattermost-1.0.2.tgz oci://registry.home:80/helm --plain-http
 ```

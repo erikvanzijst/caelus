@@ -16,7 +16,7 @@
 - [x] 2.3 Update `DeploymentRead` in `api/app/models.py`: rename `domainname` → `hostname`
 - [x] 2.4 Rename `_iter_domainname_paths()` → `_iter_hostname_paths()` and `_derive_domainname()` → `_derive_hostname()` in `api/app/services/deployments.py`. Change schema title check to `title.lower() == "hostname"`. Rename all local variables
 - [x] 2.5 Update all Python test files: replace `domainname` with `hostname` in assertions, fixtures, schema definitions (`title: "domainname"` → `title: "hostname"`), and test function names (~15 files)
-- [x] 2.6 Update chart `values.schema.json` files: add `"title": "hostname"` to the host/serverName fields in `charts/helloworld/`, `charts/matrix/`, `charts/immich/`
+- [x] 2.6 Update chart `values.schema.json` files: add `"title": "hostname"` to the host/serverName fields in `products/helloworld/chart/`, `products/matrix/chart/`, `products/immich/chart/`
 - [x] 2.7 Run full backend test suite and fix any remaining references
 
 ## 3. Rename domainname to hostname — frontend

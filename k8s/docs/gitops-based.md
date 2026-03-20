@@ -51,10 +51,11 @@ The `git_path` points to the folder in the Git repo that holds the per‑instanc
 ### 3. Repository Layout
 ```
 /gitops-repo/
-├─ charts/
-│   └─ nextcloud/            # shared chart repo (admin‑maintained)
-│       ├─ Chart.yaml
-│       └─ templates/...
+├─ products/
+│   └─ nextcloud/
+│       └─ chart/            # chart repo (admin‑maintained)
+│           ├─ Chart.yaml
+│           └─ templates/...
 ├─ instances/
 │   ├─ 123e4567‑89ab‑cdef/   # instance UUID
 │   │   ├─ values.yaml        # merged default + overrides
@@ -132,7 +133,7 @@ Argo CD continuously reconciles the **Application** CRs with the live cluster,
 ---
 
 ### 10. Next Steps
-1. Create the **Git repo** layout & initial `charts/` directory.
+1. Create the **Git repo** layout & initial `products/` directory.
 2. Add `helm` chart repository configuration (local or remote).
 3. Implement FastAPI routes to **generate/commit** instance folders and Application manifests (use `gitpython` or CLI).
 4. Deploy **Argo CD** into the cluster (helm install) and configure it to watch the repo.

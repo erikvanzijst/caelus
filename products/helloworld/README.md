@@ -14,7 +14,7 @@ Demo Helm chart for Caelus architecture work.
 ## Quick test
 
 ```bash
-helm template demo ./charts/helloworld \
+helm template demo ./products/helloworld/chart \
   --set ingress.enabled=true \
   --set ingress.className=traefik \
   --set ingress.host=hello.example.com \
@@ -24,8 +24,8 @@ helm template demo ./charts/helloworld \
 ## Publish to docker registry
 
 ```bash
-helm lint ./charts/helloworld
-helm package ./charts/helloworld --destination ./build
+helm lint ./products/helloworld/chart
+helm package ./products/helloworld/chart --destination ./build
 helm push ./build/helloworld-0.1.4.tgz oci://registry.home:80/helm --plain-http
 ```
 

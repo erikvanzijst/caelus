@@ -12,8 +12,8 @@ Custom Helm chart for deploying [Tuwunel](https://matrix-construct.github.io/tuw
 ## Quick test
 
 ```bash
-helm lint ./charts/matrix
-helm template matrix ./charts/matrix --set serverName=matrix.app.example.com
+helm lint ./products/matrix/chart
+helm template matrix ./products/matrix/chart --set serverName=matrix.app.example.com
 ```
 
 ## Key values
@@ -64,7 +64,7 @@ This supports federation on a single hostname with TLS termination handled upstr
 Package the chart and push to the Caelus OCI registry:
 
 ```bash
-cd charts/matrix
+cd products/matrix/chart
 helm package .
 helm registry login registry.home:80
 helm push matrix-0.1.0.tgz oci://registry.home:80/helm --plain-http

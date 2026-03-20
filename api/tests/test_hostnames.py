@@ -25,6 +25,7 @@ from sqlmodel import select
 from starlette.testclient import TestClient
 
 from tests.conftest import client, db_session
+from tests.conftest import create_free_plan_template
 
 
 def _settings(**overrides) -> CaelusSettings:
@@ -304,6 +305,7 @@ class TestHostnameCheckEndpoint:
         template_id = template.json()["id"]
         # Make it the canonical template
         client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+        ptv_id = create_free_plan_template(db_session, product_id)
         user = client.post("/api/users", json={"email": "hn-test@example.com"})
         user_id = user.json()["id"]
         client.post(
@@ -311,6 +313,7 @@ class TestHostnameCheckEndpoint:
             json={
                 "desired_template_id": template_id,
                 "user_values_json": {"host": "occupied.example.com"},
+                "plan_template_id": ptv_id,
             },
         )
         resp = client.get("/api/hostnames/occupied.example.com")
@@ -385,7 +388,7 @@ class TestDomainsEndpoint:
 
 
 class TestServerSideEnforcement:
-    def test_create_deployment_rejects_reserved_hostname(self, client, monkeypatch):
+    def test_create_deployment_rejects_reserved_hostname(self, client, db_session, monkeypatch):
         monkeypatch.setattr(
             "app.services.hostnames.get_settings",
             lambda: _settings(reserved_hostnames=["reserved.example.com"]),
@@ -406,6 +409,7 @@ class TestServerSideEnforcement:
         template_id = template.json()["id"]
         # Make it the canonical template
         client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+        ptv_id = create_free_plan_template(db_session, product_id)
         user = client.post("/api/users", json={"email": "enforce@example.com"})
         user_id = user.json()["id"]
 
@@ -414,12 +418,13 @@ class TestServerSideEnforcement:
             json={
                 "desired_template_id": template_id,
                 "user_values_json": {"host": "reserved.example.com"},
+                "plan_template_id": ptv_id,
             },
         )
         assert resp.status_code == 409
         assert "reserved" in resp.json()["detail"]
 
-    def test_create_deployment_rejects_in_use_hostname(self, client):
+    def test_create_deployment_rejects_in_use_hostname(self, client, db_session):
         product = client.post("/api/products", json={"name": "enforce-inuse", "description": "test"})
         product_id = product.json()["id"]
         template = client.post(
@@ -436,6 +441,7 @@ class TestServerSideEnforcement:
         template_id = template.json()["id"]
         # Make it the canonical template
         client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+        ptv_id = create_free_plan_template(db_session, product_id)
         user = client.post("/api/users", json={"email": "enforce-inuse@example.com"})
         user_id = user.json()["id"]
 
@@ -445,6 +451,7 @@ class TestServerSideEnforcement:
             json={
                 "desired_template_id": template_id,
                 "user_values_json": {"host": "taken.enforce.example.com"},
+                "plan_template_id": ptv_id,
             },
         )
         assert resp1.status_code == 201
@@ -457,12 +464,13 @@ class TestServerSideEnforcement:
             json={
                 "desired_template_id": template_id,
                 "user_values_json": {"host": "taken.enforce.example.com"},
+                "plan_template_id": ptv_id,
             },
         )
         assert resp2.status_code == 409
         assert "in_use" in resp2.json()["detail"]
 
-    def test_create_deployment_skips_validation_when_no_hostname(self, client):
+    def test_create_deployment_skips_validation_when_no_hostname(self, client, db_session):
         """Templates without a hostname-titled field should not trigger validation."""
         product = client.post("/api/products", json={"name": "enforce-nohost", "description": "test"})
         product_id = product.json()["id"]
@@ -480,6 +488,7 @@ class TestServerSideEnforcement:
         template_id = template.json()["id"]
         # Make it the canonical template
         client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+        ptv_id = create_free_plan_template(db_session, product_id)
         user = client.post("/api/users", json={"email": "enforce-nohost@example.com"})
         user_id = user.json()["id"]
 
@@ -488,6 +497,7 @@ class TestServerSideEnforcement:
             json={
                 "desired_template_id": template_id,
                 "user_values_json": {"message": "hello"},
+                "plan_template_id": ptv_id,
             },
         )
         assert resp.status_code == 201
@@ -514,9 +524,11 @@ class TestServerSideEnforcement:
         user = client.post("/api/users", json={"email": "enforce-update@example.com"})
         user_id = user.json()["id"]
 
+        ptv_id = create_free_plan_template(db_session, product_id)
+
         dep = client.post(
             f"/api/users/{user_id}/deployments",
-            json={"desired_template_id": tmpl1.json()["id"], "user_values_json": {"host": "same.example.com"}},
+            json={"desired_template_id": tmpl1.json()["id"], "user_values_json": {"host": "same.example.com"}, "plan_template_id": ptv_id},
         )
         assert dep.status_code == 201
         dep_id = dep.json()["id"]

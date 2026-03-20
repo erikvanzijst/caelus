@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional, Any
 
 from pydantic import ConfigDict, model_validator
@@ -6,6 +6,10 @@ from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String, func
 
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class UserBase(SQLModel):
@@ -26,8 +30,12 @@ class UserORM(UserBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(nullable=False, unique=False)
     is_admin: bool = Field(default=False, nullable=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
     deployments: list["DeploymentORM"] = Relationship(back_populates="user")
+    subscriptions: list["SubscriptionORM"] = Relationship(
+        back_populates="user",
+        sa_relationship_kwargs={"foreign_keys": "SubscriptionORM.user_id"},
+    )
     deleted_at: Optional[datetime] = Field(default=None)
 
 
@@ -71,10 +79,14 @@ class ProductORM(ProductBase, table=True):
         back_populates="products",
         sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id", "lazy": "joined"},
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
     templates: list["ProductTemplateVersionORM"] = Relationship(
         back_populates="product",
         sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id"},
+    )
+    plans: list["PlanORM"] = Relationship(
+        back_populates="product",
+        sa_relationship_kwargs={"foreign_keys": "PlanORM.product_id"},
     )
     deleted_at: Optional[datetime] = Field(default=None)
 
@@ -163,7 +175,7 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
         back_populates="applied_template",
         sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id"},
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
     deleted_at: Optional[datetime] = Field(default=None)
 
 
@@ -175,6 +187,11 @@ class ProductTemplateVersionRead(ProductTemplateVersionBase):
     id: Optional[int]
     created_at: datetime
     product: ProductReadBase
+
+
+# ---------------------------------------------------------------------------
+# Deployment
+# ---------------------------------------------------------------------------
 
 
 class DeploymentBase(SQLModel):
@@ -243,7 +260,7 @@ class DeploymentORM(DeploymentBase, table=True):
     generation: int = Field(default=1, nullable=False)
     last_error: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
     last_reconcile_at: Optional[datetime] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
     deleted_at: Optional[datetime] = Field(default=None)
     reconcile_jobs: list["DeploymentReconcileJobORM"] = Relationship(back_populates="deployment")
     user: UserORM = Relationship(back_populates="deployments", sa_relationship_kwargs={"lazy": "joined"})
@@ -253,10 +270,24 @@ class DeploymentORM(DeploymentBase, table=True):
     applied_template: Optional[ProductTemplateVersionORM] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id", "lazy": "joined"}
     )
+    subscription_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("subscription.id"),
+            nullable=True,
+            index=True,
+        ),
+    )
+    subscription: Optional["SubscriptionORM"] = Relationship(
+        back_populates="deployments",
+        sa_relationship_kwargs={"foreign_keys": "DeploymentORM.subscription_id", "lazy": "joined"},
+    )
 
 
 class DeploymentCreate(DeploymentBase):
     model_config = ConfigDict(extra="forbid")
+    plan_template_id: int
     user_values_json: dict[str, Any] = Field(default=dict())
     user_id: Optional[int] = None
 
@@ -276,6 +307,7 @@ class DeploymentRead(DeploymentBase):
     hostname: Optional[str] = None
     desired_template: ProductTemplateVersionRead
     applied_template: Optional[ProductTemplateVersionRead]
+    subscription_id: Optional[int] = None
     name: Optional[str] = None
     namespace: Optional[str] = None
     status: str = Field(default="pending")
@@ -288,7 +320,7 @@ class DeploymentReconcileJobBase(SQLModel):
     deployment_id: int
     reason: str
     status: str = Field(default="queued")
-    run_after: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    run_after: datetime = Field(default_factory=_utcnow, nullable=False)
     # TODO: remove this field. Jobs are not being retried:
     attempt: int = Field(default=0, nullable=False)
     locked_by: Optional[str] = None
@@ -318,5 +350,5 @@ class DeploymentReconcileJobORM(DeploymentReconcileJobBase, table=True):
         )
     )
     deployment: DeploymentORM = Relationship(back_populates="reconcile_jobs")
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
+    updated_at: datetime = Field(default_factory=_utcnow, nullable=False)

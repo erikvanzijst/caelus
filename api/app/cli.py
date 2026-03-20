@@ -19,6 +19,10 @@ from app.models import (
     ProductCreate,
     ProductUpdate,
     DeploymentUpdate,
+    PlanCreate,
+    PlanUpdate,
+    PlanTemplateVersionCreate,
+    BillingInterval,
 )
 from app.services import (
     templates as template_service,
@@ -27,6 +31,8 @@ from app.services import (
     users as user_service,
     reconcile as reconcile_service,
     jobs as jobs_service,
+    plans as plan_service,
+    subscriptions as subscription_service,
 )
 from app.services.errors import CaelusException
 from app.services.reconcile_constants import (
@@ -391,6 +397,7 @@ def create_deployment(
     *,
     user_id: int = typer.Option(..., "--user-id"),
     desired_template_id: int = typer.Option(..., "--desired-template-id"),
+    plan_template_id: int = typer.Option(..., "--plan-template-id"),
     user_values_json: str | None = typer.Option(
         None,
         "--user-values-json",
@@ -422,6 +429,7 @@ def create_deployment(
                 payload=DeploymentCreate(
                     user_id=user_id,
                     desired_template_id=desired_template_id,
+                    plan_template_id=plan_template_id,
                     user_values_json=parsed_user_values,
                 ),
             )
@@ -563,6 +571,134 @@ def jobs(
         if reverse:
             jobs_list = list(reversed(jobs_list))
         _echo_yaml_entity(jobs_list)
+
+
+# ── Plan commands ─────────────────────────────────────────────────────
+
+
+@app.command("list-plans")
+def list_plans(product_id: int) -> None:
+    with session_scope() as session:
+        _require_cli_user(session)
+        try:
+            plans = plan_service.list_plans_for_product(session, product_id)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(plans)
+
+
+@app.command("get-plan")
+def get_plan(plan_id: int) -> None:
+    with session_scope() as session:
+        _require_cli_user(session)
+        try:
+            plan = plan_service.get_plan(session, plan_id)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(plan)
+
+
+@app.command("create-plan")
+def create_plan(
+    product_id: int = typer.Option(..., "--product-id"),
+    name: str = typer.Option(..., "--name"),
+    description: str | None = typer.Option(None, "--description"),
+    sort_order: int | None = typer.Option(None, "--sort-order"),
+) -> None:
+    with session_scope() as session:
+        _require_cli_user(session)
+        try:
+            plan = plan_service.create_plan(
+                session,
+                product_id=product_id,
+                payload=PlanCreate(name=name, description=description, sort_order=sort_order),
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(plan)
+
+
+@app.command("update-plan")
+def update_plan(
+    plan_id: int,
+    name: str | None = typer.Option(None, "--name"),
+    description: str | None = typer.Option(None, "--description"),
+    template_id: int | None = typer.Option(None, "--template-id"),
+    sort_order: int | None = typer.Option(None, "--sort-order"),
+) -> None:
+    with session_scope() as session:
+        _require_cli_user(session)
+        try:
+            plan = plan_service.update_plan(
+                session,
+                plan_id=plan_id,
+                payload=PlanUpdate(
+                    name=name, description=description,
+                    template_id=template_id, sort_order=sort_order,
+                ),
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(plan)
+
+
+@app.command("delete-plan")
+def delete_plan(plan_id: int) -> None:
+    with session_scope() as session:
+        _require_cli_user(session)
+        try:
+            plan_service.delete_plan(session, plan_id=plan_id)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        typer.echo("Deleted")
+
+
+@app.command("create-plan-template")
+def create_plan_template(
+    plan_id: int = typer.Option(..., "--plan-id"),
+    price_cents: int = typer.Option(..., "--price-cents"),
+    billing_interval: BillingInterval = typer.Option(..., "--billing-interval"),
+    storage_bytes: int | None = typer.Option(None, "--storage-bytes"),
+) -> None:
+    with session_scope() as session:
+        _require_cli_user(session)
+        try:
+            tmpl = plan_service.create_plan_template_version(
+                session,
+                plan_id=plan_id,
+                payload=PlanTemplateVersionCreate(
+                    price_cents=price_cents,
+                    billing_interval=billing_interval,
+                    storage_bytes=storage_bytes,
+                ),
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(tmpl)
+
+
+# ── Subscription commands ─────────────────────────────────────────────
+
+
+@app.command("list-subscriptions")
+def list_subscriptions(user_id: int) -> None:
+    with session_scope() as session:
+        _require_cli_user(session)
+        subs = subscription_service.list_subscriptions_for_user(session, user_id)
+        _echo_yaml_entity(subs)
+
+
+@app.command("cancel-subscription")
+def cancel_subscription(subscription_id: int) -> None:
+    with session_scope() as session:
+        _require_cli_user(session)
+        try:
+            sub = subscription_service.cancel_subscription(
+                session, subscription_id=subscription_id
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(sub)
 
 
 if __name__ == "__main__":

@@ -94,16 +94,22 @@ queries but SHALL remain in the database for referential integrity.
 - **AND** subscriptions exist that reference template versions of that plan
 - **THEN** the subscriptions remain valid and queryable
 
-### Requirement: Plan name is mutable
+### Requirement: Plan name and description are mutable
 
-The system SHALL allow the plan's `name` field to be updated after
-creation. The plan name is a display label and is not part of the
-commercial contract frozen by subscriptions.
+The system SHALL allow the plan's `name` and `description` fields to be
+updated after creation. These are display labels and are not part of the
+commercial contract frozen by subscriptions. The `description` field is
+nullable and stores a brief summary of the plan visible to users.
 
 #### Scenario: Rename a plan
 - **GIVEN** a plan with name "Basic 50GB"
 - **WHEN** the name is updated to "Starter 50GB"
 - **THEN** the plan's name is "Starter 50GB"
+
+#### Scenario: Update plan description
+- **GIVEN** a plan with no description
+- **WHEN** the description is updated to "Best for small teams"
+- **THEN** the plan's description is "Best for small teams"
 - **AND** existing subscriptions to this plan's template versions are
   NOT affected
 
@@ -112,8 +118,8 @@ commercial contract frozen by subscriptions.
 The system SHALL store plan template versions in a `plan_template_version`
 table. Each template version belongs to exactly one plan via a `plan_id`
 foreign key. Template versions are immutable by convention -- once created,
-their commercial fields (price_cents, billing_interval, storage_bytes,
-description) SHALL NOT be modified.
+their commercial fields (price_cents, billing_interval, storage_bytes)
+SHALL NOT be modified.
 
 #### Scenario: Create a plan template version
 - **WHEN** a plan template version is created with `plan_id=1`,
@@ -130,7 +136,6 @@ description) SHALL NOT be modified.
     floating-point rounding
   - `billing_interval` (string, NOT NULL) -- 'monthly' or 'annual'
   - `storage_bytes` (integer, nullable) -- storage quota in bytes
-  - `description` (string, nullable) -- marketing copy
   - `created_at` (datetime, auto-set)
   - `deleted_at` (datetime, nullable -- for soft delete)
 

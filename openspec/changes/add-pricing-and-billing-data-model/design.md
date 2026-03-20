@@ -394,7 +394,7 @@ The migration steps:
            user_id = deployment.user_id,
            status = 'active',
            payment_status = 'current',
-           start_date = deployment.created_at)
+           created_at = deployment.created_at)
 
 6. ALTER TABLE deployment ADD COLUMN subscription_id (nullable)
 
@@ -447,32 +447,32 @@ This is a phased rollout:
 | id          |       | id           |       | id                         |
 | name        |       | product_id   |       | plan_id (FK)               |
 | description |       | name         |       | price_cents                |
-| template_id |       | template_id  |<--ref-| billing_interval           |
-| created_at  |       |  (canonical) |       |  (monthly|annual)          |
-| deleted_at  |       | sort_order   |       | storage_bytes              |
-+-------------+       | created_at   |       | description                |
-                      | deleted_at   |       | created_at                 |
-                      +--------------+       | deleted_at                 |
-                                             +----------------------------+
+| template_id |       | description  |       | billing_interval           |
+| created_at  |       | template_id  |<--ref-|  (monthly|annual)          |
+| deleted_at  |       |  (canonical) |       | storage_bytes              |
++-------------+       | sort_order   |       | created_at                 |
+                      | created_at   |       +----------------------------+
+                      | deleted_at   |
+                      +--------------+
                                                           |
                                                      1:N  | plan_template_id
                                                           v
-+--------------+       +------------------------------+
-|DeploymentORM |--N:1->|     SubscriptionORM          |
-| (existing)   |       |                              |
-|              |       | id                            |
-| subscription_|       | plan_template_id (FK, NN)    |
-|  id (FK, NN) |       | user_id (FK, NN)             |
-|              |       | status (active|cancelled)     |
-|              |       | payment_status                |
-|              |       |  (current|arrears)            |
-|              |       | start_date                    |
-|              |       | cancelled_at (nullable)       |
-|              |       | external_ref (nullable)       |
-|              |       | created_at                    |
-|              |       |                               |
-|              |       | (no deleted_at)               |
-+--------------+       +------------------------------+
+                  +--------------+       +------------------------------+
+                  |DeploymentORM |--N:1->|     SubscriptionORM          |
+                  | (existing)   |       |                              |
+                  |              |       | id                           |
+                  | subscription_|       | plan_template_id (FK, NN)    |
+                  |  id (FK, NN) |       | user_id (FK, NN)             |
+                  |              |       | status (active|cancelled)    |
+                  |              |       | payment_status               |
+                  |              |       |  (current|arrears)           |
+                  |              |       | created_at                   |
+                  |              |       | cancelled_at (nullable)      |
+                  |              |       | external_ref (nullable)      |
+                  |              |       | created_at                   |
+                  |              |       |                              |
+                  |              |       | (no deleted_at)              |
+                  +--------------+       +------------------------------+
 ```
 
 ## API Design

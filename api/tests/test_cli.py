@@ -10,6 +10,7 @@ from app.db import session_scope
 from app.models import DeploymentORM, DeploymentReconcileJobORM
 from app.services.jobs import JobService
 from app.services import templates as template_service, reconcile as reconcile_service
+from tests.conftest import create_free_plan_template
 from sqlmodel import select
 
 
@@ -57,15 +58,23 @@ def _seed_deployment_via_services() -> tuple[int, int]:
         product_orm.template_id = template.id
         session.add(product_orm)
         session.commit()
+        ptv_id = create_free_plan_template(session, product.id)
         deployment = deployment_service.create_deployment(
             session,
             payload=DeploymentCreate(
                 user_id=user.id,
                 desired_template_id=template.id,
                 user_values_json={"domain": "dep.example.com"},
+                plan_template_id=ptv_id,
             ),
         )
         return user.id, deployment.id
+
+
+def _create_free_plan_template_via_services(product_id: int) -> int:
+    """Create a free plan+template for a product via service layer. For CLI tests."""
+    with session_scope() as session:
+        return create_free_plan_template(session, product_id)
 
 
 def _get_template_from_services(product_id: int, template_id: int):
@@ -482,6 +491,7 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
     update_prod_res = runner.invoke(app, ["update-product", "1", "--template-id", str(template_id)])
     assert update_prod_res.exit_code == 0
 
+    ptv_id = _create_free_plan_template_via_services(1)
     create_dep_res = runner.invoke(
         app,
         [
@@ -492,6 +502,8 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
             str(template_id),
             "--user-values-json",
             '{"domain":"cli-audit.example.test"}',
+            "--plan-template-id",
+            str(ptv_id),
         ],
     )
     assert create_dep_res.exit_code == 0
@@ -528,6 +540,7 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
     update_prod_res = runner.invoke(app, ["update-product", "1", "--template-id", str(template_id)])
     assert update_prod_res.exit_code == 0
 
+    ptv_id = _create_free_plan_template_via_services(1)
     create_dep_res = runner.invoke(
         app,
         [
@@ -538,6 +551,8 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
             str(template_id),
             "--user-values-json",
             '{"domain":"cli-json.example.test","message":"hi"}',
+            "--plan-template-id",
+            str(ptv_id),
         ],
     )
     assert create_dep_res.exit_code == 0
@@ -581,6 +596,7 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
         json.dumps({"domain": "cli-file.example.test", "replicas": 2, "feature": {"enabled": True}})
     )
 
+    ptv_id = _create_free_plan_template_via_services(1)
     create_dep_res = runner.invoke(
         app,
         [
@@ -591,6 +607,8 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
             str(template_id),
             "--user-values-file",
             str(values_file),
+            "--plan-template-id",
+            str(ptv_id),
         ],
     )
     assert create_dep_res.exit_code == 0
@@ -616,6 +634,8 @@ def test_cli_create_deployment_user_values_invalid_json_returns_stable_error(cli
             "1",
             "--user-values-json",
             "{not-json}",
+            "--plan-template-id",
+            "1",
         ],
     )
     assert result.exit_code == 1
@@ -634,6 +654,8 @@ def test_cli_create_deployment_not_found_returns_stable_error(cli_runner):
             "99999",
             "--desired-template-id",
             "1",
+            "--plan-template-id",
+            "1",
         ],
     )
     assert missing_user_res.exit_code == 1
@@ -651,6 +673,8 @@ def test_cli_rejects_removed_hostname_write_option(cli_runner):
             "--user-id",
             "1",
             "--desired-template-id",
+            "1",
+            "--plan-template-id",
             "1",
             "--hostname",
             "deprecated.example.test",
@@ -723,6 +747,7 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
     update_prod_res = runner.invoke(app, ["update-product", "1", "--template-id", str(tmpl1_id)])
     assert update_prod_res.exit_code == 0
 
+    ptv_id = _create_free_plan_template_via_services(1)
     domain = "upgrade-cli.example.test"
     create_dep_res = runner.invoke(
         app,
@@ -734,6 +759,8 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
             str(tmpl1_id),
             "--user-values-json",
             json.dumps({"domain": domain}),
+            "--plan-template-id",
+            str(ptv_id),
         ],
     )
     assert create_dep_res.exit_code == 0
@@ -969,11 +996,13 @@ def test_cli_worker_parallel_processes_multiple_jobs(cli_runner, monkeypatch):
             product_orm.template_id = template.id
             session.add(product_orm)
             session.commit()
+            ptv_id = create_free_plan_template(session, product.id)
             deployment = deployment_service.create_deployment(
                 session,
                 payload=DeploymentCreate(
                     user_id=user.id,
                     desired_template_id=template.id,
+                    plan_template_id=ptv_id,
                 ),
             )
             deployment_ids.append(deployment.id)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlmodel import select
@@ -9,6 +9,7 @@ from app.models import DeploymentReconcileJobORM, ProductORM
 from app.services import deployments, products, templates, users
 from app.services.jobs import JobService
 from app.services.errors import DeploymentInProgressException, NotFoundException
+from tests.conftest import create_free_plan_template
 
 
 def _seed_deployment(db_session):
@@ -33,12 +34,14 @@ def _seed_deployment(db_session):
     product_orm.template_id = template.id
     db_session.add(product_orm)
     db_session.commit()
+    ptv_id = create_free_plan_template(db_session, product.id)
     deployment = deployments.create_deployment(
         db_session,
         payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template.id,
             user_values_json={"domain": "jobs.example.test"},
+            plan_template_id=ptv_id,
         ),
     )
     return deployment.id
@@ -67,7 +70,7 @@ def test_enqueue_and_list_jobs_with_filters(db_session):
     second = jobs.enqueue_job(
         deployment_id=deployment_id,
         reason="update",
-        run_after=datetime.utcnow() + timedelta(seconds=60),
+        run_after=datetime.now(UTC) + timedelta(seconds=60),
     )
 
     listed_all = jobs.list_jobs(deployment_id=deployment_id, limit=20)

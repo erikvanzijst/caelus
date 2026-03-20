@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 import logging
 
 from sqlmodel import Session
@@ -49,7 +49,7 @@ class DeploymentReconciler:
                 status=DEPLOYMENT_STATUS_ERROR,
                 applied_template_id=deployment.applied_template_id,
                 last_error=str(exc),
-                last_reconcile_at=datetime.utcnow(),
+                last_reconcile_at=datetime.now(UTC),
             )
         deployment.status = result.status
         deployment.applied_template_id = result.applied_template_id
@@ -113,7 +113,7 @@ class DeploymentReconciler:
             status=DEPLOYMENT_STATUS_READY,
             applied_template_id=deployment.desired_template_id,
             last_error=None,
-            last_reconcile_at=datetime.utcnow(),
+            last_reconcile_at=datetime.now(UTC),
         )
 
     def _reconcile_delete(self, deployment: DeploymentORM) -> ReconcileResult:
@@ -137,7 +137,7 @@ class DeploymentReconciler:
             status=DEPLOYMENT_STATUS_DELETED,
             applied_template_id=deployment.applied_template_id,
             last_error=None,
-            last_reconcile_at=datetime.utcnow(),
+            last_reconcile_at=datetime.now(UTC),
         )
 
     def _build_merged_values(

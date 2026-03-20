@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 import logging
 
 from sqlalchemy import text
@@ -34,7 +34,7 @@ class JobService:
         job = DeploymentReconcileJobORM(
             deployment_id=deployment_id,
             reason=reason,
-            run_after=run_after or datetime.utcnow(),
+            run_after=run_after or datetime.now(UTC),
             status=JOB_STATUS_QUEUED,
         )
         try:
@@ -75,7 +75,7 @@ class JobService:
 
     def _claim_next_job_postgres(self, *, worker_id: str) -> DeploymentReconcileJobORM | None:
         """Claim the next runnable job using Postgres row locking with SKIP LOCKED."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         # TODO: Write a more sophisticated query that groups by deployment_id, selects the deployment that has the
         #  oldest open job and then selects all live jobs for that deployment ordered by run_after, immediately marks
         #  all but the newest jobs as done, and then returns that newest job. This automatically eliminates redundant
@@ -111,7 +111,7 @@ class JobService:
 
     def _claim_next_job_sqlite(self, *, worker_id: str) -> DeploymentReconcileJobORM | None:
         """Claim the next runnable job atomically using SQLite UPDATE ... RETURNING fallback."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         stmt = text(
             """
             UPDATE deployment_reconcile_job
@@ -171,7 +171,7 @@ class JobService:
         job.last_error = None
         job.locked_by = None
         job.locked_at = None
-        job.updated_at = datetime.utcnow()
+        job.updated_at = datetime.now(UTC)
         self._session.add(job)
         self._session.commit()
         self._session.refresh(job)
@@ -183,7 +183,7 @@ class JobService:
         job = self._session.get(DeploymentReconcileJobORM, job_id)
         if job is None:
             raise NotFoundException("Job not found")
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         job.status = JOB_STATUS_FAILED
         job.last_error = error
         job.locked_by = None

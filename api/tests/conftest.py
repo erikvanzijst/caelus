@@ -11,7 +11,8 @@ from typer.testing import CliRunner
 
 from app.db import get_session, init_db
 from app.main import app
-from app.models import UserORM
+from app.models import UserORM, PlanORM, PlanTemplateVersionORM, BillingInterval
+from app.models.core import _utcnow
 
 
 @pytest.fixture
@@ -53,6 +54,30 @@ def cli_runner(tmp_path, monkeypatch):
     importlib.reload(cli)
 
     return CliRunner(), cli.app
+
+
+def create_free_plan_template(session: Session, product_id: int) -> int:
+    """Create a free Plan + PlanTemplateVersion for a product.
+
+    Returns the plan_template_version ID, suitable for passing as
+    ``plan_template_id`` to DeploymentCreate or API deployment payloads.
+    """
+    plan = PlanORM(name="Free", product_id=product_id, created_at=_utcnow())
+    session.add(plan)
+    session.flush()
+    ptv = PlanTemplateVersionORM(
+        plan_id=plan.id,
+        price_cents=0,
+        billing_interval=BillingInterval.MONTHLY,
+        storage_bytes=0,
+        created_at=_utcnow(),
+    )
+    session.add(ptv)
+    session.flush()
+    plan.template_id = ptv.id
+    session.commit()
+    session.refresh(ptv)
+    return ptv.id
 
 
 ADMIN_EMAIL = "test@example.com"

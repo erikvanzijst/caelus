@@ -58,8 +58,8 @@ single plan with its canonical template version details.
 
 The system SHALL provide a `POST /products/{product_id}/plans` endpoint
 (admin only) that creates a new plan for the given product. The request
-body SHALL include `name` (required). The response SHALL be the created
-plan resource.
+body SHALL include `name` (required) and optionally `description` and
+`sort_order`. The response SHALL be the created plan resource.
 
 #### Scenario: Admin creates a plan
 - **GIVEN** the request is from an admin user
@@ -88,8 +88,8 @@ plan resource.
 
 The system SHALL provide a `PUT /plans/{plan_id}` endpoint (admin only)
 that updates a plan's mutable fields. Updatable fields: `name`,
-`template_id` (to change the canonical template version), `sort_order`
-(display ordering on the pricing page).
+`description`, `template_id` (to change the canonical template version),
+`sort_order` (display ordering on the pricing page).
 
 #### Scenario: Rename a plan
 - **GIVEN** plan 1 has name "Basic"
@@ -125,7 +125,7 @@ that soft-deletes the plan by setting `deleted_at`.
 The system SHALL provide a `POST /plans/{plan_id}/templates` endpoint
 (admin only) that creates a new template version for the given plan. The
 request body SHALL include `price_cents` (required), `billing_interval`
-(required), and optionally `storage_bytes`, `description`, and
+(required), and optionally `storage_bytes`.
 The response SHALL be the created template version resource.
 
 #### Scenario: Create a template version
@@ -135,8 +135,7 @@ The response SHALL be the created template version resource.
   {
     "price_cents": 999,
     "billing_interval": "monthly",
-    "storage_bytes": 53687091200,
-    "description": "50GB storage, billed monthly"
+    "storage_bytes": 53687091200
   }
   ```
 - **THEN** a template version is created with the given values
@@ -149,7 +148,7 @@ The response SHALL be the created template version resource.
 
 #### Scenario: Missing required fields
 - **WHEN** `POST /plans/1/templates` is called with
-  `{"description": "No price"}`
+  `{"storage_bytes": 1000}`
 - **THEN** the response is 422 (validation error -- price_cents and
   billing_interval are required)
 
@@ -163,8 +162,7 @@ The CLI SHALL provide commands equivalent to all plan API endpoints:
   [--sort-order <n>]` -- update a plan (admin)
 - `plan delete <plan_id>` -- soft-delete a plan (admin)
 - `plan template create <plan_id> --price-cents <n>
-  --billing-interval <interval> [--storage-bytes <n>]
-  [--description <text>]` -- create a template
+  --billing-interval <interval> [--storage-bytes <n>]` -- create a template
   version (admin)
 
 #### Scenario: CLI list plans

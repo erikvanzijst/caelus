@@ -157,23 +157,6 @@ The `status` field handles visibility in application queries:
 - **WHEN** the subscription table schema is inspected
 - **THEN** there is no `deleted_at` column
 
-### Requirement: Subscription has a start date
-
-Each subscription SHALL have a `start_date` datetime field (NOT NULL) that
-records when the subscription period began. This is distinct from
-`created_at` (which records when the database row was inserted) -- for
-backfilled subscriptions, `start_date` matches the original deployment's
-`created_at`.
-
-#### Scenario: New subscription start date
-- **WHEN** a subscription is created as part of a new deployment
-- **THEN** `start_date` is set to the current UTC timestamp
-
-#### Scenario: Backfilled subscription start date
-- **GIVEN** a deployment was created on 2026-01-15
-- **WHEN** the migration backfills a subscription for this deployment
-- **THEN** `start_date` is set to 2026-01-15 (the deployment's created_at)
-
 ### Requirement: Free subscriptions have payment_status current
 
 For subscriptions referencing a plan template version with `price_cents=0`,

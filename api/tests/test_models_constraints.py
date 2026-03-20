@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.services import templates, deployments, products, users
 from app.services.jobs import JobService
@@ -9,13 +9,14 @@ from app.services.errors import HostnameException, IntegrityException
 from app.services.reconcile import DeploymentReconciler
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
 from tests.conftest import db_session
+from tests.conftest import create_free_plan_template
 from tests.provisioner_utils import FakeProvisioner
 
 
 def test_product_name_unique_constraint(db_session):
     def delete_product(prod: products.ProductORM):
         orm = db_session.get(products.ProductORM, prod.id)
-        orm.deleted_at = datetime.utcnow()
+        orm.deleted_at = datetime.now(UTC)
         db_session.add(orm)
         db_session.commit()
 
@@ -82,11 +83,13 @@ def test_deployment_unique_constraint(db_session):
     product_orm.template_id = template.id
     db_session.add(product_orm)
     db_session.commit()
+    ptv_id = create_free_plan_template(db_session, product.id)
     # Create first deployment
     dep1 = deployments.create_deployment(
         db_session,
         payload=deployments.DeploymentCreate(
-            user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"}
+            user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"},
+            plan_template_id=ptv_id,
         ),
     )
     # Attempt duplicate deployment — service-level validation catches hostname reuse
@@ -94,7 +97,8 @@ def test_deployment_unique_constraint(db_session):
         deployments.create_deployment(
             db_session,
             payload=deployments.DeploymentCreate(
-                user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"}
+                user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"},
+                plan_template_id=ptv_id,
             ),
         )
     create_job = db_session.exec(
@@ -117,7 +121,8 @@ def test_deployment_unique_constraint(db_session):
     dep2 = deployments.create_deployment(
         db_session,
         payload=deployments.DeploymentCreate(
-            user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"}
+            user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"},
+            plan_template_id=ptv_id,
         ),
     )
     assert dep2.id != dep1.id
@@ -159,6 +164,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
     product_orm.template_id = template_v1.id
     db_session.add(product_orm)
     db_session.commit()
+    ptv_id = create_free_plan_template(db_session, product.id)
 
     dep_a = deployments.create_deployment(
         db_session,
@@ -166,6 +172,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
             user_id=user_a.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "shared.example.com"},
+            plan_template_id=ptv_id,
         ),
     )
     assert dep_a.hostname == "shared.example.com"
@@ -182,6 +189,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
                 user_id=user_b.id,
                 desired_template_id=template_v2.id,
                 user_values_json={"domain": "shared.example.com"},
+                plan_template_id=ptv_id,
             ),
         )
     dep_a_orm = db_session.get(deployments.DeploymentORM, dep_a.id)
@@ -201,6 +209,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
             user_id=user_b.id,
             desired_template_id=template_v2.id,
             user_values_json={"domain": "shared.example.com"},
+            plan_template_id=ptv_id,
         ),
     )
     assert dep_b.hostname == "shared.example.com"
@@ -228,6 +237,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
     product_orm.template_id = template.id
     db_session.add(product_orm)
     db_session.commit()
+    ptv_id = create_free_plan_template(db_session, product.id)
 
     dep_a = deployments.create_deployment(
         db_session,
@@ -235,6 +245,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
             user_id=user.id,
             desired_template_id=template.id,
             user_values_json={"domain": "active.example.com"},
+            plan_template_id=ptv_id,
         ),
     )
     with pytest.raises(HostnameException, match="in_use"):
@@ -244,6 +255,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
                 user_id=user.id,
                 desired_template_id=template.id,
                 user_values_json={"domain": "active.example.com"},
+                plan_template_id=ptv_id,
             ),
         )
 
@@ -260,6 +272,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
             user_id=user.id,
             desired_template_id=template.id,
             user_values_json={"domain": "active.example.com"},
+            plan_template_id=ptv_id,
         ),
     )
     assert dep_b.id != dep_a.id

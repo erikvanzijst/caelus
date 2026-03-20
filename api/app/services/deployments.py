@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import UTC, datetime
 import logging
 from typing import Any
 
@@ -15,6 +15,7 @@ from app.models import (
     DeploymentUpdate,
 )
 from app.services.jobs import JobService
+from app.services import subscriptions as subscription_service
 from app.services import template_values
 from app.services import users as user_service
 from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException
@@ -154,6 +155,16 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     if derived_hostname is not None:
         require_valid_hostname_for_deployment(session, derived_hostname)
 
+    # Create subscription atomically (commit=False so we control the transaction).
+    # Validates that the plan_template_id is valid and not soft-deleted.
+    sub = subscription_service.create_subscription(
+        session,
+        plan_template_id=payload.plan_template_id,
+        user_id=payload.user_id,
+        commit=False,
+    )
+    session.flush()  # ensure sub.id is available
+
     deployment_name = generate_deployment_name(template.product.name)
     deployment_namespace = generate_deployment_namespace(user.email)
     deployment: DeploymentORM = DeploymentORM.model_validate(
@@ -162,7 +173,8 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
             namespace=deployment_namespace,
             hostname=derived_hostname,
             status=DEPLOYMENT_STATUS_PROVISIONING,
-            **payload.model_dump(),
+            subscription_id=sub.id,
+            **payload.model_dump(exclude={"plan_template_id"}),
         )
     )
     session.add(deployment)
@@ -173,10 +185,11 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
         session.commit()
         deployment = _get_deployment_orm(session, deployment_id=deployment.id)
         logger.info(
-            "Created deployment id=%s user_id=%s desired_template_id=%s",
+            "Created deployment id=%s user_id=%s desired_template_id=%s subscription_id=%s",
             deployment.id,
             deployment.user_id,
             deployment.desired_template_id,
+            deployment.subscription_id,
         )
         return DeploymentRead.model_validate(deployment)
     except DeploymentInProgressException:
@@ -220,7 +233,7 @@ def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> 
         deployment.status = DEPLOYMENT_STATUS_DELETING
         deployment.generation += 1
         deployment.last_error = None
-        deployment.deleted_at = datetime.utcnow()
+        deployment.deleted_at = datetime.now(UTC)
         session.add(deployment)
         try:
             _enqueue_reconcile_job(session, deployment_id=deployment_id, reason=JOB_REASON_DELETE)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -85,7 +85,7 @@ def delete_product(session: Session, *, product_id: int) -> ProductRead:
         ).one_or_none()
     ):
         raise NotFoundException("Product not found")
-    product.deleted_at = datetime.utcnow()
+    product.deleted_at = datetime.now(UTC)
     session.commit()
     return ProductRead.model_validate(product)
 

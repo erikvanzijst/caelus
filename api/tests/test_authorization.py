@@ -15,6 +15,7 @@ from tests.conftest import (
     OTHER_EMAIL,
     USER_AUTH_HEADER,
     USER_EMAIL,
+    create_free_plan_template,
 )
 from app.db import get_session
 from app.main import app as fastapi_app
@@ -71,11 +72,15 @@ def authz_setup(db_session):
         # Make it the canonical template
         admin_client.put(f"/api/products/{product_id}", json={"template_id": template_id})
 
+        # Create a free plan for this product
+        ptv_id = create_free_plan_template(db_session, product_id)
+
         # Create a deployment for the regular user (as admin)
         deployment = admin_client.post(
             f"/api/users/{user.id}/deployments",
             json={
                 "desired_template_id": template_id,
+                "plan_template_id": ptv_id,
                 "user_values_json": {"user": {"host": "authz.example.com"}},
             },
         )
@@ -91,6 +96,7 @@ def authz_setup(db_session):
             "product_id": product_id,
             "template_id": template_id,
             "deployment_id": deployment_id,
+            "plan_template_id": ptv_id,
         }
 
     fastapi_app.dependency_overrides.clear()
@@ -200,6 +206,7 @@ def test_other_user_rejected_from_resources(authz_setup):
         ("DELETE", f"/api/users/{s['user'].id}/deployments/{s['deployment_id']}", None),
         ("POST", f"/api/users/{s['user'].id}/deployments", {
             "desired_template_id": s["template_id"],
+            "plan_template_id": s["plan_template_id"],
             "user_values_json": {"user": {"host": "other.example.com"}},
         }),
     ]

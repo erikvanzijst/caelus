@@ -68,7 +68,7 @@ Client                                     Server
   |                                          |      user_id=3,
   |                                          |      status='active',
   |                                          |      payment_status='current',
-  |                                          |      start_date=now())
+  |                                          |      created_at=now())
   |                                          |    Create Deployment(
   |                                          |      subscription_id=above,
   |                                          |      desired_template_id=5,
@@ -199,7 +199,7 @@ MIGRATION STEPS:
            user_id = deployment.user_id,
            status = 'active',
            payment_status = 'current',
-           start_date = deployment.created_at)
+           created_at = deployment.created_at)
 6. ALTER TABLE deployment ADD COLUMN subscription_id (nullable)
 7. UPDATE deployment SET subscription_id = matched subscription
 8. ALTER TABLE deployment ALTER COLUMN subscription_id SET NOT NULL
@@ -222,7 +222,7 @@ MIGRATION STEPS:
   deployment's product
 - **AND** each subscription has `status='active'` and
   `payment_status='current'`
-- **AND** each subscription's `start_date` matches its deployment's
+- **AND** each subscription's `created_at` matches its deployment's
   `created_at`
 
 #### Scenario: All deployments have subscription_id after migration

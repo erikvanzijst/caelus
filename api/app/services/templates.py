@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -56,7 +56,7 @@ def delete_template(
     template = session.get(ProductTemplateVersionORM, template_id)
     if not template or template.product_id != product_id:
         raise NotFoundException("Template not found")
-    template.deleted_at = datetime.utcnow()
+    template.deleted_at = datetime.now(UTC)
     session.add(template)
     session.commit()
     return ProductTemplateVersionRead.model_validate(template)

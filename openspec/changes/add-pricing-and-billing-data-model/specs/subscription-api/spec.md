@@ -40,7 +40,7 @@ that returns a single subscription with its plan template version details.
 - **GIVEN** subscription 42 exists for user 3
 - **WHEN** `GET /subscriptions/42` is called
 - **THEN** the response contains the subscription with plan template
-  version details, status, payment_status, start_date, and cancelled_at
+  version details, status, payment_status, and cancelled_at
 
 #### Scenario: Get a nonexistent subscription
 - **WHEN** `GET /subscriptions/999` is called
@@ -112,7 +112,6 @@ The subscription response resource SHALL include the following fields:
 - `user_id` -- FK to the user
 - `status` -- `active` or `cancelled`
 - `payment_status` -- `current` or `arrears`
-- `start_date` -- when the subscription began
 - `cancelled_at` -- when cancelled (null if active)
 - `external_ref` -- external payment provider reference (null if free)
 - `created_at` -- when the database record was created

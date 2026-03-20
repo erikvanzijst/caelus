@@ -86,25 +86,26 @@ plan resource.
 
 ### Requirement: Update a plan (admin only)
 
-The system SHALL provide a `PATCH /plans/{plan_id}` endpoint (admin only)
+The system SHALL provide a `PUT /plans/{plan_id}` endpoint (admin only)
 that updates a plan's mutable fields. Updatable fields: `name`,
-`template_id` (to change the canonical template version).
+`template_id` (to change the canonical template version), `sort_order`
+(display ordering on the pricing page).
 
 #### Scenario: Rename a plan
 - **GIVEN** plan 1 has name "Basic"
-- **WHEN** `PATCH /plans/1` is called with `{"name": "Starter"}`
+- **WHEN** `PUT /plans/1` is called with `{"name": "Starter"}`
 - **THEN** the plan's name is updated to "Starter"
 
 #### Scenario: Update canonical template
 - **GIVEN** plan 1 has `template_id=5`
 - **AND** a new template version 6 exists for plan 1
-- **WHEN** `PATCH /plans/1` is called with `{"template_id": 6}`
+- **WHEN** `PUT /plans/1` is called with `{"template_id": 6}`
 - **THEN** the plan's canonical template is updated to version 6
 
 #### Scenario: Update canonical template to a version from another plan
 - **GIVEN** plan 1 exists
 - **AND** template version 10 belongs to plan 2
-- **WHEN** `PATCH /plans/1` is called with `{"template_id": 10}`
+- **WHEN** `PUT /plans/1` is called with `{"template_id": 10}`
 - **THEN** the response is 400 (template does not belong to this plan)
 
 ### Requirement: Delete a plan (admin only)
@@ -125,7 +126,7 @@ The system SHALL provide a `POST /plans/{plan_id}/templates` endpoint
 (admin only) that creates a new template version for the given plan. The
 request body SHALL include `price_cents` (required), `billing_interval`
 (required), and optionally `storage_bytes`, `description`, and
-`sort_order`. The response SHALL be the created template version resource.
+The response SHALL be the created template version resource.
 
 #### Scenario: Create a template version
 - **GIVEN** plan 1 exists
@@ -158,12 +159,12 @@ The CLI SHALL provide commands equivalent to all plan API endpoints:
 
 - `plan list <product_id>` -- list plans for a product
 - `plan create <product_id> --name <name>` -- create a plan (admin)
-- `plan update <plan_id> [--name <name>] [--template-id <id>]` --
-  update a plan (admin)
+- `plan update <plan_id> [--name <name>] [--template-id <id>]
+  [--sort-order <n>]` -- update a plan (admin)
 - `plan delete <plan_id>` -- soft-delete a plan (admin)
 - `plan template create <plan_id> --price-cents <n>
   --billing-interval <interval> [--storage-bytes <n>]
-  [--description <text>] [--sort-order <n>]` -- create a template
+  [--description <text>]` -- create a template
   version (admin)
 
 #### Scenario: CLI list plans

@@ -131,7 +131,6 @@ description) SHALL NOT be modified.
   - `billing_interval` (string, NOT NULL) -- 'monthly' or 'annual'
   - `storage_bytes` (integer, nullable) -- storage quota in bytes
   - `description` (string, nullable) -- marketing copy
-  - `sort_order` (integer, nullable) -- display ordering
   - `created_at` (datetime, auto-set)
   - `deleted_at` (datetime, nullable -- for soft delete)
 

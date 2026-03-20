@@ -48,7 +48,7 @@ that returns a single subscription with its plan template version details.
 
 ### Requirement: Cancel a subscription
 
-The system SHALL provide a `PATCH /subscriptions/{subscription_id}`
+The system SHALL provide a `PUT /subscriptions/{subscription_id}`
 endpoint that allows updating the subscription's `status` to `cancelled`.
 When cancelled, `cancelled_at` SHALL be set to the current UTC timestamp.
 Cancelling an already-cancelled subscription SHALL be idempotent (no
@@ -56,7 +56,7 @@ error, no change to `cancelled_at`).
 
 #### Scenario: Cancel an active subscription
 - **GIVEN** subscription 42 is active with `payment_status='current'`
-- **WHEN** `PATCH /subscriptions/42` is called with
+- **WHEN** `PUT /subscriptions/42` is called with
   `{"status": "cancelled"}`
 - **THEN** `status` is `cancelled`
 - **AND** `cancelled_at` is set to the current UTC timestamp
@@ -64,7 +64,7 @@ error, no change to `cancelled_at`).
 
 #### Scenario: Cancel an active subscription in arrears
 - **GIVEN** subscription 42 is active with `payment_status='arrears'`
-- **WHEN** `PATCH /subscriptions/42` is called with
+- **WHEN** `PUT /subscriptions/42` is called with
   `{"status": "cancelled"}`
 - **THEN** `status` is `cancelled`
 - **AND** `payment_status` remains `arrears`
@@ -73,33 +73,33 @@ error, no change to `cancelled_at`).
 #### Scenario: Cancel an already-cancelled subscription
 - **GIVEN** subscription 42 is already cancelled with
   `cancelled_at='2026-03-15T10:00:00Z'`
-- **WHEN** `PATCH /subscriptions/42` is called with
+- **WHEN** `PUT /subscriptions/42` is called with
   `{"status": "cancelled"}`
 - **THEN** the response is 200
 - **AND** `cancelled_at` is unchanged (still '2026-03-15T10:00:00Z')
 
 #### Scenario: Reactivate a cancelled subscription
 - **GIVEN** subscription 42 is cancelled
-- **WHEN** `PATCH /subscriptions/42` is called with
+- **WHEN** `PUT /subscriptions/42` is called with
   `{"status": "active"}`
 - **THEN** the response is 400 (reactivation is not supported in v1)
 
 ### Requirement: Update payment status
 
 The system SHALL allow updating a subscription's `payment_status` via
-`PATCH /subscriptions/{subscription_id}`. Valid transitions:
+`PUT /subscriptions/{subscription_id}`. Valid transitions:
 `current` to `arrears` and `arrears` to `current`.
 
 #### Scenario: Mark subscription as in arrears
 - **GIVEN** subscription 42 is active with `payment_status='current'`
-- **WHEN** `PATCH /subscriptions/42` is called with
+- **WHEN** `PUT /subscriptions/42` is called with
   `{"payment_status": "arrears"}`
 - **THEN** `payment_status` is `arrears`
 - **AND** `status` remains `active`
 
 #### Scenario: Resolve arrears
 - **GIVEN** subscription 42 has `payment_status='arrears'`
-- **WHEN** `PATCH /subscriptions/42` is called with
+- **WHEN** `PUT /subscriptions/42` is called with
   `{"payment_status": "current"}`
 - **THEN** `payment_status` is `current`
 

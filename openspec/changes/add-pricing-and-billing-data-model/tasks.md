@@ -1,7 +1,7 @@
 ## 1. Plan Data Model
 
-- [ ] 1.1 Create `PlanORM` SQLModel class in `api/app/models.py` with fields: `id`, `product_id` (FK to ProductORM, NOT NULL, indexed), `name` (str), `template_id` (FK to PlanTemplateVersionORM, nullable), `created_at`, `deleted_at`. Add partial unique index on `(product_id, lowercase(name))` where `deleted_at IS NULL`.
-- [ ] 1.2 Create `PlanTemplateVersionORM` SQLModel class in `api/app/models.py` with fields: `id`, `plan_id` (FK to PlanORM, NOT NULL, indexed), `price_cents` (int, NOT NULL), `billing_interval` (str, NOT NULL -- 'monthly' or 'annual'), `storage_bytes` (int, nullable), `description` (str, nullable), `sort_order` (int, nullable), `created_at`, `deleted_at`.
+- [ ] 1.1 Create `PlanORM` SQLModel class in `api/app/models.py` with fields: `id`, `product_id` (FK to ProductORM, NOT NULL, indexed), `name` (str), `template_id` (FK to PlanTemplateVersionORM, nullable), `sort_order` (int, nullable), `created_at`, `deleted_at`. Add partial unique index on `(product_id, lowercase(name))` where `deleted_at IS NULL`.
+- [ ] 1.2 Create `PlanTemplateVersionORM` SQLModel class in `api/app/models.py` with fields: `id`, `plan_id` (FK to PlanORM, NOT NULL, indexed), `price_cents` (int, NOT NULL), `billing_interval` (str, NOT NULL -- 'monthly' or 'annual'), `storage_bytes` (int, nullable), `description` (str, nullable), `created_at`, `deleted_at`.
 - [ ] 1.3 Add SQLAlchemy relationships: `PlanORM.templates` (one-to-many), `PlanORM.template` (canonical, via template_id FK), `PlanORM.product` (many-to-one), `ProductORM.plans` (one-to-many), `PlanTemplateVersionORM.plan` (many-to-one).
 - [ ] 1.4 Create Pydantic read/create/update models: `PlanCreate`, `PlanUpdate`, `PlanRead`, `PlanTemplateVersionCreate`, `PlanTemplateVersionRead`.
 
@@ -44,7 +44,7 @@
 - [ ] 7.2 `GET /products/{product_id}/plans` -- list visible plans for a product (public).
 - [ ] 7.3 `GET /plans/{plan_id}` -- get a single plan with canonical template details.
 - [ ] 7.4 `POST /products/{product_id}/plans` -- create a plan (admin only).
-- [ ] 7.5 `PATCH /plans/{plan_id}` -- update plan name or canonical template_id (admin only).
+- [ ] 7.5 `PUT /plans/{plan_id}` -- update plan name, sort_order, or canonical template_id (admin only).
 - [ ] 7.6 `DELETE /plans/{plan_id}` -- soft-delete a plan (admin only).
 - [ ] 7.7 `POST /plans/{plan_id}/templates` -- create a new plan template version (admin only).
 
@@ -53,7 +53,7 @@
 - [ ] 8.1 Create `api/app/api/subscriptions.py` route module.
 - [ ] 8.2 `GET /users/{user_id}/subscriptions` -- list subscriptions for a user.
 - [ ] 8.3 `GET /subscriptions/{subscription_id}` -- get a single subscription.
-- [ ] 8.4 `PATCH /subscriptions/{subscription_id}` -- cancel a subscription or update payment status.
+- [ ] 8.4 `PUT /subscriptions/{subscription_id}` -- cancel a subscription or update payment status.
 
 ## 9. CLI Commands
 

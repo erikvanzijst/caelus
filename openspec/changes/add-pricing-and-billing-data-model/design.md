@@ -449,11 +449,10 @@ This is a phased rollout:
 | description |       | name         |       | price_cents                |
 | template_id |       | template_id  |<--ref-| billing_interval           |
 | created_at  |       |  (canonical) |       |  (monthly|annual)          |
-| deleted_at  |       | created_at   |       | storage_bytes              |
-+-------------+       | deleted_at   |       | description                |
-                      +--------------+       | sort_order                 |
-                                             | created_at                 |
-                                             | deleted_at                 |
+| deleted_at  |       | sort_order   |       | storage_bytes              |
++-------------+       | created_at   |       | description                |
+                      | deleted_at   |       | created_at                 |
+                      +--------------+       | deleted_at                 |
                                              +----------------------------+
                                                           |
                                                      1:N  | plan_template_id
@@ -493,7 +492,7 @@ GET /plans/{id}                         Get a single plan with its
 
 ```
 POST   /products/{product_id}/plans     Create a new plan for a product
-PATCH  /plans/{id}                      Update plan name or canonical
+PUT    /plans/{id}                      Update plan name or canonical
                                           template_id
 DELETE /plans/{id}                       Soft-delete a plan
 POST   /plans/{plan_id}/templates       Create a new plan template version
@@ -504,7 +503,7 @@ POST   /plans/{plan_id}/templates       Create a new plan template version
 ```
 GET    /users/{user_id}/subscriptions   List subscriptions for a user
 GET    /subscriptions/{id}              Get a single subscription
-PATCH  /subscriptions/{id}              Update status (cancel) or
+PUT    /subscriptions/{id}              Update status (cancel) or
                                           payment_status
 ```
 
@@ -570,7 +569,5 @@ Client                                     Server
 - **Grace period**: When a subscription enters arrears, how long before
   service is suspended or cancelled? This is a business policy question
   that affects the billing workflow, not the data model.
-- **Plan ordering on the pricing page**: `sort_order` on
-  PlanTemplateVersionORM controls display order. Should this be on PlanORM
-  instead (stable across version changes)? Minor decision for
-  implementation.
+- **Plan ordering on the pricing page**: `sort_order` lives on PlanORM
+  so it is stable across template version changes.

@@ -1,0 +1,82 @@
+# NaaS — No As A Service
+
+A service that serves a random "NO" meme image on every request.
+
+Every time you hit the endpoint, you get a different NO meme — Grumpy Cat,
+Michael Scott, Darth Vader, Dikembe Mutombo, and more.
+
+## How it works
+
+- A lightweight Python HTTP server runs inside a `python:3.12-alpine` container
+- 11 classic NO meme images are baked into the chart as a ConfigMap (`binaryData`)
+- Each HTTP request returns a randomly selected image with appropriate headers
+- `Cache-Control: no-store` ensures every refresh gives you a fresh NO
+- The `X-No-Meme` response header tells you which meme you got
+
+## Endpoints
+
+| Path       | Description                  |
+|------------|------------------------------|
+| `/`        | Random NO meme image         |
+| `/healthz` | Health check (returns `ok`)  |
+
+## Quick test
+
+```bash
+helm template demo ./products/naas/chart \
+  --set ingress.host=no.example.com
+```
+
+## Publish to docker registry
+
+```bash
+helm lint ./products/naas/chart
+helm package ./products/naas/chart --destination ./build
+helm push ./build/naas-0.1.0.tgz oci://registry.home:80/helm --plain-http
+```
+
+## Caelus product template
+
+Create a new NaaS product in the Admin UI and add a template with the following values:
+
+- Chart: `oci://registry.home:80/helm/naas`
+- Tag: `0.1.0`
+
+Default values:
+
+```json
+{
+  "ingress": {
+    "enabled": true,
+    "className": "traefik"
+  }
+}
+```
+
+### User values schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string",
+          "title": "Hostname",
+          "minLength": 1,
+          "description": "The hostname name for this glorious service"
+        }
+      },
+      "required": ["host"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["ingress"],
+  "additionalProperties": false
+}
+```

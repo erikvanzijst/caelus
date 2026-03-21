@@ -150,11 +150,15 @@ export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete,
                 )}
               </Stack>
             </Stack>
-            {price && (
-              <Typography variant="h4" color="primary">
-                {price}
-              </Typography>
-            )}
+            <Typography
+              variant="h4"
+              sx={price
+                ? { color: 'primary.main' }
+                : { color: 'text.disabled'}
+              }
+            >
+              {price ?? 'TBD'}
+            </Typography>
             {plan!.description && (
               <Box
                 sx={{

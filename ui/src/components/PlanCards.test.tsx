@@ -208,8 +208,8 @@ describe('PlanCards', () => {
     }
     render(<PlanCards {...defaultProps} plans={[...defaultProps.plans, planNoTemplate]} />)
     expect(screen.getByText('Draft')).toBeInTheDocument()
-    // No price should be displayed for this card
-    expect(screen.queryByText('No template')).not.toBeInTheDocument()
+    // Shows placeholder price
+    expect(screen.getByText('TBD')).toBeInTheDocument()
   })
 })
 

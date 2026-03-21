@@ -1,5 +1,5 @@
 import { requestJson, requestMultipart } from './client'
-import type { Deployment, HostnameCheckResult, Product, ProductTemplate, User } from './types'
+import type { Deployment, HostnameCheckResult, Plan, PlanTemplateVersion, Product, ProductTemplate, User } from './types'
 
 export function getMe() {
   return requestJson<User>('/me')
@@ -78,6 +78,35 @@ export function createTemplate(
 export function deleteTemplate(productId: number, templateId: number) {
   return requestJson<null>(`/products/${productId}/templates/${templateId}`, {
     method: 'DELETE',
+  })
+}
+
+export function listPlans(productId: number) {
+  return requestJson<Plan[]>(`/products/${productId}/plans`)
+}
+
+export function createPlan(productId: number, payload: { name: string; description?: string | null; sort_order?: number | null }) {
+  return requestJson<Plan>(`/products/${productId}/plans`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updatePlan(planId: number, payload: { name?: string; description?: string | null; template_id?: number; sort_order?: number | null }) {
+  return requestJson<Plan>(`/plans/${planId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deletePlan(planId: number) {
+  return requestJson<null>(`/plans/${planId}`, { method: 'DELETE' })
+}
+
+export function createPlanTemplate(planId: number, payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null }) {
+  return requestJson<PlanTemplateVersion>(`/plans/${planId}/templates`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }
 

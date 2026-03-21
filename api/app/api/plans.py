@@ -84,6 +84,15 @@ def delete_plan(
 # ---------------------------------------------------------------------------
 
 
+@router.get("/plans/{plan_id}/templates", response_model=list[PlanTemplateVersionRead])
+def list_plan_templates(
+    plan_id: int,
+    _current_user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> list[PlanTemplateVersionRead]:
+    return plan_service.list_plan_template_versions(session, plan_id)
+
+
 @router.post(
     "/plans/{plan_id}/templates",
     response_model=PlanTemplateVersionRead,

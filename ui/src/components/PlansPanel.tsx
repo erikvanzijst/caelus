@@ -1,11 +1,12 @@
-import { Alert, Divider, Stack, Typography } from '@mui/material'
+import { Alert, Card, Divider, Stack, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { createPlan, deletePlan, listPlans, listProducts, updatePlan } from '../api/endpoints'
+import { createPlan, deletePlan, listPlanTemplates, listPlans, listProducts, updatePlan } from '../api/endpoints'
 import type { Plan, Product } from '../api/types'
 import { useAuth } from '../state/AuthContext'
 import { ProductList } from './ProductList'
 import { PlanCards } from './PlanCards'
+import { PlanTemplateTabs } from './PlanTemplateTabs'
 
 function readSelectedProduct(): number | null {
   const raw = sessionStorage.getItem('admin.selectedProduct')
@@ -112,6 +113,12 @@ export function PlansPanel() {
     onError: (err: Error) => setError(err.message),
   })
 
+  const planTemplatesQuery = useQuery({
+    queryKey: ['plan-templates', selectedPlan?.id],
+    queryFn: () => listPlanTemplates(selectedPlan!.id),
+    enabled: selectedPlan !== undefined,
+  })
+
   const saving = createPlanMutation.isPending || updatePlanMutation.isPending
 
   return (
@@ -148,9 +155,13 @@ export function PlansPanel() {
       {selectedPlan && (
         <>
           <Divider />
-          <Typography color="text.secondary">
-            Template versions for plan &ldquo;{selectedPlan.name}&rdquo; will appear here.
-          </Typography>
+          <Card>
+            <PlanTemplateTabs
+              plan={selectedPlan}
+              templates={planTemplatesQuery.data ?? []}
+              onError={(err) => setError(err.message)}
+            />
+          </Card>
         </>
       )}
     </Stack>

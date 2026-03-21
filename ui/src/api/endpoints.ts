@@ -103,6 +103,10 @@ export function deletePlan(planId: number) {
   return requestJson<null>(`/plans/${planId}`, { method: 'DELETE' })
 }
 
+export function listPlanTemplates(planId: number) {
+  return requestJson<PlanTemplateVersion[]>(`/plans/${planId}/templates`)
+}
+
 export function createPlanTemplate(planId: number, payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null }) {
   return requestJson<PlanTemplateVersion>(`/plans/${planId}/templates`, {
     method: 'POST',

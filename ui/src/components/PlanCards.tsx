@@ -64,7 +64,7 @@ function SortablePlanCard({ plan, selected, onSelect, onSave, onDelete, saving }
   return (
     <Grid
       ref={setNodeRef}
-      size={{ xs: 12, sm: 6, md: 4 }}
+      size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
@@ -140,7 +140,7 @@ export function PlanCards({
               saving={saving}
             />
           ))}
-          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
             {showNewForm || selectedPlanId === 'new' ? (
               <PlanCard
                 onSave={(data) => {

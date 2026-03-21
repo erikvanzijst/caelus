@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import ConfigDict
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import Column, Enum as SAEnum, ForeignKey, Integer, Index, Text, func
+from sqlalchemy import BigInteger, Column, Enum as SAEnum, ForeignKey, Integer, Index, Text, func
 
 from app.models.core import _utcnow, ProductORM, UserORM
 
@@ -120,7 +120,9 @@ class PlanTemplateVersionORM(PlanTemplateVersionBase, table=True):
             nullable=False,
         )
     )
-    storage_bytes: Optional[int] = Field(default=None)
+    storage_bytes: Optional[int] = Field(
+        default=None, sa_column=Column(BigInteger, nullable=True)
+    )
     created_at: datetime = Field(default_factory=_utcnow, nullable=False)
     deleted_at: Optional[datetime] = Field(default=None)
 

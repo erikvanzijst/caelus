@@ -108,6 +108,9 @@ function Dashboard() {
                       <Typography variant="h6" noWrap>{deployment.hostname}</Typography>
                       <Typography variant="body2" color="text.secondary">
                         {deployment.desired_template?.product?.name ?? 'Unknown product'}
+                        {deployment.subscription?.plan_template?.plan?.name
+                          ? ` — ${deployment.subscription.plan_template.plan.name}`
+                          : ''}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Created {formatDateTime(deployment.created_at)}

@@ -18,6 +18,13 @@ const columns: GridColDef<Deployment>[] = [
     valueGetter: (_value, row) => row.applied_template?.product?.name ?? row.desired_template?.product?.name ?? '',
   },
   {
+    field: 'plan',
+    headerName: 'Plan',
+    flex: 0.8,
+    minWidth: 100,
+    valueGetter: (_value, row) => row.subscription?.plan_template?.plan?.name ?? '',
+  },
+  {
     field: 'hostname',
     headerName: 'Hostname',
     flex: 1.5,

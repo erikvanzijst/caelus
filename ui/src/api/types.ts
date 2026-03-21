@@ -37,6 +37,38 @@ export interface HostnameCheckResult {
   reason: string | null
 }
 
+export interface Plan {
+  id: number
+  name: string
+  description?: string | null
+  product_id: number
+  template_id?: number | null
+  sort_order?: number | null
+  created_at: IsoDate
+}
+
+export interface PlanTemplateVersion {
+  id: number
+  plan_id: number
+  price_cents: number
+  billing_interval: 'monthly' | 'annual'
+  storage_bytes?: number | null
+  created_at: IsoDate
+  plan?: Plan | null
+}
+
+export interface Subscription {
+  id: number
+  plan_template_id: number
+  user_id: number
+  status: 'active' | 'cancelled'
+  payment_status: 'current' | 'arrears'
+  cancelled_at?: IsoDate | null
+  external_ref?: string | null
+  created_at: IsoDate
+  plan_template?: PlanTemplateVersion | null
+}
+
 export interface Deployment {
   desired_template_id: number
   hostname: string | null
@@ -47,6 +79,8 @@ export interface Deployment {
   user: User
   desired_template: ProductTemplate
   applied_template?: ProductTemplate | null
+  subscription_id?: number | null
+  subscription?: Subscription | null
   name?: string | null
   namespace?: string | null
   status?: DeploymentStatus

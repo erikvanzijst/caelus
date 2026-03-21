@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import { AuthProvider } from './state/AuthContext'
 import { ProductsPanel } from './components/ProductsPanel'
 import { DeploymentsPanel } from './components/DeploymentsPanel'
+import { PlansPanel } from './components/PlansPanel'
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
             <Route index element={<Navigate to="products" replace />} />
             <Route path="products" element={<ProductsPanel />} />
             <Route path="deployments" element={<DeploymentsPanel />} />
+            <Route path="plans" element={<PlansPanel />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

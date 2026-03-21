@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.models import DeploymentCreate, DeploymentORM, ProductORM
 from app.services import deployments, products, templates, users
 from app.services.reconcile import DeploymentReconciler
+from tests.conftest import create_free_plan_template
 from tests.provisioner_utils import FakeProvisioner
 
 
@@ -44,12 +45,14 @@ def _seed_deployment(db_session) -> int:
     product_orm.template_id = template.id
     db_session.add(product_orm)
     db_session.commit()
+    ptv_id = create_free_plan_template(db_session, product.id)
     deployment = deployments.create_deployment(
         db_session,
         payload=DeploymentCreate(
             user_id=user.id,
             desired_template_id=template.id,
             user_values_json={"user": {"message": "hello", "domain": "reconcile.example.test"}},
+            plan_template_id=ptv_id,
         ),
     )
     return deployment.id
@@ -82,7 +85,7 @@ def test_reconcile_delete_returns_deleted_when_marked_deleted(db_session) -> Non
     deployment_id = _seed_deployment(db_session)
     deployment = db_session.get(DeploymentORM, deployment_id)
     assert deployment is not None
-    deployment.deleted_at = datetime.utcnow()
+    deployment.deleted_at = datetime.now(UTC)
     db_session.add(deployment)
     db_session.commit()
 

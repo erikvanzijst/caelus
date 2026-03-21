@@ -1,6 +1,7 @@
 from starlette.testclient import TestClient
 
 from tests.conftest import client, db_session
+from tests.conftest import create_free_plan_template
 
 from app.db import get_session
 from app.main import app as fastapi_app
@@ -122,7 +123,7 @@ def test_product_deletion(client):
     assert resp.status_code == 204
 
 
-def test_user_deployment_flow(client):
+def test_user_deployment_flow(client, db_session):
     user = client.post("/api/users", json={"email": "user@example.com"})
     assert user.status_code == 201
     user_id = user.json()["id"]
@@ -155,11 +156,14 @@ def test_user_deployment_flow(client):
     # Make it the canonical template
     client.put(f"/api/products/{product_id}", json={"template_id": template_id})
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     deployment = client.post(
         f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": template_id,
             "user_values_json": {"user": {"host": "cloud.example.com"}},
+            "plan_template_id": ptv_id,
         },
     )
     assert deployment.status_code == 201
@@ -174,7 +178,7 @@ def test_user_deployment_flow(client):
     assert fetched.json()["hostname"] == "cloud.example.com"
 
 
-def test_user_deployment_flow_with_user_values(client):
+def test_user_deployment_flow_with_user_values(client, db_session):
     user = client.post("/api/users", json={"email": "user-values@example.com"})
     assert user.status_code == 201
     user_id = user.json()["id"]
@@ -214,11 +218,14 @@ def test_user_deployment_flow_with_user_values(client):
     # Make it the canonical template
     client.put(f"/api/products/{product_id}", json={"template_id": template_id})
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     deployment = client.post(
         f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": template_id,
             "user_values_json": {"user": {"message": "hi", "domain": "values.example.com"}},
+            "plan_template_id": ptv_id,
         },
     )
     assert deployment.status_code == 201
@@ -226,7 +233,7 @@ def test_user_deployment_flow_with_user_values(client):
     assert deployment.json()["user_values_json"] == {"user": {"message": "hi", "domain": "values.example.com"}}
 
 
-def test_deployment_write_contract_rejects_hostname(client):
+def test_deployment_write_contract_rejects_hostname(client, db_session):
     user = client.post("/api/users", json={"email": "contract@example.com"})
     assert user.status_code == 201
     user_id = user.json()["id"]
@@ -268,15 +275,17 @@ def test_deployment_write_contract_rejects_hostname(client):
     assert template_2.status_code == 201
     template_2_id = template_2.json()["id"]
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     bad_create = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_1_id, "hostname": "bad.example.com"},
+        json={"desired_template_id": template_1_id, "hostname": "bad.example.com", "plan_template_id": ptv_id},
     )
     assert bad_create.status_code == 422
 
     created = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_1_id, "user_values_json": {"user": {}}},
+        json={"desired_template_id": template_1_id, "user_values_json": {"user": {}}, "plan_template_id": ptv_id},
     )
     assert created.status_code == 201
     deployment_id = created.json()["id"]

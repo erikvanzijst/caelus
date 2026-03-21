@@ -5,6 +5,7 @@ from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_READY,
 )
 from tests.conftest import client, db_session, user_client, USER_AUTH_HEADER
+from tests.conftest import create_free_plan_template
 from sqlmodel import select
 
 from app.models import DeploymentORM, DeploymentReconcileJobORM, UserORM
@@ -60,9 +61,11 @@ def test_delete_deployment_flow(client, db_session):
     # Make it the canonical template
     client.put(f"/api/products/{product_id}", json={"template_id": template_id})
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     deployment_resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_id, "user_values_json": {"ingress": {"host": "cloud.example.com"}}},
+        json={"desired_template_id": template_id, "user_values_json": {"ingress": {"host": "cloud.example.com"}}, "plan_template_id": ptv_id},
     )
     assert deployment_resp.status_code == 201
     deployment_id = deployment_resp.json()["id"]
@@ -158,11 +161,14 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
     assert tmpl2_resp.status_code == 201
     tmpl2_id = tmpl2_resp.json()["id"]
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": tmpl1_id,
             "user_values_json": {"user": {"domain": "upgrade-api.example.test"}},
+            "plan_template_id": ptv_id,
         },
     )
     assert dep_resp.status_code == 201
@@ -187,7 +193,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
     assert len(update_jobs) == 1
 
 
-def test_create_deployment_user_values_with_empty_schema(client):
+def test_create_deployment_user_values_with_empty_schema(client, db_session):
     user_resp = client.post("/api/users", json={"email": "noscope@example.com"})
     assert user_resp.status_code == 201
     user_id = user_resp.json()["id"]
@@ -212,17 +218,20 @@ def test_create_deployment_user_values_with_empty_schema(client):
     # Make it the canonical template
     client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": tmpl_id,
             "user_values_json": {"message": "hello"},
+            "plan_template_id": ptv_id,
         },
     )
     assert dep_resp.status_code == 201
 
 
-def test_create_deployment_rejects_unknown_user_keys_against_schema(client):
+def test_create_deployment_rejects_unknown_user_keys_against_schema(client, db_session):
     user_resp = client.post("/api/users", json={"email": "unknownkeys@example.com"})
     assert user_resp.status_code == 201
     user_id = user_resp.json()["id"]
@@ -258,18 +267,21 @@ def test_create_deployment_rejects_unknown_user_keys_against_schema(client):
     # Make it the canonical template
     client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": tmpl_id,
             "user_values_json": {"message": "hello", "extra": True},
+            "plan_template_id": ptv_id,
         },
     )
     assert dep_resp.status_code == 409
     assert "invalid" in dep_resp.json()["detail"]
 
 
-def test_create_deployment_derives_hostname_recursively_case_insensitive_and_first_match(client):
+def test_create_deployment_derives_hostname_recursively_case_insensitive_and_first_match(client, db_session):
     user_resp = client.post("/api/users", json={"email": "recursive@example.com"})
     assert user_resp.status_code == 201
     user_id = user_resp.json()["id"]
@@ -305,11 +317,14 @@ def test_create_deployment_derives_hostname_recursively_case_insensitive_and_fir
     # Make it the canonical template
     client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
         json={
             "desired_template_id": tmpl_id,
             "user_values_json": {"outer_first": "first.example.test", "nested": {"inner": "second.example.test"}},
+            "plan_template_id": ptv_id,
         },
     )
     assert dep_resp.status_code == 201
@@ -351,9 +366,11 @@ def test_update_deployment_rederives_hostname_from_user_values(client, db_sessio
     assert tmpl2_resp.status_code == 201
     tmpl2_id = tmpl2_resp.json()["id"]
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": tmpl1_id, "user_values_json": {"domain": "before.example.test", "user": {}}},
+        json={"desired_template_id": tmpl1_id, "user_values_json": {"domain": "before.example.test", "user": {}}, "plan_template_id": ptv_id},
     )
     assert dep_resp.status_code == 201
     dep_id = dep_resp.json()["id"]
@@ -393,9 +410,11 @@ def test_same_version_update_with_new_values(client, db_session):
     # Make it the canonical template
     client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "same.example.test", "color": "red"}},
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "same.example.test", "color": "red"}, "plan_template_id": ptv_id},
     )
     dep_id = dep_resp.json()["id"]
     _finish_create_job(db_session, dep_id)
@@ -435,9 +454,11 @@ def test_update_deployment_rejects_non_ready_status(client, db_session):
     # Make it the canonical template
     client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "notready.example.test"}},
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "notready.example.test"}, "plan_template_id": ptv_id},
     )
     dep_id = dep_resp.json()["id"]
 
@@ -473,9 +494,11 @@ def test_update_deployment_rejects_non_ready_error_status(client, db_session):
     # Make it the canonical template
     client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
 
+    ptv_id = create_free_plan_template(db_session, product_id)
+
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "errstate.example.test"}},
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "errstate.example.test"}, "plan_template_id": ptv_id},
     )
     dep_id = dep_resp.json()["id"]
 
@@ -492,7 +515,7 @@ def test_update_deployment_rejects_non_ready_error_status(client, db_session):
     assert update_resp.status_code == 409
 
 
-def _create_deployment_for_user(client, user_id, product_suffix=""):
+def _create_deployment_for_user(client, db_session, user_id, product_suffix=""):
     """Helper: create a product, template, and deployment for a user."""
     product_resp = client.post(
         "/api/products",
@@ -509,9 +532,10 @@ def _create_deployment_for_user(client, user_id, product_suffix=""):
     )
     tmpl_id = tmpl_resp.json()["id"]
     client.put(f"/api/products/{product_id}", json={"template_id": tmpl_id})
+    ptv_id = create_free_plan_template(db_session, product_id)
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": tmpl_id},
+        json={"desired_template_id": tmpl_id, "plan_template_id": ptv_id},
     )
     assert dep_resp.status_code == 201
     return dep_resp.json()["id"]
@@ -522,7 +546,7 @@ def test_list_deployments_excludes_deleted(client, db_session):
     user_resp = client.post("/api/users", json={"email": "excl@example.com"})
     user_id = user_resp.json()["id"]
 
-    dep_id = _create_deployment_for_user(client, user_id, "-excl")
+    dep_id = _create_deployment_for_user(client, db_session, user_id, "-excl")
 
     # Mark deployment as deleted
     deployment = db_session.get(DeploymentORM, dep_id)
@@ -540,7 +564,7 @@ def test_list_deployments_includes_deleting(client, db_session):
     user_resp = client.post("/api/users", json={"email": "deleting@example.com"})
     user_id = user_resp.json()["id"]
 
-    dep_id = _create_deployment_for_user(client, user_id, "-deleting")
+    dep_id = _create_deployment_for_user(client, db_session, user_id, "-deleting")
 
     deployment = db_session.get(DeploymentORM, dep_id)
     deployment.status = DEPLOYMENT_STATUS_DELETING
@@ -560,8 +584,8 @@ def test_admin_list_all_deployments(client, db_session):
     user2_resp = client.post("/api/users", json={"email": "admin-list2@example.com"})
     user2_id = user2_resp.json()["id"]
 
-    dep1_id = _create_deployment_for_user(client, user1_id, "-admin1")
-    dep2_id = _create_deployment_for_user(client, user2_id, "-admin2")
+    dep1_id = _create_deployment_for_user(client, db_session, user1_id, "-admin1")
+    dep2_id = _create_deployment_for_user(client, db_session, user2_id, "-admin2")
 
     resp = client.get("/api/deployments")
     assert resp.status_code == 200
@@ -575,7 +599,7 @@ def test_admin_list_deployments_excludes_deleted(client, db_session):
     user_resp = client.post("/api/users", json={"email": "admin-excl@example.com"})
     user_id = user_resp.json()["id"]
 
-    dep_id = _create_deployment_for_user(client, user_id, "-admin-excl")
+    dep_id = _create_deployment_for_user(client, db_session, user_id, "-admin-excl")
 
     deployment = db_session.get(DeploymentORM, dep_id)
     deployment.status = DEPLOYMENT_STATUS_DELETED

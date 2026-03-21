@@ -7,6 +7,7 @@ from app.models import DeploymentReconcileJobORM, ProductORM
 from app.services import deployments, products, templates, users
 from app.services.jobs import JobService
 from app.services.errors import IntegrityException
+from tests.conftest import create_free_plan_template
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_PROVISIONING,
     DEPLOYMENT_STATUS_DELETING,
@@ -48,11 +49,12 @@ def _setup_user_and_templates(db_session):
     product_orm.template_id = template_v1.id
     db_session.add(product_orm)
     db_session.commit()
-    return user, template_v1, template_v2
+    ptv_id = create_free_plan_template(db_session, product.id)
+    return user, template_v1, template_v2, ptv_id
 
 
 def test_create_deployment_enqueues_create_job(db_session):
-    user, template_v1, _ = _setup_user_and_templates(db_session)
+    user, template_v1, _, ptv_id = _setup_user_and_templates(db_session)
 
     dep = deployments.create_deployment(
         db_session,
@@ -60,6 +62,7 @@ def test_create_deployment_enqueues_create_job(db_session):
             user_id=user.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "queue-create.example.test"},
+            plan_template_id=ptv_id,
         ),
     )
 
@@ -73,13 +76,14 @@ def test_create_deployment_enqueues_create_job(db_session):
 
 
 def test_delete_deployment_sets_state_and_enqueues_delete_job(db_session):
-    user, template_v1, _ = _setup_user_and_templates(db_session)
+    user, template_v1, _, ptv_id = _setup_user_and_templates(db_session)
     dep = deployments.create_deployment(
         db_session,
         payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "queue-delete.example.test"},
+            plan_template_id=ptv_id,
         ),
     )
 
@@ -105,13 +109,14 @@ def test_delete_deployment_sets_state_and_enqueues_delete_job(db_session):
 
 
 def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
-    user, template_v1, template_v2 = _setup_user_and_templates(db_session)
+    user, template_v1, template_v2, ptv_id = _setup_user_and_templates(db_session)
     dep = deployments.create_deployment(
         db_session,
         payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "queue-upgrade.example.test"},
+            plan_template_id=ptv_id,
         ),
     )
 
@@ -149,13 +154,14 @@ def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
 
 def test_update_rejects_non_ready_deployment(db_session):
     """Update is rejected when deployment is not in 'ready' state (e.g. still provisioning)."""
-    user, template_v1, template_v2 = _setup_user_and_templates(db_session)
+    user, template_v1, template_v2, ptv_id = _setup_user_and_templates(db_session)
     dep = deployments.create_deployment(
         db_session,
         payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "queue-rollback.example.test"},
+            plan_template_id=ptv_id,
         ),
     )
 

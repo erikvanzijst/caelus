@@ -55,3 +55,7 @@ from app.models.billing import (  # noqa: F401
     SubscriptionRead,
     SubscriptionStatus,
 )
+
+# Rebuild DeploymentRead so Pydantic resolves the SubscriptionRead
+# forward reference (defined in billing.py, referenced in core.py).
+DeploymentRead.model_rebuild()

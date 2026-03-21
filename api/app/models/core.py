@@ -308,6 +308,7 @@ class DeploymentRead(DeploymentBase):
     desired_template: ProductTemplateVersionRead
     applied_template: Optional[ProductTemplateVersionRead]
     subscription_id: Optional[int] = None
+    subscription: Optional["SubscriptionRead"] = None
     name: Optional[str] = None
     namespace: Optional[str] = None
     status: str = Field(default="pending")

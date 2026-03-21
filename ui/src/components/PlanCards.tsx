@@ -51,6 +51,7 @@ interface SortablePlanCardProps {
 }
 
 function SortablePlanCard({ plan, selected, onSelect, onSave, onDelete, saving }: SortablePlanCardProps) {
+  const [isEditing, setIsEditing] = useState(false)
   const {
     attributes,
     listeners,
@@ -58,7 +59,7 @@ function SortablePlanCard({ plan, selected, onSelect, onSave, onDelete, saving }
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: plan.id })
+  } = useSortable({ id: plan.id, disabled: isEditing })
 
   return (
     <Grid
@@ -70,7 +71,7 @@ function SortablePlanCard({ plan, selected, onSelect, onSave, onDelete, saving }
         opacity: isDragging ? 0.5 : 1,
       }}
       {...attributes}
-      {...listeners}
+      {...(isEditing ? {} : listeners)}
     >
       <PlanCard
         plan={plan}
@@ -78,6 +79,7 @@ function SortablePlanCard({ plan, selected, onSelect, onSave, onDelete, saving }
         onSelect={onSelect}
         onSave={onSave}
         onDelete={onDelete}
+        onEditingChange={setIsEditing}
         saving={saving}
       />
     </Grid>

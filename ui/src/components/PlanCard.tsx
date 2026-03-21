@@ -28,12 +28,18 @@ interface PlanCardProps {
   onSave: (data: { name: string; description: string }) => void
   onCancel?: () => void
   onDelete?: () => void
+  onEditingChange?: (editing: boolean) => void
   saving?: boolean
 }
 
-export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete, saving }: PlanCardProps) {
+export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete, onEditingChange, saving }: PlanCardProps) {
   const isNew = !plan
-  const [editing, setEditing] = useState(isNew)
+  const [editing, setEditingRaw] = useState(isNew)
+
+  function setEditing(value: boolean) {
+    setEditingRaw(value)
+    onEditingChange?.(value)
+  }
   const [name, setName] = useState(plan?.name ?? '')
   const [description, setDescription] = useState(plan?.description ?? '')
 

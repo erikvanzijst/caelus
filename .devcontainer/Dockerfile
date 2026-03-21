@@ -55,6 +55,7 @@ RUN npm i -g @qwen-code/qwen-code@latest
 RUN npm i -g @fission-ai/openspec@latest
 RUN mkdir /workspace && chown vscode:vscode /workspace
 
+ENV LANG="en_US.UTF-8"
 ENV PATH=/home/vscode/.local/bin:$PATH
 ENV COLORTERM=truecolor
 ENV UV_PROJECT_ENVIRONMENT="/home/vscode/venv"

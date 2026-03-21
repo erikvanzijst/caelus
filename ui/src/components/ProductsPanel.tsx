@@ -1,6 +1,6 @@
 import { Alert, Card, Stack } from '@mui/material'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listProducts } from '../api/endpoints'
 import type { Product } from '../api/types'
 import { useAuth } from '../state/AuthContext'
@@ -11,8 +11,18 @@ import { NewProductHeader } from './NewProductHeader'
 export function ProductsPanel() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const [selectedProductId, setSelectedProductId] = useState<number | 'new' | null>(null)
   const [adminError, setAdminError] = useState<string | null>(null)
+
+  const [selectedProductId, setSelectedProductIdRaw] = useState<number | 'new' | null>(() => {
+    const raw = sessionStorage.getItem('admin.selectedProduct')
+    if (raw) { const n = Number(raw); if (!isNaN(n)) return n }
+    return null
+  })
+
+  const setSelectedProductId = useCallback((id: number | 'new') => {
+    sessionStorage.setItem('admin.selectedProduct', String(id))
+    setSelectedProductIdRaw(id)
+  }, [])
 
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -20,12 +30,17 @@ export function ProductsPanel() {
     enabled: Boolean(user),
   })
 
+  const sortedProducts = useMemo(
+    () => [...(productsQuery.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [productsQuery.data],
+  )
+
   useEffect(() => {
-    if (!productsQuery.data?.length) return
-    if (!selectedProductId) {
-      setSelectedProductId(productsQuery.data[0].id)
+    if (!sortedProducts.length) return
+    if (selectedProductId === null) {
+      setSelectedProductId(sortedProducts[0].id)
     }
-  }, [productsQuery.data, selectedProductId])
+  }, [sortedProducts, selectedProductId, setSelectedProductId])
 
   const selectedProduct = useMemo<Product | undefined>(() => {
     if (selectedProductId === 'new' || selectedProductId === null) return undefined

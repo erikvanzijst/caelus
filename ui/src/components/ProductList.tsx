@@ -8,6 +8,7 @@ import {
   Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
+import { useMemo } from 'react'
 import { resolveApiPath } from '../api/client'
 import type { Product } from '../api/types'
 
@@ -19,9 +20,14 @@ interface ProductListProps {
 }
 
 export function ProductList({ products, selectedProductId, onSelectProduct, showNewCard }: ProductListProps) {
+  const sorted = useMemo(
+    () => [...(products ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [products],
+  )
+
   return (
     <Grid container spacing={2}>
-      {products?.map((product) => (
+      {sorted.map((product) => (
         <Grid key={product.id} size={{ xs: 6, sm: 4, md: 3 }}>
           <Card
             sx={{

@@ -24,13 +24,13 @@ import { CSS } from '@dnd-kit/utilities'
 import type { Plan } from '../api/types'
 import { PlanCard } from './PlanCard'
 
-const SORT_ORDER_GAP = 1000
+export const SORT_ORDER_GAP = 1000
 
 /**
  * Calculate a new sort_order for an item moved to a given index.
  * Uses fractional indexing: takes the midpoint between neighbors.
  */
-function calculateSortOrder(plans: Plan[], toIndex: number, movedPlanId: number): number {
+export function calculateSortOrder(plans: Plan[], toIndex: number, movedPlanId: number): number {
   const others = plans.filter((p) => p.id !== movedPlanId)
   const prev = toIndex > 0 ? (others[toIndex - 1]?.sort_order ?? 0) : null
   const next = toIndex < others.length ? (others[toIndex]?.sort_order ?? 0) : null

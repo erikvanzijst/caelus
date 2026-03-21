@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { PlanCards } from './PlanCards'
+import { PlanCards, calculateSortOrder, SORT_ORDER_GAP } from './PlanCards'
 import type { Plan } from '../api/types'
 
 // dnd-kit doesn't play well with jsdom; mock sortable to render children normally
@@ -210,5 +210,80 @@ describe('PlanCards', () => {
     expect(screen.getByText('Draft')).toBeInTheDocument()
     // No price should be displayed for this card
     expect(screen.queryByText('No template')).not.toBeInTheDocument()
+  })
+})
+
+describe('calculateSortOrder', () => {
+  const makePlan = (id: number, sortOrder: number): Plan => ({
+    id,
+    name: `Plan ${id}`,
+    product_id: 1,
+    sort_order: sortOrder,
+    created_at: '2026-01-01T00:00:00Z',
+  })
+
+  it('returns GAP for a single item', () => {
+    const plans = [makePlan(1, 1000)]
+    expect(calculateSortOrder(plans, 0, 1)).toBe(SORT_ORDER_GAP)
+  })
+
+  it('places item between two neighbors at the midpoint', () => {
+    const plans = [makePlan(1, 1000), makePlan(2, 2000), makePlan(3, 3000)]
+    // Move plan 3 between plan 1 and plan 2 (toIndex=1)
+    const result = calculateSortOrder(plans, 1, 3)
+    expect(result).toBe(1500)
+  })
+
+  it('places item before the first at first - GAP', () => {
+    const plans = [makePlan(1, 1000), makePlan(2, 2000), makePlan(3, 3000)]
+    // Move plan 3 to the beginning (toIndex=0)
+    const result = calculateSortOrder(plans, 0, 3)
+    expect(result).toBe(1000 - SORT_ORDER_GAP)
+  })
+
+  it('places item after the last at last + GAP', () => {
+    const plans = [makePlan(1, 1000), makePlan(2, 2000), makePlan(3, 3000)]
+    // Move plan 1 to the end (toIndex=2)
+    const result = calculateSortOrder(plans, 2, 1)
+    expect(result).toBe(3000 + SORT_ORDER_GAP)
+  })
+
+  it('handles swap of two adjacent items', () => {
+    const plans = [makePlan(1, 1000), makePlan(2, 2000)]
+    // Move plan 2 to position 0 (before plan 1)
+    const result = calculateSortOrder(plans, 0, 2)
+    expect(result).toBe(1000 - SORT_ORDER_GAP)
+  })
+
+  it('produces correct midpoint with uneven spacing', () => {
+    const plans = [makePlan(1, 100), makePlan(2, 500), makePlan(3, 10000)]
+    // Move plan 3 between plan 1 and plan 2 (toIndex=1)
+    const result = calculateSortOrder(plans, 1, 3)
+    expect(result).toBe(300) // midpoint of 100 and 500
+  })
+
+  it('handles repeated reorderings without collision', () => {
+    // Simulate inserting between two items multiple times
+    let plans = [makePlan(1, 1000), makePlan(2, 2000)]
+
+    // Insert plan 3 between 1 and 2
+    const order3 = calculateSortOrder([...plans, makePlan(3, 9999)], 1, 3)
+    expect(order3).toBe(1500)
+    plans = [makePlan(1, 1000), makePlan(3, order3), makePlan(2, 2000)]
+
+    // Insert plan 4 between 1 and 3
+    const order4 = calculateSortOrder([...plans, makePlan(4, 9999)], 1, 4)
+    expect(order4).toBe(1250)
+
+    // Insert plan 5 between 1 and 4
+    plans = [makePlan(1, 1000), makePlan(4, order4), makePlan(3, order3), makePlan(2, 2000)]
+    const order5 = calculateSortOrder([...plans, makePlan(5, 9999)], 1, 5)
+    expect(order5).toBe(1125)
+
+    // All sort orders should be distinct and in ascending order
+    const allOrders = [1000, order5, order4, order3, 2000].sort((a, b) => a - b)
+    for (let i = 1; i < allOrders.length; i++) {
+      expect(allOrders[i]).toBeGreaterThan(allOrders[i - 1])
+    }
   })
 })

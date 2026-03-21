@@ -41,3 +41,5 @@ var/
 
 # Playwright MCP artifacts
 .playwright-mcp/
+
+.claude/worktrees

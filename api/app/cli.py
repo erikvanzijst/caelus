@@ -397,7 +397,7 @@ def create_deployment(
     *,
     user_id: int = typer.Option(..., "--user-id"),
     desired_template_id: int = typer.Option(..., "--desired-template-id"),
-    plan_template_id: int = typer.Option(..., "--plan-template-id"),
+    plan_template_id: int | None = typer.Option(None, "--plan-template-id"),
     user_values_json: str | None = typer.Option(
         None,
         "--user-values-json",

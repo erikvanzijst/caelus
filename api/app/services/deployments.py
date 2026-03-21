@@ -18,7 +18,7 @@ from app.services.jobs import JobService
 from app.services import subscriptions as subscription_service
 from app.services import template_values
 from app.services import users as user_service
-from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException
+from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException, ValidationException
 from app.services.hostnames import require_valid_hostname_for_deployment
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETING,
@@ -155,11 +155,26 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     if derived_hostname is not None:
         require_valid_hostname_for_deployment(session, derived_hostname)
 
+    # If no plan_template_id provided, auto-assign the product's canonical plan.
+    # This is a temporary fallback for clients that don't yet send plan_template_id.
+    plan_template_id = payload.plan_template_id
+    if plan_template_id is None:
+        product = template.product
+        if not product.plans:
+            raise ValidationException("No plans available for this product")
+        canonical_plan = next(
+            (p for p in product.plans if p.deleted_at is None and p.template_id is not None),
+            None,
+        )
+        if canonical_plan is None:
+            raise ValidationException("No active plan with a template found for this product")
+        plan_template_id = canonical_plan.template_id
+
     # Create subscription atomically (commit=False so we control the transaction).
     # Validates that the plan_template_id is valid and not soft-deleted.
     sub = subscription_service.create_subscription(
         session,
-        plan_template_id=payload.plan_template_id,
+        plan_template_id=plan_template_id,
         user_id=payload.user_id,
         commit=False,
     )

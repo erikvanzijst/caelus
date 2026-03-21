@@ -83,8 +83,8 @@ describe('PlanCards', () => {
     // Free plan shows "Free" as price
     const freeCards = screen.getAllByText('Free')
     expect(freeCards.length).toBeGreaterThanOrEqual(2) // name + price
-    // Pro plan shows "$9.99/mo"
-    expect(screen.getByText('$9.99/mo')).toBeInTheDocument()
+    // Pro plan shows "€9.99/mo"
+    expect(screen.getByText('€9.99/mo')).toBeInTheDocument()
   })
 
   it('renders markdown description', () => {
@@ -194,7 +194,7 @@ describe('PlanCards', () => {
   it('shows selected card with primary border', () => {
     const { container } = render(<PlanCards {...defaultProps} selectedPlanId={2} />)
     // The Pro card (id=2) should have the primary border
-    const proCard = screen.getByText('$9.99/mo').closest('[class*="MuiCard-root"]')
+    const proCard = screen.getByText('€9.99/mo').closest('[class*="MuiCard-root"]')
     expect(proCard).toBeTruthy()
   })
 

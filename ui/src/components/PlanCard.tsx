@@ -18,7 +18,7 @@ import type { Plan } from '../api/types'
 function formatPrice(priceCents: number, interval: string): string {
   const amount = (priceCents / 100).toFixed(priceCents % 100 === 0 ? 0 : 2)
   const suffix = interval === 'annual' ? '/yr' : '/mo'
-  return priceCents === 0 ? 'Free' : `$${amount}${suffix}`
+  return priceCents === 0 ? 'Free' : `€${amount}${suffix}`
 }
 
 interface PlanCardProps {

@@ -16,7 +16,7 @@ import { createPlanTemplate, updatePlan } from '../api/endpoints'
 import type { Plan, PlanTemplateVersion } from '../api/types'
 
 function formatPrice(cents: number): string {
-  return cents === 0 ? 'Free' : `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
+  return cents === 0 ? 'Free' : `€${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
 }
 
 function formatStorage(bytes: number | null | undefined): string {
@@ -199,7 +199,7 @@ function NewPlanTemplateForm({ onSave, saving }: NewPlanTemplateFormProps) {
   return (
     <Stack spacing={2} sx={{ maxWidth: 400 }}>
       <TextField
-        label="Price ($)"
+        label="Price (€)"
         value={priceCents}
         onChange={(e) => setPriceCents(e.target.value)}
         type="number"

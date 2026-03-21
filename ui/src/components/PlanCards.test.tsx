@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { PlanCards, calculateSortOrder, SORT_ORDER_GAP } from './PlanCards'
 import type { Plan } from '../api/types'
@@ -192,7 +192,7 @@ describe('PlanCards', () => {
   })
 
   it('shows selected card with primary border', () => {
-    const { container } = render(<PlanCards {...defaultProps} selectedPlanId={2} />)
+    render(<PlanCards {...defaultProps} selectedPlanId={2} />)
     // The Pro card (id=2) should have the primary border
     const proCard = screen.getByText('€9.99/mo').closest('[class*="MuiCard-root"]')
     expect(proCard).toBeTruthy()

@@ -45,6 +45,7 @@ export interface Plan {
   template_id?: number | null
   sort_order?: number | null
   created_at: IsoDate
+  template?: PlanTemplateVersion | null
 }
 
 export interface PlanTemplateVersion {

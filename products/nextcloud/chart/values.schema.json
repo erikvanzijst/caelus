@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "nextcloud wrapper values",
+  "type": "object",
+  "properties": {
+    "storage": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "accessMode": {
+              "type": "string",
+              "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"]
+            },
+            "size": { "type": "string", "minLength": 1 },
+            "storageClassName": { "type": "string" }
+          },
+          "required": ["accessMode", "size", "storageClassName"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["data"],
+      "additionalProperties": false
+    },
+    "nextcloud": {
+      "type": "object",
+      "description": "Pass-through values for upstream nextcloud dependency chart"
+    },
+    "caelus": {
+      "type": "object",
+      "description": "Plan-injected values from Caelus reconciler",
+      "properties": {
+        "plan": {
+          "type": "object",
+          "properties": {
+            "storageBytes": { "type": "integer" },
+            "storageSize": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["storage", "nextcloud"],
+  "additionalProperties": false
+}

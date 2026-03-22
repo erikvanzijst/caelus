@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nextcloud-data
+  labels:
+    {{- include "nextcloud-wrapper.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.storage.data.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.caelus.plan.storageSize | default .Values.storage.data.size }}
+{{- if .Values.storage.data.storageClassName }}
+  storageClassName: {{ .Values.storage.data.storageClassName }}
+{{- end }}

@@ -10,7 +10,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi
+      storage: {{ .Values.caelus.plan.storageSize | default "10Gi" }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

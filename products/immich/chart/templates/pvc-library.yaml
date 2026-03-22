@@ -9,7 +9,7 @@ spec:
     - {{ .Values.storage.library.accessMode }}
   resources:
     requests:
-      storage: {{ .Values.storage.library.size }}
+      storage: {{ .Values.caelus.plan.storageSize | default .Values.storage.library.size }}
 {{- if .Values.storage.library.storageClassName }}
   storageClassName: {{ .Values.storage.library.storageClassName }}
 {{- end }}

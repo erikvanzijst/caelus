@@ -4,6 +4,7 @@ import pytest
 
 from app.services.errors import IntegrityException
 from app.services.template_values import (
+    bytes_to_k8s_size,
     deep_merge,
     merge_values_scoped,
     validate_user_values,
@@ -36,3 +37,20 @@ def test_deep_merge_replaces_arrays_and_scalars() -> None:
     base = {"arr": [1, 2], "obj": {"x": 1}, "s": "a"}
     override = {"arr": [3], "obj": {"y": 2}, "s": "b"}
     assert deep_merge(base, override) == {"arr": [3], "obj": {"x": 1, "y": 2}, "s": "b"}
+
+
+@pytest.mark.parametrize(
+    "input_bytes,expected",
+    [
+        (0, "0"),
+        (1024, "1Ki"),
+        (1048576, "1Mi"),
+        (536870912, "512Mi"),
+        (1073741824, "1Gi"),
+        (10737418240, "10Gi"),
+        (1099511627776, "1Ti"),
+        (500000000, "500000000"),
+    ],
+)
+def test_bytes_to_k8s_size(input_bytes: int, expected: str) -> None:
+    assert bytes_to_k8s_size(input_bytes) == expected

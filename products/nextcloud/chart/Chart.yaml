@@ -1,0 +1,17 @@
+apiVersion: v2
+name: nextcloud-wrapper
+description: Nextcloud wrapper chart for Caelus with plan-enforced storage
+type: application
+version: 1.0.0
+appVersion: "30.0.0"
+keywords:
+  - nextcloud
+  - files
+  - storage
+maintainers:
+  - name: Caelus Team
+
+dependencies:
+  - name: nextcloud
+    version: "8.9.1"
+    repository: "https://nextcloud.github.io/helm/"

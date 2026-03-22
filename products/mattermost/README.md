@@ -125,6 +125,40 @@ template time.
 +------------------------------------------------------+
 ```
 
+### Plan Storage Limits
+
+Caelus enforces per-tenant storage quotas through plans.
+During reconciliation, the reconciler reads
+`storage_bytes` from the deployment's subscription plan
+template and injects it into the Helm values under a
+reserved `caelus.plan` namespace as a system override
+(highest merge precedence, cannot be overridden by user
+values):
+
+```json
+{
+  "caelus": {
+    "plan": {
+      "storageBytes": 10737418240,
+      "storageSize": "10Gi"
+    }
+  }
+}
+```
+
+The data PVC template (`pvc.yaml`) references this value
+with a fallback default:
+
+```yaml
+storage: {{ .Values.caelus.plan.storageSize | default "10Gi" }}
+```
+
+If the plan has no storage quota (`storage_bytes` is null),
+the `caelus` key is not injected and the PVC falls back to
+10Gi. The plugins PVC (1Gi) and PostgreSQL PVC
+(`postgresql.size`) are infrastructure overhead and are not
+subject to plan limits.
+
 ### Resource Inventory
 
 | Template | Resources Created |

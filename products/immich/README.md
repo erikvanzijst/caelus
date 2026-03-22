@@ -71,8 +71,6 @@ For the Caelus Admin product template, use the following values schema:
           "title": "domainname",
           "type": "string",
           "minLength": 1,
-          "maxLength": 64,
-          "pattern": "^((?!-)(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]?\\.)+(xn--)?[a-z0-9-]{2,}$",
           "description": "The hostname for your Immich instance"
         }
       },

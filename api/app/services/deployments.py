@@ -155,6 +155,10 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     if derived_hostname is not None:
         require_valid_hostname_for_deployment(session, derived_hostname)
 
+    # TODO: Drop the temporary hack and validate the plan_template_id is associated
+    #       with the DeploymentCreate.desired_template.product and is the canonical
+    #       plan template:
+
     # If no plan_template_id provided, auto-assign the product's canonical plan.
     # This is a temporary fallback for clients that don't yet send plan_template_id.
     plan_template_id = payload.plan_template_id

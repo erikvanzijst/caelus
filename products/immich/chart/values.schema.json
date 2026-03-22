@@ -95,6 +95,21 @@
     "immich": {
       "type": "object",
       "description": "Pass-through values for upstream dependency chart"
+    },
+    "caelus": {
+      "type": "object",
+      "description": "Plan-injected values from Caelus reconciler",
+      "properties": {
+        "plan": {
+          "type": "object",
+          "properties": {
+            "storageBytes": { "type": "integer" },
+            "storageSize": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": ["ingress", "smtp", "storage", "postgresql", "immich"],

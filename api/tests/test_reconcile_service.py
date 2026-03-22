@@ -2,14 +2,40 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from app.models import DeploymentCreate, DeploymentORM, ProductORM
+from app.models import DeploymentCreate, DeploymentORM, ProductORM, PlanORM, PlanTemplateVersionORM, BillingInterval
+from app.models.core import _utcnow
 from app.services import deployments, products, templates, users
 from app.services.reconcile import DeploymentReconciler
-from tests.conftest import create_free_plan_template
 from tests.provisioner_utils import FakeProvisioner
 
 
-def _seed_deployment(db_session) -> int:
+def _create_plan_template(db_session, product_id: int, storage_bytes: int | None) -> int:
+    """Create a Plan + PlanTemplateVersion with a specific storage_bytes value."""
+    plan = PlanORM(name=f"plan-{storage_bytes}", product_id=product_id, created_at=_utcnow())
+    db_session.add(plan)
+    db_session.flush()
+    ptv = PlanTemplateVersionORM(
+        plan_id=plan.id,
+        price_cents=0,
+        billing_interval=BillingInterval.MONTHLY,
+        storage_bytes=storage_bytes,
+        created_at=_utcnow(),
+    )
+    db_session.add(ptv)
+    db_session.flush()
+    plan.template_id = ptv.id
+    db_session.commit()
+    db_session.refresh(ptv)
+    return ptv.id
+
+
+def _seed_deployment(db_session, *, storage_bytes: int | None = 0) -> int:
+    """Seed a deployment with a plan template.
+
+    ``storage_bytes`` defaults to 0 (free-plan behaviour used by existing tests).
+    Pass an explicit int to test plan storage injection, or ``None`` for a plan
+    with no storage quota.
+    """
     user = users.create_user(db_session, payload=users.UserCreate(email="reconcile-user@example.com"))
     product = products.create_product(
         db_session,
@@ -45,7 +71,7 @@ def _seed_deployment(db_session) -> int:
     product_orm.template_id = template.id
     db_session.add(product_orm)
     db_session.commit()
-    ptv_id = create_free_plan_template(db_session, product.id)
+    ptv_id = _create_plan_template(db_session, product.id, storage_bytes)
     deployment = deployments.create_deployment(
         db_session,
         payload=DeploymentCreate(
@@ -78,6 +104,7 @@ def test_reconcile_apply_happy_path_returns_ready_and_applied_template(db_sessio
     assert fake_provisioner.calls[1][1]["values"] == {
         "replicas": 1,
         "user": {"message": "hello", "domain": "reconcile.example.test"},
+        "caelus": {"plan": {"storageBytes": 0, "storageSize": "0"}},
     }
 
 
@@ -147,3 +174,35 @@ def test_reconcile_schema_validation_failure_returns_error_result(db_session) ->
     assert "invalid" in result.last_error
     assert fake_provisioner.calls == []
     assert deployment.status == "error"
+
+
+def test_reconcile_injects_plan_storage_into_helm_values(db_session) -> None:
+    """Plan storage_bytes is projected into caelus.plan namespace in Helm values."""
+    deployment_id = _seed_deployment(db_session, storage_bytes=10737418240)  # 10 GiB
+    fake_provisioner = FakeProvisioner()
+    reconciler = DeploymentReconciler(session=db_session, provisioner=fake_provisioner)
+
+    result = reconciler.reconcile(deployment_id)
+    assert result.status == "ready"
+
+    values = fake_provisioner.calls[1][1]["values"]
+    assert values["caelus"] == {
+        "plan": {"storageBytes": 10737418240, "storageSize": "10Gi"},
+    }
+    # Other values still present
+    assert values["replicas"] == 1
+    assert values["user"]["message"] == "hello"
+
+
+def test_reconcile_omits_caelus_when_storage_bytes_is_none(db_session) -> None:
+    """When plan has no storage quota, caelus namespace is not injected."""
+    deployment_id = _seed_deployment(db_session, storage_bytes=None)
+    fake_provisioner = FakeProvisioner()
+    reconciler = DeploymentReconciler(session=db_session, provisioner=fake_provisioner)
+
+    result = reconciler.reconcile(deployment_id)
+    assert result.status == "ready"
+
+    values = fake_provisioner.calls[1][1]["values"]
+    assert "caelus" not in values
+    assert values["replicas"] == 1

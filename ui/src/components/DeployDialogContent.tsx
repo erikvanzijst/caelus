@@ -157,7 +157,7 @@ export function DeployDialogContent({
       </Stack>
       {(onCancel || onLaunch) && (
         <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 3 }}>
-          {onCancel && <Button onClick={onCancel}>Cancel</Button>}
+          {onCancel && <Button onClick={onCancel} variant="outlined">Cancel</Button>}
           {onLaunch && (
             <Button
               variant="contained"

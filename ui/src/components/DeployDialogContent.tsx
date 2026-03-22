@@ -3,12 +3,24 @@ import {
   Avatar,
   Box,
   Button,
+  Card,
+  CardActionArea,
+  CardContent,
+  Grid,
   Stack,
   Typography,
 } from '@mui/material'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import Markdown from 'react-markdown'
 import { resolveApiPath } from '../api/client'
-import type { Product } from '../api/types'
+import type { Plan, Product } from '../api/types'
 import { UserValuesForm } from './UserValuesForm'
+
+function formatPrice(priceCents: number, interval: string): string {
+  const amount = (priceCents / 100).toFixed(priceCents % 100 === 0 ? 0 : 2)
+  const suffix = interval === 'annual' ? '/yr' : '/mo'
+  return priceCents === 0 ? 'Free' : `€${amount}${suffix}`
+}
 
 interface DeployDialogContentProps {
   product: Product
@@ -27,6 +39,9 @@ interface DeployDialogContentProps {
   initialHostname?: string
   submitLabel?: string
   readOnly?: boolean
+  plans?: Plan[]
+  selectedPlanTemplateId?: number | null
+  onSelectPlan?: (planTemplateId: number) => void
 }
 
 export function DeployDialogContent({
@@ -46,6 +61,9 @@ export function DeployDialogContent({
   initialHostname,
   submitLabel = 'Launch',
   readOnly,
+  plans,
+  selectedPlanTemplateId,
+  onSelectPlan,
 }: DeployDialogContentProps) {
   return (
     <>
@@ -67,10 +85,82 @@ export function DeployDialogContent({
           )}
         </Box>
       </Stack>
+
+      {plans && plans.length > 0 && onSelectPlan && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+            Select a plan:
+          </Typography>
+          <Grid container spacing={1.5}>
+            {plans.map((plan) => {
+              const tmpl = plan.template
+              const price = tmpl ? formatPrice(tmpl.price_cents, tmpl.billing_interval) : null
+              const isSelected = tmpl && selectedPlanTemplateId === tmpl.id
+              return (
+                <Grid key={plan.id} size={{ xs: 12, sm: plans.length <= 2 ? 6 : 4 }}>
+                  <Card
+                    variant="outlined"
+                    sx={{
+                      height: '100%',
+                      borderColor: isSelected ? 'primary.main' : 'divider',
+                      borderWidth: isSelected ? 2 : 1,
+                      bgcolor: isSelected ? 'action.selected' : undefined,
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => tmpl && onSelectPlan(tmpl.id)}
+                      sx={{
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'stretch',
+                        justifyContent: 'flex-start',
+                      }}
+                    >
+                      <CardContent sx={{ py: 1.5, px: 2 }}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                          <Box sx={{ minWidth: 0, flex: 1 }}>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <Typography variant="subtitle2">{plan.name}</Typography>
+                              {isSelected && (
+                                <CheckCircleIcon sx={{ fontSize: 18, color: 'primary.main' }} />
+                              )}
+                            </Stack>
+                            {price && (
+                              <Typography variant="h6" color="primary" sx={{ mt: 0.25 }}>
+                                {price}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Stack>
+                        {tmpl?.description && (
+                          <Box
+                            sx={{
+                              '& p': { m: 0, mb: 0.25 },
+                              '& ul, & ol': { m: 0, pl: 2, mb: 0 },
+                              '& li': { mb: 0, fontSize: '0.75rem' },
+                              typography: 'caption',
+                              color: 'text.secondary',
+                              mt: 0.5,
+                            }}
+                          >
+                            <Markdown>{tmpl.description}</Markdown>
+                          </Box>
+                        )}
+                      </CardContent>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+              )
+            })}
+          </Grid>
+        </Box>
+      )}
+
       <Stack spacing={2}>
         {formError && <Alert severity="error">{formError}</Alert>}
         {loading ? (
-          <Typography color="text.secondary">Loading template...</Typography>
+          <Typography color="text.secondary">Loading...</Typography>
         ) : noTemplateWarning ? (
           <Alert severity="warning">
             This product has no template configured yet.

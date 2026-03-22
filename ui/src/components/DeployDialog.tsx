@@ -1,8 +1,8 @@
 import { Dialog, DialogContent } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo, useState } from 'react'
-import { createDeployment, updateDeployment, listTemplates } from '../api/endpoints'
-import type { Deployment, Product, ProductTemplate } from '../api/types'
+import { createDeployment, updateDeployment, listTemplates, listPlans } from '../api/endpoints'
+import type { Deployment, Plan, Product, ProductTemplate } from '../api/types'
 import { validateUserValues } from './UserValuesForm'
 import { DeployDialogContent } from './DeployDialogContent'
 
@@ -19,13 +19,19 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
   const [formError, setFormError] = useState<string | null>(null)
   const [userValuesErrors, setUserValuesErrors] = useState<string[]>([])
   const [hostnameValid, setHostnameValid] = useState(true)
+  const [selectedPlanTemplateId, setSelectedPlanTemplateId] = useState<number | null>(null)
 
   const isEditMode = Boolean(deployment)
 
   const templatesQuery = useQuery({
     queryKey: ['templates', product.id],
     queryFn: () => listTemplates(product.id),
-    // In edit mode the deployment already carries its template; skip fetch
+    enabled: !isEditMode,
+  })
+
+  const plansQuery = useQuery({
+    queryKey: ['plans', product.id],
+    queryFn: () => listPlans(product.id),
     enabled: !isEditMode,
   })
 
@@ -33,16 +39,28 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
     return templatesQuery.data?.find((t) => t.id === product.template_id)
   }, [templatesQuery.data, product.template_id])
 
-  // In edit mode, use the deployment's own template; in create mode, use the canonical
   const activeTemplate: ProductTemplate | undefined = isEditMode
     ? deployment!.desired_template
     : canonicalTemplate
 
+  const plans: Plan[] = useMemo(() => {
+    return (plansQuery.data ?? []).filter((p) => p.template_id != null)
+  }, [plansQuery.data])
+
+  // Auto-select if there's only one plan
+  const effectivePlanTemplateId = useMemo(() => {
+    if (isEditMode) return null
+    if (selectedPlanTemplateId) return selectedPlanTemplateId
+    if (plans.length === 1 && plans[0].template_id) return plans[0].template_id
+    return null
+  }, [isEditMode, selectedPlanTemplateId, plans])
+
   const createMutation = useMutation({
-    mutationFn: (payload: { templateId: number; userValuesJson?: object }) =>
+    mutationFn: (payload: { templateId: number; userValuesJson?: object; planTemplateId?: number }) =>
       createDeployment(userId, {
         desired_template_id: payload.templateId,
         user_values_json: payload.userValuesJson,
+        plan_template_id: payload.planTemplateId,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
@@ -107,20 +125,29 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
 
     setUserValuesErrors([])
     const valuesToSend = userValues ?? {}
-    activeMutation.mutate({
-      templateId,
-      userValuesJson: valuesToSend,
-    })
-  }, [product.template_id, deployment, isEditMode, activeTemplate, userValues, activeMutation])
+    if (isEditMode) {
+      updateMutation.mutate({
+        templateId,
+        userValuesJson: valuesToSend,
+      })
+    } else {
+      createMutation.mutate({
+        templateId,
+        userValuesJson: valuesToSend,
+        planTemplateId: effectivePlanTemplateId ?? undefined,
+      })
+    }
+  }, [product.template_id, deployment, isEditMode, activeTemplate, userValues, effectivePlanTemplateId, createMutation, updateMutation])
 
-  // In edit mode, pre-populate the form with the deployment's current user values.
-  // In create mode, pass null — form defaults come from JSON Schema annotations.
   const initialValuesJson = isEditMode
     ? (deployment!.user_values_json as Record<string, unknown> | null) ?? null
     : null
 
+  // Widen dialog when there are multiple plans
+  const dialogMaxWidth = !isEditMode && plans.length > 2 ? 'md' as const : 'sm' as const
+
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth={dialogMaxWidth} fullWidth>
       <DialogContent sx={{ pt: 3 }}>
         <DeployDialogContent
           product={product}
@@ -132,14 +159,22 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
           onHostnameValidationChange={setHostnameValid}
           onLaunch={handleLaunch}
           onCancel={onClose}
-          launchDisabled={activeMutation.isPending || !activeTemplate || !hostnameValid}
+          launchDisabled={
+            activeMutation.isPending ||
+            !activeTemplate ||
+            !hostnameValid ||
+            (!isEditMode && !effectivePlanTemplateId)
+          }
           launchPending={activeMutation.isPending}
           formError={formError}
           userValuesErrors={userValuesErrors}
           noTemplateWarning={!isEditMode && !templatesQuery.isLoading && !canonicalTemplate}
-          loading={!isEditMode && templatesQuery.isLoading}
+          loading={!isEditMode && (templatesQuery.isLoading || plansQuery.isLoading)}
           initialHostname={deployment?.hostname ?? undefined}
           submitLabel={isEditMode ? 'Update' : 'Launch'}
+          plans={isEditMode ? undefined : plans}
+          selectedPlanTemplateId={effectivePlanTemplateId}
+          onSelectPlan={(planTemplateId) => setSelectedPlanTemplateId(planTemplateId)}
         />
       </DialogContent>
     </Dialog>

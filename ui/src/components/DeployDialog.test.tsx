@@ -5,6 +5,7 @@ import { DeployDialog } from './DeployDialog'
 import type { Deployment, Product, ProductTemplate } from '../api/types'
 
 const listTemplatesMock = vi.fn()
+const listPlansMock = vi.fn()
 const createDeploymentMock = vi.fn()
 const updateDeploymentMock = vi.fn()
 const checkHostnameMock = vi.fn()
@@ -12,11 +13,30 @@ const listDomainsMock = vi.fn()
 
 vi.mock('../api/endpoints', () => ({
   listTemplates: (...args: unknown[]) => listTemplatesMock(...args),
+  listPlans: (...args: unknown[]) => listPlansMock(...args),
   createDeployment: (...args: unknown[]) => createDeploymentMock(...args),
   updateDeployment: (...args: unknown[]) => updateDeploymentMock(...args),
   checkHostname: (...args: unknown[]) => checkHostnameMock(...args),
   listDomains: (...args: unknown[]) => listDomainsMock(...args),
 }))
+
+const freePlan = {
+  id: 1,
+  name: 'Free',
+  product_id: 1,
+  template_id: 100,
+  sort_order: 1000,
+  created_at: '2026-01-01T00:00:00Z',
+  template: {
+    id: 100,
+    plan_id: 1,
+    price_cents: 0,
+    billing_interval: 'monthly',
+    storage_bytes: 0,
+    description: 'Everything for free',
+    created_at: '2026-01-01T00:00:00Z',
+  },
+}
 
 function renderWithQuery(ui: React.ReactNode) {
   const client = new QueryClient({
@@ -62,6 +82,7 @@ const helloTemplate = {
 describe('DeployDialog', () => {
   it('renders product name and description in the header', async () => {
     listTemplatesMock.mockResolvedValue([helloTemplate])
+    listPlansMock.mockResolvedValue([freePlan])
     listDomainsMock.mockResolvedValue([])
 
     renderWithQuery(
@@ -74,6 +95,7 @@ describe('DeployDialog', () => {
 
   it('shows Cancel and disabled Launch buttons', async () => {
     listTemplatesMock.mockResolvedValue([helloTemplate])
+    listPlansMock.mockResolvedValue([freePlan])
     listDomainsMock.mockResolvedValue([])
 
     renderWithQuery(
@@ -88,6 +110,7 @@ describe('DeployDialog', () => {
 
   it('calls onClose when Cancel is clicked', async () => {
     listTemplatesMock.mockResolvedValue([helloTemplate])
+    listPlansMock.mockResolvedValue([freePlan])
     listDomainsMock.mockResolvedValue([])
     const onClose = vi.fn()
 
@@ -115,6 +138,7 @@ describe('DeployDialog', () => {
 
   it('enables Launch when hostname is valid and submits deployment', async () => {
     listTemplatesMock.mockResolvedValue([helloTemplate])
+    listPlansMock.mockResolvedValue([freePlan])
     listDomainsMock.mockResolvedValue([])
     checkHostnameMock.mockResolvedValue({ fqdn: 'test.example.com', usable: true, reason: null })
     createDeploymentMock.mockResolvedValue({ id: 1 })
@@ -142,6 +166,7 @@ describe('DeployDialog', () => {
       expect(createDeploymentMock).toHaveBeenCalledWith(42, {
         desired_template_id: 10,
         user_values_json: { hostname: 'test.example.com' },
+        plan_template_id: 100,
       })
     })
 
@@ -152,6 +177,7 @@ describe('DeployDialog', () => {
 
   it('shows error alert on deployment failure', async () => {
     listTemplatesMock.mockResolvedValue([helloTemplate])
+    listPlansMock.mockResolvedValue([freePlan])
     listDomainsMock.mockResolvedValue([])
     checkHostnameMock.mockResolvedValue({ fqdn: 'test.example.com', usable: true, reason: null })
     createDeploymentMock.mockRejectedValue(new Error('Server error'))

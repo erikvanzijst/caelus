@@ -156,7 +156,7 @@ describe('DeployDialogContent', () => {
       />,
     )
 
-    expect(screen.getByText('Loading template...')).toBeInTheDocument()
+    expect(screen.getByText('Loading...')).toBeInTheDocument()
   })
 
   it('shows form error alert', () => {

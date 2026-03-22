@@ -365,6 +365,75 @@ class TestDeploymentPlanTemplate:
         )
         assert resp.status_code in (404, 422, 400)
 
+    def test_deployment_with_non_canonical_plan_template_returns_error(
+        self, client, db_session
+    ):
+        """A plan template that is no longer canonical cannot be used for new deployments."""
+        from app.models import PlanORM, PlanTemplateVersionORM, BillingInterval
+        from app.models.core import _utcnow
+
+        product_id, template_id = _setup_product_and_template(client)
+
+        # Create a plan with two template versions; only the second is canonical.
+        plan = PlanORM(name="Versioned", product_id=product_id, created_at=_utcnow())
+        db_session.add(plan)
+        db_session.flush()
+        old_ptv = PlanTemplateVersionORM(
+            plan_id=plan.id, price_cents=500, billing_interval=BillingInterval.MONTHLY,
+            storage_bytes=1073741824, created_at=_utcnow(),
+        )
+        db_session.add(old_ptv)
+        db_session.flush()
+        new_ptv = PlanTemplateVersionORM(
+            plan_id=plan.id, price_cents=999, billing_interval=BillingInterval.MONTHLY,
+            storage_bytes=10737418240, created_at=_utcnow(),
+        )
+        db_session.add(new_ptv)
+        db_session.flush()
+        plan.template_id = new_ptv.id  # new_ptv is canonical, old_ptv is stale
+        db_session.commit()
+
+        user_resp = client.post("/api/users", json={"email": "stale-ptv@example.com"})
+        user_id = user_resp.json()["id"]
+
+        resp = client.post(
+            f"/api/users/{user_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "plan_template_id": old_ptv.id,
+                "user_values_json": {"user": {"host": "stale.example.com"}},
+            },
+        )
+        assert resp.status_code == 400
+        assert "canonical" in resp.json()["detail"].lower()
+
+    def test_deployment_with_plan_template_from_different_product_returns_error(
+        self, client, db_session
+    ):
+        """A plan template belonging to a different product cannot be used."""
+        product_id, template_id = _setup_product_and_template(client)
+
+        # Create a second product with its own plan template.
+        other_product = client.post(
+            "/api/products", json={"name": "other-product", "description": "Other"}
+        )
+        other_product_id = other_product.json()["id"]
+        other_ptv_id = create_free_plan_template(db_session, other_product_id)
+
+        user_resp = client.post("/api/users", json={"email": "cross-product@example.com"})
+        user_id = user_resp.json()["id"]
+
+        resp = client.post(
+            f"/api/users/{user_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "plan_template_id": other_ptv_id,
+                "user_values_json": {"user": {"host": "cross.example.com"}},
+            },
+        )
+        assert resp.status_code == 400
+        assert "product" in resp.json()["detail"].lower()
+
 
 # ===========================================================================
 # 11.9 Authorization tests

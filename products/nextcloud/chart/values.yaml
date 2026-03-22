@@ -1,0 +1,50 @@
+# Wrapper-level storage configuration for the Nextcloud data PVC.
+# caelus.plan.storageSize (injected by reconciler) overrides storage.data.size.
+storage:
+  data:
+    accessMode: ReadWriteOnce
+    size: 100Gi
+    storageClassName: ""
+
+# Values passed to upstream nextcloud dependency chart.
+nextcloud:
+  ingress:
+    enabled: true
+    className: traefik
+
+  phpClientHttpsFix:
+    enabled: true
+    protocol: "https"
+
+  internalDatabase:
+    enabled: false
+
+  postgresql:
+    enabled: true
+    primary:
+      persistence:
+        enabled: true
+
+  nextcloud:
+    host: "nextcloud.local"
+    mail:
+      enabled: true
+      fromAddress: "nextcloud"
+      domain: "deprutser.be"
+      smtp:
+        host: "smtp.mailer.svc.cluster.local"
+        port: 25
+        secure: ""
+        authtype: ""
+        name: ""
+        password: ""
+
+  persistence:
+    enabled: true
+    existingClaim: nextcloud-data
+
+  cronjob:
+    enabled: false
+
+  startupProbe:
+    enabled: true

@@ -287,7 +287,7 @@ class DeploymentORM(DeploymentBase, table=True):
 
 class DeploymentCreate(DeploymentBase):
     model_config = ConfigDict(extra="forbid")
-    plan_template_id: Optional[int] = None
+    plan_template_id: int
     user_values_json: dict[str, Any] = Field(default=dict())
     user_id: Optional[int] = None
 

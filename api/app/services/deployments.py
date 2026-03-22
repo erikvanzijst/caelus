@@ -11,6 +11,7 @@ from app.models import (
     DeploymentCreate,
     DeploymentORM,
     DeploymentRead,
+    PlanTemplateVersionORM,
     ProductTemplateVersionORM,
     DeploymentUpdate,
 )
@@ -56,6 +57,17 @@ def _get_deployment_orm(
 
 def _validate_user_values(template: ProductTemplateVersionORM, user_values_json: dict[str, Any] | None) -> None:
     template_values.validate_user_values(user_values_json or {}, template.values_schema_json)
+
+
+def _validate_plan_template(session: Session, plan_template_id: int, product_id: int) -> None:
+    """Validate that plan_template_id belongs to this product and is canonical."""
+    ptv = session.get(PlanTemplateVersionORM, plan_template_id)
+    if not ptv or ptv.deleted_at:
+        raise ValidationException(f"Plan template version {plan_template_id} not found or deleted")
+    if ptv.plan.product_id != product_id:
+        raise ValidationException("Plan template does not belong to this product")
+    if ptv.plan.template_id != ptv.id:
+        raise ValidationException("Plan template is not the current canonical version for its plan")
 
 
 def _iter_hostname_paths(schema: Any, path: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
@@ -155,26 +167,13 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     if derived_hostname is not None:
         require_valid_hostname_for_deployment(session, derived_hostname)
 
-    # If no plan_template_id provided, auto-assign the product's canonical plan.
-    # This is a temporary fallback for clients that don't yet send plan_template_id.
-    plan_template_id = payload.plan_template_id
-    if plan_template_id is None:
-        product = template.product
-        if not product.plans:
-            raise ValidationException("No plans available for this product")
-        canonical_plan = next(
-            (p for p in product.plans if p.deleted_at is None and p.template_id is not None),
-            None,
-        )
-        if canonical_plan is None:
-            raise ValidationException("No active plan with a template found for this product")
-        plan_template_id = canonical_plan.template_id
+    # Validate the plan template: must exist, belong to the same product, and be canonical.
+    _validate_plan_template(session, payload.plan_template_id, template.product_id)
 
     # Create subscription atomically (commit=False so we control the transaction).
-    # Validates that the plan_template_id is valid and not soft-deleted.
     sub = subscription_service.create_subscription(
         session,
-        plan_template_id=plan_template_id,
+        plan_template_id=payload.plan_template_id,
         user_id=payload.user_id,
         commit=False,
     )

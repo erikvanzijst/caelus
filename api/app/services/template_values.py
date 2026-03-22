@@ -9,6 +9,16 @@ from jsonschema import validate as jsonschema_validate
 from app.services.errors import IntegrityException
 
 
+def bytes_to_k8s_size(n: int) -> str:
+    """Convert byte count to the largest clean Kubernetes binary size unit."""
+    if n == 0:
+        return "0"
+    for unit, divisor in [("Ti", 1 << 40), ("Gi", 1 << 30), ("Mi", 1 << 20), ("Ki", 1 << 10)]:
+        if n >= divisor and n % divisor == 0:
+            return f"{n // divisor}{unit}"
+    return str(n)
+
+
 def deep_merge(base: Any, override: Any) -> Any:
     """Deep-merge two JSON-like values, recursively merging object keys."""
     if isinstance(base, dict) and isinstance(override, dict):

@@ -9,6 +9,7 @@ from sqlmodel import Session
 from app.models import DeploymentORM, ProductTemplateVersionORM, DeploymentRead
 from app.provisioner import Provisioner, provisioner as default_provisioner
 from app.services import template_values
+from app.services.template_values import bytes_to_k8s_size
 from app.services.deployments import _get_deployment_orm
 from app.services.errors import IntegrityException
 from app.services.reconcile_constants import (
@@ -146,8 +147,26 @@ class DeploymentReconciler:
         template: ProductTemplateVersionORM,
     ) -> dict:
         template_values.validate_user_values(deployment.user_values_json, template.values_schema_json)
+        system_overrides = self._build_plan_overrides(deployment)
         return template_values.merge_values_scoped(
             template.system_values_json,
             deployment.user_values_json,
-            None,
+            system_overrides,
         )
+
+    @staticmethod
+    def _build_plan_overrides(deployment: DeploymentORM) -> dict | None:
+        """Project plan-level constraints into the caelus.plan Helm values namespace."""
+        if not deployment.subscription or not deployment.subscription.plan_template:
+            return None
+        storage_bytes = deployment.subscription.plan_template.storage_bytes
+        if storage_bytes is None:
+            return None
+        return {
+            "caelus": {
+                "plan": {
+                    "storageBytes": storage_bytes,
+                    "storageSize": bytes_to_k8s_size(storage_bytes),
+                },
+            },
+        }

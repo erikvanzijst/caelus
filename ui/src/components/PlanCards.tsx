@@ -45,7 +45,7 @@ interface SortablePlanCardProps {
   plan: Plan
   selected: boolean
   onSelect: () => void
-  onSave: (data: { name: string; description: string }) => void
+  onSave: (data: { name: string }) => void
   onDelete: () => void
   saving?: boolean
 }
@@ -90,8 +90,8 @@ interface PlanCardsProps {
   plans: Plan[]
   selectedPlanId: number | 'new' | null
   onSelectPlan: (planId: number | 'new') => void
-  onCreatePlan: (data: { name: string; description: string }) => void
-  onUpdatePlan: (planId: number, data: { name: string; description: string }) => void
+  onCreatePlan: (data: { name: string }) => void
+  onUpdatePlan: (planId: number, data: { name: string }) => void
   onDeletePlan: (planId: number) => void
   onReorder: (planId: number, newSortOrder: number) => void
   saving?: boolean

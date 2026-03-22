@@ -32,7 +32,6 @@ class PaymentStatus(StrEnum):
 class PlanBase(SQLModel):
     name: str
     product_id: int
-    description: Optional[str] = None
     template_id: Optional[int] = None
     sort_order: Optional[int] = None
 
@@ -52,8 +51,6 @@ class PlanORM(PlanBase, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(nullable=False)
-    # Uses Markdown for formatting:
-    description: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
     product_id: int = Field(
         sa_column=Column(Integer, ForeignKey("product.id"), nullable=False, index=True)
     )
@@ -82,13 +79,11 @@ class PlanORM(PlanBase, table=True):
 
 class PlanCreate(SQLModel):
     name: str
-    description: Optional[str] = None
     sort_order: Optional[int] = None
 
 
 class PlanUpdate(SQLModel):
     name: Optional[str] = None
-    description: Optional[str] = None
     template_id: Optional[int] = None
     sort_order: Optional[int] = None
 
@@ -104,6 +99,7 @@ class PlanTemplateVersionBase(SQLModel):
     price_cents: int
     billing_interval: BillingInterval
     storage_bytes: Optional[int] = None
+    description: Optional[str] = None
 
 
 class PlanTemplateVersionORM(PlanTemplateVersionBase, table=True):
@@ -123,6 +119,8 @@ class PlanTemplateVersionORM(PlanTemplateVersionBase, table=True):
     storage_bytes: Optional[int] = Field(
         default=None, sa_column=Column(BigInteger, nullable=True)
     )
+    # Uses Markdown for formatting:
+    description: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
     created_at: datetime = Field(default_factory=_utcnow, nullable=False)
     deleted_at: Optional[datetime] = Field(default=None)
 
@@ -141,6 +139,7 @@ class PlanTemplateVersionCreate(SQLModel):
     price_cents: int
     billing_interval: BillingInterval
     storage_bytes: Optional[int] = None
+    description: Optional[str] = None
 
 
 class PlanTemplateVersionRead(PlanTemplateVersionBase):

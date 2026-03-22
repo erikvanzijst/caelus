@@ -602,7 +602,6 @@ def get_plan(plan_id: int) -> None:
 def create_plan(
     product_id: int = typer.Option(..., "--product-id"),
     name: str = typer.Option(..., "--name"),
-    description: str | None = typer.Option(None, "--description"),
     sort_order: int | None = typer.Option(None, "--sort-order"),
 ) -> None:
     with session_scope() as session:
@@ -611,7 +610,7 @@ def create_plan(
             plan = plan_service.create_plan(
                 session,
                 product_id=product_id,
-                payload=PlanCreate(name=name, description=description, sort_order=sort_order),
+                payload=PlanCreate(name=name, sort_order=sort_order),
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
@@ -622,7 +621,6 @@ def create_plan(
 def update_plan(
     plan_id: int,
     name: str | None = typer.Option(None, "--name"),
-    description: str | None = typer.Option(None, "--description"),
     template_id: int | None = typer.Option(None, "--template-id"),
     sort_order: int | None = typer.Option(None, "--sort-order"),
 ) -> None:
@@ -633,7 +631,7 @@ def update_plan(
                 session,
                 plan_id=plan_id,
                 payload=PlanUpdate(
-                    name=name, description=description,
+                    name=name,
                     template_id=template_id, sort_order=sort_order,
                 ),
             )
@@ -659,6 +657,7 @@ def create_plan_template(
     price_cents: int = typer.Option(..., "--price-cents"),
     billing_interval: BillingInterval = typer.Option(..., "--billing-interval"),
     storage_bytes: int | None = typer.Option(None, "--storage-bytes"),
+    description: str | None = typer.Option(None, "--description"),
 ) -> None:
     with session_scope() as session:
         _require_cli_user(session)
@@ -670,6 +669,7 @@ def create_plan_template(
                     price_cents=price_cents,
                     billing_interval=billing_interval,
                     storage_bytes=storage_bytes,
+                    description=description,
                 ),
             )
         except CaelusException as e:

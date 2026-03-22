@@ -5,22 +5,14 @@ import {
   Card,
   CardContent,
   IconButton,
-  Skeleton,
   Stack,
   TextField,
-  Typography,
 } from '@mui/material'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
-import Markdown from 'react-markdown'
 import type { Plan } from '../api/types'
-
-function formatPrice(priceCents: number, interval: string): string {
-  const amount = (priceCents / 100).toFixed(priceCents % 100 === 0 ? 0 : 2)
-  const suffix = interval === 'annual' ? '/yr' : '/mo'
-  return priceCents === 0 ? 'Free' : `€${amount}${suffix}`
-}
+import { PlanCardContent } from './PlanCardContent'
 
 interface PlanCardProps {
   plan?: Plan
@@ -44,8 +36,6 @@ export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete,
   const [name, setName] = useState(plan?.name ?? '')
 
   const tmpl = plan?.template
-  const price = tmpl ? formatPrice(tmpl.price_cents, tmpl.billing_interval) : null
-  const description = tmpl?.description ?? null
 
   function handleSave() {
     const trimmedName = name.trim()
@@ -119,8 +109,15 @@ export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete,
               />
             </Box>
             <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-              <Typography variant="h6">{plan!.name}</Typography>
-              <Stack direction="row" spacing={0.5}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <PlanCardContent
+                  name={plan!.name}
+                  priceCents={tmpl?.price_cents}
+                  billingInterval={tmpl?.billing_interval}
+                  description={tmpl?.description}
+                />
+              </Box>
+              <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
                 <IconButton
                   size="small"
                   onClick={(e) => {
@@ -145,33 +142,6 @@ export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete,
                 )}
               </Stack>
             </Stack>
-            {tmpl ? (
-              <>
-                <Typography variant="h4" color="primary">
-                  {price}
-                </Typography>
-                {description && (
-                  <Box
-                    sx={{
-                      '& p': { m: 0, mb: 0.5 },
-                      '& ul, & ol': { m: 0, pl: 2.5 },
-                      '& li': { mb: 0.25 },
-                      typography: 'body2',
-                      color: 'text.secondary',
-                    }}
-                  >
-                    <Markdown>{description}</Markdown>
-                  </Box>
-                )}
-              </>
-            ) : (
-              <>
-                <Skeleton variant="text" animation={false} width="60%" sx={{ fontSize: '2.125rem' }} />
-                <Skeleton variant="text" animation={false} width="80%" />
-                <Skeleton variant="text" animation={false} width="70%" />
-                <Skeleton variant="text" animation={false} width="75%" />
-              </>
-            )}
           </Stack>
         )}
       </CardContent>

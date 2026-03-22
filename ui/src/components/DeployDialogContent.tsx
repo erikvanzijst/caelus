@@ -11,16 +11,10 @@ import {
   Typography,
 } from '@mui/material'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import Markdown from 'react-markdown'
 import { resolveApiPath } from '../api/client'
 import type { Plan, Product } from '../api/types'
 import { UserValuesForm } from './UserValuesForm'
-
-function formatPrice(priceCents: number, interval: string): string {
-  const amount = (priceCents / 100).toFixed(priceCents % 100 === 0 ? 0 : 2)
-  const suffix = interval === 'annual' ? '/yr' : '/mo'
-  return priceCents === 0 ? 'Free' : `€${amount}${suffix}`
-}
+import { PlanCardContent } from './PlanCardContent'
 
 interface DeployDialogContentProps {
   product: Product
@@ -94,7 +88,6 @@ export function DeployDialogContent({
           <Grid container spacing={1.5}>
             {plans.map((plan) => {
               const tmpl = plan.template
-              const price = tmpl ? formatPrice(tmpl.price_cents, tmpl.billing_interval) : null
               const isSelected = tmpl && selectedPlanTemplateId === tmpl.id
               return (
                 <Grid key={plan.id} size={{ xs: 12, sm: plans.length <= 2 ? 6 : 4 }}>
@@ -118,35 +111,20 @@ export function DeployDialogContent({
                       }}
                     >
                       <CardContent sx={{ py: 1.5, px: 2 }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                          <Box sx={{ minWidth: 0, flex: 1 }}>
-                            <Stack direction="row" spacing={1} alignItems="center">
-                              <Typography variant="subtitle2">{plan.name}</Typography>
-                              {isSelected && (
-                                <CheckCircleIcon sx={{ fontSize: 18, color: 'primary.main' }} />
-                              )}
-                            </Stack>
-                            {price && (
-                              <Typography variant="h6" color="primary" sx={{ mt: 0.25 }}>
-                                {price}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Stack>
-                        {tmpl?.description && (
-                          <Box
-                            sx={{
-                              '& p': { m: 0, mb: 0.25 },
-                              '& ul, & ol': { m: 0, pl: 2, mb: 0 },
-                              '& li': { mb: 0, fontSize: '0.75rem' },
-                              typography: 'caption',
-                              color: 'text.secondary',
-                              mt: 0.5,
-                            }}
-                          >
-                            <Markdown>{tmpl.description}</Markdown>
-                          </Box>
-                        )}
+                        <PlanCardContent
+                          name={plan.name}
+                          priceCents={tmpl?.price_cents}
+                          billingInterval={tmpl?.billing_interval}
+                          description={tmpl?.description}
+                          compact
+                          nameVariant="subtitle2"
+                          priceVariant="h6"
+                          nameAdornment={
+                            isSelected
+                              ? <CheckCircleIcon sx={{ fontSize: 18, color: 'primary.main' }} />
+                              : undefined
+                          }
+                        />
                       </CardContent>
                     </CardActionArea>
                   </Card>

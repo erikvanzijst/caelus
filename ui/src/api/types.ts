@@ -40,7 +40,6 @@ export interface HostnameCheckResult {
 export interface Plan {
   id: number
   name: string
-  description?: string | null
   product_id: number
   template_id?: number | null
   sort_order?: number | null
@@ -54,6 +53,7 @@ export interface PlanTemplateVersion {
   price_cents: number
   billing_interval: 'monthly' | 'annual'
   storage_bytes?: number | null
+  description?: string | null
   created_at: IsoDate
   plan?: Plan | null
 }

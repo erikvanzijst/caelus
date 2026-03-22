@@ -72,7 +72,7 @@ def get_plan(session: Session, plan_id: int) -> PlanRead:
 
 
 def update_plan(session: Session, *, plan_id: int, payload: PlanUpdate) -> PlanRead:
-    """Update a plan's mutable fields (name, description, template_id, sort_order).
+    """Update a plan's mutable fields (name, template_id, sort_order).
 
     Raises NotFoundException if the plan or referenced template is not found.
     Raises IntegrityException if the new name conflicts with an existing plan.
@@ -92,8 +92,6 @@ def update_plan(session: Session, *, plan_id: int, payload: PlanUpdate) -> PlanR
 
     if payload.name is not None:
         plan.name = payload.name
-    if payload.description is not None:
-        plan.description = payload.description
     if payload.sort_order is not None:
         plan.sort_order = payload.sort_order
 

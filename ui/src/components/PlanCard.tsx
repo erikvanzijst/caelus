@@ -5,6 +5,7 @@ import {
   Card,
   CardContent,
   IconButton,
+  Skeleton,
   Stack,
   TextField,
   Typography,
@@ -25,7 +26,7 @@ interface PlanCardProps {
   plan?: Plan
   selected?: boolean
   onSelect?: () => void
-  onSave: (data: { name: string; description: string }) => void
+  onSave: (data: { name: string }) => void
   onCancel?: () => void
   onDelete?: () => void
   onEditingChange?: (editing: boolean) => void
@@ -41,19 +42,17 @@ export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete,
     onEditingChange?.(value)
   }
   const [name, setName] = useState(plan?.name ?? '')
-  const [description, setDescription] = useState(plan?.description ?? '')
 
-  const price = plan?.template
-    ? formatPrice(plan.template.price_cents, plan.template.billing_interval)
-    : null
+  const tmpl = plan?.template
+  const price = tmpl ? formatPrice(tmpl.price_cents, tmpl.billing_interval) : null
+  const description = tmpl?.description ?? null
 
   function handleSave() {
     const trimmedName = name.trim()
     if (!trimmedName) return
-    onSave({ name: trimmedName, description: description.trim() })
+    onSave({ name: trimmedName })
     if (isNew) {
       setName('')
-      setDescription('')
     } else {
       setEditing(false)
     }
@@ -64,7 +63,6 @@ export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete,
       onCancel?.()
     } else {
       setName(plan.name)
-      setDescription(plan.description ?? '')
       setEditing(false)
     }
   }
@@ -92,15 +90,6 @@ export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete,
               onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
               size="small"
               autoFocus
-              fullWidth
-            />
-            <TextField
-              label="Description (Markdown)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              size="small"
-              multiline
-              minRows={3}
               fullWidth
             />
             <Stack direction="row" spacing={1}>
@@ -156,27 +145,32 @@ export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete,
                 )}
               </Stack>
             </Stack>
-            <Typography
-              variant="h4"
-              sx={price
-                ? { color: 'primary.main' }
-                : { color: 'text.disabled'}
-              }
-            >
-              {price ?? 'TBD'}
-            </Typography>
-            {plan!.description && (
-              <Box
-                sx={{
-                  '& p': { m: 0, mb: 0.5 },
-                  '& ul, & ol': { m: 0, pl: 2.5 },
-                  '& li': { mb: 0.25 },
-                  typography: 'body2',
-                  color: 'text.secondary',
-                }}
-              >
-                <Markdown>{plan!.description}</Markdown>
-              </Box>
+            {tmpl ? (
+              <>
+                <Typography variant="h4" color="primary">
+                  {price}
+                </Typography>
+                {description && (
+                  <Box
+                    sx={{
+                      '& p': { m: 0, mb: 0.5 },
+                      '& ul, & ol': { m: 0, pl: 2.5 },
+                      '& li': { mb: 0.25 },
+                      typography: 'body2',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    <Markdown>{description}</Markdown>
+                  </Box>
+                )}
+              </>
+            ) : (
+              <>
+                <Skeleton variant="text" animation={false} width="60%" sx={{ fontSize: '2.125rem' }} />
+                <Skeleton variant="text" animation={false} width="80%" />
+                <Skeleton variant="text" animation={false} width="70%" />
+                <Skeleton variant="text" animation={false} width="75%" />
+              </>
             )}
           </Stack>
         )}

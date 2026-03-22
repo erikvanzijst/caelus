@@ -14,6 +14,8 @@ import AddIcon from '@mui/icons-material/Add'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPlanTemplate, updatePlan } from '../api/endpoints'
 import type { Plan, PlanTemplateVersion } from '../api/types'
+import { SplitPane } from './SplitPane'
+import { PlanCardPreview } from './PlanCardPreview'
 
 function formatPrice(cents: number): string {
   return cents === 0 ? 'Free' : `€${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
@@ -64,11 +66,10 @@ export function PlanTemplateTabs({ plan, templates, onError }: PlanTemplateTabsP
   })
 
   const createMutation = useMutation({
-    mutationFn: (payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null }) =>
+    mutationFn: (payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null; description?: string | null }) =>
       createPlanTemplate(plan.id, payload),
     onSuccess: (tmpl) => {
       queryClient.invalidateQueries({ queryKey: ['plan-templates', plan.id] })
-      // Auto-set as canonical if this is the first template
       if (!plan.template_id) {
         makeCanonicalMutation.mutate(tmpl.id)
       }
@@ -109,11 +110,14 @@ export function PlanTemplateTabs({ plan, templates, onError }: PlanTemplateTabsP
       <Box sx={{ p: 2 }}>
         {activeTab === 'new' ? (
           <NewPlanTemplateForm
+            plan={plan}
+            lastTemplate={sorted.length > 0 ? sorted[sorted.length - 1] : undefined}
             onSave={(payload) => createMutation.mutate(payload)}
             saving={createMutation.isPending}
           />
         ) : activeTemplate ? (
           <PlanTemplateReadOnly
+            plan={plan}
             template={activeTemplate}
             isCanonical={plan.template_id === activeTemplate.id}
             onMakeCanonical={() => makeCanonicalMutation.mutate(activeTemplate.id)}
@@ -129,41 +133,72 @@ export function PlanTemplateTabs({ plan, templates, onError }: PlanTemplateTabsP
 // ---------------------------------------------------------------------------
 
 interface PlanTemplateReadOnlyProps {
+  plan: Plan
   template: PlanTemplateVersion
   isCanonical: boolean
   onMakeCanonical: () => void
 }
 
-function PlanTemplateReadOnly({ template, isCanonical, onMakeCanonical }: PlanTemplateReadOnlyProps) {
+function PlanTemplateReadOnly({ plan, template, isCanonical, onMakeCanonical }: PlanTemplateReadOnlyProps) {
   return (
-    <Stack spacing={2}>
-      <Stack direction="row" spacing={4}>
+    <SplitPane
+      left={
+        <Stack spacing={2}>
+          <Stack direction="row" spacing={4} flexWrap="wrap">
+            <Box>
+              <Typography variant="caption" color="text.secondary">Price</Typography>
+              <Typography variant="h6">{formatPrice(template.price_cents)}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Billing interval</Typography>
+              <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>{template.billing_interval}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Storage</Typography>
+              <Typography variant="h6">{formatStorage(template.storage_bytes)}</Typography>
+            </Box>
+          </Stack>
+          {template.description && (
+            <Box>
+              <Typography variant="caption" color="text.secondary">Description (Markdown)</Typography>
+              <TextField
+                value={template.description}
+                multiline
+                fullWidth
+                size="small"
+                slotProps={{ input: { readOnly: true } }}
+                sx={{ mt: 0.5 }}
+              />
+            </Box>
+          )}
+          <Typography variant="caption" color="text.secondary">
+            Created {new Date(template.created_at).toLocaleString()}
+          </Typography>
+          {isCanonical ? (
+            <Button variant="outlined" disabled startIcon={<StarIcon />} sx={{ alignSelf: 'flex-start' }}>
+              Canonical
+            </Button>
+          ) : (
+            <Button variant="outlined" onClick={onMakeCanonical} startIcon={<StarIcon />} sx={{ alignSelf: 'flex-start' }}>
+              Make canonical
+            </Button>
+          )}
+        </Stack>
+      }
+      right={
         <Box>
-          <Typography variant="caption" color="text.secondary">Price</Typography>
-          <Typography variant="h6">{formatPrice(template.price_cents)}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Card preview
+          </Typography>
+          <PlanCardPreview
+            name={plan.name}
+            priceCents={template.price_cents}
+            billingInterval={template.billing_interval}
+            description={template.description}
+          />
         </Box>
-        <Box>
-          <Typography variant="caption" color="text.secondary">Billing interval</Typography>
-          <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>{template.billing_interval}</Typography>
-        </Box>
-        <Box>
-          <Typography variant="caption" color="text.secondary">Storage</Typography>
-          <Typography variant="h6">{formatStorage(template.storage_bytes)}</Typography>
-        </Box>
-      </Stack>
-      <Typography variant="caption" color="text.secondary">
-        Created {new Date(template.created_at).toLocaleString()}
-      </Typography>
-      {isCanonical ? (
-        <Button variant="outlined" disabled startIcon={<StarIcon />}>
-          Canonical
-        </Button>
-      ) : (
-        <Button variant="outlined" onClick={onMakeCanonical} startIcon={<StarIcon />}>
-          Make canonical
-        </Button>
-      )}
-    </Stack>
+      }
+    />
   )
 }
 
@@ -172,68 +207,105 @@ function PlanTemplateReadOnly({ template, isCanonical, onMakeCanonical }: PlanTe
 // ---------------------------------------------------------------------------
 
 interface NewPlanTemplateFormProps {
-  onSave: (payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null }) => void
+  plan: Plan
+  lastTemplate?: PlanTemplateVersion
+  onSave: (payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null; description?: string | null }) => void
   saving: boolean
 }
 
-function NewPlanTemplateForm({ onSave, saving }: NewPlanTemplateFormProps) {
-  const [priceCents, setPriceCents] = useState('')
-  const [billingInterval, setBillingInterval] = useState('monthly')
-  const [storageGb, setStorageGb] = useState('')
+function NewPlanTemplateForm({ plan, lastTemplate, onSave, saving }: NewPlanTemplateFormProps) {
+  const [priceEuros, setPriceEuros] = useState(lastTemplate ? String(lastTemplate.price_cents / 100) : '')
+  const [billingInterval, setBillingInterval] = useState<string>(lastTemplate?.billing_interval ?? 'monthly')
+  const [storageGb, setStorageGb] = useState(
+    lastTemplate?.storage_bytes ? String(lastTemplate.storage_bytes / 1024 ** 3) : '',
+  )
+  const [description, setDescription] = useState(lastTemplate?.description ?? '')
 
   function handleSubmit() {
-    const cents = Math.round(parseFloat(priceCents) * 100)
+    const cents = Math.round(parseFloat(priceEuros) * 100)
     if (isNaN(cents) || cents < 0) return
     const storageBytes = storageGb ? Math.round(parseFloat(storageGb) * 1024 ** 3) : null
     onSave({
       price_cents: cents,
       billing_interval: billingInterval,
       storage_bytes: storageBytes,
+      description: description.trim() || null,
     })
-    setPriceCents('')
+    setPriceEuros('')
     setStorageGb('')
+    setDescription('')
   }
 
-  const valid = priceCents !== '' && !isNaN(parseFloat(priceCents)) && parseFloat(priceCents) >= 0
+  const valid = priceEuros !== '' && !isNaN(parseFloat(priceEuros)) && parseFloat(priceEuros) >= 0
+
+  // Live preview values
+  const previewCents = valid ? Math.round(parseFloat(priceEuros) * 100) : null
 
   return (
-    <Stack spacing={2} sx={{ maxWidth: 400 }}>
-      <TextField
-        label="Price (€)"
-        value={priceCents}
-        onChange={(e) => setPriceCents(e.target.value)}
-        type="number"
-        size="small"
-        autoFocus
-        helperText="Enter 0 for a free plan"
-        slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
-      />
-      <TextField
-        label="Billing interval"
-        value={billingInterval}
-        onChange={(e) => setBillingInterval(e.target.value)}
-        size="small"
-        select
-      >
-        <MenuItem value="monthly">Monthly</MenuItem>
-        <MenuItem value="annual">Annual</MenuItem>
-      </TextField>
-      <TextField
-        label="Storage (GB)"
-        value={storageGb}
-        onChange={(e) => setStorageGb(e.target.value)}
-        type="number"
-        size="small"
-        helperText="Leave empty for no storage limit"
-        slotProps={{ htmlInput: { min: 0 } }}
-      />
-      <Button
-        variant="contained"
-        onClick={handleSubmit}
-        disabled={!valid || saving}
-      >
-        Create template
-      </Button>
-    </Stack>
+    <SplitPane
+      left={
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <TextField
+            label="Price (€)"
+            value={priceEuros}
+            onChange={(e) => setPriceEuros(e.target.value)}
+            type="number"
+            size="small"
+            autoFocus
+            helperText="Enter 0 for a free plan"
+            slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
+          />
+          <TextField
+            label="Billing interval"
+            value={billingInterval}
+            onChange={(e) => setBillingInterval(e.target.value)}
+            size="small"
+            select
+          >
+            <MenuItem value="monthly">Monthly</MenuItem>
+            <MenuItem value="annual">Annual</MenuItem>
+          </TextField>
+          <TextField
+            label="Storage (GB)"
+            value={storageGb}
+            onChange={(e) => setStorageGb(e.target.value)}
+            type="number"
+            size="small"
+            helperText="Leave empty for no storage limit"
+            slotProps={{ htmlInput: { min: 0 } }}
+          />
+          <TextField
+            label="Description (Markdown)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            size="small"
+            multiline
+            minRows={4}
+            fullWidth
+          />
+          <Button
+            variant="contained"
+            onClick={handleSubmit}
+            disabled={!valid || saving}
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            {saving ? 'Creating...' : 'Create template'}
+          </Button>
+        </Stack>
+      }
+      right={
+        <Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Card preview
+          </Typography>
+          <PlanCardPreview
+            name={plan.name}
+            priceCents={previewCents}
+            billingInterval={billingInterval}
+            description={description || null}
+          />
+        </Box>
+      }
+    />
   )
 }

@@ -27,7 +27,6 @@ vi.mock('@dnd-kit/sortable', () => ({
 const freePlan: Plan = {
   id: 1,
   name: 'Free',
-  description: 'Everything for free',
   product_id: 1,
   template_id: 10,
   sort_order: 1000,
@@ -38,6 +37,7 @@ const freePlan: Plan = {
     price_cents: 0,
     billing_interval: 'monthly',
     storage_bytes: 0,
+    description: 'Everything for free',
     created_at: '2026-01-01T00:00:00Z',
   },
 }
@@ -45,7 +45,6 @@ const freePlan: Plan = {
 const proPlan: Plan = {
   id: 2,
   name: 'Pro',
-  description: '- 100GB storage\n- Priority support',
   product_id: 1,
   template_id: 20,
   sort_order: 2000,
@@ -56,6 +55,7 @@ const proPlan: Plan = {
     price_cents: 999,
     billing_interval: 'monthly',
     storage_bytes: 107374182400,
+    description: '- 100GB storage\n- Priority support',
     created_at: '2026-01-01T00:00:00Z',
   },
 }
@@ -105,7 +105,6 @@ describe('PlanCards', () => {
     render(<PlanCards {...defaultProps} selectedPlanId={null} onSelectPlan={onSelectPlan} />)
     fireEvent.click(screen.getByText('New plan'))
     expect(screen.getByLabelText('Plan name')).toBeInTheDocument()
-    expect(screen.getByLabelText('Description (Markdown)')).toBeInTheDocument()
     expect(screen.getByText('Create')).toBeDisabled()
   })
 
@@ -115,10 +114,9 @@ describe('PlanCards', () => {
     fireEvent.click(screen.getByText('New plan'))
 
     fireEvent.change(screen.getByLabelText('Plan name'), { target: { value: 'Enterprise' } })
-    fireEvent.change(screen.getByLabelText('Description (Markdown)'), { target: { value: 'For teams' } })
     fireEvent.click(screen.getByText('Create'))
 
-    expect(onCreatePlan).toHaveBeenCalledWith({ name: 'Enterprise', description: 'For teams' })
+    expect(onCreatePlan).toHaveBeenCalledWith({ name: 'Enterprise' })
   })
 
   it('hides create form when Cancel is clicked', () => {
@@ -158,7 +156,7 @@ describe('PlanCards', () => {
     fireEvent.change(screen.getByDisplayValue('Free'), { target: { value: 'Basic' } })
     fireEvent.click(screen.getByText('Save'))
 
-    expect(onUpdatePlan).toHaveBeenCalledWith(1, { name: 'Basic', description: 'Everything for free' })
+    expect(onUpdatePlan).toHaveBeenCalledWith(1, { name: 'Basic' })
   })
 
   it('calls onDeletePlan when delete is confirmed', () => {
@@ -206,10 +204,11 @@ describe('PlanCards', () => {
       template_id: null,
       template: undefined,
     }
-    render(<PlanCards {...defaultProps} plans={[...defaultProps.plans, planNoTemplate]} />)
+    const { container } = render(<PlanCards {...defaultProps} plans={[...defaultProps.plans, planNoTemplate]} />)
     expect(screen.getByText('Draft')).toBeInTheDocument()
-    // Shows placeholder price
-    expect(screen.getByText('TBD')).toBeInTheDocument()
+    // Shows skeleton placeholders instead of price/description
+    const skeletons = container.querySelectorAll('.MuiSkeleton-root')
+    expect(skeletons.length).toBeGreaterThanOrEqual(1)
   })
 })
 

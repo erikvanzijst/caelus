@@ -85,14 +85,14 @@ export function listPlans(productId: number) {
   return requestJson<Plan[]>(`/products/${productId}/plans`)
 }
 
-export function createPlan(productId: number, payload: { name: string; description?: string | null; sort_order?: number | null }) {
+export function createPlan(productId: number, payload: { name: string; sort_order?: number | null }) {
   return requestJson<Plan>(`/products/${productId}/plans`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
-export function updatePlan(planId: number, payload: { name?: string; description?: string | null; template_id?: number; sort_order?: number | null }) {
+export function updatePlan(planId: number, payload: { name?: string; template_id?: number; sort_order?: number | null }) {
   return requestJson<Plan>(`/plans/${planId}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
@@ -107,7 +107,7 @@ export function listPlanTemplates(planId: number) {
   return requestJson<PlanTemplateVersion[]>(`/plans/${planId}/templates`)
 }
 
-export function createPlanTemplate(planId: number, payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null }) {
+export function createPlanTemplate(planId: number, payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null; description?: string | null }) {
   return requestJson<PlanTemplateVersion>(`/plans/${planId}/templates`, {
     method: 'POST',
     body: JSON.stringify(payload),

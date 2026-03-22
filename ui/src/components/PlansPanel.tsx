@@ -70,10 +70,9 @@ export function PlansPanel() {
   }, [plansQuery.data, selectedPlanId])
 
   const createPlanMutation = useMutation({
-    mutationFn: (data: { name: string; description: string }) =>
+    mutationFn: (data: { name: string }) =>
       createPlan(selectedProductId!, {
         name: data.name,
-        description: data.description || null,
         sort_order: ((plansQuery.data ?? []).reduce((max, p) => Math.max(max, p.sort_order ?? 0), 0)) + 1000,
       }),
     onSuccess: (newPlan) => {
@@ -85,8 +84,8 @@ export function PlansPanel() {
   })
 
   const updatePlanMutation = useMutation({
-    mutationFn: ({ planId, data }: { planId: number; data: { name: string; description: string } }) =>
-      updatePlan(planId, { name: data.name, description: data.description || null }),
+    mutationFn: ({ planId, data }: { planId: number; data: { name: string } }) =>
+      updatePlan(planId, { name: data.name }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plans', selectedProductId] })
       setError(null)

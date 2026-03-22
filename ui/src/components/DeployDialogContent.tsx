@@ -80,15 +80,35 @@ export function DeployDialogContent({
         </Box>
       </Stack>
 
-      {plans && plans.length > 0 && onSelectPlan && (
+      {plans && plans.length > 0 && (
         <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-            Select a plan:
-          </Typography>
+          {onSelectPlan && (
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+              Select a plan:
+            </Typography>
+          )}
           <Grid container spacing={1.5}>
             {plans.map((plan) => {
               const tmpl = plan.template
               const isSelected = tmpl && selectedPlanTemplateId === tmpl.id
+              const cardContent = (
+                <CardContent sx={{ py: 1.5, px: 2 }}>
+                  <PlanCardContent
+                    name={plan.name}
+                    priceCents={tmpl?.price_cents}
+                    billingInterval={tmpl?.billing_interval}
+                    description={tmpl?.description}
+                    compact
+                    nameVariant="subtitle2"
+                    priceVariant="h6"
+                    nameAdornment={
+                      isSelected
+                        ? <CheckCircleIcon sx={{ fontSize: 18, color: 'primary.main' }} />
+                        : undefined
+                    }
+                  />
+                </CardContent>
+              )
               return (
                 <Grid key={plan.id} size={{ xs: 12, sm: plans.length <= 2 ? 6 : 4 }}>
                   <Card
@@ -100,33 +120,22 @@ export function DeployDialogContent({
                       bgcolor: isSelected ? 'action.selected' : undefined,
                     }}
                   >
-                    <CardActionArea
-                      onClick={() => tmpl && onSelectPlan(tmpl.id)}
-                      sx={{
-                        height: '100%',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'stretch',
-                        justifyContent: 'flex-start',
-                      }}
-                    >
-                      <CardContent sx={{ py: 1.5, px: 2 }}>
-                        <PlanCardContent
-                          name={plan.name}
-                          priceCents={tmpl?.price_cents}
-                          billingInterval={tmpl?.billing_interval}
-                          description={tmpl?.description}
-                          compact
-                          nameVariant="subtitle2"
-                          priceVariant="h6"
-                          nameAdornment={
-                            isSelected
-                              ? <CheckCircleIcon sx={{ fontSize: 18, color: 'primary.main' }} />
-                              : undefined
-                          }
-                        />
-                      </CardContent>
-                    </CardActionArea>
+                    {onSelectPlan ? (
+                      <CardActionArea
+                        onClick={() => tmpl && onSelectPlan(tmpl.id)}
+                        sx={{
+                          height: '100%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'stretch',
+                          justifyContent: 'flex-start',
+                        }}
+                      >
+                        {cardContent}
+                      </CardActionArea>
+                    ) : (
+                      cardContent
+                    )}
                   </Card>
                 </Grid>
               )

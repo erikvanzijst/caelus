@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Box, Button, Dialog, DialogActions, DialogContent, Divider, LinearProgress, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { Deployment } from '../api/types'
+import type { Deployment, Plan } from '../api/types'
 import { ApiError } from '../api/client'
 import { deleteDeployment, getDeployment, updateDeployment } from '../api/endpoints'
 import { isTransitionalStatus } from '../utils/deploymentStatus'
@@ -106,6 +106,12 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
     },
   })
 
+  const subscriptionPlan: Plan[] = useMemo(() => {
+    const plan = deployment?.subscription?.plan_template?.plan
+    if (!plan) return []
+    return [{ ...plan, template: deployment?.subscription?.plan_template ?? null }]
+  }, [deployment])
+
   if (!deployment) return null
 
   return (
@@ -119,6 +125,8 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
             onChange={() => {}}
             initialHostname={deployment.hostname ?? undefined}
             readOnly
+            plans={subscriptionPlan}
+            selectedPlanTemplateId={deployment.subscription?.plan_template?.id ?? null}
           />
         )}
         {isTransitioning && (
@@ -129,7 +137,6 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
         )}
         <Divider sx={{ my: 2 }} />
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          <MetadataRow label="Plan" value={deployment.subscription?.plan_template?.plan?.name ?? '—'} />
           <MetadataRow label="Owner" value={deployment.user?.email ?? '—'} />
           <MetadataRow label="Created" value={formatLocalIso(deployment.created_at)} />
           <MetadataRow label="Age" value={formatAge(deployment.created_at)} />

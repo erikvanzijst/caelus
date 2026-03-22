@@ -44,8 +44,13 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
     : canonicalTemplate
 
   const plans: Plan[] = useMemo(() => {
+    if (isEditMode) {
+      // Show the deployment's current plan as a read-only display
+      const plan = deployment?.subscription?.plan_template?.plan
+      return plan ? [{ ...plan, template: deployment?.subscription?.plan_template ?? null }] : []
+    }
     return (plansQuery.data ?? []).filter((p) => p.template_id != null)
-  }, [plansQuery.data])
+  }, [isEditMode, deployment, plansQuery.data])
 
   // Auto-select if there's only one plan
   const effectivePlanTemplateId = useMemo(() => {
@@ -172,9 +177,9 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
           loading={!isEditMode && (templatesQuery.isLoading || plansQuery.isLoading)}
           initialHostname={deployment?.hostname ?? undefined}
           submitLabel={isEditMode ? 'Update' : 'Launch'}
-          plans={isEditMode ? undefined : plans}
-          selectedPlanTemplateId={effectivePlanTemplateId}
-          onSelectPlan={(planTemplateId) => setSelectedPlanTemplateId(planTemplateId)}
+          plans={plans}
+          selectedPlanTemplateId={isEditMode ? (deployment?.subscription?.plan_template?.id ?? null) : effectivePlanTemplateId}
+          onSelectPlan={isEditMode ? undefined : (planTemplateId) => setSelectedPlanTemplateId(planTemplateId)}
         />
       </DialogContent>
     </Dialog>

@@ -156,17 +156,18 @@ class DeploymentReconciler:
 
     @staticmethod
     def _build_plan_overrides(deployment: DeploymentORM) -> dict | None:
-        """Project plan-level constraints into the caelus.plan Helm values namespace."""
+        """Project plan-level constraints into the caelus.plan Helm values namespace.
+
+        Always injects ``caelus.plan`` when the deployment has a subscription so
+        that chart templates using ``| default`` fail loudly if the key is
+        unexpectedly absent (indicating a reconciler bug). Storage fields are
+        only included when the plan defines a positive storage quota.
+        """
         if not deployment.subscription or not deployment.subscription.plan_template:
             return None
+        plan_values: dict = {}
         storage_bytes = deployment.subscription.plan_template.storage_bytes
-        if storage_bytes is None:
-            return None
-        return {
-            "caelus": {
-                "plan": {
-                    "storageBytes": storage_bytes,
-                    "storageSize": bytes_to_k8s_size(storage_bytes),
-                },
-            },
-        }
+        if storage_bytes:
+            plan_values["storageBytes"] = storage_bytes
+            plan_values["storageSize"] = bytes_to_k8s_size(storage_bytes)
+        return {"caelus": {"plan": plan_values}}

@@ -10,7 +10,7 @@ spec:
 {{ toYaml .Values.storage.accessModes | indent 4 }}
   resources:
     requests:
-      storage: {{ .Values.storage.size }}
+      storage: {{ .Values.caelus.plan.storageSize | default .Values.storage.size }}
 {{- if .Values.storage.storageClassName }}
   storageClassName: {{ .Values.storage.storageClassName }}
 {{- end }}

@@ -54,7 +54,6 @@ Note that upstream chart values are nested under the
       }
     },
     "nextcloud": {
-      "host": "nextcloud.local",
       "mail": {
         "enabled": true,
         "fromAddress": "nextcloud",

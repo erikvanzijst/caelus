@@ -39,6 +39,21 @@
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
       },
       "additionalProperties": false
+    },
+    "caelus": {
+      "type": "object",
+      "description": "Plan-injected values from Caelus reconciler",
+      "properties": {
+        "plan": {
+          "type": "object",
+          "properties": {
+            "storageBytes": { "type": "integer" },
+            "storageSize": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

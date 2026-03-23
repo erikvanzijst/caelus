@@ -104,7 +104,7 @@ def test_reconcile_apply_happy_path_returns_ready_and_applied_template(db_sessio
     assert fake_provisioner.calls[1][1]["values"] == {
         "replicas": 1,
         "user": {"message": "hello", "domain": "reconcile.example.test"},
-        "caelus": {"plan": {"storageBytes": 0, "storageSize": "0"}},
+        "caelus": {"plan": {}},
     }
 
 
@@ -194,8 +194,8 @@ def test_reconcile_injects_plan_storage_into_helm_values(db_session) -> None:
     assert values["user"]["message"] == "hello"
 
 
-def test_reconcile_omits_caelus_when_storage_bytes_is_none(db_session) -> None:
-    """When plan has no storage quota, caelus namespace is not injected."""
+def test_reconcile_injects_empty_caelus_plan_when_no_storage_quota(db_session) -> None:
+    """When plan has no storage quota, caelus.plan is injected but empty."""
     deployment_id = _seed_deployment(db_session, storage_bytes=None)
     fake_provisioner = FakeProvisioner()
     reconciler = DeploymentReconciler(session=db_session, provisioner=fake_provisioner)
@@ -204,5 +204,5 @@ def test_reconcile_omits_caelus_when_storage_bytes_is_none(db_session) -> None:
     assert result.status == "ready"
 
     values = fake_provisioner.calls[1][1]["values"]
-    assert "caelus" not in values
+    assert values["caelus"] == {"plan": {}}
     assert values["replicas"] == 1

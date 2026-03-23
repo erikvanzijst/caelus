@@ -137,6 +137,7 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
         )}
         <Divider sx={{ my: 2 }} />
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <MetadataRow label="Plan" value={deployment.subscription?.plan_template?.plan?.name ?? '—'} />
           <MetadataRow label="Owner" value={deployment.user?.email ?? '—'} />
           <MetadataRow label="Created" value={formatLocalIso(deployment.created_at)} />
           <MetadataRow label="Age" value={formatAge(deployment.created_at)} />

@@ -60,13 +60,22 @@ override plan limits.
 - **GIVEN** a deployment with an active subscription
 - **AND** the subscription's plan template has `storage_bytes=None`
 - **WHEN** the reconciler builds merged values
-- **THEN** the merged values do NOT contain a `caelus` key
-- **AND** charts fall back to their own default storage sizes
+- **THEN** the merged values include `caelus.plan` as an empty object
+- **AND** charts fall back to their own default storage sizes via `| default`
+
+#### Scenario: Deployment with a plan that has zero storage_bytes
+- **GIVEN** a deployment with an active subscription
+- **AND** the subscription's plan template has `storage_bytes=0`
+- **WHEN** the reconciler builds merged values
+- **THEN** the merged values include `caelus.plan` as an empty object
+- **AND** charts fall back to their own default storage sizes via `| default`
 
 #### Scenario: Deployment with no subscription
 - **GIVEN** a deployment with `subscription_id=NULL`
 - **WHEN** the reconciler builds merged values
 - **THEN** the merged values do NOT contain a `caelus` key
+- **AND** chart templates that reference `.Values.caelus.plan` will fail
+  with a nil map traversal error, surfacing the missing subscription
 
 ### Requirement: bytes_to_k8s_size conversion
 
@@ -113,8 +122,22 @@ the plan-enforced value wins.
 
 Product Helm charts that use storage SHALL reference
 `.Values.caelus.plan.storageSize` in their PVC templates with a
-`| default` fallback to the chart's own default size. Charts that do
-not use storage MAY ignore the `caelus.plan` namespace entirely.
+`| default` fallback to the chart's own default size:
+
+```
+{{ .Values.caelus.plan.storageSize | default <chart-default> }}
+```
+
+The reconciler guarantees that `caelus.plan` is always present
+when a deployment has a subscription (even if empty). If
+`caelus.plan` is unexpectedly absent (no subscription, or a
+reconciler bug), Go template map traversal will fail loudly —
+this is the intended behavior, as it surfaces the problem rather
+than silently applying an arbitrary default.
+
+Charts that do not use storage MAY ignore the `caelus.plan`
+namespace entirely — but the `caelus` key will still be present
+in values.
 
 #### Scenario: Chart renders PVC with plan storage size
 - **GIVEN** Helm values contain `caelus.plan.storageSize: "10Gi"`
@@ -125,6 +148,7 @@ not use storage MAY ignore the `caelus.plan` namespace entirely.
 - **GIVEN** Helm values do NOT contain `caelus.plan`
 - **WHEN** the PVC template is rendered
 - **THEN** the PVC's `resources.requests.storage` falls back to the chart's default (e.g. `100Gi`)
+- **AND** template rendering does NOT fail with a nil map traversal error
 
 ### Requirement: Chart values schema permits optional caelus namespace
 

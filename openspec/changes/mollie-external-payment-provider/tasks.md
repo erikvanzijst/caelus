@@ -1,19 +1,19 @@
 ## 1. Database Schema & Migration
 
-- [ ] 1.1 Add `MolliePaymentStatus` enum to `app/models/billing.py` (open, pending, authorized, paid, canceled, expired, failed)
-- [ ] 1.2 Add `MolliePaymentORM` model to `app/models/billing.py` with all columns: id (UUID), subscription_id (FK), mollie_payment_id (unique str), status (enum), sequence_type (str), amount_cents (int), created_at (datetime), payload (JSON)
-- [ ] 1.3 Add `mollie_customer_id` (nullable str) to `UserORM` in `app/models/core.py`
-- [ ] 1.4 Add `mollie_subscription_id` (nullable str) and `mollie_mandate_id` (nullable str) to `SubscriptionORM` in `app/models/billing.py`
-- [ ] 1.5 Remove `external_ref` from `SubscriptionORM` in `app/models/billing.py`
-- [ ] 1.6 Add `pending` value to `PaymentStatus` enum in `app/models/billing.py`
-- [ ] 1.7 Add `pending` to the deployment status values (string field in `DeploymentORM`)
-- [ ] 1.8 Create Alembic migration: add columns, drop `external_ref`, create `mollie_payment` table, extend `payment_status` enum
-- [ ] 1.9 Update `SubscriptionORM` relationships to include `mollie_payments` backref
-- [ ] 1.10 Remove `external_ref` from subscription Pydantic response models and API routes
+- [x] 1.1 Add `MolliePaymentStatus` enum to `app/models/billing.py` (open, pending, authorized, paid, canceled, expired, failed)
+- [x] 1.2 Add `MolliePaymentORM` model to `app/models/billing.py` with all columns: id (UUID), subscription_id (FK), mollie_payment_id (unique str), status (enum), sequence_type (str), amount_cents (int), created_at (datetime), payload (JSON)
+- [x] 1.3 Add `mollie_customer_id` (nullable str) to `UserORM` in `app/models/core.py`
+- [x] 1.4 Add `mollie_subscription_id` (nullable str) and `mollie_mandate_id` (nullable str) to `SubscriptionORM` in `app/models/billing.py`
+- [x] 1.5 Remove `external_ref` from `SubscriptionORM` in `app/models/billing.py`
+- [x] 1.6 Add `pending` value to `PaymentStatus` enum in `app/models/billing.py`
+- [x] 1.7 Add `pending` to the deployment status values (string field in `DeploymentORM`)
+- [x] 1.8 Create Alembic migration: add columns, drop `external_ref`, create `mollie_payment` table, extend `payment_status` enum
+- [x] 1.9 Update `SubscriptionORM` relationships to include `mollie_payments` backref
+- [x] 1.10 Remove `external_ref` from subscription Pydantic response models and API routes
 
 ## 2. Configuration
 
-- [ ] 2.1 Add `mollie_api_key`, `mollie_redirect_url`, `mollie_webhook_base_url` to `CaelusSettings` in `app/config.py` (all optional, default None)
+- [x] 2.1 Add `mollie_api_key`, `mollie_redirect_url`, `mollie_webhook_base_url` to `CaelusSettings` in `app/config.py` (all optional, default None)
 
 ## 3. Payment Provider Abstraction
 

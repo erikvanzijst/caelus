@@ -17,6 +17,10 @@ class CaelusSettings(BaseSettings):
     wildcard_domains: list[str] = []
     reserved_hostnames: list[str] = []
 
+    mollie_api_key: str | None = None
+    mollie_redirect_url: str | None = None
+    mollie_webhook_base_url: str | None = None
+
 
 @lru_cache
 def get_settings() -> CaelusSettings:

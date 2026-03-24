@@ -13,6 +13,7 @@ from app.services.reconcile_naming import (
 
 def test_deployment_statuses_are_complete_and_unique() -> None:
     expected = {
+        "pending",
         "provisioning",
         "ready",
         "deleting",

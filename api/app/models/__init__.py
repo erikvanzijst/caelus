@@ -39,6 +39,8 @@ from app.models.core import (  # noqa: F401
 
 from app.models.billing import (  # noqa: F401
     BillingInterval,
+    MolliePaymentORM,
+    MolliePaymentStatus,
     PaymentStatus,
     PlanBase,
     PlanCreate,

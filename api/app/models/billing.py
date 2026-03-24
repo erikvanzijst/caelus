@@ -1,10 +1,11 @@
+import uuid as uuid_mod
 from datetime import datetime
 from enum import StrEnum
 from typing import Optional
 
 from pydantic import ConfigDict
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import BigInteger, Column, Enum as SAEnum, ForeignKey, Integer, Index, Text, func
+from sqlalchemy import BigInteger, Column, Enum as SAEnum, ForeignKey, Integer, Index, JSON, String, Text, Uuid, func
 
 from app.models.core import _utcnow, ProductORM, UserORM
 
@@ -20,8 +21,19 @@ class SubscriptionStatus(StrEnum):
 
 
 class PaymentStatus(StrEnum):
+    PENDING = "pending"
     CURRENT = "current"
     ARREARS = "arrears"
+
+
+class MolliePaymentStatus(StrEnum):
+    OPEN = "open"
+    PENDING = "pending"
+    AUTHORIZED = "authorized"
+    PAID = "paid"
+    CANCELED = "canceled"
+    EXPIRED = "expired"
+    FAILED = "failed"
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +176,6 @@ class SubscriptionBase(SQLModel):
     status: SubscriptionStatus = SubscriptionStatus.ACTIVE
     payment_status: PaymentStatus = PaymentStatus.CURRENT
     cancelled_at: Optional[datetime] = None
-    external_ref: Optional[str] = None
 
 
 class SubscriptionORM(SubscriptionBase, table=True):
@@ -192,7 +203,8 @@ class SubscriptionORM(SubscriptionBase, table=True):
         ),
     )
     cancelled_at: Optional[datetime] = Field(default=None)
-    external_ref: Optional[str] = Field(default=None)
+    mollie_subscription_id: Optional[str] = Field(default=None)
+    mollie_mandate_id: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=_utcnow, nullable=False)
 
     plan_template: PlanTemplateVersionORM = Relationship(
@@ -204,6 +216,7 @@ class SubscriptionORM(SubscriptionBase, table=True):
         sa_relationship_kwargs={"foreign_keys": "SubscriptionORM.user_id", "lazy": "joined"},
     )
     deployments: list["DeploymentORM"] = Relationship(back_populates="subscription")
+    mollie_payments: list["MolliePaymentORM"] = Relationship(back_populates="subscription")
 
 
 class SubscriptionRead(SubscriptionBase):
@@ -211,3 +224,38 @@ class SubscriptionRead(SubscriptionBase):
     id: int
     created_at: datetime
     plan_template: Optional[PlanTemplateVersionRead] = None
+
+
+# ---------------------------------------------------------------------------
+# Mollie Payment
+# ---------------------------------------------------------------------------
+
+
+class MolliePaymentORM(SQLModel, table=True):
+    __tablename__ = "mollie_payment"
+
+    id: uuid_mod.UUID = Field(
+        default_factory=uuid_mod.uuid4,
+        sa_column=Column(Uuid, primary_key=True),
+    )
+    subscription_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("subscription.id"), nullable=False, index=True)
+    )
+    mollie_payment_id: str = Field(
+        sa_column=Column(String(), unique=True, nullable=False)
+    )
+    status: MolliePaymentStatus = Field(
+        sa_column=Column(
+            SAEnum(MolliePaymentStatus, values_callable=lambda e: [m.value for m in e]),
+            nullable=False,
+        )
+    )
+    sequence_type: str = Field(nullable=False)
+    amount_cents: int = Field(nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
+    payload: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
+
+    subscription: SubscriptionORM = Relationship(
+        back_populates="mollie_payments",
+        sa_relationship_kwargs={"foreign_keys": "MolliePaymentORM.subscription_id", "lazy": "joined"},
+    )

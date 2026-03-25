@@ -5,6 +5,7 @@ import logging
 import os
 import time
 from pathlib import Path
+from uuid import UUID
 
 import typer
 import yaml
@@ -455,7 +456,7 @@ def list_deployments(
 
 
 @app.command("get-deployment")
-def get_deployment(user_id: int, deployment_id: int) -> None:
+def get_deployment(user_id: int, deployment_id: UUID) -> None:
     with session_scope() as session:
         _require_cli_user(session)
         try:
@@ -470,7 +471,7 @@ def get_deployment(user_id: int, deployment_id: int) -> None:
 
 
 @app.command("delete-deployment")
-def delete_deployment(user_id: int, deployment_id: int) -> None:
+def delete_deployment(user_id: int, deployment_id: UUID) -> None:
     with session_scope() as session:
         _require_cli_user(session)
         try:
@@ -486,7 +487,7 @@ def delete_deployment(user_id: int, deployment_id: int) -> None:
 def update_deployment(
     *,
     user_id: int = typer.Option(..., "--user-id"),
-    deployment_id: int = typer.Option(..., "--deployment-id"),
+    deployment_id: UUID = typer.Option(..., "--deployment-id"),
     desired_template_id: int = typer.Option(..., "--desired-template-id"),
 ) -> None:
     with session_scope() as session:
@@ -505,7 +506,7 @@ def update_deployment(
 
 @app.command("reconcile")
 def reconcile(
-    deployment_id: int,
+    deployment_id: UUID,
 ) -> None:
     with session_scope() as session:
         try:
@@ -550,7 +551,7 @@ def jobs(
     failed: bool = typer.Option(False, "--failed", help="Show only failed jobs"),
     done: bool = typer.Option(False, "--done", help="Show only done jobs"),
     reverse: bool = typer.Option(False, "--reverse", "-r", help="Reverse run_after sort order"),
-    deployment_id: int | None = typer.Option(
+    deployment_id: UUID | None = typer.Option(
         None, "--deployment-id", "-d", help="Filter by deployment id"
     ),
 ) -> None:

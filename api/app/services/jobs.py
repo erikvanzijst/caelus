@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import logging
+from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -26,7 +27,7 @@ class JobService:
     def enqueue_job(
         self,
         *,
-        deployment_id: int,
+        deployment_id: UUID,
         reason: str,
         run_after: datetime | None = None,
     ) -> DeploymentReconcileJobORM:
@@ -61,7 +62,7 @@ class JobService:
         self,
         *,
         statuses: list[str] | None = None,
-        deployment_id: int | None = None,
+        deployment_id: UUID | None = None,
         limit: int = 100,
     ) -> list[DeploymentReconcileJobORM]:
         """List reconcile jobs with optional status/deployment filters."""
@@ -195,7 +196,7 @@ class JobService:
         logger.warning("Marked reconcile job id=%s as failed: %s", job_id, error)
         return job
 
-    def dedupe_open_jobs(self, *, deployment_id: int) -> int:
+    def dedupe_open_jobs(self, *, deployment_id: UUID) -> int:
         """Remove duplicate open jobs for a deployment, keeping the earliest one."""
         jobs = list(
             self._session.exec(

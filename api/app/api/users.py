@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
@@ -89,7 +91,7 @@ def list_deployments(
 @router.get("/{user_id}/deployments/{deployment_id}", response_model=DeploymentRead)
 def get_deployment(
     user_id: int,
-    deployment_id: int,
+    deployment_id: UUID,
     current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> DeploymentRead:
@@ -99,7 +101,7 @@ def get_deployment(
 @router.put("/{user_id}/deployments/{deployment_id}", response_model=DeploymentRead)
 def update_deployment(
     user_id: int,
-    deployment_id: int,
+    deployment_id: UUID,
     deployment: DeploymentUpdate,
     current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
@@ -112,7 +114,7 @@ def update_deployment(
 @router.delete("/{user_id}/deployments/{deployment_id}", status_code=204)
 def delete_deployment_endpoint(
     user_id: int,
-    deployment_id: int,
+    deployment_id: UUID,
     current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> None:

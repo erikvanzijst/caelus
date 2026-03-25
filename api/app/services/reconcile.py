@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import logging
+from uuid import UUID
 
 from sqlmodel import Session
 
@@ -35,7 +36,7 @@ class DeploymentReconciler:
         self._session = session
         self._provisioner = provisioner or default_provisioner
 
-    def reconcile(self, deployment_id: int) -> ReconcileResult:
+    def reconcile(self, deployment_id: UUID) -> ReconcileResult:
         logger.info("Starting reconcile for deployment_id=%s", deployment_id)
         deployment = _get_deployment_orm(self._session, deployment_id=deployment_id)
         try:

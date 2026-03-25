@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
 from typing import Optional, Any
+from uuid import UUID, uuid4
 
 from pydantic import ConfigDict, model_validator
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String, func
+from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String, Uuid, func
 
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
 
@@ -229,7 +230,7 @@ class DeploymentORM(DeploymentBase, table=True):
         ),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, sa_column=Column(Uuid, primary_key=True))
     user_id: int = Field(foreign_key="user.id", index=True)
     desired_template_id: int = Field(
         sa_column=Column(
@@ -294,14 +295,14 @@ class DeploymentCreate(DeploymentBase):
 
 class DeploymentUpdate(SQLModel):
     model_config = ConfigDict(extra="forbid")
-    id: Optional[int] = None
+    id: Optional[UUID] = None
     user_id: Optional[int] = None
     desired_template_id: int
     user_values_json: Optional[dict[str, Any]] = Field(default=None)
 
 
 class DeploymentRead(DeploymentBase):
-    id: int
+    id: UUID
     created_at: datetime
     user: UserRead
     hostname: Optional[str] = None
@@ -318,7 +319,7 @@ class DeploymentRead(DeploymentBase):
 
 
 class DeploymentReconcileJobBase(SQLModel):
-    deployment_id: int
+    deployment_id: UUID
     reason: str
     status: str = Field(default="queued")
     run_after: datetime = Field(default_factory=_utcnow, nullable=False)
@@ -342,9 +343,9 @@ class DeploymentReconcileJobORM(DeploymentReconcileJobBase, table=True):
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    deployment_id: int = Field(
+    deployment_id: UUID = Field(
         sa_column=Column(
-            Integer,
+            Uuid,
             ForeignKey("deployment.id", ondelete="CASCADE"),
             nullable=False,
             index=True,

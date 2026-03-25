@@ -456,7 +456,7 @@ def test_cli_get_deployment_command(cli_runner):
     assert get_dep_res.exit_code == 0
     assert _parse_yaml_stdout(get_dep_res)["hostname"] == "dep.example.com"
 
-    missing_dep_res = runner.invoke(app, ["get-deployment", str(user_id), "99999"])
+    missing_dep_res = runner.invoke(app, ["get-deployment", str(user_id), "00000000-0000-0000-0000-000000000000"])
     assert missing_dep_res.exit_code == 1
     assert "Error: Deployment not found" in missing_dep_res.output
     assert "Traceback" not in missing_dep_res.output
@@ -785,14 +785,14 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
     )
     assert upgrade_res.exit_code == 0
     upgraded = _parse_yaml_stdout(upgrade_res)
-    assert upgraded["id"] == dep_id
+    assert upgraded["id"] == str(dep_id)
     assert upgraded["desired_template_id"] == tmpl2_id
     _mark_first_open_job_done(dep_id)
 
     delete_res = runner.invoke(app, ["delete-deployment", "1", str(dep_id)])
     assert delete_res.exit_code == 0
     deleted = _parse_yaml_stdout(delete_res)
-    assert deleted["id"] == dep_id
+    assert deleted["id"] == str(dep_id)
 
     reasons = _get_job_reasons_for_deployment(dep_id)
     assert reasons == ["create", "update", "delete"]
@@ -872,7 +872,7 @@ def test_cli_reconcile_command_reconciles_deployment(cli_runner, monkeypatch):
 
 def test_cli_reconcile_command_not_found_returns_stable_error(cli_runner):
     runner, app = cli_runner
-    result = runner.invoke(app, ["reconcile", "999999"])
+    result = runner.invoke(app, ["reconcile", "00000000-0000-0000-0000-000000000000"])
     assert result.exit_code == 1
     assert "Error: Deployment not found" in result.output
     assert "Traceback" not in result.output

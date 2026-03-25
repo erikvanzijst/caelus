@@ -118,7 +118,7 @@ export function listAllDeployments() {
   return requestJson<Deployment[]>('/deployments')
 }
 
-export function getDeployment(userId: number, deploymentId: number) {
+export function getDeployment(userId: number, deploymentId: string) {
   return requestJson<Deployment>(`/users/${userId}/deployments/${deploymentId}`)
 }
 
@@ -138,7 +138,7 @@ export function createDeployment(
 
 export function updateDeployment(
   userId: number,
-  deploymentId: number,
+  deploymentId: string,
   payload: { desired_template_id: number; user_values_json?: object },
 ) {
   return requestJson<Deployment>(`/users/${userId}/deployments/${deploymentId}`, {
@@ -147,7 +147,7 @@ export function updateDeployment(
   })
 }
 
-export function deleteDeployment(userId: number, deploymentId: number) {
+export function deleteDeployment(userId: number, deploymentId: string) {
   return requestJson<null>(`/users/${userId}/deployments/${deploymentId}`, {
     method: 'DELETE',
   })

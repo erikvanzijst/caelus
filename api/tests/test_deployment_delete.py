@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlmodel import select
 
 from app.models import DeploymentReconcileJobORM
@@ -42,7 +44,7 @@ def test_delete_deployment_flow(client, db_session):
     dep_id = dep_resp.json()["id"]
     create_job = db_session.exec(
         select(DeploymentReconcileJobORM).where(
-            DeploymentReconcileJobORM.deployment_id == dep_id,
+            DeploymentReconcileJobORM.deployment_id == UUID(dep_id),
             DeploymentReconcileJobORM.reason == "create",
         )
     ).one()

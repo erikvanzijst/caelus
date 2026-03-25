@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_PROVISIONING,
     DEPLOYMENT_STATUS_DELETING,
@@ -14,6 +16,7 @@ from app.services.jobs import JobService
 
 def _finish_create_job(db_session, deployment_id):
     """Mark the create job as done and set deployment to ready (simulates reconciler)."""
+    deployment_id = UUID(deployment_id) if isinstance(deployment_id, str) else deployment_id
     create_job = db_session.exec(
         select(DeploymentReconcileJobORM).where(
             DeploymentReconcileJobORM.deployment_id == deployment_id,
@@ -68,7 +71,7 @@ def test_delete_deployment_flow(client, db_session):
         json={"desired_template_id": template_id, "user_values_json": {"ingress": {"host": "cloud.example.com"}}, "plan_template_id": ptv_id},
     )
     assert deployment_resp.status_code == 201
-    deployment_id = deployment_resp.json()["id"]
+    deployment_id = UUID(deployment_resp.json()["id"])
     assert deployment_resp.json()["status"] == DEPLOYMENT_STATUS_PROVISIONING
     assert deployment_resp.json()["generation"] == 1
     create_jobs = db_session.exec(
@@ -97,11 +100,11 @@ def test_delete_deployment_flow(client, db_session):
     # Verify its status is "deleting"
     list_resp = client.get(f"/api/users/{user_id}/deployments")
     assert list_resp.status_code == 200
-    deleting_dep = next(filter(lambda d: d["id"] == deployment_id, list_resp.json()))
+    deleting_dep = next(filter(lambda d: d["id"] == str(deployment_id), list_resp.json()))
     assert deleting_dep.get("status") == DEPLOYMENT_STATUS_DELETING
 
     # Deleting a non‑existent deployment should return 404
-    not_found_resp = client.delete(f"/api/users/{user_id}/deployments/99999")
+    not_found_resp = client.delete(f"/api/users/{user_id}/deployments/00000000-0000-0000-0000-000000000000")
     assert not_found_resp.status_code == 404
 
     # Re-deleting an already deleted/deleting deployment should be idempotent
@@ -186,7 +189,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
 
     update_jobs = db_session.exec(
         select(DeploymentReconcileJobORM).where(
-            DeploymentReconcileJobORM.deployment_id == dep_id,
+            DeploymentReconcileJobORM.deployment_id == UUID(dep_id),
             DeploymentReconcileJobORM.reason == "update",
         )
     ).all()
@@ -500,7 +503,7 @@ def test_update_deployment_rejects_non_ready_error_status(client, db_session):
         f"/api/users/{user_id}/deployments",
         json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "errstate.example.test"}, "plan_template_id": ptv_id},
     )
-    dep_id = dep_resp.json()["id"]
+    dep_id = UUID(dep_resp.json()["id"])
 
     # Simulate error state
     deployment = db_session.get(DeploymentORM, dep_id)
@@ -538,7 +541,7 @@ def _create_deployment_for_user(client, db_session, user_id, product_suffix=""):
         json={"desired_template_id": tmpl_id, "plan_template_id": ptv_id},
     )
     assert dep_resp.status_code == 201
-    return dep_resp.json()["id"]
+    return UUID(dep_resp.json()["id"])
 
 
 def test_list_deployments_excludes_deleted(client, db_session):
@@ -574,7 +577,7 @@ def test_list_deployments_includes_deleting(client, db_session):
     list_resp = client.get(f"/api/users/{user_id}/deployments")
     assert list_resp.status_code == 200
     ids = [d["id"] for d in list_resp.json()]
-    assert dep_id in ids
+    assert str(dep_id) in ids
 
 
 def test_admin_list_all_deployments(client, db_session):
@@ -590,8 +593,8 @@ def test_admin_list_all_deployments(client, db_session):
     resp = client.get("/api/deployments")
     assert resp.status_code == 200
     ids = [d["id"] for d in resp.json()]
-    assert dep1_id in ids
-    assert dep2_id in ids
+    assert str(dep1_id) in ids
+    assert str(dep2_id) in ids
 
 
 def test_admin_list_deployments_excludes_deleted(client, db_session):
@@ -609,7 +612,7 @@ def test_admin_list_deployments_excludes_deleted(client, db_session):
     resp = client.get("/api/deployments")
     assert resp.status_code == 200
     ids = [d["id"] for d in resp.json()]
-    assert dep_id not in ids
+    assert str(dep_id) not in ids
 
 
 def test_admin_list_deployments_forbidden_for_non_admin(user_client):

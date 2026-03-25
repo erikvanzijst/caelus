@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import logging
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError
@@ -36,7 +37,7 @@ from app.services.reconcile_naming import generate_deployment_name, generate_dep
 logger = logging.getLogger(__name__)
 
 
-def _enqueue_reconcile_job(session: Session, *, deployment_id: int, reason: str) -> None:
+def _enqueue_reconcile_job(session: Session, *, deployment_id: UUID, reason: str) -> None:
     logger.debug("Queueing reconcile job deployment_id=%s reason=%s", deployment_id, reason)
     JobService(session).enqueue_job(deployment_id=deployment_id, reason=reason)
 
@@ -44,7 +45,7 @@ def _enqueue_reconcile_job(session: Session, *, deployment_id: int, reason: str)
 def _get_deployment_orm(
     session: Session,
     *,
-    deployment_id: int,
+    deployment_id: UUID,
     user_id: int | None = None,
 ) -> DeploymentORM:
     stmt = select(DeploymentORM).where(DeploymentORM.id == deployment_id)
@@ -194,7 +195,6 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     session.add(deployment)
     try:
         session.flush()
-        assert deployment.id is not None, "Deployment ID should not be None after flush"
         _enqueue_reconcile_job(session, deployment_id=deployment.id, reason=JOB_REASON_CREATE)
         session.commit()
         deployment = _get_deployment_orm(session, deployment_id=deployment.id)
@@ -224,7 +224,7 @@ def list_deployments(session: Session, *, user_id: int | None = None) -> list[De
     return [DeploymentRead.model_validate(d) for d in session.exec(stmt).all()]
 
 
-def get_deployment(session: Session, *, deployment_id: int, user_id: int | None = None) -> DeploymentRead:
+def get_deployment(session: Session, *, deployment_id: UUID, user_id: int | None = None) -> DeploymentRead:
     deployment = _get_deployment_orm(
         session,
         user_id=user_id,
@@ -235,7 +235,7 @@ def get_deployment(session: Session, *, deployment_id: int, user_id: int | None 
     return DeploymentRead.model_validate(deployment)
 
 
-def delete_deployment(session: Session, *, user_id: int, deployment_id: int) -> DeploymentRead:
+def delete_deployment(session: Session, *, user_id: int, deployment_id: UUID) -> DeploymentRead:
     """Mark a deployment as deleted.
 
     Retrieves the deployment ensuring it belongs to the given user. If not found,

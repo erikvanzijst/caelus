@@ -30,7 +30,7 @@ import { DeployDialog } from '../components/DeployDialog'
 function Dashboard() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
-  const [deletePendingIds, setDeletePendingIds] = useState<Set<number>>(new Set())
+  const [deletePendingIds, setDeletePendingIds] = useState<Set<string>>(new Set())
   const [deployProduct, setDeployProduct] = useState<Product | null>(null)
   const [editDeployment, setEditDeployment] = useState<Deployment | null>(null)
 
@@ -55,7 +55,7 @@ function Dashboard() {
   })
 
   const deleteDeploymentMutation = useMutation({
-    mutationFn: (deploymentId: number) =>
+    mutationFn: (deploymentId: string) =>
       deleteDeployment(user!.id, deploymentId),
     onMutate: (deploymentId) => {
       setDeletePendingIds((previous) => new Set(previous).add(deploymentId))
@@ -75,7 +75,7 @@ function Dashboard() {
     const visibleIds = new Set((deploymentsQuery.data ?? []).map((deployment) => deployment.id))
     setDeletePendingIds((previous) => {
       let changed = false
-      const next = new Set<number>()
+      const next = new Set<string>()
       previous.forEach((id) => {
         if (visibleIds.has(id)) {
           next.add(id)

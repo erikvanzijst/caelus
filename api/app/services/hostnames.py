@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import socket
 import logging
+from uuid import UUID
 
 from sqlmodel import Session, select
 
@@ -34,7 +35,7 @@ def _check_reserved(fqdn: str, settings: CaelusSettings) -> None:
         raise HostnameException("reserved")
 
 
-def _check_available(session: Session, fqdn: str, *, exclude_deployment_id: int | None = None) -> None:
+def _check_available(session: Session, fqdn: str, *, exclude_deployment_id: UUID | None = None) -> None:
     stmt = select(DeploymentORM.id).where(
         DeploymentORM.hostname == fqdn,
         DeploymentORM.status != DEPLOYMENT_STATUS_DELETED,
@@ -64,7 +65,7 @@ def require_valid_hostname_for_deployment(
     session: Session,
     fqdn: str,
     *,
-    exclude_deployment_id: int | None = None,
+    exclude_deployment_id: UUID | None = None,
     settings: CaelusSettings | None = None,
 ) -> None:
     """Validate that *fqdn* can be used for a new or updated deployment.

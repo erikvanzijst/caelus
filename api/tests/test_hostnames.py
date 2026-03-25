@@ -1,6 +1,7 @@
 """Tests for the hostname validation service and API endpoint."""
 import socket
 from unittest.mock import patch
+from uuid import UUID
 
 import pytest
 
@@ -536,13 +537,13 @@ class TestServerSideEnforcement:
         # Mark create job done and set status to ready so update is allowed
         create_job = db_session.exec(
             select(DeploymentReconcileJobORM).where(
-                DeploymentReconcileJobORM.deployment_id == dep_id,
+                DeploymentReconcileJobORM.deployment_id == UUID(dep_id),
                 DeploymentReconcileJobORM.reason == "create",
             )
         ).one()
         JobService(db_session).mark_job_done(job_id=create_job.id)
         from app.models import DeploymentORM
-        dep_orm = db_session.get(DeploymentORM, dep_id)
+        dep_orm = db_session.get(DeploymentORM, UUID(dep_id))
         dep_orm.status = "ready"
         db_session.add(dep_orm)
         db_session.commit()

@@ -75,7 +75,7 @@ export interface Deployment {
   hostname: string | null
   user_id: number
   user_values_json?: Record<string, unknown> | null
-  id: number
+  id: string
   created_at: IsoDate
   user: User
   desired_template: ProductTemplate

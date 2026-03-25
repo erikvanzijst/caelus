@@ -27,6 +27,7 @@ dependencies = [
   "Pillow>=10.0",
   "python-multipart>=0.0.6",
   "mollie-api-py>=1.2.3",
+  "python-dateutil>=2.9.0.post0",
 ]
 
 [tool.setuptools]
@@ -41,3 +42,9 @@ line-length = 100
 
 [tool.pytest.ini_options]
 addopts = "-q"
+
+[dependency-groups]
+dev = [
+    "ipython>=9.10.0",
+    "mypy>=1.19.1",
+]

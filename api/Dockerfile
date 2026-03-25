@@ -6,7 +6,7 @@ COPY --from=kubectl /opt/bitnami/kubectl/bin/kubectl /usr/local/bin/kubectl
 COPY --from=helm /helm /usr/local/bin/helm
 
 RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends postgresql-client
+    apt-get install -y --no-install-recommends postgresql-client procps
 
 RUN pip install uv
 

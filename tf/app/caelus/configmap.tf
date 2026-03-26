@@ -11,6 +11,7 @@ resource "kubernetes_config_map" "api" {
     CAELUS_DATABASE_URL = "postgresql+psycopg://${var.db_user}:${var.db_password}@caelus-postgres:5432/${var.db_name}"
     CAELUS_LB_IPS = jsonencode(var.lb_ips)
     CAELUS_WILDCARD_DOMAINS = jsonencode(var.wildcard_domains)
+    CAELUS_MOLLIE_API_KEY = var.mollie_api_key
     # CAELUS_LOG_LEVEL    = "info"
     PYTHONUNBUFFERED    = "1"
   }

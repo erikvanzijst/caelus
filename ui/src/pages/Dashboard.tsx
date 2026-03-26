@@ -10,8 +10,11 @@ import {
   Grid,
   LinearProgress,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material'
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -118,10 +121,22 @@ function Dashboard() {
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                         <Chip
                           size="small"
-                          label={`Status: ${deployment.status ?? 'unknown'}`}
+                          label={deployment.status === 'pending' ? 'Waiting for payment' : `Status: ${deployment.status ?? 'unknown'}`}
                           color={statusColor(deployment.status)}
+                          icon={deployment.status === 'pending' ? <HourglassEmptyIcon /> : undefined}
                           variant="outlined"
                         />
+                        {deployment.subscription?.payment_status === 'arrears' && deployment.status !== 'pending' && (
+                          <Tooltip title="A recent payment has failed. Please update your payment method.">
+                            <Chip
+                              size="small"
+                              label="Payment issue"
+                              color="warning"
+                              icon={<WarningAmberIcon />}
+                              variant="outlined"
+                            />
+                          </Tooltip>
+                        )}
                       </Stack>
                       <Typography variant="caption" color="text.secondary">
                         Last reconcile {formatDateTime(deployment.last_reconcile_at)}
@@ -143,14 +158,14 @@ function Dashboard() {
                   )}
                 </Stack>
               </CardContent>
-              {isTransitionalStatus(deployment.status) && (
+              {isTransitionalStatus(deployment.status) && deployment.status !== 'pending' && (
                 <LinearProgress
                   color={deployment.status === 'deleting' ? 'secondary' : 'primary'}
                   sx={{ mx: 2, borderRadius: 1 }}
                 />
               )}
               <CardActions sx={{ px: 2, pb: 2 }}>
-                {deployment.hostname && !(deployment.status === 'deleting' || (deployment.status === 'provisioning' && deployment.generation === 1)) ? (
+                {deployment.hostname && !(deployment.status === 'pending' || deployment.status === 'deleting' || (deployment.status === 'provisioning' && deployment.generation === 1)) ? (
                   <Button
                     href={ensureUrl(deployment.hostname)}
                     target="_blank"

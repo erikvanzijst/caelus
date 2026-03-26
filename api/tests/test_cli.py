@@ -67,7 +67,7 @@ def _seed_deployment_via_services() -> tuple[int, int]:
                 user_values_json={"domain": "dep.example.com"},
                 plan_template_id=ptv_id,
             ),
-        )
+        ).deployment
         return user.id, deployment.id
 
 
@@ -1004,7 +1004,7 @@ def test_cli_worker_parallel_processes_multiple_jobs(cli_runner, monkeypatch):
                     desired_template_id=template.id,
                     plan_template_id=ptv_id,
                 ),
-            )
+            ).deployment
             deployment_ids.append(deployment.id)
 
     # Use process_one_job directly (multiprocessing.Process workers can't

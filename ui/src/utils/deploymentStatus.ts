@@ -8,6 +8,8 @@ export function statusColor(
       return 'success'
     case 'error':
       return 'error'
+    case 'pending':
+      return 'info'
     case 'provisioning':
     case 'deleting':
       return 'warning'
@@ -19,5 +21,5 @@ export function statusColor(
 }
 
 export function isTransitionalStatus(status?: DeploymentStatus) {
-  return status === 'provisioning' || status === 'deleting'
+  return status === 'pending' || status === 'provisioning' || status === 'deleting'
 }

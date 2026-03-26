@@ -7,7 +7,7 @@ containing both the deployment resource and an optional checkout URL:
 
 ```json
 {
-  "deployment": { "id": 88, "status": "pending", "subscription_id": 42, ... },
+  "deployment": { "id": "a1b2c3d4-...", "status": "pending", "subscription_id": 42, ... },
   "checkout_url": "https://payments.mollie.com/checkout/..."
 }
 ```

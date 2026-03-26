@@ -4,17 +4,17 @@ Add Mollie-related columns to user and subscription tables,
 drop external_ref from subscription, extend payment_status enum,
 and create mollie_payment table.
 
-Revision ID: f6a7b8c9d0e1
-Revises: e5f6a7b8c9d0
-Create Date: 2026-03-24 12:00:00.000000
+Revision ID: a1b2c3d4e5f7
+Revises: f6a7b8c9d0e1
+Create Date: 2026-03-25 12:00:00.000000
 
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "f6a7b8c9d0e1"
-down_revision = "e5f6a7b8c9d0"
+revision = "a1b2c3d4e5f7"
+down_revision = "f6a7b8c9d0e1"
 branch_labels = None
 depends_on = None
 

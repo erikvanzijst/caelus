@@ -151,6 +151,30 @@ Client                                     Server
   `{"desired_template_id": 5}` (no plan_template_id)
 - **THEN** the response is 422 (plan_template_id is required)
 
+### Requirement: Deployment UUID pre-generated before Mollie calls
+
+During paid deployment creation, the server SHALL generate the deployment UUID
+(`uuid4()`) before making any Mollie API calls or database transactions. This
+pre-generated UUID is used for:
+
+1. **Redirect URL**: Appended as `?deployment={uuid}` to `CAELUS_MOLLIE_REDIRECT_URL`,
+   so the frontend can identify and focus on the new deployment when the user returns
+   from Mollie checkout.
+2. **Idempotency key**: Passed as the `idempotency_key` to `create_first_payment`,
+   ensuring that retried requests produce the same Mollie payment rather than duplicates.
+3. **Primary key**: Used as `DeploymentORM.id` when the database record is created.
+
+#### Scenario: Redirect URL includes deployment UUID
+- **GIVEN** `CAELUS_MOLLIE_REDIRECT_URL` is `"https://app.example.com/dashboard"`
+- **WHEN** a paid deployment is created with pre-generated UUID `abc-def-123`
+- **THEN** the redirect URL sent to Mollie is
+  `"https://app.example.com/dashboard?deployment=abc-def-123"`
+
+#### Scenario: Deployment UUID used as idempotency key
+- **WHEN** a paid deployment is created
+- **THEN** `create_first_payment` is called with `idempotency_key` equal to the
+  string representation of the deployment UUID
+
 ### Requirement: Mollie customer ensured before payment creation
 
 During paid deployment creation, the server SHALL ensure the user has a Mollie

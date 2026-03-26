@@ -64,7 +64,7 @@ def test_create_deployment_enqueues_create_job(db_session):
             user_values_json={"domain": "queue-create.example.test"},
             plan_template_id=ptv_id,
         ),
-    )
+    ).deployment
 
     assert dep.status == DEPLOYMENT_STATUS_PROVISIONING
     jobs = db_session.exec(
@@ -85,7 +85,7 @@ def test_delete_deployment_sets_state_and_enqueues_delete_job(db_session):
             user_values_json={"domain": "queue-delete.example.test"},
             plan_template_id=ptv_id,
         ),
-    )
+    ).deployment
 
     create_job = db_session.exec(
         select(DeploymentReconcileJobORM)
@@ -118,7 +118,7 @@ def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
             user_values_json={"domain": "queue-upgrade.example.test"},
             plan_template_id=ptv_id,
         ),
-    )
+    ).deployment
 
     create_job = db_session.exec(
         select(DeploymentReconcileJobORM)
@@ -163,7 +163,7 @@ def test_update_rejects_non_ready_deployment(db_session):
             user_values_json={"domain": "queue-rollback.example.test"},
             plan_template_id=ptv_id,
         ),
-    )
+    ).deployment
 
     # Deployment is still in 'provisioning' — update should be rejected
     with pytest.raises(IntegrityException, match="not in ready state"):

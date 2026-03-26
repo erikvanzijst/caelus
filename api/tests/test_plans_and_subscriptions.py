@@ -562,7 +562,7 @@ class TestDeploymentSubscriptionAtomic:
                 user_values_json={"domain": "atomic.example.com"},
                 plan_template_id=ptv_id,
             ),
-        )
+        ).deployment
 
         assert dep.subscription_id is not None
 

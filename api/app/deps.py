@@ -4,8 +4,10 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from app.config import get_settings
 from app.db import get_session
 from app.models import UserORM
+from app.services.mollie import MolliePaymentProvider, PaymentProvider
 
 
 def get_current_user(
@@ -48,3 +50,14 @@ def require_self(
     if current_user.id != user_id and not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return current_user
+
+
+def get_payment_provider() -> PaymentProvider | None:
+    """Return a MolliePaymentProvider when configured, None otherwise.
+
+    When None, all plans are treated as free regardless of price_cents.
+    """
+    settings = get_settings()
+    if settings.mollie_api_key:
+        return MolliePaymentProvider(api_key=settings.mollie_api_key)
+    return None

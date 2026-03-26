@@ -15,6 +15,7 @@ from app.models.core import (  # noqa: F401
     _utcnow,
     DeploymentBase,
     DeploymentCreate,
+    DeploymentCreateResponse,
     DeploymentORM,
     DeploymentRead,
     DeploymentReconcileJobBase,

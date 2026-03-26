@@ -71,9 +71,9 @@ def test_delete_deployment_flow(client, db_session):
         json={"desired_template_id": template_id, "user_values_json": {"ingress": {"host": "cloud.example.com"}}, "plan_template_id": ptv_id},
     )
     assert deployment_resp.status_code == 201
-    deployment_id = UUID(deployment_resp.json()["id"])
-    assert deployment_resp.json()["status"] == DEPLOYMENT_STATUS_PROVISIONING
-    assert deployment_resp.json()["generation"] == 1
+    deployment_id = UUID(deployment_resp.json()["deployment"]["id"])
+    assert deployment_resp.json()["deployment"]["status"] == DEPLOYMENT_STATUS_PROVISIONING
+    assert deployment_resp.json()["deployment"]["generation"] == 1
     create_jobs = db_session.exec(
         select(DeploymentReconcileJobORM).where(
             DeploymentReconcileJobORM.deployment_id == deployment_id,
@@ -175,7 +175,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
         },
     )
     assert dep_resp.status_code == 201
-    dep_id = dep_resp.json()["id"]
+    dep_id = dep_resp.json()["deployment"]["id"]
     _finish_create_job(db_session, dep_id)
 
     upgrade_resp = client.put(
@@ -331,7 +331,7 @@ def test_create_deployment_derives_hostname_recursively_case_insensitive_and_fir
         },
     )
     assert dep_resp.status_code == 201
-    assert dep_resp.json()["hostname"] == "first.example.test"
+    assert dep_resp.json()["deployment"]["hostname"] == "first.example.test"
 
 
 def test_update_deployment_rederives_hostname_from_user_values(client, db_session):
@@ -376,7 +376,7 @@ def test_update_deployment_rederives_hostname_from_user_values(client, db_sessio
         json={"desired_template_id": tmpl1_id, "user_values_json": {"domain": "before.example.test", "user": {}}, "plan_template_id": ptv_id},
     )
     assert dep_resp.status_code == 201
-    dep_id = dep_resp.json()["id"]
+    dep_id = dep_resp.json()["deployment"]["id"]
     _finish_create_job(db_session, dep_id)
 
     update_resp = client.put(
@@ -419,7 +419,7 @@ def test_same_version_update_with_new_values(client, db_session):
         f"/api/users/{user_id}/deployments",
         json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "same.example.test", "color": "red"}, "plan_template_id": ptv_id},
     )
-    dep_id = dep_resp.json()["id"]
+    dep_id = dep_resp.json()["deployment"]["id"]
     _finish_create_job(db_session, dep_id)
 
     # Same template, different values
@@ -463,7 +463,7 @@ def test_update_deployment_rejects_non_ready_status(client, db_session):
         f"/api/users/{user_id}/deployments",
         json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "notready.example.test"}, "plan_template_id": ptv_id},
     )
-    dep_id = dep_resp.json()["id"]
+    dep_id = dep_resp.json()["deployment"]["id"]
 
     # Deployment is still in 'provisioning' — update should fail
     update_resp = client.put(
@@ -503,7 +503,7 @@ def test_update_deployment_rejects_non_ready_error_status(client, db_session):
         f"/api/users/{user_id}/deployments",
         json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "errstate.example.test"}, "plan_template_id": ptv_id},
     )
-    dep_id = UUID(dep_resp.json()["id"])
+    dep_id = UUID(dep_resp.json()["deployment"]["id"])
 
     # Simulate error state
     deployment = db_session.get(DeploymentORM, dep_id)
@@ -541,7 +541,7 @@ def _create_deployment_for_user(client, db_session, user_id, product_suffix=""):
         json={"desired_template_id": tmpl_id, "plan_template_id": ptv_id},
     )
     assert dep_resp.status_code == 201
-    return UUID(dep_resp.json()["id"])
+    return UUID(dep_resp.json()["deployment"]["id"])
 
 
 def test_list_deployments_excludes_deleted(client, db_session):

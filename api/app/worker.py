@@ -64,6 +64,8 @@ def process_one_job(base_worker_id: str) -> dict | None:
         }
 
 
+# TODO: When a worker processes crashes, does it get replaced in the pool? If not, the sentinel object
+#       never gets sent and the master won't join and exit gracefully
 def _worker_loop(
     base_worker_id: str, result_queue: multiprocessing.Queue, poll_seconds: float
 ) -> None:

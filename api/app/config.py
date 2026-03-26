@@ -9,6 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class CaelusSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="CAELUS_", env_file=(".env", ".env.local"))
 
+    base_url: str = "http://localhost:5173"
+    base_url_api: str = "http://localhost:8000/api"
     database_url: str = "postgresql+psycopg://caelus:caelus@localhost:5432/caelus"
     static_path: Path = Path(__file__).parent.parent / "static"
     log_level: str = "INFO"
@@ -18,8 +20,8 @@ class CaelusSettings(BaseSettings):
     reserved_hostnames: list[str] = []
 
     mollie_api_key: str | None = None
-    mollie_redirect_url: str | None = None
-    mollie_webhook_base_url: str | None = None
+    mollie_redirect_url: str = base_url
+    mollie_webhook_base_url: str = base_url_api
 
 
 @lru_cache

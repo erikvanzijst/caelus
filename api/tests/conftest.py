@@ -10,9 +10,11 @@ from sqlmodel import Session
 from typer.testing import CliRunner
 
 from app.db import get_session, init_db
+from app.deps import get_payment_provider
 from app.main import app
 from app.models import UserORM, PlanORM, PlanTemplateVersionORM, BillingInterval
 from app.models.core import _utcnow
+from app.services.mollie import FakePaymentProvider
 
 
 @pytest.fixture
@@ -80,6 +82,31 @@ def create_free_plan_template(session: Session, product_id: int) -> int:
     return ptv.id
 
 
+def create_paid_plan_template(
+    session: Session, product_id: int, *, price_cents: int = 1000, name: str = "Pro",
+) -> int:
+    """Create a paid Plan + PlanTemplateVersion for a product.
+
+    Returns the plan_template_version ID.
+    """
+    plan = PlanORM(name=name, product_id=product_id, created_at=_utcnow())
+    session.add(plan)
+    session.flush()
+    ptv = PlanTemplateVersionORM(
+        plan_id=plan.id,
+        price_cents=price_cents,
+        billing_interval=BillingInterval.MONTHLY,
+        storage_bytes=0,
+        created_at=_utcnow(),
+    )
+    session.add(ptv)
+    session.flush()
+    plan.template_id = ptv.id
+    session.commit()
+    session.refresh(ptv)
+    return ptv.id
+
+
 ADMIN_EMAIL = "test@example.com"
 AUTH_HEADER = {"X-Auth-Request-Email": ADMIN_EMAIL}
 
@@ -92,11 +119,12 @@ OTHER_AUTH_HEADER = {"X-Auth-Request-Email": OTHER_EMAIL}
 
 @pytest.fixture
 def client(db_session):
-    """Test client authenticated as an admin user."""
+    """Test client authenticated as an admin user (no payment provider)."""
     def override_get_db():
         yield db_session
 
     app.dependency_overrides[get_session] = override_get_db
+    app.dependency_overrides[get_payment_provider] = lambda: None
 
     # Pre-create the default test user as admin so existing tests pass
     admin_user = UserORM(email=ADMIN_EMAIL, is_admin=True)
@@ -107,6 +135,37 @@ def client(db_session):
         yield client
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def fake_payment_provider():
+    """A FakePaymentProvider instance shared across a test."""
+    return FakePaymentProvider()
+
+
+@pytest.fixture
+def paid_client(db_session, fake_payment_provider, monkeypatch):
+    """Test client with FakePaymentProvider injected via dependency override."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("CAELUS_MOLLIE_WEBHOOK_BASE_URL", "https://test.example.com/api")
+    get_settings.cache_clear()
+
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_get_db
+    app.dependency_overrides[get_payment_provider] = lambda: fake_payment_provider
+
+    admin_user = UserORM(email=ADMIN_EMAIL, is_admin=True)
+    db_session.add(admin_user)
+    db_session.commit()
+
+    with TestClient(app, headers=AUTH_HEADER) as client:
+        yield client
+
+    app.dependency_overrides.clear()
+    get_settings.cache_clear()
 
 
 @pytest.fixture

@@ -218,6 +218,7 @@ PAID PLAN DEPLOYMENT CREATION:
     |────────────────────────────>|                               |
     |                             |                               |
     |                             |  Validate inputs              |
+    |                             |  Generate deployment UUID     |
     |                             |  Ensure Mollie customer       |
     |                             |  exists for this user         |
     |                             |──────────────────────────────>|
@@ -231,8 +232,10 @@ PAID PLAN DEPLOYMENT CREATION:
     |                             |  POST /v2/customers/cst/pay   |
     |                             |  { sequenceType: "first",     |
     |                             |    amount: {EUR, "10.00"},    |
-    |                             |    redirectUrl, webhookUrl,   |
-    |                             |    metadata: {sub_id: ...} }  |
+    |                             |    redirectUrl:               |
+    |                             |      dashboard?deployment=id, |
+    |                             |    webhookUrl,                |
+    |                             |    idempotencyKey: dep UUID } |
     |                             |<──────────────────────────────|
     |                             |  tr_xxxxx + checkout URL      |
     |                             |                               |
@@ -429,9 +432,22 @@ redirect (`window.location.href = checkout_url`), abandoning the SPA state. Afte
 payment, Mollie redirects to the dashboard URL. The app reloads fresh and shows the
 new deployment card.
 
-The redirect URL given to Mollie includes a query parameter to help the dashboard
-identify the new deployment: `?new_deployment=<deployment_id>`. This allows the UI to
-show a contextual indicator even before the webhook arrives.
+The redirect URL given to Mollie is constructed from `CAELUS_MOLLIE_REDIRECT_URL` with
+a `deployment` query parameter containing the pre-generated deployment UUID:
+
+```
+{CAELUS_MOLLIE_REDIRECT_URL}?deployment={deployment_id}
+```
+
+This works because `DeploymentORM.id` is a UUID4 generated client-side before the
+Mollie API call — not a database sequence. The deployment ID is known before any
+external calls or database transactions begin. The same UUID also serves as the Mollie
+idempotency key for `create_first_payment`, protecting against duplicate payments on
+retry.
+
+The `deployment` query parameter allows the frontend to highlight or open the relevant
+deployment when the user returns from Mollie checkout, even before the webhook has
+arrived and transitioned the deployment from `pending` to `provisioning`.
 
 **Future consideration (out of scope):** Give the deployment dialog its own URL path
 and use that as the Mollie redirect URL, so the user returns to the open dialog.

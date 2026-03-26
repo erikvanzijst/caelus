@@ -16,6 +16,7 @@ from app.services.errors import IntegrityException
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETED,
     DEPLOYMENT_STATUS_ERROR,
+    DEPLOYMENT_STATUS_PENDING,
     DEPLOYMENT_STATUS_READY,
 )
 
@@ -70,6 +71,8 @@ class DeploymentReconciler:
 
     @staticmethod
     def _validate_input_state(deployment: DeploymentORM) -> None:
+        if deployment.status == DEPLOYMENT_STATUS_PENDING:
+            raise IntegrityException("Deployment is awaiting payment and cannot be reconciled")
         if not deployment.name:
             raise IntegrityException("Deployment is missing name")
         if not deployment.namespace:

@@ -67,9 +67,13 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
         user_values_json: payload.userValuesJson,
         plan_template_id: payload.planTemplateId,
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
-      onClose()
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url
+      } else {
+        onClose()
+      }
     },
     onError: (error: Error) => {
       const errorMsg = error.message

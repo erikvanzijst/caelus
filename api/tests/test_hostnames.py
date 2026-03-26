@@ -502,7 +502,7 @@ class TestServerSideEnforcement:
             },
         )
         assert resp.status_code == 201
-        assert resp.json()["hostname"] is None
+        assert resp.json()["deployment"]["hostname"] is None
 
     def test_update_deployment_allows_same_hostname(self, client, db_session):
         """Updating a deployment should not reject its own current hostname."""
@@ -532,7 +532,7 @@ class TestServerSideEnforcement:
             json={"desired_template_id": tmpl1.json()["id"], "user_values_json": {"host": "same.example.com"}, "plan_template_id": ptv_id},
         )
         assert dep.status_code == 201
-        dep_id = dep.json()["id"]
+        dep_id = dep.json()["deployment"]["id"]
 
         # Mark create job done and set status to ready so update is allowed
         create_job = db_session.exec(

@@ -11,6 +11,7 @@ import typer
 import yaml
 from fastapi.encoders import jsonable_encoder
 
+from app.config import get_settings
 from app.db import session_scope
 from app.logging_config import configure_logging
 from app.models import (
@@ -424,8 +425,22 @@ def create_deployment(
 
     with session_scope() as session:
         _require_cli_user(session)
+
+        # Refuse paid plans via CLI — checkout requires a browser redirect.
+        settings = get_settings()
+        if settings.mollie_api_key:
+            from app.models import PlanTemplateVersionORM
+            ptv = session.get(PlanTemplateVersionORM, plan_template_id)
+            if ptv and ptv.price_cents > 0:
+                typer.echo(
+                    "Error: Paid plans require payment via the web dashboard. "
+                    "The CLI cannot redirect to the Mollie checkout page.",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
+
         try:
-            deployment = deployment_service.create_deployment(
+            result = deployment_service.create_deployment(
                 session,
                 payload=DeploymentCreate(
                     user_id=user_id,
@@ -436,7 +451,7 @@ def create_deployment(
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
-        _echo_yaml_entity(deployment)
+        _echo_yaml_entity(result.deployment)
 
 
 @app.command("list-deployments")

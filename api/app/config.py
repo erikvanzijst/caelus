@@ -20,8 +20,8 @@ class CaelusSettings(BaseSettings):
     reserved_hostnames: list[str] = []
 
     mollie_api_key: str | None = None
-    mollie_redirect_url: str = base_url
-    mollie_webhook_base_url: str = base_url_api
+    mollie_redirect_url: str | None = None
+    mollie_webhook_base_url: str | None = None
 
 
 @lru_cache

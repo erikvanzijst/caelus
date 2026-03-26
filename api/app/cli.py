@@ -49,7 +49,7 @@ from sqlmodel import Session, select
 
 from app.models import UserORM
 
-configure_logging()
+configure_logging(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 app = typer.Typer(help="Caelus CLI", pretty_exceptions_show_locals=False)
 

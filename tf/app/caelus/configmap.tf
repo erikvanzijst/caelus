@@ -12,6 +12,9 @@ resource "kubernetes_config_map" "api" {
     CAELUS_LB_IPS = jsonencode(var.lb_ips)
     CAELUS_WILDCARD_DOMAINS = jsonencode(var.wildcard_domains)
     CAELUS_MOLLIE_API_KEY = var.mollie_api_key
+    CAELUS_MOLLIE_REDIRECT_URL="https://${var.domain}"
+    CAELUS_MOLLIE_WEBHOOK_BASE_URL="https://${var.domain}/api/"
+
     # CAELUS_LOG_LEVEL    = "info"
     PYTHONUNBUFFERED    = "1"
   }

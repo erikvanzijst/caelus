@@ -47,7 +47,7 @@ def _seed_jobs(engine, *, job_count: int) -> None:
                 desired_template_id=template.id,
                 user_values_json={"domain": f"pg-jobs-{token}.example.test"},
             ),
-        )
+        ).deployment
         jobs = JobService(session)
         for _ in range(job_count - 1):
             jobs.enqueue_job(deployment_id=deployment.id, reason="update")

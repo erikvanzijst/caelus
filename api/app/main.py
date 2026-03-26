@@ -6,12 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import users, products, deployments, hostnames, plans, subscriptions
-from app.api.utils import register_exception_handlers
+from app.api import users, products, deployments, hostnames, plans, subscriptions, webhooks
+from app.api.util import register_exception_handlers
 from app.logging_config import configure_logging
 from app.config import get_settings
 
-configure_logging()
+configure_logging(level="DEBUG")
 
 _settings = get_settings()
 
@@ -56,6 +56,7 @@ app.include_router(products.router, prefix="/api")
 app.include_router(hostnames.router, prefix="/api")
 app.include_router(plans.router, prefix="/api")
 app.include_router(subscriptions.router, prefix="/api")
+app.include_router(webhooks.router, prefix="/api")
 
 _init_static_dir()
 app.mount("/api/static", StaticFiles(directory=str(_settings.static_path)), name="static")

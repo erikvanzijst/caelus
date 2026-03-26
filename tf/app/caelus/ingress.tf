@@ -1,3 +1,38 @@
+# Webhook endpoints bypass oauth2-proxy entirely — Mollie (and future
+# providers) POST here without auth cookies, so no forward-auth middleware.
+resource "kubernetes_ingress_v1" "webhooks" {
+  metadata {
+    name      = "caelus-webhooks-ingress"
+    namespace = var.namespace
+
+    annotations = {
+      "traefik.ingress.kubernetes.io/router.entrypoints" = "web, websecure"
+    }
+  }
+
+  spec {
+    rule {
+      host = var.domain
+
+      http {
+        path {
+          path      = "/api/webhooks"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = kubernetes_service.api.metadata[0].name
+              port {
+                number = 8000
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 resource "kubernetes_ingress_v1" "caelus" {
   metadata {
     name      = "caelus-ingress"

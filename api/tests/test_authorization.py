@@ -84,7 +84,7 @@ def authz_setup(db_session):
                 "user_values_json": {"user": {"host": "authz.example.com"}},
             },
         )
-        deployment_id = deployment.json()["id"]
+        deployment_id = deployment.json()["deployment"]["id"]
 
         yield {
             "admin_client": admin_client,

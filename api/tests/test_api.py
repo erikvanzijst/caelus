@@ -167,7 +167,7 @@ def test_user_deployment_flow(client, db_session):
         },
     )
     assert deployment.status_code == 201
-    deployment_id = deployment.json()["id"]
+    deployment_id = deployment.json()["deployment"]["id"]
 
     listed = client.get(f"/api/users/{user_id}/deployments")
     assert listed.status_code == 200
@@ -229,8 +229,8 @@ def test_user_deployment_flow_with_user_values(client, db_session):
         },
     )
     assert deployment.status_code == 201
-    assert deployment.json()["hostname"] == "values.example.com"
-    assert deployment.json()["user_values_json"] == {"user": {"message": "hi", "domain": "values.example.com"}}
+    assert deployment.json()["deployment"]["hostname"] == "values.example.com"
+    assert deployment.json()["deployment"]["user_values_json"] == {"user": {"message": "hi", "domain": "values.example.com"}}
 
 
 def test_deployment_write_contract_rejects_hostname(client, db_session):
@@ -288,7 +288,7 @@ def test_deployment_write_contract_rejects_hostname(client, db_session):
         json={"desired_template_id": template_1_id, "user_values_json": {"user": {}}, "plan_template_id": ptv_id},
     )
     assert created.status_code == 201
-    deployment_id = created.json()["id"]
+    deployment_id = created.json()["deployment"]["id"]
 
     bad_update = client.put(
         f"/api/users/{user_id}/deployments/{deployment_id}",

@@ -19,6 +19,7 @@ def create_subscription(
     *,
     plan_template_id: int,
     user_id: int,
+    payment_status: PaymentStatus = PaymentStatus.CURRENT,
     commit: bool = True,
 ) -> SubscriptionORM:
     """Create a subscription for a user to a plan template version.
@@ -41,6 +42,7 @@ def create_subscription(
     sub = SubscriptionORM(
         plan_template_id=plan_template_id,
         user_id=user_id,
+        payment_status=payment_status,
     )
     session.add(sub)
 

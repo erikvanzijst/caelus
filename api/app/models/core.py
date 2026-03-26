@@ -31,6 +31,7 @@ class UserORM(UserBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(nullable=False, unique=False)
     is_admin: bool = Field(default=False, nullable=False)
+    mollie_customer_id: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=_utcnow, nullable=False)
     deployments: list["DeploymentORM"] = Relationship(back_populates="user")
     subscriptions: list["SubscriptionORM"] = Relationship(
@@ -285,6 +286,12 @@ class DeploymentORM(DeploymentBase, table=True):
         sa_relationship_kwargs={"foreign_keys": "DeploymentORM.subscription_id", "lazy": "joined"},
     )
 
+    def payment_description(self) -> str:
+        """The description used for Mollie payments MUST be unique per customer. So if a user has
+        multiple instances of the same product, we need to include the instance ID in the description.
+        """
+        return f"{self.subscription.plan_template.plan.product.name} -- {self.subscription.plan_template.plan.name} (instance {self.id})"
+
 
 class DeploymentCreate(DeploymentBase):
     model_config = ConfigDict(extra="forbid")
@@ -316,6 +323,12 @@ class DeploymentRead(DeploymentBase):
     generation: int = Field(default=1)
     last_error: Optional[str] = None
     last_reconcile_at: Optional[datetime] = None
+
+
+class DeploymentCreateResponse(SQLModel):
+    """Envelope returned by the deployment creation endpoint only."""
+    deployment: DeploymentRead
+    checkout_url: str | None = None
 
 
 class DeploymentReconcileJobBase(SQLModel):

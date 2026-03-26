@@ -80,7 +80,7 @@ def _seed_deployment(db_session, *, storage_bytes: int | None = 0) -> int:
             user_values_json={"user": {"message": "hello", "domain": "reconcile.example.test"}},
             plan_template_id=ptv_id,
         ),
-    )
+    ).deployment
     return deployment.id
 
 

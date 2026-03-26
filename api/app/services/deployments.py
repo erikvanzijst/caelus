@@ -1,8 +1,9 @@
 from __future__ import annotations
+from dataclasses import dataclass
 from datetime import UTC, datetime
 import logging
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError
@@ -12,19 +13,25 @@ from app.models import (
     DeploymentCreate,
     DeploymentORM,
     DeploymentRead,
+    MolliePaymentORM,
+    MolliePaymentStatus,
+    PaymentStatus,
     PlanTemplateVersionORM,
     ProductTemplateVersionORM,
+    UserORM,
     DeploymentUpdate,
 )
 from app.services.jobs import JobService
 from app.services import subscriptions as subscription_service
 from app.services import template_values
-from app.services import users as user_service
 from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException, ValidationException
 from app.services.hostnames import require_valid_hostname_for_deployment
+from app.config import get_settings
+from app.services.mollie import PaymentProvider
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETING,
     DEPLOYMENT_STATUS_ERROR,
+    DEPLOYMENT_STATUS_PENDING,
     DEPLOYMENT_STATUS_PROVISIONING,
     DEPLOYMENT_STATUS_READY,
     JOB_REASON_CREATE,
@@ -33,6 +40,13 @@ from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETED,
 )
 from app.services.reconcile_naming import generate_deployment_name, generate_deployment_namespace
+from app.util import amend_url
+
+
+@dataclass
+class DeploymentCreateResult:
+    deployment: DeploymentRead
+    checkout_url: str | None = None
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +74,11 @@ def _validate_user_values(template: ProductTemplateVersionORM, user_values_json:
     template_values.validate_user_values(user_values_json or {}, template.values_schema_json)
 
 
-def _validate_plan_template(session: Session, plan_template_id: int, product_id: int) -> None:
-    """Validate that plan_template_id belongs to this product and is canonical."""
+def _validate_plan_template(session: Session, plan_template_id: int, product_id: int) -> PlanTemplateVersionORM:
+    """Validate that plan_template_id belongs to this product and is canonical.
+
+    Returns the validated PlanTemplateVersionORM so callers can inspect price_cents.
+    """
     ptv = session.get(PlanTemplateVersionORM, plan_template_id)
     if not ptv or ptv.deleted_at:
         raise ValidationException(f"Plan template version {plan_template_id} not found or deleted")
@@ -69,6 +86,7 @@ def _validate_plan_template(session: Session, plan_template_id: int, product_id:
         raise ValidationException("Plan template does not belong to this product")
     if ptv.plan.template_id != ptv.id:
         raise ValidationException("Plan template is not the current canonical version for its plan")
+    return ptv
 
 
 def _iter_hostname_paths(schema: Any, path: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
@@ -142,9 +160,16 @@ def _derive_hostname(
     return None
 
 
-def create_deployment(session: Session, *, payload: DeploymentCreate) -> DeploymentRead:
-    # ensure that the user exists
-    user = user_service.get_user(session, user_id=payload.user_id)
+def create_deployment(
+    session: Session,
+    *,
+    payload: DeploymentCreate,
+    payment_provider: PaymentProvider | None = None,
+) -> DeploymentCreateResult:
+    # ensure that the user exists (need ORM object to read/write mollie_customer_id)
+    user = session.get(UserORM, payload.user_id)
+    if not user or user.deleted_at:
+        raise NotFoundException("User not found")
     # ensure that the template exists and retrieve it to validate product association
     template = session.get(ProductTemplateVersionORM, payload.desired_template_id)
     if not template:
@@ -169,13 +194,22 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
         require_valid_hostname_for_deployment(session, derived_hostname)
 
     # Validate the plan template: must exist, belong to the same product, and be canonical.
-    _validate_plan_template(session, payload.plan_template_id, template.product_id)
+    plan_template: PlanTemplateVersionORM = _validate_plan_template(session, payload.plan_template_id, template.product_id)
 
-    # Create subscription atomically (commit=False so we control the transaction).
+    # Determine if this is a paid plan requiring payment.
+    is_paid = payment_provider is not None and plan_template.price_cents > 0
+
+    # Pre-generate the deployment UUID so we can use it in the Mollie
+    # redirect URL and as an idempotency key before the DB transaction.
+    deployment_id = uuid4()
+    checkout_url: str | None = None
+
+    # --- DB transaction ---
     sub = subscription_service.create_subscription(
         session,
         plan_template_id=payload.plan_template_id,
         user_id=payload.user_id,
+        payment_status=PaymentStatus.PENDING if is_paid else PaymentStatus.CURRENT,
         commit=False,
     )
     session.flush()  # ensure sub.id is available
@@ -184,28 +218,68 @@ def create_deployment(session: Session, *, payload: DeploymentCreate) -> Deploym
     deployment_namespace = generate_deployment_namespace(user.email)
     deployment: DeploymentORM = DeploymentORM.model_validate(
         dict(
+            id=deployment_id,
             name=deployment_name,
             namespace=deployment_namespace,
             hostname=derived_hostname,
-            status=DEPLOYMENT_STATUS_PROVISIONING,
+            status=DEPLOYMENT_STATUS_PENDING if is_paid else DEPLOYMENT_STATUS_PROVISIONING,
             subscription_id=sub.id,
             **payload.model_dump(exclude={"plan_template_id"}),
         )
     )
     session.add(deployment)
+    session.flush()  # ensure deployment.subscription_id is available
+
+    if is_paid:
+        settings = get_settings()
+
+        # Ensure user has a Mollie customer
+        if not user.mollie_customer_id:
+            user.mollie_customer_id = payment_provider.ensure_customer(email=user.email,
+                                                                       idempotency_key=f"customer_{deployment_id}")
+
+        # Build redirect URL with deployment ID so the dashboard can
+        # focus on the new deployment when the user returns from checkout.
+        redirect_url = amend_url(settings.mollie_redirect_url, query={"deployment": str(deployment_id)})
+
+        # Create first payment via Mollie
+        payment_result = payment_provider.create_first_payment(
+            customer_id=user.mollie_customer_id,
+            amount_cents=plan_template.price_cents,
+            description=deployment.payment_description(),
+            redirect_url=redirect_url,
+            webhook_url=amend_url(settings.mollie_webhook_base_url, "webhooks/mollie"),
+            idempotency_key=f"first_payment_{deployment_id}",
+        )
+        checkout_url = payment_result.checkout_url
+        mollie_payment = MolliePaymentORM(
+            subscription_id=sub.id,
+            mollie_payment_id=payment_result.payment_id,
+            status=MolliePaymentStatus.OPEN,
+            sequence_type="first",
+            amount_cents=plan_template.price_cents,
+        )
+        session.add(mollie_payment)
+
+
     try:
         session.flush()
-        _enqueue_reconcile_job(session, deployment_id=deployment.id, reason=JOB_REASON_CREATE)
+        if not is_paid:
+            _enqueue_reconcile_job(session, deployment_id=deployment.id, reason=JOB_REASON_CREATE)
         session.commit()
         deployment = _get_deployment_orm(session, deployment_id=deployment.id)
         logger.info(
-            "Created deployment id=%s user_id=%s desired_template_id=%s subscription_id=%s",
+            "Created deployment id=%s user_id=%s desired_template_id=%s subscription_id=%s paid=%s",
             deployment.id,
             deployment.user_id,
             deployment.desired_template_id,
             deployment.subscription_id,
+            is_paid,
         )
-        return DeploymentRead.model_validate(deployment)
+        return DeploymentCreateResult(
+            deployment=DeploymentRead.model_validate(deployment),
+            checkout_url=checkout_url,
+        )
     except DeploymentInProgressException:
         session.rollback()
         logger.warning("Create deployment blocked by in-progress reconcile job for user_id=%s", payload.user_id)

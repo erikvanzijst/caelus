@@ -41,7 +41,7 @@ def test_delete_deployment_flow(client, db_session):
         json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "example.com"}, "plan_template_id": ptv_id},
     )
     assert dep_resp.status_code == 201
-    dep_id = dep_resp.json()["id"]
+    dep_id = dep_resp.json()["deployment"]["id"]
     create_job = db_session.exec(
         select(DeploymentReconcileJobORM).where(
             DeploymentReconcileJobORM.deployment_id == UUID(dep_id),

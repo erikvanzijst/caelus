@@ -5,16 +5,20 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
+from app.config import get_settings
 from app.db import get_session
-from app.deps import get_current_user, require_admin, require_self
+from app.deps import get_current_user, get_payment_provider, require_admin, require_self
 from app.models import (
     DeploymentCreate,
+    DeploymentCreateResponse,
     DeploymentRead,
     UserCreate,
     UserORM,
     UserRead, DeploymentUpdate,
 )
 from app.services import deployments as deployment_service, users as user_service
+from app.services.mollie import PaymentProvider
+from app.util import amend_url
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -26,6 +30,7 @@ def get_me(current_user: UserORM = Depends(get_current_user)) -> UserRead:
     return UserRead.model_validate(current_user)
 
 
+# TODO: Why do we have this? Users are auto-created.
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: UserCreate,
@@ -65,7 +70,7 @@ def get_user(
 
 @router.post(
     "/{user_id}/deployments",
-    response_model=DeploymentRead,
+    response_model=DeploymentCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def create_deployment(
@@ -73,10 +78,19 @@ def create_deployment(
     payload: DeploymentCreate,
     current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
-) -> DeploymentRead:
+    payment_provider: PaymentProvider | None = Depends(get_payment_provider),
+) -> DeploymentCreateResponse:
     payload.user_id = user_id
-    # TODO: validate that the template exists and is associated with the scoped product
-    return deployment_service.create_deployment(session, payload=payload)
+    settings = get_settings()
+    result = deployment_service.create_deployment(
+        session,
+        payload=payload,
+        payment_provider=payment_provider,
+    )
+    return DeploymentCreateResponse(
+        deployment=result.deployment,
+        checkout_url=result.checkout_url,
+    )
 
 
 @router.get("/{user_id}/deployments", response_model=list[DeploymentRead])

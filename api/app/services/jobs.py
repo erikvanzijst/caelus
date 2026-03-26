@@ -93,7 +93,7 @@ class JobService:
         )
         job = self._session.exec(stmt).first()
         if job is None:
-            logger.debug("No runnable reconcile job available for worker_id=%s", worker_id)
+            # logger.debug("No runnable reconcile job available for worker_id=%s", worker_id)
             return None
         job.status = JOB_STATUS_RUNNING
         job.locked_by = worker_id
@@ -142,7 +142,7 @@ class JobService:
         ).first()
         if row is None:
             self._session.commit()
-            logger.debug("No runnable reconcile job available for worker_id=%s", worker_id)
+            # logger.debug("No runnable reconcile job available for worker_id=%s", worker_id)
             return None
         job_id = int(row[0])
         self._session.commit()

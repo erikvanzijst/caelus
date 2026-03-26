@@ -61,3 +61,9 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "mollie_api_key" {
+  description = "Mollie API Key"
+  type        = string
+  sensitive   = true
+}

@@ -7,15 +7,16 @@ module "oauth2-proxy" {
 }
 
 module "caelus" {
-  source      = "./caelus"
-  namespace   = kubernetes_namespace.caelus.metadata[0].name
-  domain      = local.domain
-  api_image   = var.api_image
-  ui_image    = var.ui_image
-  rbac_name   = "caelus-api-${kubernetes_namespace.caelus.metadata[0].name}"
-  ns_login    = kubernetes_namespace.login.metadata[0].name
-  db_password = var.db_password
+  source         = "./caelus"
+  namespace      = kubernetes_namespace.caelus.metadata[0].name
+  domain         = local.domain
+  api_image      = var.api_image
+  ui_image       = var.ui_image
+  rbac_name      = "caelus-api-${kubernetes_namespace.caelus.metadata[0].name}"
+  ns_login       = kubernetes_namespace.login.metadata[0].name
+  db_password    = var.db_password
   wildcard_domains = [local.domain]
+  mollie_api_key = var.mollie_api_key
 
   depends_on = [kubernetes_namespace.caelus]
 }

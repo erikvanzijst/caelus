@@ -224,7 +224,7 @@ class TestSubscriptionAPI:
             },
         )
         assert dep_resp.status_code == 201
-        return user_id, dep_resp.json(), product_id, ptv_id
+        return user_id, dep_resp.json()["deployment"], product_id, ptv_id
 
     def test_list_subscriptions(self, client, db_session):
         user_id, dep_data, _, _ = self._create_deployment_with_subscription(
@@ -341,7 +341,7 @@ class TestDeploymentPlanTemplate:
             },
         )
         assert resp.status_code == 201
-        data = resp.json()
+        data = resp.json()["deployment"]
         assert "subscription_id" in data
         assert data["subscription_id"] is not None
 
@@ -482,7 +482,7 @@ def authz_setup(db_session):
             },
         )
         assert dep_resp.status_code == 201
-        subscription_id = dep_resp.json()["subscription_id"]
+        subscription_id = dep_resp.json()["deployment"]["subscription_id"]
 
         yield {
             "admin_client": admin_client,

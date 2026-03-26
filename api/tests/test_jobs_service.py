@@ -43,7 +43,7 @@ def _seed_deployment(db_session):
             user_values_json={"domain": "jobs.example.test"},
             plan_template_id=ptv_id,
         ),
-    )
+    ).deployment
     return deployment.id
 
 

@@ -141,7 +141,7 @@ describe('DeployDialog', () => {
     listPlansMock.mockResolvedValue([freePlan])
     listDomainsMock.mockResolvedValue([])
     checkHostnameMock.mockResolvedValue({ fqdn: 'test.example.com', usable: true, reason: null })
-    createDeploymentMock.mockResolvedValue({ id: 1 })
+    createDeploymentMock.mockResolvedValue({ deployment: { id: '1' }, checkout_url: null })
     const onClose = vi.fn()
 
     renderWithQuery(
@@ -231,7 +231,7 @@ describe('DeployDialog', () => {
     }
 
     const deployment: Deployment = {
-      id: 42,
+      id: '00000000-0000-0000-0000-00000000002a',
       user_id: 1,
       desired_template_id: 5,
       hostname: 'edit-test.example.com',
@@ -268,7 +268,7 @@ describe('DeployDialog', () => {
 
     // Must send deployment's template ID (5), NOT the product's canonical (10)
     await waitFor(() => {
-      expect(updateDeploymentMock).toHaveBeenCalledWith(1, 42, {
+      expect(updateDeploymentMock).toHaveBeenCalledWith(1, '00000000-0000-0000-0000-00000000002a', {
         desired_template_id: 5,
         user_values_json: { hostname: 'edit-test.example.com' },
       })

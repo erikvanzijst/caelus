@@ -1,5 +1,5 @@
 import { requestJson, requestMultipart } from './client'
-import type { Deployment, HostnameCheckResult, Plan, PlanTemplateVersion, Product, ProductTemplate, User } from './types'
+import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplateVersion, Product, ProductTemplate, User } from './types'
 
 export function getMe() {
   return requestJson<User>('/me')
@@ -130,7 +130,7 @@ export function createDeployment(
   userId: number,
   payload: { desired_template_id: number; user_values_json?: object; plan_template_id?: number },
 ) {
-  return requestJson<Deployment>(`/users/${userId}/deployments`, {
+  return requestJson<DeploymentCreateResponse>(`/users/${userId}/deployments`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })

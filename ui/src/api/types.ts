@@ -1,5 +1,5 @@
 export type IsoDate = string
-export type DeploymentStatus = 'provisioning' | 'ready' | 'deleting' | 'deleted' | 'error'
+export type DeploymentStatus = 'pending' | 'provisioning' | 'ready' | 'deleting' | 'deleted' | 'error'
 
 export interface User {
   id: number
@@ -63,9 +63,8 @@ export interface Subscription {
   plan_template_id: number
   user_id: number
   status: 'active' | 'cancelled'
-  payment_status: 'current' | 'arrears'
+  payment_status: 'pending' | 'current' | 'arrears'
   cancelled_at?: IsoDate | null
-  external_ref?: string | null
   created_at: IsoDate
   plan_template?: PlanTemplateVersion | null
 }
@@ -88,4 +87,9 @@ export interface Deployment {
   generation?: number
   last_error?: string | null
   last_reconcile_at?: IsoDate | null
+}
+
+export interface DeploymentCreateResponse {
+  deployment: Deployment
+  checkout_url: string | null
 }

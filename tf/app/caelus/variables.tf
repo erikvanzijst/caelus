@@ -57,6 +57,12 @@ variable "wildcard_domains" {
   type        = list(string)
 }
 
+variable "mollie_api_key" {
+  description = "Mollie API Key"
+  type        = string
+  sensitive   = true
+}
+
 # NOTE: These are currently configured in api/.env
 # variable "reserved_hostnames" {
 #   description = "Hostnames that cannot be claimed by users"

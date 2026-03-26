@@ -148,6 +148,7 @@ def paid_client(db_session, fake_payment_provider, monkeypatch):
     """Test client with FakePaymentProvider injected via dependency override."""
     from app.config import get_settings
 
+    monkeypatch.setenv("CAELUS_MOLLIE_REDIRECT_URL", "https://test.example.com")
     monkeypatch.setenv("CAELUS_MOLLIE_WEBHOOK_BASE_URL", "https://test.example.com/api")
     get_settings.cache_clear()
 

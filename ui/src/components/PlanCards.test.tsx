@@ -161,7 +161,6 @@ describe('PlanCards', () => {
 
   it('calls onDeletePlan when delete is confirmed', () => {
     const onDeletePlan = vi.fn()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     render(<PlanCards {...defaultProps} onDeletePlan={onDeletePlan} />)
 
@@ -170,13 +169,14 @@ describe('PlanCards', () => {
     )
     fireEvent.click(deleteButtons[0])
 
+    // Confirmation dialog is now shown; click its Delete button
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
     expect(onDeletePlan).toHaveBeenCalledWith(1)
-    vi.restoreAllMocks()
   })
 
   it('does not call onDeletePlan when delete is cancelled', () => {
     const onDeletePlan = vi.fn()
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
 
     render(<PlanCards {...defaultProps} onDeletePlan={onDeletePlan} />)
 
@@ -185,8 +185,10 @@ describe('PlanCards', () => {
     )
     fireEvent.click(deleteButtons[0])
 
+    // Confirmation dialog is now shown; click its Cancel button
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
     expect(onDeletePlan).not.toHaveBeenCalled()
-    vi.restoreAllMocks()
   })
 
   it('shows selected card with primary border', () => {

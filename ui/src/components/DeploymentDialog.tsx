@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Box, Button, Dialog, DialogActions, DialogContent, Divider, LinearProgress, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Deployment, Plan } from '../api/types'
@@ -6,6 +6,7 @@ import { ApiError } from '../api/client'
 import { deleteDeployment, getDeployment, updateDeployment } from '../api/endpoints'
 import { isTransitionalStatus } from '../utils/deploymentStatus'
 import { formatLocalIso } from '../utils/formatDate'
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 import { DeployDialogContent } from './DeployDialogContent'
 
 interface DeploymentDialogProps {
@@ -40,6 +41,7 @@ function MetadataRow({ label, value }: { label: string; value: string }) {
 
 export function DeploymentDialog({ deployment: initialDeployment, onClose }: DeploymentDialogProps) {
   const queryClient = useQueryClient()
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   // Poll the single deployment while the dialog is open
   const { data: polledDeployment, error: pollError } = useQuery({
@@ -151,10 +153,21 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
           variant="outlined"
           color="error"
           disabled={isTransitioning || deleteMutation.isPending}
-          onClick={() => deleteMutation.mutate()}
+          onClick={() => setConfirmingDelete(true)}
         >
           {deleteMutation.isPending || isDeleting ? 'Deleting...' : 'Delete'}
         </Button>
+        {confirmingDelete && (
+          <ConfirmDeleteDialog
+            name={product?.name ?? deployment.hostname ?? deployment.id}
+            subject="deployment"
+            onConfirm={() => {
+              setConfirmingDelete(false)
+              deleteMutation.mutate()
+            }}
+            onCancel={() => setConfirmingDelete(false)}
+          />
+        )}
         <Box sx={{ flex: 1 }} />
         <Button variant="outlined" onClick={onClose}>Cancel</Button>
         <Button

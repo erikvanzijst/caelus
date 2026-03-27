@@ -13,6 +13,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import type { Plan } from '../api/types'
 import { PlanCardContent } from './PlanCardContent'
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 
 interface PlanCardProps {
   plan?: Plan
@@ -28,6 +29,7 @@ interface PlanCardProps {
 export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete, onEditingChange, saving }: PlanCardProps) {
   const isNew = !plan
   const [editing, setEditingRaw] = useState(isNew)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   function setEditing(value: boolean) {
     setEditingRaw(value)
@@ -128,17 +130,28 @@ export function PlanCard({ plan, selected, onSelect, onSave, onCancel, onDelete,
                   <EditIcon fontSize="small" />
                 </IconButton>
                 {onDelete && (
-                  <IconButton
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (window.confirm(`Delete plan "${plan!.name}"?`)) {
-                        onDelete()
-                      }
-                    }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                  <>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setConfirmingDelete(true)
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                    {confirmingDelete && (
+                      <ConfirmDeleteDialog
+                        name={plan!.name}
+                        subject="plan"
+                        onConfirm={() => {
+                          setConfirmingDelete(false)
+                          onDelete()
+                        }}
+                        onCancel={() => setConfirmingDelete(false)}
+                      />
+                    )}
+                  </>
                 )}
               </Stack>
             </Stack>

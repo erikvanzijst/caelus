@@ -13,6 +13,7 @@ import { deleteProduct, updateProduct } from '../api/endpoints'
 import { resolveApiPath } from '../api/client'
 import type { Product } from '../api/types'
 import { formatDateTime } from '../utils/format'
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 
 interface SelectedProductProps {
   product: Product
@@ -21,6 +22,7 @@ interface SelectedProductProps {
 
 export function SelectedProduct({ product, onError }: SelectedProductProps) {
   const queryClient = useQueryClient()
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [editingDesc, setEditingDesc] = useState(false)
   const [draftName, setDraftName] = useState('')
@@ -147,14 +149,21 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
               variant="outlined"
               color="secondary"
               size="small"
-              onClick={() => {
-                if (window.confirm(`Delete ${product.name}?`)) {
-                  deleteProductMutation.mutate()
-                }
-              }}
+              onClick={() => setConfirmingDelete(true)}
             >
               Delete
             </Button>
+            {confirmingDelete && (
+              <ConfirmDeleteDialog
+                name={product.name}
+                subject="product"
+                onConfirm={() => {
+                  setConfirmingDelete(false)
+                  deleteProductMutation.mutate()
+                }}
+                onCancel={() => setConfirmingDelete(false)}
+              />
+            )}
           </Stack>
         </Stack>
         <Badge

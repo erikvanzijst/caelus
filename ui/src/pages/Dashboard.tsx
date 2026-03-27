@@ -29,6 +29,7 @@ import { isTransitionalStatus, statusColor } from '../utils/deploymentStatus'
 import { ensureUrl, formatDateTime } from '../utils/format'
 import { ProductList } from '../components/ProductList'
 import { DeployDialog } from '../components/DeployDialog'
+import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog'
 
 function Dashboard() {
   const queryClient = useQueryClient()
@@ -36,6 +37,7 @@ function Dashboard() {
   const [deletePendingIds, setDeletePendingIds] = useState<Set<string>>(new Set())
   const [deployProduct, setDeployProduct] = useState<Product | null>(null)
   const [editDeployment, setEditDeployment] = useState<Deployment | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Deployment | null>(null)
 
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -192,11 +194,7 @@ function Dashboard() {
                     variant="outlined"
                     color="secondary"
                     disabled={deletePendingIds.has(deployment.id)}
-                    onClick={() => {
-                      if (window.confirm('Delete this deployment?')) {
-                        deleteDeploymentMutation.mutate(deployment.id)
-                      }
-                    }}
+                    onClick={() => setDeleteTarget(deployment)}
                   >
                     {deletePendingIds.has(deployment.id) ? 'Deleting...' : 'Delete'}
                   </Button>
@@ -249,6 +247,19 @@ function Dashboard() {
           userId={user.id}
           deployment={editDeployment}
           onClose={() => setEditDeployment(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDeleteDialog
+          name={deleteTarget.desired_template?.product?.name ?? 'this deployment'}
+          subject="deployment"
+          confirmValue={deleteTarget.hostname ?? deleteTarget.id}
+          onConfirm={() => {
+            deleteDeploymentMutation.mutate(deleteTarget.id)
+            setDeleteTarget(null)
+          }}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </Stack>

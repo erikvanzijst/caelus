@@ -236,6 +236,34 @@ class TestRequireValidHostname:
             )
         assert exc_info.value.reason == "reserved"
 
+    def test_mixed_case_detected_as_in_use(self, db_session, seed_parents):
+        """Mixed-case FQDN should be detected as in-use when lowercase variant exists."""
+        dep = DeploymentORM(
+            user_id=seed_parents["user_id"],
+            desired_template_id=seed_parents["template_id"],
+            hostname="taken.example.com",
+            status=DEPLOYMENT_STATUS_PROVISIONING,
+            name="test-name-case",
+            namespace="test-namespace-case",
+        )
+        db_session.add(dep)
+        db_session.flush()
+        with pytest.raises(HostnameException) as exc_info:
+            require_valid_hostname_for_deployment(
+                db_session, "Taken.Example.COM",
+                settings=_settings(),
+            )
+        assert exc_info.value.reason == "in_use"
+
+    def test_reserved_matching_is_case_insensitive(self, db_session):
+        """Reserved hostname check should match regardless of input case."""
+        with pytest.raises(HostnameException) as exc_info:
+            require_valid_hostname_for_deployment(
+                db_session, "SMTP.Example.Com",
+                settings=_settings(reserved_hostnames=["smtp.example.com"]),
+            )
+        assert exc_info.value.reason == "reserved"
+
     def test_short_circuits_on_in_use(self, db_session, seed_parents):
         """In-use failure should not perform DNS resolution."""
         dep = DeploymentORM(
@@ -345,6 +373,12 @@ class TestHostnameCheckEndpoint:
             resp = no_auth_client.get("/api/hostnames/test.example.com")
             assert resp.status_code == 404
         fastapi_app.dependency_overrides.clear()
+
+    def test_mixed_case_fqdn_normalized_in_response(self, client):
+        resp = client.get("/api/hostnames/MyApp.Example.COM")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["fqdn"] == "myapp.example.com"
 
     def test_response_has_exactly_three_fields(self, client):
         resp = client.get("/api/hostnames/clean.example.com")

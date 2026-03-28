@@ -26,6 +26,7 @@ def check_hostname(
     current_user: UserORM = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> HostnameCheck:
+    fqdn = fqdn.lower()
     try:
         require_valid_hostname_for_deployment(session, fqdn)
         return HostnameCheck(fqdn=fqdn, usable=True)

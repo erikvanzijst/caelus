@@ -1,8 +1,5 @@
-# hostname-validation Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change hostname-validation-and-domains. Update Purpose after archive.
-## Requirements
 ### Requirement: Hostname validation service exposes a single public function
 The system MUST provide a hostname validation function `require_valid_hostname_for_deployment(session, fqdn)` in `api/app/services/hostnames.py` that validates whether a given FQDN can be used for a new Caelus deployment. The function MUST normalize the FQDN to lowercase before performing any checks. The function MUST return `None` on success or raise a `HostnameException` with a `reason` attribute on failure.
 
@@ -42,38 +39,7 @@ The system MUST provide a hostname validation function `require_valid_hostname_f
 - **WHEN** `require_valid_hostname_for_deployment` is called and `settings.lb_ips` is an empty list
 - **THEN** the DNS resolution check is skipped and the hostname passes that check
 
-### Requirement: Validation checks execute in order and short-circuit on first failure
-The hostname validation MUST execute checks in the following order: format, reserved, availability, DNS resolution. The function MUST short-circuit and raise on the first failing check.
-
-#### Scenario: Reserved hostname skips availability and DNS checks
-- **WHEN** an FQDN is well-formed but appears in the reserved hostnames list
-- **THEN** the function raises `HostnameException(reason="reserved")` without querying the database or performing DNS resolution
-
-#### Scenario: Unavailable hostname skips DNS check
-- **WHEN** an FQDN is well-formed, not reserved, but already in use
-- **THEN** the function raises `HostnameException(reason="in_use")` without performing DNS resolution
-
-### Requirement: HostnameException carries a reason attribute
-The `HostnameException` class in `api/app/services/errors.py` MUST have a `reason` attribute of type `str`. Valid reason values MUST be: `"invalid"`, `"reserved"`, `"in_use"`, `"not_resolving"`.
-
-#### Scenario: Exception reason is accessible
-- **WHEN** a `HostnameException` is raised with `reason="in_use"`
-- **THEN** the exception's `reason` attribute equals `"in_use"`
-
-### Requirement: DNS resolution validates all resolved addresses against LB IPs
-The DNS resolution check MUST resolve the FQDN using `socket.getaddrinfo()` (which follows CNAME chains), collect all unique IPv4 and IPv6 addresses, and verify that every resolved address is a member of the configured `lb_ips` set. A hostname that resolves to any address outside the `lb_ips` set MUST fail.
-
-#### Scenario: Hostname resolves to only Caelus LB IPs
-- **WHEN** an FQDN resolves to `1.2.3.4` and `2001:db8::1`, and `lb_ips` contains both
-- **THEN** the DNS check passes
-
-#### Scenario: Hostname resolves to a mix of Caelus and non-Caelus IPs
-- **WHEN** an FQDN resolves to `1.2.3.4` (in `lb_ips`) and `9.9.9.9` (not in `lb_ips`)
-- **THEN** the function raises `HostnameException(reason="not_resolving")`
-
-#### Scenario: Hostname resolves to only IPv4 when lb_ips has both v4 and v6
-- **WHEN** an FQDN resolves to `1.2.3.4` only, and `lb_ips` contains `["1.2.3.4", "2001:db8::1"]`
-- **THEN** the DNS check passes (IPv4-only is acceptable)
+## ADDED Requirements
 
 ### Requirement: Derived hostnames are normalized to lowercase before storage
 The `_derive_hostname()` function in `api/app/services/deployments.py` MUST return hostnames in lowercase form. This ensures the `DeploymentORM.hostname` column always stores the canonical lowercase representation.

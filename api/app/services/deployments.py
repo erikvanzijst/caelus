@@ -155,8 +155,8 @@ def _derive_hostname(
         if value is None:
             return None
         if isinstance(value, str):
-            return value
-        return str(value)
+            return value.lower()
+        return str(value).lower()
     return None
 
 

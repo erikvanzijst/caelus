@@ -77,6 +77,7 @@ def require_valid_hostname_for_deployment(
     own hostname doesn't trigger an "in_use" conflict.
     """
     settings = settings or get_settings()
+    fqdn = fqdn.lower()
     _check_format(fqdn)
     _check_reserved(fqdn, settings)
     _check_available(session, fqdn, exclude_deployment_id=exclude_deployment_id)

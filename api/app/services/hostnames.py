@@ -31,13 +31,15 @@ def _check_format(fqdn: str) -> None:
 
 
 def _check_reserved(fqdn: str, settings: CaelusSettings) -> None:
-    if fqdn in settings.reserved_hostnames:
+    fqdn_lower = fqdn.lower()
+    reserved_lower = {h.lower() for h in settings.reserved_hostnames}
+    if fqdn_lower in reserved_lower:
         raise HostnameException("reserved")
 
 
 def _check_available(session: Session, fqdn: str, *, exclude_deployment_id: UUID | None = None) -> None:
     stmt = select(DeploymentORM.id).where(
-        DeploymentORM.hostname == fqdn,
+        DeploymentORM.hostname == fqdn.lower(),
         DeploymentORM.status != DEPLOYMENT_STATUS_DELETED,
     )
     if exclude_deployment_id is not None:
@@ -77,7 +79,8 @@ def require_valid_hostname_for_deployment(
     own hostname doesn't trigger an "in_use" conflict.
     """
     settings = settings or get_settings()
+    fqdn_lower = fqdn.lower()
     _check_format(fqdn)
-    _check_reserved(fqdn, settings)
-    _check_available(session, fqdn, exclude_deployment_id=exclude_deployment_id)
-    _check_resolving(fqdn, settings)
+    _check_reserved(fqdn_lower, settings)
+    _check_available(session, fqdn_lower, exclude_deployment_id=exclude_deployment_id)
+    _check_resolving(fqdn_lower, settings)

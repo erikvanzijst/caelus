@@ -24,7 +24,12 @@ from app.models import (
 from app.services.jobs import JobService
 from app.services import subscriptions as subscription_service
 from app.services import template_values
-from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException, ValidationException
+from app.services.errors import (
+    DeploymentInProgressException,
+    IntegrityException,
+    NotFoundException,
+    ValidationException,
+)
 from app.services.hostnames import require_valid_hostname_for_deployment
 from app.config import get_settings
 from app.services.mollie import PaymentProvider
@@ -47,6 +52,7 @@ from app.util import amend_url
 class DeploymentCreateResult:
     deployment: DeploymentRead
     checkout_url: str | None = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -155,8 +161,8 @@ def _derive_hostname(
         if value is None:
             return None
         if isinstance(value, str):
-            return value
-        return str(value)
+            return value.lower()
+        return str(value).lower()
     return None
 
 
@@ -194,7 +200,9 @@ def create_deployment(
         require_valid_hostname_for_deployment(session, derived_hostname)
 
     # Validate the plan template: must exist, belong to the same product, and be canonical.
-    plan_template: PlanTemplateVersionORM = _validate_plan_template(session, payload.plan_template_id, template.product_id)
+    plan_template: PlanTemplateVersionORM = _validate_plan_template(
+        session, payload.plan_template_id, template.product_id
+    )
 
     # Determine if this is a paid plan requiring payment.
     is_paid = payment_provider is not None and plan_template.price_cents > 0
@@ -260,7 +268,6 @@ def create_deployment(
             amount_cents=plan_template.price_cents,
         )
         session.add(mollie_payment)
-
 
     try:
         session.flush()

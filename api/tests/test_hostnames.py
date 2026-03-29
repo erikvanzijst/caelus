@@ -1,4 +1,5 @@
 """Tests for the hostname validation service and API endpoint."""
+
 import socket
 from unittest.mock import patch
 from uuid import UUID
@@ -161,6 +162,34 @@ class TestCheckAvailable:
         db_session.add(dep)
         db_session.flush()
         _check_available(db_session, "recycled.example.com")
+
+    def test_case_insensitive_in_use_raises(self, db_session, seed_parents):
+        dep = DeploymentORM(
+            user_id=seed_parents["user_id"],
+            desired_template_id=seed_parents["template_id"],
+            hostname="taken.example.com",
+            status=DEPLOYMENT_STATUS_PROVISIONING,
+            name="test-name-3",
+            namespace="test-namespace-3",
+        )
+        db_session.add(dep)
+        db_session.flush()
+        with pytest.raises(HostnameException, match="in_use"):
+            _check_available(db_session, "TAKEN.EXAMPLE.COM")
+
+    def test_case_insensitive_mixed_case_raises(self, db_session, seed_parents):
+        dep = DeploymentORM(
+            user_id=seed_parents["user_id"],
+            desired_template_id=seed_parents["template_id"],
+            hostname="foo.dev.deprutser.be",
+            status=DEPLOYMENT_STATUS_PROVISIONING,
+            name="test-name-4",
+            namespace="test-namespace-4",
+        )
+        db_session.add(dep)
+        db_session.flush()
+        with pytest.raises(HostnameException, match="in_use"):
+            _check_available(db_session, "Foo.Dev.Deprutser.Be")
 
 
 # ── DNS resolution check ─────────────────────────────────────────────
@@ -351,6 +380,38 @@ class TestHostnameCheckEndpoint:
         assert resp.status_code == 200
         assert set(resp.json().keys()) == {"fqdn", "usable", "reason"}
 
+    def test_case_insensitive_hostname_in_use(self, client, db_session):
+        product = client.post("/api/products", json={"name": "ci-test", "description": "test"})
+        product_id = product.json()["id"]
+        template = client.post(
+            f"/api/products/{product_id}/templates",
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "1.0.0",
+                "values_schema_json": {
+                    "type": "object",
+                    "properties": {"host": {"type": "string", "title": "hostname"}},
+                },
+            },
+        )
+        template_id = template.json()["id"]
+        client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+        ptv_id = create_free_plan_template(db_session, product_id)
+        user = client.post("/api/users", json={"email": "ci-test@example.com"})
+        user_id = user.json()["id"]
+        client.post(
+            f"/api/users/{user_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "user_values_json": {"host": "occupied.ci.example.com"},
+                "plan_template_id": ptv_id,
+            },
+        )
+        resp = client.get("/api/hostnames/OCCUPIED.CI.EXAMPLE.COM")
+        assert resp.status_code == 200
+        assert resp.json()["usable"] is False
+        assert resp.json()["reason"] == "in_use"
+
 
 # ── Domains endpoint tests ────────────────────────────────────────────
 
@@ -514,13 +575,21 @@ class TestServerSideEnforcement:
         }
         tmpl1 = client.post(
             f"/api/products/{product_id}/templates",
-            json={"chart_ref": "oci://example/chart", "chart_version": "1.0.0", "values_schema_json": schema},
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "1.0.0",
+                "values_schema_json": schema,
+            },
         )
         # Make it the canonical template
         client.put(f"/api/products/{product_id}", json={"template_id": tmpl1.json()["id"]})
         tmpl2 = client.post(
             f"/api/products/{product_id}/templates",
-            json={"chart_ref": "oci://example/chart", "chart_version": "2.0.0", "values_schema_json": schema},
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "2.0.0",
+                "values_schema_json": schema,
+            },
         )
         user = client.post("/api/users", json={"email": "enforce-update@example.com"})
         user_id = user.json()["id"]
@@ -529,7 +598,11 @@ class TestServerSideEnforcement:
 
         dep = client.post(
             f"/api/users/{user_id}/deployments",
-            json={"desired_template_id": tmpl1.json()["id"], "user_values_json": {"host": "same.example.com"}, "plan_template_id": ptv_id},
+            json={
+                "desired_template_id": tmpl1.json()["id"],
+                "user_values_json": {"host": "same.example.com"},
+                "plan_template_id": ptv_id,
+            },
         )
         assert dep.status_code == 201
         dep_id = dep.json()["deployment"]["id"]
@@ -542,7 +615,7 @@ class TestServerSideEnforcement:
             )
         ).one()
         JobService(db_session).mark_job_done(job_id=create_job.id)
-        from app.models import DeploymentORM
+
         dep_orm = db_session.get(DeploymentORM, UUID(dep_id))
         dep_orm.status = "ready"
         db_session.add(dep_orm)
@@ -551,7 +624,200 @@ class TestServerSideEnforcement:
         # Upgrade template but keep same hostname — should succeed
         resp = client.put(
             f"/api/users/{user_id}/deployments/{dep_id}",
-            json={"desired_template_id": tmpl2.json()["id"], "user_values_json": {"host": "same.example.com"}},
+            json={
+                "desired_template_id": tmpl2.json()["id"],
+                "user_values_json": {"host": "same.example.com"},
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["hostname"] == "same.example.com"
+
+    def test_create_deployment_case_insensitive_rejects(self, client, db_session):
+        product = client.post("/api/products", json={"name": "ci-reject", "description": "test"})
+        product_id = product.json()["id"]
+        template = client.post(
+            f"/api/products/{product_id}/templates",
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "1.0.0",
+                "values_schema_json": {
+                    "type": "object",
+                    "properties": {"host": {"type": "string", "title": "hostname"}},
+                },
+            },
+        )
+        template_id = template.json()["id"]
+        client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+        ptv_id = create_free_plan_template(db_session, product_id)
+        user = client.post("/api/users", json={"email": "ci-reject@example.com"})
+        user_id = user.json()["id"]
+
+        client.post(
+            f"/api/users/{user_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "user_values_json": {"host": "foo.ci.example.com"},
+                "plan_template_id": ptv_id,
+            },
+        )
+        user2 = client.post("/api/users", json={"email": "ci-reject2@example.com"})
+        user2_id = user2.json()["id"]
+        resp = client.post(
+            f"/api/users/{user2_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "user_values_json": {"host": "FOO.CI.EXAMPLE.COM"},
+                "plan_template_id": ptv_id,
+            },
+        )
+        assert resp.status_code == 409
+        assert "in_use" in resp.json()["detail"]
+
+    def test_update_deployment_mixed_case_same_hostname_succeeds(self, client, db_session):
+        product = client.post("/api/products", json={"name": "ci-update", "description": "test"})
+        product_id = product.json()["id"]
+        schema = {
+            "type": "object",
+            "properties": {"host": {"type": "string", "title": "hostname"}},
+        }
+        tmpl1 = client.post(
+            f"/api/products/{product_id}/templates",
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "1.0.0",
+                "values_schema_json": schema,
+            },
+        )
+        client.put(f"/api/products/{product_id}", json={"template_id": tmpl1.json()["id"]})
+        tmpl2 = client.post(
+            f"/api/products/{product_id}/templates",
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "2.0.0",
+                "values_schema_json": schema,
+            },
+        )
+        user = client.post("/api/users", json={"email": "ci-update@example.com"})
+        user_id = user.json()["id"]
+        ptv_id = create_free_plan_template(db_session, product_id)
+
+        dep = client.post(
+            f"/api/users/{user_id}/deployments",
+            json={
+                "desired_template_id": tmpl1.json()["id"],
+                "user_values_json": {"host": "test.ci.example.com"},
+                "plan_template_id": ptv_id,
+            },
+        )
+        assert dep.status_code == 201
+        dep_id = dep.json()["deployment"]["id"]
+
+        create_job = db_session.exec(
+            select(DeploymentReconcileJobORM).where(
+                DeploymentReconcileJobORM.deployment_id == UUID(dep_id),
+                DeploymentReconcileJobORM.reason == "create",
+            )
+        ).one()
+        JobService(db_session).mark_job_done(job_id=create_job.id)
+        from app.models import DeploymentORM
+
+        dep_orm = db_session.get(DeploymentORM, UUID(dep_id))
+        dep_orm.status = "ready"
+        db_session.add(dep_orm)
+        db_session.commit()
+
+        resp = client.put(
+            f"/api/users/{user_id}/deployments/{dep_id}",
+            json={
+                "desired_template_id": tmpl2.json()["id"],
+                "user_values_json": {"host": "TEST.CI.EXAMPLE.COM"},
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["hostname"] == "test.ci.example.com"
+
+    def test_create_deployment_stores_lowercase(self, client, db_session):
+        product = client.post("/api/products", json={"name": "ci-lower", "description": "test"})
+        product_id = product.json()["id"]
+        template = client.post(
+            f"/api/products/{product_id}/templates",
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "1.0.0",
+                "values_schema_json": {
+                    "type": "object",
+                    "properties": {"host": {"type": "string", "title": "hostname"}},
+                },
+            },
+        )
+        template_id = template.json()["id"]
+        client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+        ptv_id = create_free_plan_template(db_session, product_id)
+        user = client.post("/api/users", json={"email": "ci-lower@example.com"})
+        user_id = user.json()["id"]
+
+        resp = client.post(
+            f"/api/users/{user_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "user_values_json": {"host": "MiXeD.CaSe.ExAmPlE.CoM"},
+                "plan_template_id": ptv_id,
+            },
+        )
+        assert resp.status_code == 201
+        assert resp.json()["deployment"]["hostname"] == "mixed.case.example.com"
+
+    def test_database_unique_constraint_rejects_case_variants(self, client, db_session):
+        """Test that the database unique constraint on LOWER(hostname) prevents case variants.
+
+        This test verifies the functional unique index is working correctly.
+        """
+        product = client.post(
+            "/api/products", json={"name": "db-constraint", "description": "test"}
+        )
+        product_id = product.json()["id"]
+        template = client.post(
+            f"/api/products/{product_id}/templates",
+            json={
+                "chart_ref": "oci://example/chart",
+                "chart_version": "1.0.0",
+                "values_schema_json": {
+                    "type": "object",
+                    "properties": {"host": {"type": "string", "title": "hostname"}},
+                },
+            },
+        )
+        template_id = template.json()["id"]
+        client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+        ptv_id = create_free_plan_template(db_session, product_id)
+        user = client.post("/api/users", json={"email": "db-constraint@example.com"})
+        user_id = user.json()["id"]
+
+        client.post(
+            f"/api/users/{user_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "user_values_json": {"host": "dbtest.example.com"},
+                "plan_template_id": ptv_id,
+            },
+        )
+
+        from sqlmodel import select
+        from app.models import DeploymentORM
+
+        stmt = select(DeploymentORM.hostname).where(DeploymentORM.user_id == user_id)
+        hostnames = db_session.exec(stmt).all()
+        assert "dbtest.example.com" in hostnames
+
+        user2 = client.post("/api/users", json={"email": "db-constraint2@example.com"})
+        user2_id = user2.json()["id"]
+        resp = client.post(
+            f"/api/users/{user2_id}/deployments",
+            json={
+                "desired_template_id": template_id,
+                "user_values_json": {"host": "DBTEST.EXAMPLE.COM"},
+                "plan_template_id": ptv_id,
+            },
+        )
+        assert resp.status_code == 409
+        assert "in_use" in resp.json()["detail"]

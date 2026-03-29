@@ -26,6 +26,7 @@ from app.services import subscriptions as subscription_service
 from app.services import template_values
 from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException, ValidationException
 from app.services.hostnames import require_valid_hostname_for_deployment
+from app.util import set_value_at_path, value_for_path
 from app.config import get_settings
 from app.services.mollie import PaymentProvider
 from app.services.reconcile_constants import (
@@ -129,34 +130,26 @@ def _iter_hostname_paths(schema: Any, path: tuple[str, ...] = ()) -> list[tuple[
     return paths
 
 
-def _value_for_path(user_values_json: dict[str, Any] | None, path: tuple[str, ...]) -> Any:
-    current: Any = user_values_json or {}
-    for key in path:
-        if key == "*":
-            if isinstance(current, list) and current:
-                current = current[0]
-                continue
-            return None
-        if not isinstance(current, dict) or key not in current:
-            return None
-        current = current[key]
-    return current
-
-
-def _derive_hostname(
+def normalize_and_return_hostname(
     *,
     values_schema_json: dict[str, Any] | None,
     user_values_json: dict[str, Any] | None,
 ) -> str | None:
+    """Derive the hostname from user values and normalize it to lowercase.
+
+    When a hostname is found, the lowercased value is written back into
+    ``user_values_json`` so that downstream consumers (e.g. the Helm
+    reconciler) receive an RFC 1123-compliant value.
+    """
     if not isinstance(values_schema_json, dict):
         return None
     for path in _iter_hostname_paths(values_schema_json):
-        value = _value_for_path(user_values_json, path)
+        value = value_for_path(user_values_json, path)
         if value is None:
             return None
-        if isinstance(value, str):
-            return value.lower()
-        return str(value).lower()
+        lowered = value.lower() if isinstance(value, str) else str(value).lower()
+        set_value_at_path(user_values_json, path, lowered)
+        return lowered
     return None
 
 
@@ -186,7 +179,7 @@ def create_deployment(
 
     # Pre-flight the user-provided values against the template's schema:
     _validate_user_values(template, payload.user_values_json)
-    derived_hostname = _derive_hostname(
+    derived_hostname = normalize_and_return_hostname(
         values_schema_json=template.values_schema_json,
         user_values_json=payload.user_values_json,
     )
@@ -358,7 +351,7 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
 
     # Pre-flight the user-provided values against the template's schema:
     _validate_user_values(target_template, new_user_values)
-    derived_hostname = _derive_hostname(
+    derived_hostname = normalize_and_return_hostname(
         values_schema_json=target_template.values_schema_json,
         user_values_json=new_user_values,
     )

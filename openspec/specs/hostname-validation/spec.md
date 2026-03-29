@@ -1,7 +1,7 @@
 # hostname-validation Specification
 
 ## Purpose
-TBD - created by archiving change hostname-validation-and-domains. Update Purpose after archive.
+Validate hostnames for Caelus deployments with case-insensitive uniqueness and lowercase normalization.
 ## Requirements
 ### Requirement: Hostname validation service exposes a single public function
 The system MUST provide a hostname validation function `require_valid_hostname_for_deployment(session, fqdn)` in `api/app/services/hostnames.py` that validates whether a given FQDN can be used for a new Caelus deployment. The function MUST return `None` on success or raise a `HostnameException` with a `reason` attribute on failure.
@@ -66,3 +66,47 @@ The DNS resolution check MUST resolve the FQDN using `socket.getaddrinfo()` (whi
 #### Scenario: Hostname resolves to only IPv4 when lb_ips has both v4 and v6
 - **WHEN** an FQDN resolves to `1.2.3.4` only, and `lb_ips` contains `["1.2.3.4", "2001:db8::1"]`
 - **THEN** the DNS check passes (IPv4-only is acceptable)
+
+### Requirement: Hostname availability check is case-insensitive
+The system MUST perform hostname availability checks in a case-insensitive manner. When checking if a hostname is already in use, the validation function `require_valid_hostname_for_deployment(session, fqdn)` MUST normalize the FQDN to lowercase before querying the database. A hostname that differs only in case from an existing deployment's hostname (e.g., `Foo.dev.deprutser.be` vs `foo.dev.deprutser.be`) MUST be treated as in-use and raise `HostnameException` with `reason="in_use"`.
+
+#### Scenario: Case-different hostname is rejected as in-use
+- **WHEN** `require_valid_hostname_for_deployment` is called with `Foo.dev.deprutser.be`
+- **AND** a deployment exists with hostname `foo.dev.deprutser.be` (all lowercase)
+- **THEN** the function raises `HostnameException` with `reason="in_use"`
+
+#### Scenario: Same hostname with different case raises in_use
+- **WHEN** `require_valid_hostname_for_deployment` is called with `TEST.EXAMPLE.COM`
+- **AND** a deployment exists with hostname `test.example.com`
+- **THEN** the function raises `HostnameException` with `reason="in_use"`
+
+#### Scenario: Mixed-case update to same hostname (normalized) succeeds
+- **WHEN** updating an existing deployment that currently has hostname `test.example.com`
+- **AND** the update request specifies hostname `TEST.EXAMPLE.COM`
+- **THEN** the hostname is normalized to lowercase and the update succeeds (no self-conflict)
+
+### Requirement: Hostnames are normalized to lowercase on storage
+The system MUST normalize all hostnames to lowercase before storing them in the `deployment` table. When a deployment is created or updated with a hostname, the hostname MUST be converted to lowercase in the database.
+
+#### Scenario: Deployment creation normalizes hostname
+- **WHEN** a deployment is created with hostname `MyApp.Example.Com`
+- **THEN** the hostname is stored as `myapp.example.com` in the database
+
+#### Scenario: Deployment update normalizes hostname
+- **WHEN** a deployment's hostname is updated from `old.example.com` to `New.Example.Com`
+- **THEN** the new hostname is stored as `new.example.com` in the database
+
+### Requirement: Database enforces case-insensitive uniqueness
+The `deployment` table MUST enforce a unique constraint on hostnames that is case-insensitive. The database MUST reject any attempt to insert or update a deployment with a hostname that matches an existing active deployment's hostname when compared case-insensitively.
+
+#### Scenario: Duplicate hostname with different case is rejected at database level
+- **WHEN** an attempt is made to insert a deployment with hostname `Test.Example.Com`
+- **AND** a deployment already exists with hostname `test.example.com` (status != deleted)
+- **THEN** the database raises a unique constraint violation
+
+### Requirement: Hostname validation service normalizes before checking
+The `_check_available(session, fqdn, exclude_deployment_id)` function in `api/app/services/hostnames.py` MUST normalize the `fqdn` parameter to lowercase before constructing the database query. The query MUST compare against lowercase hostnames in the database.
+
+#### Scenario: Lowercase normalization happens before DB query
+- **WHEN** `_check_available` is called with `Mixed.Case.Example.Com`
+- **THEN** the SQL query uses `lowercase` form `mixed.case.example.com` for comparison

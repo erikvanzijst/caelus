@@ -222,7 +222,9 @@ This works for any `caelus` command that returns a YAML list or object.
 - Active template `(chart_ref, chart_version, product_id)` combinations are
   unique.
 - Only one open reconcile job (`queued` or `running`) may exist per deployment.
-- Domain names are unique for deployments that are not in `deleted` status.
+- Hostnames are unique and case-insensitive for deployments that are not in `deleted` status.
+  Hostnames are normalized to lowercase on storage, and uniqueness is enforced via a
+  functional index on `LOWER(hostname)`.
 - Deployment identity requires DNS-safe `name` (max 27 chars) and `namespace`
   (max 30 chars). Active deployments have a unique `(namespace, name)` pair.
 - Kubernetes namespace is `deployment.namespace`; Helm release name is
@@ -233,10 +235,11 @@ This works for any `caelus` command that returns a YAML list or object.
 ### Create
 
 - `create_deployment()` validates user + template + user values.
-- REST/CLI create payloads do not accept top-level `domainname`.
-- Service derives persisted `domainname` from `user_values_json` by recursively
+- REST/CLI create payloads do not accept top-level `hostname`.
+- Service derives persisted `hostname` from `user_values_json` by recursively
   scanning template `values_schema_json` for the first field whose `title`
-  matches `domainname` case-insensitively.
+  matches `hostname` case-insensitively.
+- Hostnames are normalized to lowercase before validation and storage.
 - Generates `name` from product name + random suffix, and `namespace` from
   user email + random suffix.
 - Persists deployment with status `provisioning`.
@@ -247,9 +250,10 @@ This works for any `caelus` command that returns a YAML list or object.
 - Only allows forward template changes (`desired_template_id` must increase).
 - Allowed from `ready` or `error` status (not during `provisioning` or `deleting`).
 - Requires same product lineage between current and target template.
-- REST/CLI update inputs do not accept top-level `domainname`.
-- Service re-derives persisted `domainname` from effective
+- REST/CLI update inputs do not accept top-level `hostname`.
+- Service re-derives persisted `hostname` from effective
   `user_values_json` using the same recursive schema-title rule as create.
+- Hostnames are normalized to lowercase before validation and storage.
 - Revalidates values against target schema.
 - Sets status `provisioning`, increments `generation`, enqueues `update` job.
 
@@ -341,6 +345,24 @@ Docs UI:
 Migration commands:
 - New migration: `alembic revision --autogenerate -m "message"`
 - Upgrade DB: `alembic upgrade head`
+
+### Migration Runbook
+
+Before applying migrations in production:
+
+1. **Check for conflicts**: Some migrations include pre-flight checks that detect
+   data conflicts (e.g., case-only duplicate hostnames). Review migration output
+   for warnings.
+
+2. **Backup**: Ensure database backups are current before running migrations.
+
+3. **Apply in order**: Migrations are sequential. Run `alembic upgrade head` to
+   apply all pending migrations.
+
+4. **Verify**: After migration, verify application health and run smoke tests.
+
+5. **Rollback**: If issues occur, `alembic downgrade -1` reverses the last migration.
+   Test rollback procedures in staging before production deployment.
 
 ## Testing Strategy
 

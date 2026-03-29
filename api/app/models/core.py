@@ -168,7 +168,10 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     )
     product: ProductORM = Relationship(
         back_populates="templates",
-        sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id", "lazy": "joined"},
+        sa_relationship_kwargs={
+            "foreign_keys": "ProductTemplateVersionORM.product_id",
+            "lazy": "joined",
+        },
     )
     products: list["ProductORM"] = Relationship(
         back_populates="template", sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id"}
@@ -216,7 +219,7 @@ class DeploymentORM(DeploymentBase, table=True):
         ),
         Index(
             "uq_hostname_active",
-            "hostname",
+            func.lower(Column("hostname")),
             unique=True,
             sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
             postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
@@ -327,6 +330,7 @@ class DeploymentRead(DeploymentBase):
 
 class DeploymentCreateResponse(SQLModel):
     """Envelope returned by the deployment creation endpoint only."""
+
     deployment: DeploymentRead
     checkout_url: str | None = None
 

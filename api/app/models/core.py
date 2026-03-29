@@ -208,7 +208,7 @@ class DeploymentORM(DeploymentBase, table=True):
         Index(
             "uq_deployment_active",
             "user_id",
-            "hostname",
+            func.lower(Column("hostname")),
             "desired_template_id",
             unique=True,
             sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
@@ -216,7 +216,7 @@ class DeploymentORM(DeploymentBase, table=True):
         ),
         Index(
             "uq_hostname_active",
-            "hostname",
+            func.lower(Column("hostname")),
             unique=True,
             sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
             postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,

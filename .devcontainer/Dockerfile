@@ -53,6 +53,7 @@ RUN groupadd --gid 968 -f docker && usermod -aG docker vscode
 RUN npm i -g @openai/codex
 RUN npm i -g @qwen-code/qwen-code@latest
 RUN npm i -g @fission-ai/openspec@latest
+RUN npm i -g @google/gemini-cli
 RUN mkdir /workspace && chown vscode:vscode /workspace
 
 ENV LANG="en_US.UTF-8"
@@ -84,6 +85,7 @@ RUN echo '' >> ~/.bashrc && \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN curl -fsSL https://opencode.ai/install | bash
+RUN curl -fsSL https://ampcode.com/install.sh | bash
 
 EXPOSE 8000 5173
 CMD bash

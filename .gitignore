@@ -22,6 +22,7 @@ pytest.xml
 venv/
 
 # Local env overrides (may contain secrets)
+.env
 .env.local
 
 # SQLite

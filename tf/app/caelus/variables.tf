@@ -49,7 +49,7 @@ variable "db_password" {
 variable "lb_ips" {
   description = "Load balancer IPs for hostname DNS validation"
   type        = list(string)
-  default     = ["185.142.224.215"]
+  default     = ["185.142.225.126"]
 }
 
 variable "wildcard_domains" {

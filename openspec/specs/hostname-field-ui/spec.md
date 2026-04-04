@@ -5,7 +5,7 @@ TBD - created by archiving change hostname-validation-and-domains. Update Purpos
 ## Requirements
 ### Requirement: HostnameField component supports dual-mode hostname input
 The system MUST provide a `HostnameField` React component in `ui/src/components/HostnameField.tsx` that supports two modes of hostname entry:
-1. **Caelus wildcard mode**: A text input for the hostname prefix combined with a dropdown selector for the wildcard domain suffix, concatenated as `${prefix}.${selectedDomain}`.
+1. **Caelus wildcard mode**: A text input for the hostname prefix combined with a dropdown selector for the wildcard domain suffix, concatenated as `${prefix}.${selectedDomain}`. The prefix input MUST NOT allow dot characters — dots MUST be stripped from the input value.
 2. **Custom FQDN mode**: A single text input for the complete FQDN.
 
 The user MUST be able to toggle between modes.
@@ -21,6 +21,14 @@ The user MUST be able to toggle between modes.
 #### Scenario: Switching modes clears previous input
 - **WHEN** the user switches from wildcard mode to custom mode (or vice versa)
 - **THEN** the input fields are reset and `onChange` is called with the new (possibly empty) value
+
+#### Scenario: Dots are stripped from wildcard prefix input
+- **WHEN** the user types or pastes `foo.bar` in the wildcard-mode prefix field
+- **THEN** the prefix value becomes `foobar` (dots removed) and the component emits `foobar.app.deprutser.be` via `onChange`
+
+#### Scenario: Custom FQDN mode allows dots
+- **WHEN** the user types `foo.bar.example.com` in the custom FQDN input
+- **THEN** the component emits `foo.bar.example.com` via `onChange` without stripping any characters
 
 ### Requirement: HostnameField fetches wildcard domains from API
 The component MUST fetch the list of available wildcard domains from `GET /api/domains` (via React Query) and populate the domain suffix dropdown.
@@ -59,6 +67,7 @@ The tooltip on the red error icon MUST display a human-readable message correspo
 - `"reserved"` -> "Hostname is reserved"
 - `"in_use"` -> "Already in use"
 - `"not_resolving"` -> "Does not resolve to Caelus"
+- `"nested_subdomain"` -> "Only a single subdomain level is allowed"
 
 #### Scenario: Usable hostname shows green check
 - **WHEN** the API returns `{"fqdn": "myapp.app.deprutser.be", "reason": null}`
@@ -67,6 +76,10 @@ The tooltip on the red error icon MUST display a human-readable message correspo
 #### Scenario: Taken hostname shows red error with tooltip
 - **WHEN** the API returns `{"fqdn": "taken.app.deprutser.be", "reason": "in_use"}`
 - **THEN** a red Error icon is displayed with tooltip text "Already in use"
+
+#### Scenario: Nested subdomain shows error with tooltip
+- **WHEN** the API returns `{"fqdn": "foo.bar.dev.deprutser.be", "reason": "nested_subdomain"}`
+- **THEN** a red Error icon is displayed with tooltip text "Only a single subdomain level is allowed"
 
 #### Scenario: Loading state shows spinner
 - **WHEN** an API call is in flight

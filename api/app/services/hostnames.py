@@ -30,6 +30,15 @@ def _check_format(fqdn: str) -> None:
             raise HostnameException("invalid")
 
 
+def _check_wildcard_depth(fqdn: str, settings: CaelusSettings) -> None:
+    for domain in settings.wildcard_domains:
+        if fqdn == domain or fqdn.endswith(f".{domain}"):
+            prefix = fqdn[: -(len(domain) + 1)]
+            if not prefix or "." in prefix:
+                raise HostnameException("nested_subdomain")
+            return
+
+
 def _check_reserved(fqdn: str, settings: CaelusSettings) -> None:
     if fqdn in settings.reserved_hostnames:
         raise HostnameException("reserved")
@@ -79,6 +88,7 @@ def require_valid_hostname_for_deployment(
     settings = settings or get_settings()
     fqdn = fqdn.lower()
     _check_format(fqdn)
+    _check_wildcard_depth(fqdn, settings)
     _check_reserved(fqdn, settings)
     _check_available(session, fqdn, exclude_deployment_id=exclude_deployment_id)
     _check_resolving(fqdn, settings)

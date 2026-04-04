@@ -9,6 +9,7 @@ from app.config import CaelusSettings
 from app.services.errors import HostnameException
 from app.services.hostnames import (
     _check_format,
+    _check_wildcard_depth,
     _check_reserved,
     _check_available,
     _check_resolving,
@@ -111,6 +112,40 @@ class TestCheckFormat:
     def test_rejects_space(self):
         with pytest.raises(HostnameException, match="invalid"):
             _check_format("bad host.example.com")
+
+
+# ── Wildcard depth check ─────────────────────────────────────────────
+
+
+class TestCheckWildcardDepth:
+    def test_single_level_prefix_passes(self):
+        _check_wildcard_depth("myapp.dev.deprutser.be", _settings(wildcard_domains=["dev.deprutser.be"]))
+
+    def test_multi_level_prefix_rejected(self):
+        with pytest.raises(HostnameException, match="nested_subdomain"):
+            _check_wildcard_depth("foo.bar.dev.deprutser.be", _settings(wildcard_domains=["dev.deprutser.be"]))
+
+    def test_bare_wildcard_domain_rejected(self):
+        with pytest.raises(HostnameException, match="nested_subdomain"):
+            _check_wildcard_depth("dev.deprutser.be", _settings(wildcard_domains=["dev.deprutser.be"]))
+
+    def test_non_wildcard_fqdn_skipped(self):
+        _check_wildcard_depth("foo.bar.example.com", _settings(wildcard_domains=["dev.deprutser.be"]))
+
+    def test_case_insensitive_matching(self):
+        """The FQDN is already lowercased by require_valid_hostname_for_deployment,
+        but verify the check works with lowercase input against a wildcard domain."""
+        with pytest.raises(HostnameException, match="nested_subdomain"):
+            _check_wildcard_depth("foo.bar.dev.deprutser.be", _settings(wildcard_domains=["dev.deprutser.be"]))
+
+    def test_empty_wildcard_domains_skips(self):
+        _check_wildcard_depth("foo.bar.example.com", _settings(wildcard_domains=[]))
+
+    def test_multiple_wildcard_domains(self):
+        settings = _settings(wildcard_domains=["dev.deprutser.be", "app.deprutser.be"])
+        _check_wildcard_depth("myapp.app.deprutser.be", settings)
+        with pytest.raises(HostnameException, match="nested_subdomain"):
+            _check_wildcard_depth("a.b.app.deprutser.be", settings)
 
 
 # ── Reserved check ────────────────────────────────────────────────────
@@ -226,6 +261,15 @@ class TestRequireValidHostname:
                 db_session, "-invalid", settings=_settings(lb_ips=["1.2.3.4"]),
             )
         assert exc_info.value.reason == "invalid"
+
+    def test_short_circuits_on_wildcard_depth(self, db_session):
+        """Nested subdomain failure should not check reserved, availability, or DNS."""
+        with pytest.raises(HostnameException) as exc_info:
+            require_valid_hostname_for_deployment(
+                db_session, "foo.bar.dev.deprutser.be",
+                settings=_settings(wildcard_domains=["dev.deprutser.be"], lb_ips=["1.2.3.4"]),
+            )
+        assert exc_info.value.reason == "nested_subdomain"
 
     def test_short_circuits_on_reserved(self, db_session):
         """Reserved failure should not check availability or DNS."""

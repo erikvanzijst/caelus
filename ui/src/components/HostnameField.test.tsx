@@ -178,6 +178,51 @@ describe('HostnameField', () => {
     })
   })
 
+  describe('wildcard prefix dot stripping', () => {
+    it('strips dots from prefix input in wildcard mode', async () => {
+      const onChange = vi.fn()
+      checkHostnameMock.mockResolvedValue({ fqdn: 'foobar.app.example.com', usable: true, reason: null })
+
+      render(
+        <HostnameField value="" onChange={onChange} wildcardDomains={['app.example.com']} />,
+      )
+
+      fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'foo.bar' } })
+
+      await waitFor(() => {
+        expect(onChange).toHaveBeenCalledWith('foobar.app.example.com')
+      })
+    })
+
+    it('allows dots in custom mode', async () => {
+      const onChange = vi.fn()
+      checkHostnameMock.mockResolvedValue({ fqdn: 'foo.bar.example.com', usable: true, reason: null })
+
+      render(<HostnameField value="" onChange={onChange} wildcardDomains={[]} />)
+
+      fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'foo.bar.example.com' } })
+
+      await waitFor(() => {
+        expect(onChange).toHaveBeenCalledWith('foo.bar.example.com')
+      })
+    })
+  })
+
+  describe('nested subdomain reason label', () => {
+    it('shows nested subdomain error message', async () => {
+      const onChange = vi.fn()
+      checkHostnameMock.mockResolvedValue({ fqdn: 'foo.bar.dev.example.com', usable: false, reason: 'nested_subdomain' })
+
+      render(<HostnameField value="" onChange={onChange} wildcardDomains={[]} />)
+
+      fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'foo.bar.dev.example.com' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('Only a single subdomain level is allowed')).toBeInTheDocument()
+      })
+    })
+  })
+
   describe('async domain loading', () => {
     it('switches to wildcard mode when domains arrive after mount', () => {
       const onChange = vi.fn()

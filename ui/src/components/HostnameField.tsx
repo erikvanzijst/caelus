@@ -24,6 +24,7 @@ const REASON_LABELS: Record<string, string> = {
   reserved: 'Hostname is reserved',
   in_use: 'Already in use',
   not_resolving: 'Does not resolve to Caelus',
+  nested_subdomain: 'Only a single subdomain level is allowed',
 }
 
 type ValidationState =
@@ -219,7 +220,7 @@ export function HostnameField({ value, onChange, onValidationChange, wildcardDom
             <TextField
               label="Hostname"
               value={prefix}
-              onChange={(e) => setPrefix(e.target.value)}
+              onChange={(e) => setPrefix(e.target.value.replace(/\./g, ''))}
               required={required}
               error={!!error || validation.status === 'error'}
               slotProps={{ input: { endAdornment: statusAdornment } }}

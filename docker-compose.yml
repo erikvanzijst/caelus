@@ -28,7 +28,8 @@ services:
       - "8501:8501" # streamlit
     env_file:
       # Must declare DEPRUTSER_API_KEY
-      - ./.env
+      - path: ./.env
+        required: false
     environment:
       - CAELUS_DATABASE_URL=postgresql+psycopg://caelus:caelus@postgres:5432/caelus
       - KUBECONFIG=/workspace/k8s/kubeconfigs/dev-k3s.yaml

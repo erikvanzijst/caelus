@@ -11,7 +11,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 API_DIR="$ROOT_DIR/api"
 CHART_DIR="$ROOT_DIR/k8s/hello-static-chart"
 CHART_YAML="$CHART_DIR/Chart.yaml"
-REGISTRY_OCI="oci://registry.home:80/helm"
+REGISTRY_OCI="oci://registry.home/helm"
 DOMAIN="${DOMAIN:-hello3.app.deprutser.be}"
 MESSAGE="${MESSAGE:-Hello from codex e2e $(date +%F-%H%M%S)}"
 
@@ -65,7 +65,7 @@ push_chart() {
 
     log "Pushing chart $v to $REGISTRY_OCI"
     set +e
-    out="$(helm push "$pkg" "$REGISTRY_OCI" --plain-http 2>&1)"
+    out="$(helm push "$pkg" "$REGISTRY_OCI" --insecure-skip-tls-verify 2>&1)"
     rc=$?
     set -e
     if [[ $rc -eq 0 ]]; then
@@ -113,7 +113,7 @@ log "Creating template and setting it on product"
 SCHEMA_JSON='{"type":"object","properties":{"user":{"type":"object","properties":{"message":{"type":"string"}},"required":["message"],"additionalProperties":false}},"additionalProperties":true}'
 uv run --no-sync python -m app.cli create-template \
   --product-id 1 \
-  --chart-ref oci://registry.home:80/helm/hello-static \
+  --chart-ref oci://registry.home/helm/hello-static \
   --chart-version "$CHART_VERSION" \
   --chart-digest "$CHART_DIGEST" \
   --values-schema-json "$SCHEMA_JSON"

@@ -30,7 +30,8 @@ RUN apt-get update -y && \
       ca-certificates \
       dnsutils \
       postgresql-client \
-      gnupg && \
+      gnupg \
+      whois && \
     install -m 0755 -d /etc/apt/keyrings && \
     wget -qO- https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
     chmod a+r /etc/apt/keyrings/google-chrome.gpg && \

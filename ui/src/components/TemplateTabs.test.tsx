@@ -8,6 +8,7 @@ vi.mock('../api/endpoints', () => ({
   createTemplate: vi.fn(),
   updateProductTemplate: vi.fn(),
   listDomains: vi.fn().mockResolvedValue([]),
+  getCnameTarget: vi.fn().mockResolvedValue(''),
   checkHostname: vi.fn().mockResolvedValue({ fqdn: '', usable: true, reason: null }),
 }))
 

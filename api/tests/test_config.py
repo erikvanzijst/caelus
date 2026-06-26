@@ -14,7 +14,7 @@ def test_default_values(monkeypatch):
     )
     assert settings.database_url == "postgresql+psycopg://caelus:caelus@localhost:5432/caelus"
     assert settings.log_level == "INFO"
-    assert settings.lb_ips == []
+    assert settings.domain == ""
     assert settings.wildcard_domains == []
     assert settings.reserved_hostnames == []
 
@@ -22,17 +22,17 @@ def test_default_values(monkeypatch):
 def test_env_var_loading(monkeypatch):
     monkeypatch.setenv("CAELUS_DATABASE_URL", "sqlite:///test.db")
     monkeypatch.setenv("CAELUS_LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("CAELUS_DOMAIN", "freepod.eu")
     settings = CaelusSettings(_env_file=None)
     assert settings.database_url == "sqlite:///test.db"
     assert settings.log_level == "DEBUG"
+    assert settings.domain == "freepod.eu"
 
 
 def test_list_field_json_parsing(monkeypatch):
-    monkeypatch.setenv("CAELUS_LB_IPS", '["1.2.3.4","2001:db8::1"]')
     monkeypatch.setenv("CAELUS_WILDCARD_DOMAINS", '["app.deprutser.be","apps.example.com"]')
     monkeypatch.setenv("CAELUS_RESERVED_HOSTNAMES", '["smtp.app.deprutser.be"]')
     settings = CaelusSettings(_env_file=None)
-    assert settings.lb_ips == ["1.2.3.4", "2001:db8::1"]
     assert settings.wildcard_domains == ["app.deprutser.be", "apps.example.com"]
     assert settings.reserved_hostnames == ["smtp.app.deprutser.be"]
 

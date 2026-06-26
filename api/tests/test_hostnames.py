@@ -1,8 +1,9 @@
 """Tests for the hostname validation service and API endpoint."""
-import socket
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import UUID
 
+import dns.exception
+import dns.resolver
 import pytest
 
 from app.config import CaelusSettings
@@ -12,7 +13,7 @@ from app.services.hostnames import (
     _check_wildcard_depth,
     _check_reserved,
     _check_available,
-    _check_resolving,
+    _check_cname,
     require_valid_hostname_for_deployment,
 )
 from app.db import get_session
@@ -32,7 +33,7 @@ from tests.conftest import create_free_plan_template
 
 def _settings(**overrides) -> CaelusSettings:
     """Build a CaelusSettings with test defaults, ignoring env vars."""
-    defaults = {"reserved_hostnames": [], "lb_ips": []}
+    defaults = {"reserved_hostnames": [], "domain": ""}
     return CaelusSettings(**{**defaults, **overrides}, _env_file=None)
 
 
@@ -198,50 +199,130 @@ class TestCheckAvailable:
         _check_available(db_session, "recycled.example.com")
 
 
-# ── DNS resolution check ─────────────────────────────────────────────
+# ── DNS CNAME check ──────────────────────────────────────────────────
 
 
-class TestCheckResolving:
-    def test_skipped_when_lb_ips_empty(self):
-        # Should not raise even if DNS would fail
-        _check_resolving("nonexistent.example.test", _settings(lb_ips=[]))
+def _cname_answer(target: str):
+    """Build a fake CNAME query result whose single rdata's target renders to
+    *target* (with the trailing-dot FQDN form dnspython produces)."""
+    rdata = Mock()
+    rdata.target.to_text.return_value = f"{target}."
+    return [rdata]
 
-    def test_passes_when_all_ips_match(self):
-        fake_results = [
-            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.2.3.4", 0)),
-            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2001:db8::1", 0, 0, 0)),
-        ]
-        with patch("app.services.hostnames.socket.getaddrinfo", return_value=fake_results):
-            _check_resolving("good.example.com", _settings(lb_ips=["1.2.3.4", "2001:db8::1"]))
 
-    def test_passes_ipv4_only_subset(self):
-        fake_results = [
-            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.2.3.4", 0)),
-        ]
-        with patch("app.services.hostnames.socket.getaddrinfo", return_value=fake_results):
-            _check_resolving("v4only.example.com", _settings(lb_ips=["1.2.3.4", "2001:db8::1"]))
+@pytest.fixture
+def no_authoritative():
+    """Force the system-resolver fallback path so a test can drive validation
+    through the module-level ``dns.resolver.resolve`` mock without standing up
+    fake authoritative nameservers."""
+    with patch("app.services.hostnames._authoritative_resolver", return_value=None):
+        yield
 
-    def test_fails_when_ip_outside_lb_set(self):
-        fake_results = [
-            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.2.3.4", 0)),
-            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("9.9.9.9", 0)),
-        ]
-        with patch("app.services.hostnames.socket.getaddrinfo", return_value=fake_results):
-            with pytest.raises(HostnameException, match="not_resolving"):
-                _check_resolving("mixed.example.com", _settings(lb_ips=["1.2.3.4"]))
 
-    def test_fails_when_dns_does_not_resolve(self):
+class TestCheckCname:
+    def test_passes_when_cname_matches_exactly(self, no_authoritative):
         with patch(
-            "app.services.hostnames.socket.getaddrinfo",
-            side_effect=socket.gaierror("Name or service not known"),
+            "app.services.hostnames.dns.resolver.resolve",
+            return_value=_cname_answer("freepod.eu"),
+        ):
+            _check_cname("good.example.com", _settings(domain="freepod.eu"))
+
+    def test_fails_when_cname_points_to_subdomain_of_domain(self, no_authoritative):
+        with patch(
+            "app.services.hostnames.dns.resolver.resolve",
+            return_value=_cname_answer("ingress.freepod.eu"),
         ):
             with pytest.raises(HostnameException, match="not_resolving"):
-                _check_resolving("nxdomain.example.com", _settings(lb_ips=["1.2.3.4"]))
+                _check_cname("sub.example.com", _settings(domain="freepod.eu"))
 
-    def test_fails_when_no_results_returned(self):
-        with patch("app.services.hostnames.socket.getaddrinfo", return_value=[]):
+    def test_fails_when_a_record_only_no_cname(self, no_authoritative):
+        with patch(
+            "app.services.hostnames.dns.resolver.resolve",
+            side_effect=dns.resolver.NoAnswer,
+        ):
             with pytest.raises(HostnameException, match="not_resolving"):
-                _check_resolving("empty.example.com", _settings(lb_ips=["1.2.3.4"]))
+                _check_cname("arecord.example.com", _settings(domain="freepod.eu"))
+
+    def test_fails_when_cname_points_to_wrong_target(self, no_authoritative):
+        with patch(
+            "app.services.hostnames.dns.resolver.resolve",
+            return_value=_cname_answer("somewhere-else.example.net"),
+        ):
+            with pytest.raises(HostnameException, match="not_resolving"):
+                _check_cname("wrong.example.com", _settings(domain="freepod.eu"))
+
+    def test_fails_on_nxdomain(self, no_authoritative):
+        with patch(
+            "app.services.hostnames.dns.resolver.resolve",
+            side_effect=dns.resolver.NXDOMAIN,
+        ):
+            with pytest.raises(HostnameException, match="not_resolving"):
+                _check_cname("nxdomain.example.com", _settings(domain="freepod.eu"))
+
+    def test_fails_on_timeout(self, no_authoritative):
+        with patch(
+            "app.services.hostnames.dns.resolver.resolve",
+            side_effect=dns.exception.Timeout,
+        ):
+            with pytest.raises(HostnameException, match="not_resolving"):
+                _check_cname("slow.example.com", _settings(domain="freepod.eu"))
+
+    def test_skipped_when_domain_empty(self):
+        # Should not raise or even query DNS when domain is unconfigured
+        with patch("app.services.hostnames._authoritative_resolver") as mock_auth, patch(
+            "app.services.hostnames.dns.resolver.resolve"
+        ) as mock_resolve:
+            _check_cname("nonexistent.example.test", _settings(domain=""))
+        mock_auth.assert_not_called()
+        mock_resolve.assert_not_called()
+
+    def test_skipped_for_wildcard_subdomain(self):
+        with patch("app.services.hostnames._authoritative_resolver") as mock_auth, patch(
+            "app.services.hostnames.dns.resolver.resolve"
+        ) as mock_resolve:
+            _check_cname(
+                "foo.freepod.eu",
+                _settings(domain="freepod.eu", wildcard_domains=["freepod.eu"]),
+            )
+        mock_auth.assert_not_called()
+        mock_resolve.assert_not_called()
+
+    def test_queries_authoritative_and_bypasses_recursive_resolver(self):
+        """The CNAME is read from the authoritative servers, not the cache-prone
+        system resolver — so a freshly created record is seen immediately."""
+        auth = Mock()
+        auth.resolve.return_value = _cname_answer("freepod.eu")
+        with patch(
+            "app.services.hostnames._authoritative_resolver", return_value=auth
+        ), patch("app.services.hostnames.dns.resolver.resolve") as module_resolve:
+            _check_cname("good.example.com", _settings(domain="freepod.eu"))
+        auth.resolve.assert_called_once_with("good.example.com", "CNAME")
+        module_resolve.assert_not_called()
+
+    def test_authoritative_negative_answer_does_not_fall_back(self):
+        """An NXDOMAIN straight from the authoritative server is definitive; we
+        must not retry via the (potentially stale) system resolver."""
+        auth = Mock()
+        auth.resolve.side_effect = dns.resolver.NXDOMAIN
+        with patch(
+            "app.services.hostnames._authoritative_resolver", return_value=auth
+        ), patch("app.services.hostnames.dns.resolver.resolve") as module_resolve:
+            with pytest.raises(HostnameException, match="not_resolving"):
+                _check_cname("nope.example.com", _settings(domain="freepod.eu"))
+        module_resolve.assert_not_called()
+
+    def test_falls_back_to_system_resolver_when_authoritative_unreachable(self):
+        """If the authoritative servers can't be reached (e.g. egress blocked),
+        degrade to the system resolver rather than failing the check."""
+        auth = Mock()
+        auth.resolve.side_effect = dns.exception.Timeout
+        with patch(
+            "app.services.hostnames._authoritative_resolver", return_value=auth
+        ), patch(
+            "app.services.hostnames.dns.resolver.resolve",
+            return_value=_cname_answer("freepod.eu"),
+        ):
+            _check_cname("good.example.com", _settings(domain="freepod.eu"))
 
 
 # ── Orchestration (short-circuit behavior) ────────────────────────────
@@ -258,7 +339,7 @@ class TestRequireValidHostname:
         """Format failure should not touch the DB or DNS."""
         with pytest.raises(HostnameException) as exc_info:
             require_valid_hostname_for_deployment(
-                db_session, "-invalid", settings=_settings(lb_ips=["1.2.3.4"]),
+                db_session, "-invalid", settings=_settings(domain="freepod.eu"),
             )
         assert exc_info.value.reason == "invalid"
 
@@ -267,7 +348,7 @@ class TestRequireValidHostname:
         with pytest.raises(HostnameException) as exc_info:
             require_valid_hostname_for_deployment(
                 db_session, "foo.bar.dev.deprutser.be",
-                settings=_settings(wildcard_domains=["dev.deprutser.be"], lb_ips=["1.2.3.4"]),
+                settings=_settings(wildcard_domains=["dev.deprutser.be"], domain="freepod.eu"),
             )
         assert exc_info.value.reason == "nested_subdomain"
 
@@ -276,7 +357,7 @@ class TestRequireValidHostname:
         with pytest.raises(HostnameException) as exc_info:
             require_valid_hostname_for_deployment(
                 db_session, "smtp.example.com",
-                settings=_settings(reserved_hostnames=["smtp.example.com"], lb_ips=["1.2.3.4"]),
+                settings=_settings(reserved_hostnames=["smtp.example.com"], domain="freepod.eu"),
             )
         assert exc_info.value.reason == "reserved"
 
@@ -323,7 +404,7 @@ class TestRequireValidHostname:
         with pytest.raises(HostnameException) as exc_info:
             require_valid_hostname_for_deployment(
                 db_session, "taken.example.com",
-                settings=_settings(lb_ips=["1.2.3.4"]),
+                settings=_settings(domain="freepod.eu"),
             )
         assert exc_info.value.reason == "in_use"
 
@@ -397,25 +478,29 @@ class TestHostnameCheckEndpoint:
     def test_not_resolving(self, client, monkeypatch):
         monkeypatch.setattr(
             "app.services.hostnames.get_settings",
-            lambda: _settings(lb_ips=["1.2.3.4"]),
+            lambda: _settings(domain="freepod.eu"),
         )
         with patch(
-            "app.services.hostnames.socket.getaddrinfo",
-            side_effect=socket.gaierror("nope"),
+            "app.services.hostnames._authoritative_resolver", return_value=None
+        ), patch(
+            "app.services.hostnames.dns.resolver.resolve",
+            side_effect=dns.resolver.NXDOMAIN("nope"),
         ):
             resp = client.get("/api/hostnames/nxdomain.example.com")
         assert resp.status_code == 200
         assert resp.json()["usable"] is False
         assert resp.json()["reason"] == "not_resolving"
 
-    def test_unauthenticated_returns_404(self, db_session):
+    def test_no_auth_required(self, db_session):
+        """The hostname check is intentionally public — no auth header needed."""
         def override_get_db():
             yield db_session
 
         fastapi_app.dependency_overrides[get_session] = override_get_db
         with TestClient(fastapi_app) as no_auth_client:
             resp = no_auth_client.get("/api/hostnames/test.example.com")
-            assert resp.status_code == 404
+            assert resp.status_code == 200
+            assert resp.json()["fqdn"] == "test.example.com"
         fastapi_app.dependency_overrides.clear()
 
     def test_mixed_case_fqdn_normalized_in_response(self, client):
@@ -459,6 +544,39 @@ class TestDomainsEndpoint:
         fastapi_app.dependency_overrides[get_session] = override_get_db
         with TestClient(fastapi_app) as no_auth_client:
             resp = no_auth_client.get("/api/domains")
+            assert resp.status_code == 200
+        fastapi_app.dependency_overrides.clear()
+
+
+# ── CNAME target endpoint tests ───────────────────────────────────────
+
+
+class TestCnameTargetEndpoint:
+    def test_returns_configured_domain(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.hostnames.get_settings",
+            lambda: _settings(domain="dev.freepod.eu"),
+        )
+        resp = client.get("/api/cname-target")
+        assert resp.status_code == 200
+        assert resp.json() == "dev.freepod.eu"
+
+    def test_returns_empty_string_when_unconfigured(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.hostnames.get_settings",
+            lambda: _settings(domain=""),
+        )
+        resp = client.get("/api/cname-target")
+        assert resp.status_code == 200
+        assert resp.json() == ""
+
+    def test_no_auth_required(self, db_session):
+        def override_get_db():
+            yield db_session
+
+        fastapi_app.dependency_overrides[get_session] = override_get_db
+        with TestClient(fastapi_app) as no_auth_client:
+            resp = no_auth_client.get("/api/cname-target")
             assert resp.status_code == 200
         fastapi_app.dependency_overrides.clear()
 

@@ -88,7 +88,9 @@ def test_endpoints_return_404_without_auth_header(db_session):
             ("GET", "/api/products/1/templates"),
             ("GET", "/api/products/1/templates/1"),
             ("DELETE", "/api/products/1/templates/1"),
-            ("GET", "/api/hostnames/test.example.com"),
+            # NOTE: GET /api/hostnames/{fqdn} is intentionally public (no auth);
+            # its open-access contract is covered by
+            # TestHostnameCheckEndpoint::test_no_auth_required.
         ]
         for method, path in endpoints:
             resp = no_auth_client.request(method, path)

@@ -160,3 +160,7 @@ export function checkHostname(fqdn: string) {
 export function listDomains() {
   return requestJson<string[]>('/domains')
 }
+
+export function getCnameTarget() {
+  return requestJson<string>('/cname-target')
+}

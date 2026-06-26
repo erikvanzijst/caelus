@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-import socket
 import logging
 from uuid import UUID
 
+import dns.exception
+import dns.resolver
 from sqlmodel import Session, select
 
 from app.config import CaelusSettings, get_settings
@@ -55,18 +56,72 @@ def _check_available(session: Session, fqdn: str, *, exclude_deployment_id: UUID
         raise HostnameException("in_use")
 
 
-def _check_resolving(fqdn: str, settings: CaelusSettings) -> None:
-    if not settings.lb_ips:
+def _authoritative_resolver(fqdn: str) -> dns.resolver.Resolver | None:
+    """Build a resolver that queries the authoritative nameservers for *fqdn*
+    directly, bypassing any recursive resolver's cache — including the negative
+    cache that would otherwise pin a "no such CNAME" answer for the zone's SOA
+    negative TTL after a failed check.
+
+    Returns ``None`` when the authoritative servers can't be determined (so the
+    caller can fall back to the default system resolver).
+    """
+    try:
+        zone = dns.resolver.zone_for_name(fqdn)
+        ns_records = dns.resolver.resolve(zone, "NS")
+    except dns.exception.DNSException:
+        return None
+
+    nameserver_ips: list[str] = []
+    for ns in ns_records:
+        for record_type in ("A", "AAAA"):
+            try:
+                nameserver_ips.extend(r.address for r in dns.resolver.resolve(ns.target, record_type))
+            except dns.exception.DNSException:
+                continue
+
+    if not nameserver_ips:
+        return None
+
+    resolver = dns.resolver.Resolver(configure=False)
+    resolver.nameservers = nameserver_ips
+    # Keep the UI responsive: the user is waiting on this check.
+    resolver.timeout = 3
+    resolver.lifetime = 5
+    return resolver
+
+
+def _check_cname(fqdn: str, settings: CaelusSettings) -> None:
+    if not settings.domain:
         return
 
-    lb_set = set(settings.lb_ips)
-    try:
-        results = socket.getaddrinfo(fqdn, None, proto=socket.IPPROTO_TCP)
-    except socket.gaierror:
-        raise HostnameException("not_resolving")
+    # Wildcard subdomains are served by platform-managed A records, not a
+    # user-delegated CNAME, so they bypass the CNAME requirement entirely.
+    for domain in settings.wildcard_domains:
+        if fqdn == domain or fqdn.endswith(f".{domain}"):
+            return
 
-    resolved_ips = {addr[0] for _, _, _, _, addr in results}
-    if not resolved_ips or not resolved_ips <= lb_set:
+    # Query the zone's authoritative nameservers directly so a user who creates
+    # the CNAME *after* a first failed check is picked up immediately, instead
+    # of waiting out a recursive resolver's negative cache.
+    resolver = _authoritative_resolver(fqdn)
+    try:
+        source = resolver if resolver is not None else dns.resolver
+        answer = source.resolve(fqdn, "CNAME")
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        # Definitive answer from the authoritative server: no matching CNAME.
+        raise HostnameException("not_resolving")
+    except dns.exception.DNSException:
+        if resolver is None:
+            raise HostnameException("not_resolving")
+        # Couldn't reach the authoritative servers (e.g. egress to port 53 is
+        # blocked); fall back to the system resolver before giving up.
+        try:
+            answer = dns.resolver.resolve(fqdn, "CNAME")
+        except dns.exception.DNSException:
+            raise HostnameException("not_resolving")
+
+    target = answer[0].target.to_text().rstrip(".").lower()
+    if target != settings.domain.lower():
         raise HostnameException("not_resolving")
 
 
@@ -80,7 +135,7 @@ def require_valid_hostname_for_deployment(
     """Validate that *fqdn* can be used for a new or updated deployment.
 
     Raises ``HostnameException(reason=...)`` on the first failing check.
-    Checks run in order: format → reserved → availability → DNS resolution.
+    Checks run in order: format → reserved → availability → DNS CNAME.
 
     Pass *exclude_deployment_id* when updating an existing deployment so its
     own hostname doesn't trigger an "in_use" conflict.
@@ -91,4 +146,4 @@ def require_valid_hostname_for_deployment(
     _check_wildcard_depth(fqdn, settings)
     _check_reserved(fqdn, settings)
     _check_available(session, fqdn, exclude_deployment_id=exclude_deployment_id)
-    _check_resolving(fqdn, settings)
+    _check_cname(fqdn, settings)

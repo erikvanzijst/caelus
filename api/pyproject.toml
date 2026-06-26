@@ -28,6 +28,7 @@ dependencies = [
   "python-multipart>=0.0.6",
   "mollie-api-py>=1.2.3",
   "python-dateutil>=2.9.0.post0",
+  "dnspython>=2.6",
 ]
 
 [tool.setuptools]

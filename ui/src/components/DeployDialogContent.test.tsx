@@ -6,6 +6,7 @@ import type { Product } from '../api/types'
 
 vi.mock('../api/endpoints', () => ({
   listDomains: vi.fn().mockResolvedValue([]),
+  getCnameTarget: vi.fn().mockResolvedValue(''),
   checkHostname: vi.fn().mockResolvedValue({ fqdn: '', usable: true, reason: null }),
 }))
 

@@ -15,7 +15,7 @@ class CaelusSettings(BaseSettings):
     static_path: Path = Path(__file__).parent.parent / "static"
     log_level: str = "INFO"
 
-    lb_ips: list[str] = []
+    domain: str = ""
     wildcard_domains: list[str] = []
     reserved_hostnames: list[str] = []
 

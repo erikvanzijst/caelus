@@ -223,6 +223,39 @@ describe('HostnameField', () => {
     })
   })
 
+  describe('CNAME target', () => {
+    it('uses the provided cnameTarget in the not_resolving message and helper text', async () => {
+      const onChange = vi.fn()
+      checkHostnameMock.mockResolvedValue({ fqdn: 'app.example.com', usable: false, reason: 'not_resolving' })
+
+      render(<HostnameField value="" onChange={onChange} wildcardDomains={[]} cnameTarget="dev.freepod.eu" />)
+
+      // Custom-mode helper text reflects the environment-specific target
+      expect(
+        screen.getByText('Point your domain at Freepod: create a CNAME record → dev.freepod.eu'),
+      ).toBeInTheDocument()
+
+      fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'app.example.com' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('Create a CNAME record pointing to dev.freepod.eu')).toBeInTheDocument()
+      })
+    })
+
+    it('falls back to freepod.eu when cnameTarget is not provided', async () => {
+      const onChange = vi.fn()
+      checkHostnameMock.mockResolvedValue({ fqdn: 'app.example.com', usable: false, reason: 'not_resolving' })
+
+      render(<HostnameField value="" onChange={onChange} wildcardDomains={[]} />)
+
+      fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'app.example.com' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('Create a CNAME record pointing to freepod.eu')).toBeInTheDocument()
+      })
+    })
+  })
+
   describe('async domain loading', () => {
     it('switches to wildcard mode when domains arrive after mount', () => {
       const onChange = vi.fn()

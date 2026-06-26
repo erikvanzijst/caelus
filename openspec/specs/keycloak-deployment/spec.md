@@ -6,7 +6,7 @@ Deploy Keycloak identity provider on Kubernetes for user authentication.
 ## ADDED Requirements
 
 ### Requirement: Keycloak runs on Kubernetes
-The system SHALL deploy Keycloak as a Kubernetes Deployment with embedded H2 database.
+The system SHALL deploy Keycloak as a Kubernetes Deployment backed by an external PostgreSQL database.
 
 #### Scenario: Keycloak deployment exists
 - **WHEN** `kubectl get deployment -n auth-system keycloak` is executed
@@ -18,14 +18,14 @@ The system SHALL deploy Keycloak as a Kubernetes Deployment with embedded H2 dat
 
 #### Scenario: Keycloak service is exposed
 - **WHEN** `kubectl get svc -n auth-system keycloak` is executed
-- **THEN** a ClusterIP service exposes port 8080
+- **THEN** a ClusterIP service exposes port 80 forwarding to container port 8080
 
 ### Requirement: Keycloak data persists across restarts
-The system SHALL use a PersistentVolumeClaim to persist Keycloak data.
+Keycloak SHALL store all realm, client, and user state in the PostgreSQL database, whose storage is backed by a PersistentVolumeClaim. The Keycloak pod itself is stateless and mounts no persistent volume.
 
-#### Scenario: PVC exists for Keycloak
-- **WHEN** `kubectl get pvc -n auth-system keycloak-data` is executed
-- **THEN** a PVC exists and is bound
+#### Scenario: PVC exists for PostgreSQL
+- **WHEN** `kubectl get pvc -n auth-system postgres-pvc` is executed
+- **THEN** a PVC exists with a `1Gi` `ReadWriteOnce` request
 
 ### Requirement: Keycloak is reachable via Ingress
 The system SHALL expose Keycloak via Kubernetes Ingress for external access.
@@ -39,7 +39,7 @@ The system SHALL configure Keycloak with required environment variables includin
 
 #### Scenario: Keycloak environment variables are set
 - **WHEN** Keycloak pod spec is inspected
-- **THEN** environment variables include `KC_HOSTNAME`, `KC_HTTP_ENABLED`, and `KC_DB`
+- **THEN** environment variables include `KC_HOSTNAME_URL`, `KC_PROXY`, and `KC_DB`
 
 ### Requirement: Keycloak has health checks
 The system SHALL configure readiness and liveness probes for Keycloak.

@@ -26,20 +26,20 @@ helm template demo ./products/helloworld/chart \
 ```bash
 helm lint ./products/helloworld/chart
 helm package ./products/helloworld/chart --destination ./build
-helm push ./build/helloworld-0.1.4.tgz oci://registry.home:80/helm --plain-http
+helm push ./build/helloworld-0.1.4.tgz oci://registry.home/helm --insecure-skip-tls-verify
 ```
 
-Optionally pull to verify: `helm pull oci://registry.home:80/helm/helloworld --version 0.1.4 --plain-http --destination /tmp`
+Optionally pull to verify: `helm pull oci://registry.home/helm/helloworld --version 0.1.4 --insecure-skip-tls-verify --destination /tmp`
 
 ## Deploy to k3s
 
 ```bash
-helm install helloworld oci://registry.home:80/helm/helloworld \
+helm install helloworld oci://registry.home/helm/helloworld \
   --kubeconfig ./kubeconfigs/k3s-dev.yaml \
   --version 0.1.4 \
   --namespace hello2 \
   --create-namespace \
-  --plain-http \
+  --insecure-skip-tls-verify \
   --set ingress.host=hello2.app.deprutser.be
 ```
 

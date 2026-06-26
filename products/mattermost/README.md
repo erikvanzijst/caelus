@@ -203,8 +203,8 @@ helm upgrade --install mattermost ./products/mattermost/chart \
 ### From OCI Registry
 
 ```bash
-helm upgrade --install mattermost oci://registry.home:80/helm/mattermost \
-  --plain-http \
+helm upgrade --install mattermost oci://registry.home/helm/mattermost \
+  --insecure-skip-tls-verify \
   --version 1.0.1 \
   --namespace mattermost \
   --create-namespace \
@@ -236,7 +236,7 @@ before Caelus can reference it:
 ```bash
 cd products/mattermost/chart
 helm package .
-helm push mattermost-1.0.2.tgz oci://registry.home:80/helm --plain-http
+helm push mattermost-1.0.2.tgz oci://registry.home/helm --insecure-skip-tls-verify
 ```
 
 ### 2. Register as a Product Template
@@ -246,7 +246,7 @@ template version to an existing one) with:
 
 | Field | Value |
 |---|---|
-| Chart ref | `oci://registry.home:80/helm/mattermost` |
+| Chart ref | `oci://registry.home/helm/mattermost` |
 | Chart version | `1.0.2` |
 | User values schema | See [values schema](#values-schema) below |
 | Default Helm values | See [system values](#system-values) below |

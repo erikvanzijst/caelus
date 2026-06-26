@@ -32,14 +32,14 @@ helm template demo ./products/naas/chart \
 ```bash
 helm lint ./products/naas/chart
 helm package ./products/naas/chart --destination ./build
-helm push ./build/naas-0.1.0.tgz oci://registry.home:80/helm --plain-http
+helm push ./build/naas-0.1.0.tgz oci://registry.home/helm --insecure-skip-tls-verify
 ```
 
 ## Caelus product template
 
 Create a new NaaS product in the Admin UI and add a template with the following values:
 
-- Chart: `oci://registry.home:80/helm/naas`
+- Chart: `oci://registry.home/helm/naas`
 - Tag: `0.1.0`
 
 Default values:

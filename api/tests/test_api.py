@@ -139,7 +139,7 @@ def test_user_deployment_flow(client, db_session):
     template = client.post(
         f"/api/products/{product_id}/templates",
         json={
-            "chart_ref": "registry.home:80/nextcloud/",
+            "chart_ref": "registry.home/nextcloud/",
             "chart_version": "1.0.0",
             "values_schema_json": {
                 "type": "object",

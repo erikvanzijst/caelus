@@ -71,7 +71,7 @@ def test_deployment_unique_constraint(db_session):
         db_session,
         payload=templates.ProductTemplateVersionCreate(
             product_id=product.id,
-            chart_ref="registry.home:80/nextcloud/",
+            chart_ref="registry.home/nextcloud/",
             chart_version="1.0.0",
             values_schema_json={
                 "type": "object",
@@ -139,7 +139,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
         db_session,
         payload=templates.ProductTemplateVersionCreate(
             product_id=product.id,
-            chart_ref="registry.home:80/nextcloud/",
+            chart_ref="registry.home/nextcloud/",
             chart_version="1.0.0",
             values_schema_json={
                 "type": "object",
@@ -151,7 +151,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
         db_session,
         payload=templates.ProductTemplateVersionCreate(
             product_id=product.id,
-            chart_ref="registry.home:80/nextcloud/",
+            chart_ref="registry.home/nextcloud/",
             chart_version="2.0.0",
             values_schema_json={
                 "type": "object",

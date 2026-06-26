@@ -45,14 +45,14 @@ Build dependencies, package the chart, and push to the Caelus OCI registry:
 cd products/immich/chart
 helm dependency build
 helm package .
-helm registry login registry.home:80
-helm push immich-2.0.0.tgz oci://registry.home:80/helm --plain-http
+helm registry login registry.home --insecure
+helm push immich-2.0.0.tgz oci://registry.home/helm --insecure-skip-tls-verify
 ```
 
 Pull test:
 
 ```bash
-helm pull oci://registry.home:80/helm/immich --version 2.0.0 --plain-http
+helm pull oci://registry.home/helm/immich --version 2.0.0 --insecure-skip-tls-verify
 ```
 
 ## Caelus product template

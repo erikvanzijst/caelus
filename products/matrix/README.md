@@ -66,14 +66,14 @@ Package the chart and push to the Caelus OCI registry:
 ```bash
 cd products/matrix/chart
 helm package .
-helm registry login registry.home:80
-helm push matrix-0.1.0.tgz oci://registry.home:80/helm --plain-http
+helm registry login registry.home --insecure
+helm push matrix-0.1.0.tgz oci://registry.home/helm --insecure-skip-tls-verify
 ```
 
 Pull test:
 
 ```bash
-helm pull oci://registry.home:80/helm/matrix --version 0.1.0 --plain-http
+helm pull oci://registry.home/helm/matrix --version 0.1.0 --insecure-skip-tls-verify
 ```
 
 ## Caelus product template

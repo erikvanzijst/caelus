@@ -22,7 +22,7 @@ def test_delete_deployment_flow(client, db_session):
     tmpl_resp = client.post(
         f"/api/products/{prod_id}/templates",
         json={
-            "chart_ref": "registry.home:80/nextcloud/",
+            "chart_ref": "registry.home/nextcloud/",
             "chart_version": "1.0.0",
             "values_schema_json": {
                 "type": "object",

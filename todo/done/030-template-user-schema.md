@@ -3,7 +3,7 @@
 Helm charts usually have values that the deployer can override. Caelus supports this. On its ProductTemplateVersion, it
 has:
 
-1. the Helm chart URL: `oci://registry.home:80/helm/hello-static`
+1. the Helm chart URL: `oci://registry.home/helm/hello-static`
 2. Helm chart tag: `0.1.2`
 3. values_schema_json: a JSONSchema that defines the subset of Helm values that the deployer can override.
 4. default_values_json: a JSON object that defines the default values for the Helm values.
@@ -12,7 +12,7 @@ For example:
 
 ```json
 {
-  "chart_ref": "oci://registry.home:80/helm/hello-static",
+  "chart_ref": "oci://registry.home/helm/hello-static",
   "chart_version": "0.1.2",
   "values_schema_json": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",

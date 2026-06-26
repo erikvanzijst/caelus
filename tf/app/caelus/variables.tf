@@ -9,7 +9,7 @@ variable "ns_login" {
 }
 
 variable "domain" {
-  description = "The base domain name (e.g. app.deprutser.be)"
+  description = "The base domain name (e.g. freepod.eu)"
   type = string
 }
 
@@ -44,12 +44,6 @@ variable "db_password" {
   description = "Postgres password"
   type        = string
   sensitive   = true
-}
-
-variable "lb_ips" {
-  description = "Load balancer IPs for hostname DNS validation"
-  type        = list(string)
-  default     = ["185.142.225.126"]
 }
 
 variable "wildcard_domains" {

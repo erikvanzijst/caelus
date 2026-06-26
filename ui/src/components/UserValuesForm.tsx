@@ -12,7 +12,7 @@ import {
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { listDomains } from '../api/endpoints'
+import { getCnameTarget, listDomains } from '../api/endpoints'
 import { HostnameField } from './HostnameField'
 
 const ajv = new Ajv2020({ allErrors: true, strict: false })
@@ -166,6 +166,12 @@ export function UserValuesForm({
     enabled: hasHostnameField,
     staleTime: 5 * 60 * 1000,
   })
+  const cnameTargetQuery = useQuery({
+    queryKey: ['cname-target'],
+    queryFn: getCnameTarget,
+    enabled: hasHostnameField,
+    staleTime: 5 * 60 * 1000,
+  })
 
   const [formData, setFormData] = useState<Record<string, unknown>>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -270,6 +276,7 @@ export function UserValuesForm({
               onChange={(hostname) => handleChange(field.path, hostname, 'string')}
               onValidationChange={onHostnameValidationChange}
               wildcardDomains={domainsQuery.data ?? []}
+              cnameTarget={cnameTargetQuery.data || undefined}
               required={field.required}
               error={fieldErrors[field.path]}
               description={field.description}

@@ -17,6 +17,26 @@ from app.models.core import _utcnow
 from app.services.mollie import FakePaymentProvider
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_hostname_settings(monkeypatch):
+    """Isolate the whole suite from ambient DNS configuration.
+
+    Hostname validation calls the real ``get_settings()``, which loads
+    ``.env`` / ``.env.local`` / ``CAELUS_*`` vars. A configured ``CAELUS_DOMAIN``
+    makes ``_check_cname`` perform real CNAME lookups against arbitrary test
+    hostnames (-> ``not_resolving``), which breaks any test that creates a
+    deployment. ``monkeypatch.delenv`` is not enough — the value comes from the
+    ``.env.local`` *file* — so override ``get_settings`` to a blank-``domain``
+    object (DNS check skipped). Tests that exercise DNS override it again.
+    """
+    from app.config import CaelusSettings
+
+    monkeypatch.setattr(
+        "app.services.hostnames.get_settings",
+        lambda: CaelusSettings(reserved_hostnames=[], domain="", _env_file=None),
+    )
+
+
 @pytest.fixture
 def db_session():
     engine = create_engine(

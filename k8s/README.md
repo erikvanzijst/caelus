@@ -93,10 +93,10 @@ helm upgrade --install nextcloud-test nextcloud/nextcloud --namespace nextcloud-
     --set ingress.className=traefik \
     --set phpClientHttpsFix.enabled=true \
     --set phpClientHttpsFix.protocol=https \
-    --set nextcloud.host=nextcloud-test.app.deprutser.be
+    --set nextcloud.host=nextcloud-test.freepod.eu
 ```
 
-Visit https://nextcloud-test.app.deprutser.be/ and login with `admin/changeme`.
+Visit https://nextcloud-test.freepod.eu/ and login with `admin/changeme`.
 Afterward, clean up with `helm uninstall nextcloud-test --namespace nextcloud-test`
 
 ### Point directly to the online chart release archive
@@ -112,7 +112,7 @@ helm upgrade --install nextcloud-test https://github.com/nextcloud/helm/releases
     --set phpClientHttpsFix.protocol=https \
     --set persistence.enabled=true \
     --set persistence.nextcloudData.enabled=true \
-    --set nextcloud.host=nextcloud-test.app.deprutser.be
+    --set nextcloud.host=nextcloud-test.freepod.eu
 ```
 
 ## Onboarding: Create product and template

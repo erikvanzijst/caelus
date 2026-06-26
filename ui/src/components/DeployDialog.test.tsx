@@ -18,6 +18,7 @@ vi.mock('../api/endpoints', () => ({
   updateDeployment: (...args: unknown[]) => updateDeploymentMock(...args),
   checkHostname: (...args: unknown[]) => checkHostnameMock(...args),
   listDomains: (...args: unknown[]) => listDomainsMock(...args),
+  getCnameTarget: vi.fn().mockResolvedValue(''),
 }))
 
 const freePlan = {

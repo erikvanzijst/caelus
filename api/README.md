@@ -136,7 +136,7 @@ For example:
 ```bash
 caelus list-deployments | yq -y '.[] | {id, domainname, status}'
 id: 1
-domainname: hello3.app.deprutser.be
+domainname: hello3.freepod.eu
 status: deleted
 ---
 id: 2
@@ -325,7 +325,7 @@ CLI catches domain exceptions and exits with code `1`.
 From `api/`:
 
 - Install deps: `uv sync`
-- Run API: `uvicorn app.main:app --host 0.0.0.0 --reload`
+- Run API: `uv run python3 app/main.py`
 - Run CLI help: `caelus --help`
 - Run tests: `pytest`
 

@@ -23,9 +23,11 @@ const REASON_LABELS: Record<string, string> = {
   invalid: 'Invalid hostname format',
   reserved: 'Hostname is reserved',
   in_use: 'Already in use',
-  not_resolving: 'Does not resolve to freepod.eu',
   nested_subdomain: 'Only a single subdomain level is allowed',
 }
+
+// Shown when the platform's CNAME target is unknown (endpoint unconfigured).
+const DEFAULT_CNAME_TARGET = 'freepod.eu'
 
 type ValidationState =
   | { status: 'idle' }
@@ -38,6 +40,7 @@ interface HostnameFieldProps {
   onChange: (hostname: string) => void
   onValidationChange?: (valid: boolean) => void
   wildcardDomains: string[]
+  cnameTarget?: string
   required?: boolean
   error?: string
   description?: string
@@ -47,7 +50,7 @@ interface HostnameFieldProps {
 
 type Mode = 'wildcard' | 'custom'
 
-export function HostnameField({ value, onChange, onValidationChange, wildcardDomains, required, error, description, initialHostname, readOnly }: HostnameFieldProps) {
+export function HostnameField({ value, onChange, onValidationChange, wildcardDomains, cnameTarget, required, error, description, initialHostname, readOnly }: HostnameFieldProps) {
   if (readOnly) {
     return (
       <TextField
@@ -181,6 +184,14 @@ export function HostnameField({ value, onChange, onValidationChange, wildcardDom
     }
   }
 
+  // The CNAME target differs per environment (e.g. dev.freepod.eu vs freepod.eu),
+  // so the not_resolving message is built from the backend-provided value.
+  const cnameDomain = cnameTarget || DEFAULT_CNAME_TARGET
+  const reasonLabel = (reason: string) =>
+    reason === 'not_resolving'
+      ? `Create a CNAME record pointing to ${cnameDomain}`
+      : REASON_LABELS[reason] ?? reason
+
   const statusAdornment = (() => {
     switch (validation.status) {
       case 'checking':
@@ -198,7 +209,7 @@ export function HostnameField({ value, onChange, onValidationChange, wildcardDom
       case 'error':
         return (
           <InputAdornment position="end">
-            <Tooltip title={REASON_LABELS[validation.reason] ?? validation.reason}>
+            <Tooltip title={reasonLabel(validation.reason)}>
               <ErrorIcon color="error" />
             </Tooltip>
           </InputAdornment>
@@ -210,7 +221,7 @@ export function HostnameField({ value, onChange, onValidationChange, wildcardDom
 
   const helperText =
     error ??
-    (validation.status === 'error' ? REASON_LABELS[validation.reason] ?? validation.reason : undefined) ??
+    (validation.status === 'error' ? reasonLabel(validation.reason) : undefined) ??
     description
 
   return (
@@ -284,6 +295,9 @@ export function HostnameField({ value, onChange, onValidationChange, wildcardDom
               slotProps={{ input: { endAdornment: statusAdornment } }}
               fullWidth
             />
+            <Typography variant="caption" color="text.secondary">
+              Point your domain at Freepod: create a CNAME record → {cnameDomain}
+            </Typography>
           </Box>
         )}
 

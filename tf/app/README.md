@@ -27,8 +27,8 @@ This project uses Terraform workspaces for environment separation.
 
 Workspace defaults:
 
-- Dev namespace/domain: `caelus-dev` + `dev.deprutser.be`
-- Prod namespace/domain: `caelus` + `app.deprutser.be`
+- Dev namespace/domain: `caelus-dev` + `dev.freepod.eu`
+- Prod namespace/domain: `caelus` + `freepod.eu`
 
 These defaults can still be overridden with variables (`namespace`, `domain`)
 or `-var-file`.

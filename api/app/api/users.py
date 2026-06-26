@@ -81,7 +81,6 @@ def create_deployment(
     payment_provider: PaymentProvider | None = Depends(get_payment_provider),
 ) -> DeploymentCreateResponse:
     payload.user_id = user_id
-    settings = get_settings()
     result = deployment_service.create_deployment(
         session,
         payload=payload,

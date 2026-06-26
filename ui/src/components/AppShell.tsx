@@ -76,11 +76,11 @@ function AppShell({ children }: PropsWithChildren) {
             <Box
               component="img"
               src="/caelus.svg"
-              alt="Caelus"
+              alt="Freepod"
               sx={{ width: 36, height: 36, borderRadius: '8px' }}
             />
             <Box>
-              <Typography variant="h6">Caelus Control</Typography>
+              <Typography variant="h6">Freepod</Typography>
               <Typography variant="caption" color="text.secondary">
                 Provisioning cockpit
               </Typography>

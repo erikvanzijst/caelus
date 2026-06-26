@@ -23,7 +23,7 @@ const REASON_LABELS: Record<string, string> = {
   invalid: 'Invalid hostname format',
   reserved: 'Hostname is reserved',
   in_use: 'Already in use',
-  not_resolving: 'Does not resolve to Caelus',
+  not_resolving: 'Does not resolve to freepod.eu',
   nested_subdomain: 'Only a single subdomain level is allowed',
 }
 

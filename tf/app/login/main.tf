@@ -26,10 +26,10 @@ resource "helm_release" "oauth2_proxy" {
       }
       extraArgs = {
         provider             = "keycloak-oidc"
-        oidc-issuer-url      = "https://keycloak.app.deprutser.be/realms/master"
+        oidc-issuer-url      = "https://keycloak.freepod.eu/realms/master"
         redirect-url         = "https://login.${var.domain}/oauth2/callback"
-        # cookie-domain     = ".dev.deprutser.be"
-        # whitelist-domain  = ".dev.deprutser.be"
+        # cookie-domain     = ".dev.freepod.eu"
+        # whitelist-domain  = ".dev.freepod.eu"
         pass-user-headers    = true
         set-xauthrequest     = true
         oidc-email-claim     = "email"
@@ -37,7 +37,7 @@ resource "helm_release" "oauth2_proxy" {
         skip-provider-button = true
         upstream             = "static://202"
         skip-auth-route      = "GET=^/oauth2/.*"
-        backend-logout-url   = "https://keycloak.app.deprutser.be/realms/master/protocol/openid-connect/logout?id_token_hint={id_token}"
+        backend-logout-url   = "https://keycloak.freepod.eu/realms/master/protocol/openid-connect/logout?id_token_hint={id_token}"
       }
       service = {
         enabled    = true

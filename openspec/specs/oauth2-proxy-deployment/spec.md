@@ -3,7 +3,7 @@
 ## Purpose
 Deploy oauth2-proxy as an authentication gateway in front of Caelus.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: oauth2-proxy runs on Kubernetes
 The system SHALL deploy oauth2-proxy as a Kubernetes Deployment.

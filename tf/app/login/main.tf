@@ -19,15 +19,17 @@ resource "helm_release" "oauth2_proxy" {
           email_domains = ["*"]
           upstreams = ["file:///dev/null"]
           cookie_secure = false
-          cookie_domains = ["${var.domain}"]
+          # No cookie_domains: the cookie is issued host-only by the apex
+          # callback (${var.domain}) and is therefore never sent to wildcard
+          # user-app subdomains. whitelist_domains still guards rd= redirects.
           whitelist_domains = ["${var.domain}"]
           provider = "keycloak-oidc"
         EOT
       }
       extraArgs = {
-        provider             = "keycloak-oidc"
-        oidc-issuer-url      = "https://keycloak.freepod.eu/realms/master"
-        redirect-url         = "https://login.${var.domain}/oauth2/callback"
+        provider        = "keycloak-oidc"
+        oidc-issuer-url = "https://keycloak.freepod.eu/realms/master"
+        redirect-url    = "https://${var.domain}/oauth2/callback"
         # cookie-domain     = ".dev.freepod.eu"
         # whitelist-domain  = ".dev.freepod.eu"
         pass-user-headers    = true
@@ -44,12 +46,12 @@ resource "helm_release" "oauth2_proxy" {
         type       = "ClusterIP"
         portNumber = 8080
       }
+      # The browser-facing /oauth2/* endpoints are served on the Caelus apex
+      # host via the oauth2_proxy_route IngressRoute below (so the callback can
+      # issue a host-only cookie). The chart's own login.${var.domain} ingress
+      # is no longer used for cookie issuance.
       ingress = {
-        enabled          = true
-        ingressClassName = "traefik"
-        pathType         = "Prefix"
-        hosts = ["login.${var.domain}"]
-        paths = ["/oauth2"]
+        enabled = false
       }
     })
   ]
@@ -80,19 +82,26 @@ resource "kubernetes_manifest" "oauth2_proxy_middleware" {
   }
 }
 
-resource "kubernetes_manifest" "oauth2_signout_route" {
+# Serve all browser-facing /oauth2/* endpoints (start, callback, sign_out) on
+# the Caelus apex host, routed straight to oauth2-proxy with NO forward-auth
+# middleware so they are reachable unauthenticated. The callback issuing from
+# this host is what makes the session cookie host-only on ${var.domain}.
+# The explicit priority keeps this ahead of the catch-all `/` route on the
+# caelus-ingress (which carries forward-auth), preventing an auth redirect loop.
+resource "kubernetes_manifest" "oauth2_proxy_route" {
   manifest = {
     apiVersion = "traefik.io/v1alpha1"
     kind       = "IngressRoute"
     metadata = {
-      name      = "oauth2-signout"
+      name      = "oauth2-endpoints"
       namespace = var.namespace
     }
     spec = {
       entryPoints = ["web", "websecure"]
       routes = [{
-        match    = "Host(`${var.domain}`) && PathPrefix(`/oauth2/sign_out`)"
+        match    = "Host(`${var.domain}`) && PathPrefix(`/oauth2`)"
         kind     = "Rule"
+        priority = 100
         services = [{
           name = "oauth2-proxy"
           port = 8080

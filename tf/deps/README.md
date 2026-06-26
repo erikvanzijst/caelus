@@ -32,8 +32,8 @@ terraform apply
 
 ## Notes
 
-- Keycloak always uses the production domain (`keycloak.app.deprutser.be`).
-- Echo uses `echo.app.deprutser.be`.
+- Keycloak always uses the production domain (`keycloak.freepod.eu`).
+- Echo uses `echo.freepod.eu`.
 - This project must be deployed before `tf/app/`, since the app's
   OAuth2-proxy depends on a running Keycloak instance.
 - Do NOT run `terraform destroy` here without understanding that it will

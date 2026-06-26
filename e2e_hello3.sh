@@ -5,7 +5,7 @@ set -euo pipefail
 #
 # Usage:
 #   ./e2e_hello3.sh
-#   DOMAIN=hello3.app.deprutser.be MESSAGE="Hello from script" ./e2e_hello3.sh
+#   DOMAIN=hello3.freepod.eu MESSAGE="Hello from script" ./e2e_hello3.sh
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 API_DIR="$ROOT_DIR/api"

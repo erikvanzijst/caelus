@@ -4,7 +4,7 @@ variable "namespace" {
 }
 
 variable "domain" {
-  description = "The base domain name of Caelus (e.g. app.deprutser.be)"
+  description = "The base domain name of Caelus (e.g. freepod.eu)"
   type = string
 }
 

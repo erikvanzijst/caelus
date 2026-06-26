@@ -21,7 +21,7 @@ def _init_static_dir() -> None:
 
 
 app = FastAPI(
-    title="Caelus Deploy",
+    title="Freepod",
     description="Service for provisioning user-owned webapp instances on cloud infrastructure",
     version="0.1.0",
     docs_url="/api/docs",

@@ -1,3 +1,3 @@
 namespace   = "caelus"
-domain      = "app.deprutser.be"
+domain      = "freepod.eu"
 environment = "production"

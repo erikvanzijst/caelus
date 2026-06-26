@@ -20,7 +20,7 @@ module "keycloak" {
   source                  = "./keycloak"
   namespace               = kubernetes_namespace.keycloak.metadata[0].name
   keycloak_admin_password = var.keycloak_admin_password
-  domain                  = "app.deprutser.be"
+  domain                  = "freepod.eu"
 }
 
 module "system" {

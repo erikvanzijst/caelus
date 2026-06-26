@@ -53,7 +53,7 @@ variable "smtp_password" {
 variable "smtp_username" {
   description = "SMTP username for outbound email"
   type        = string
-  default     = "caelus@deprutser.be"
+  default     = "noreply@freepod.eu"
 }
 
 variable "db_password" {

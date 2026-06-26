@@ -5,14 +5,14 @@ TBD - created by archiving change hostname-validation-and-domains. Update Purpos
 ## Requirements
 ### Requirement: HostnameField component supports dual-mode hostname input
 The system MUST provide a `HostnameField` React component in `ui/src/components/HostnameField.tsx` that supports two modes of hostname entry:
-1. **Caelus wildcard mode**: A text input for the hostname prefix combined with a dropdown selector for the wildcard domain suffix, concatenated as `${prefix}.${selectedDomain}`. The prefix input MUST NOT allow dot characters — dots MUST be stripped from the input value.
+1. **Freepod wildcard mode**: A text input for the hostname prefix combined with a dropdown selector for the wildcard domain suffix, concatenated as `${prefix}.${selectedDomain}`. The prefix input MUST NOT allow dot characters — dots MUST be stripped from the input value.
 2. **Custom FQDN mode**: A single text input for the complete FQDN.
 
 The user MUST be able to toggle between modes.
 
-#### Scenario: User enters hostname via Caelus wildcard mode
-- **WHEN** the user types `myapp` in the prefix field and selects `app.deprutser.be` from the dropdown
-- **THEN** the component emits the combined value `myapp.app.deprutser.be` via `onChange`
+#### Scenario: User enters hostname via Freepod wildcard mode
+- **WHEN** the user types `myapp` in the prefix field and selects `freepod.eu` from the dropdown
+- **THEN** the component emits the combined value `myapp.freepod.eu` via `onChange`
 
 #### Scenario: User enters hostname via custom FQDN mode
 - **WHEN** the user types `myapp.example.com` in the custom FQDN input
@@ -24,7 +24,7 @@ The user MUST be able to toggle between modes.
 
 #### Scenario: Dots are stripped from wildcard prefix input
 - **WHEN** the user types or pastes `foo.bar` in the wildcard-mode prefix field
-- **THEN** the prefix value becomes `foobar` (dots removed) and the component emits `foobar.app.deprutser.be` via `onChange`
+- **THEN** the prefix value becomes `foobar` (dots removed) and the component emits `foobar.freepod.eu` via `onChange`
 
 #### Scenario: Custom FQDN mode allows dots
 - **WHEN** the user types `foo.bar.example.com` in the custom FQDN input
@@ -34,8 +34,8 @@ The user MUST be able to toggle between modes.
 The component MUST fetch the list of available wildcard domains from `GET /api/domains` (via React Query) and populate the domain suffix dropdown.
 
 #### Scenario: Wildcard domains loaded successfully
-- **WHEN** `GET /api/domains` returns `["app.deprutser.be"]`
-- **THEN** the dropdown contains `app.deprutser.be` as a selectable option
+- **WHEN** `GET /api/domains` returns `["freepod.eu"]`
+- **THEN** the dropdown contains `freepod.eu` as a selectable option
 
 #### Scenario: No wildcard domains available
 - **WHEN** `GET /api/domains` returns `[]`
@@ -45,8 +45,8 @@ The component MUST fetch the list of available wildcard domains from `GET /api/d
 The component MUST call `GET /api/hostnames/{fqdn}` with approximately 400ms debounce after the last keystroke to validate the current hostname. The API MUST NOT be called when the input is empty.
 
 #### Scenario: Validation triggered after typing pauses
-- **WHEN** the user types `myapp.app.deprutser.be` and stops typing for ~400ms
-- **THEN** the component calls `GET /api/hostnames/myapp.app.deprutser.be`
+- **WHEN** the user types `myapp.freepod.eu` and stops typing for ~400ms
+- **THEN** the component calls `GET /api/hostnames/myapp.freepod.eu`
 
 #### Scenario: Rapid typing does not flood API
 - **WHEN** the user types multiple characters in quick succession (within 400ms)
@@ -66,19 +66,19 @@ The tooltip on the red error icon MUST display a human-readable message correspo
 - `"invalid"` -> "Invalid hostname format"
 - `"reserved"` -> "Hostname is reserved"
 - `"in_use"` -> "Already in use"
-- `"not_resolving"` -> "Does not resolve to Caelus"
+- `"not_resolving"` -> "Does not resolve to Freepod"
 - `"nested_subdomain"` -> "Only a single subdomain level is allowed"
 
 #### Scenario: Usable hostname shows green check
-- **WHEN** the API returns `{"fqdn": "myapp.app.deprutser.be", "reason": null}`
+- **WHEN** the API returns `{"fqdn": "myapp.freepod.eu", "reason": null}`
 - **THEN** a green CheckCircle icon is displayed
 
 #### Scenario: Taken hostname shows red error with tooltip
-- **WHEN** the API returns `{"fqdn": "taken.app.deprutser.be", "reason": "in_use"}`
+- **WHEN** the API returns `{"fqdn": "taken.freepod.eu", "reason": "in_use"}`
 - **THEN** a red Error icon is displayed with tooltip text "Already in use"
 
 #### Scenario: Nested subdomain shows error with tooltip
-- **WHEN** the API returns `{"fqdn": "foo.bar.dev.deprutser.be", "reason": "nested_subdomain"}`
+- **WHEN** the API returns `{"fqdn": "foo.bar.dev.freepod.eu", "reason": "nested_subdomain"}`
 - **THEN** a red Error icon is displayed with tooltip text "Only a single subdomain level is allowed"
 
 #### Scenario: Loading state shows spinner
@@ -104,8 +104,8 @@ The `UserValuesForm` component MUST detect schema fields where `field.title` (ca
 The `HostnameField` component MUST integrate with the existing `UserValuesForm` flattened state. The `onChange` callback MUST feed the hostname value back into the form's state using the field's dot-notation path.
 
 #### Scenario: Hostname value flows into form submission
-- **WHEN** the user enters `myapp.app.deprutser.be` in the HostnameField for a field at path `ingress.host`
-- **THEN** the form's unflattened output includes `{"ingress": {"host": "myapp.app.deprutser.be"}}`
+- **WHEN** the user enters `myapp.freepod.eu` in the HostnameField for a field at path `ingress.host`
+- **THEN** the form's unflattened output includes `{"ingress": {"host": "myapp.freepod.eu"}}`
 
 ## Requirements from rename-system-values
 

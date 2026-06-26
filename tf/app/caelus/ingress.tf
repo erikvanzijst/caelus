@@ -42,6 +42,10 @@ resource "kubernetes_ingress_v1" "caelus" {
       "traefik.ingress.kubernetes.io/router.entrypoints" = "web, websecure"
       "traefik.ingress.kubernetes.io/router.middlewares" = "${var.ns_login}-oauth-errors@kubernetescrd, ${var.ns_login}-forward-auth@kubernetescrd"
     }
+    # NOTE: /oauth2/* on this same host is served unauthenticated by the
+    # higher-priority `oauth2-endpoints` IngressRoute (tf/app/login/main.tf),
+    # which out-ranks this catch-all `/` router so the forward-auth middleware
+    # here never intercepts the login/callback/sign_out endpoints.
   }
 
   spec {

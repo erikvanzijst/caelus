@@ -44,3 +44,8 @@ var/
 .playwright-mcp/
 
 .claude/worktrees
+
+# OpenCode tooling artifacts
+.opencode/node_modules/
+.opencode/package-lock.json
+.opencode/bun.lock

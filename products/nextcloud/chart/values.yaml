@@ -8,8 +8,11 @@ storage:
 
 # Values passed to upstream nextcloud dependency chart.
 nextcloud:
+  # Upstream ingress is disabled; the wrapper provides its own Ingress
+  # (templates/ingress.yaml) so it can carry per-deployment TLS from caelus.tls
+  # (issuer/secret/host) — static subchart values cannot. Mirrors the immich wrapper.
   ingress:
-    enabled: true
+    enabled: false
     className: traefik
 
   phpClientHttpsFix:
@@ -48,3 +51,9 @@ nextcloud:
 
   startupProbe:
     enabled: true
+
+# TLS is injected per-deployment by the Caelus reconciler (caelus.tls). This default
+# lets the chart render standalone with the wrapper Ingress disabled.
+caelus:
+  tls:
+    enabled: false

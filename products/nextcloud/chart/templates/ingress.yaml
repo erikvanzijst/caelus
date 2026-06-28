@@ -1,0 +1,37 @@
+{{- if .Values.caelus.tls.enabled }}
+{{- $tlsCustom := and .Values.caelus.tls.enabled (not .Values.caelus.tls.wildcard) }}
+{{- /* Upstream service name = nextcloud.fullname: .Release.Name when it already
+       contains "nextcloud" (the Caelus case), else "<release>-nextcloud". */ -}}
+{{- $svc := .Release.Name }}
+{{- if not (contains "nextcloud" .Release.Name) }}{{- $svc = printf "%s-nextcloud" .Release.Name }}{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "nextcloud-wrapper.fullname" . }}-ingress
+  labels:
+    {{- include "nextcloud-wrapper.labels" . | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    {{- if $tlsCustom }}
+    cert-manager.io/cluster-issuer: {{ .Values.caelus.tls.issuer | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.nextcloud.ingress.className | default "traefik" }}
+  {{- if $tlsCustom }}
+  tls:
+    - hosts:
+        - {{ .Values.caelus.tls.host | quote }}
+      secretName: {{ .Values.caelus.tls.secretName | quote }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.caelus.tls.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $svc }}
+                port:
+                  number: {{ .Values.nextcloud.service.port | default 8080 }}
+{{- end }}

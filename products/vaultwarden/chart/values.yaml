@@ -1,0 +1,38 @@
+# Hostname is supplied by the user (title: hostname); the reconciler derives
+# deployment.hostname from it and injects caelus.tls.host. The wrapper Ingress
+# uses caelus.tls.host, so this is just a render-time default.
+host: ""
+
+# Values passed to the upstream gissilabs vaultwarden dependency chart.
+vaultwarden:
+  # The wrapper provides its own Ingress (templates/ingress.yaml) so it can carry
+  # per-deployment TLS from caelus.tls (issuer/secret/host) — static subchart
+  # values cannot. Disable the upstream ingress. Mirrors immich/nextcloud.
+  ingress:
+    enabled: false
+
+  service:
+    httpPort: 80
+
+  persistence:
+    enabled: true
+    accessMode: ReadWriteOnce
+    size: 1Gi
+
+  vaultwarden:
+    # NOTE: DOMAIN (vaultwarden.vaultwarden.domain) is intentionally left unset —
+    # it must be the full https URL and varies per deployment, which static subchart
+    # values can't express. This matches the previous (wrapper-less) behaviour. Admin
+    # portal / email invites / WebAuthn need DOMAIN; wiring it is a follow-up.
+    smtp:
+      enabled: true
+      host: "smtp.mailer.svc.cluster.local"
+      port: "25"
+      from: "vaultwarden@deprutser.be"
+      security: "off"
+
+# TLS is injected per-deployment by the Caelus reconciler (caelus.tls). This default
+# lets the chart render standalone with the wrapper Ingress disabled.
+caelus:
+  tls:
+    enabled: false

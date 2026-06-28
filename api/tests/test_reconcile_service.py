@@ -1,12 +1,30 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
+import pytest
+
+from app.config import CaelusSettings
 from app.models import DeploymentCreate, DeploymentORM, ProductORM, PlanORM, PlanTemplateVersionORM, BillingInterval
 from app.models.core import _utcnow
 from app.services import deployments, products, templates, users
 from app.services.reconcile import DeploymentReconciler
 from tests.provisioner_utils import FakeProvisioner
+
+
+@pytest.fixture(autouse=True)
+def _reconcile_tls_settings(monkeypatch):
+    """Pin the settings the reconciler reads for TLS injection so tests don't depend
+    on ambient ``.env`` / ``.env.local`` (no wildcard domains -> hostnames classify as
+    custom). Individual tests re-patch this to exercise the wildcard branch.
+    """
+    monkeypatch.setattr(
+        "app.services.reconcile.get_settings",
+        lambda: CaelusSettings(
+            wildcard_domains=[], tls_cluster_issuer="letsencrypt-http", domain="", _env_file=None
+        ),
+    )
 
 
 def _create_plan_template(db_session, product_id: int, storage_bytes: int | None) -> int:
@@ -104,7 +122,16 @@ def test_reconcile_apply_happy_path_returns_ready_and_applied_template(db_sessio
     assert fake_provisioner.calls[1][1]["values"] == {
         "replicas": 1,
         "user": {"message": "hello", "domain": "reconcile.example.test"},
-        "caelus": {"plan": {}},
+        "caelus": {
+            "plan": {},
+            "tls": {
+                "enabled": True,
+                "host": "reconcile.example.test",
+                "wildcard": False,
+                "issuer": "letsencrypt-http",
+                "secretName": f"{deployment.name}-tls",
+            },
+        },
     }
 
 
@@ -185,9 +212,16 @@ def test_reconcile_injects_plan_storage_into_helm_values(db_session) -> None:
     result = reconciler.reconcile(deployment_id)
     assert result.status == "ready"
 
+    deployment = db_session.get(DeploymentORM, deployment_id)
     values = fake_provisioner.calls[1][1]["values"]
-    assert values["caelus"] == {
-        "plan": {"storageBytes": 10737418240, "storageSize": "10Gi"},
+    assert values["caelus"]["plan"] == {"storageBytes": 10737418240, "storageSize": "10Gi"}
+    # TLS injected alongside plan, under the same caelus namespace.
+    assert values["caelus"]["tls"] == {
+        "enabled": True,
+        "host": "reconcile.example.test",
+        "wildcard": False,
+        "issuer": "letsencrypt-http",
+        "secretName": f"{deployment.name}-tls",
     }
     # Other values still present
     assert values["replicas"] == 1
@@ -204,5 +238,71 @@ def test_reconcile_injects_empty_caelus_plan_when_no_storage_quota(db_session) -
     assert result.status == "ready"
 
     values = fake_provisioner.calls[1][1]["values"]
-    assert values["caelus"] == {"plan": {}}
+    assert values["caelus"]["plan"] == {}
+    assert values["caelus"]["tls"]["enabled"] is True
     assert values["replicas"] == 1
+
+
+# --- _build_tls_overrides unit tests (app-tls-termination) ---------------------
+
+
+def _patch_wildcard_domains(monkeypatch, domains: list[str]) -> None:
+    monkeypatch.setattr(
+        "app.services.reconcile.get_settings",
+        lambda: CaelusSettings(
+            wildcard_domains=domains, tls_cluster_issuer="letsencrypt-http", domain="", _env_file=None
+        ),
+    )
+
+
+def test_build_tls_overrides_custom_domain(monkeypatch) -> None:
+    """A custom domain is classified non-wildcard and gets a per-app HTTP-01 cert."""
+    _patch_wildcard_domains(monkeypatch, ["freepod.eu"])
+    deployment = SimpleNamespace(hostname="app.example.com", name="immich-ab12cd")
+
+    overrides = DeploymentReconciler._build_tls_overrides(deployment)
+
+    assert overrides == {
+        "caelus": {
+            "tls": {
+                "enabled": True,
+                "host": "app.example.com",
+                "wildcard": False,
+                "issuer": "letsencrypt-http",
+                "secretName": "immich-ab12cd-tls",
+            }
+        }
+    }
+
+
+def test_build_tls_overrides_wildcard_domain(monkeypatch) -> None:
+    """A *.freepod.eu host is wildcard: enabled, no per-app issuer or secret."""
+    _patch_wildcard_domains(monkeypatch, ["freepod.eu"])
+    deployment = SimpleNamespace(hostname="hw.freepod.eu", name="helloworld-ab12cd")
+
+    tls = DeploymentReconciler._build_tls_overrides(deployment)["caelus"]["tls"]
+
+    assert tls["enabled"] is True
+    assert tls["wildcard"] is True
+    assert tls["host"] == "hw.freepod.eu"
+    assert "issuer" not in tls
+    assert "secretName" not in tls
+
+
+def test_build_tls_overrides_hostname_case_insensitive(monkeypatch) -> None:
+    """Classification and host are lower-cased."""
+    _patch_wildcard_domains(monkeypatch, ["freepod.eu"])
+    deployment = SimpleNamespace(hostname="HW.Freepod.EU", name="helloworld-ab12cd")
+
+    tls = DeploymentReconciler._build_tls_overrides(deployment)["caelus"]["tls"]
+
+    assert tls["host"] == "hw.freepod.eu"
+    assert tls["wildcard"] is True
+
+
+def test_build_tls_overrides_no_hostname_returns_none(monkeypatch) -> None:
+    """A deployment without a hostname gets no TLS block."""
+    _patch_wildcard_domains(monkeypatch, ["freepod.eu"])
+    deployment = SimpleNamespace(hostname=None, name="naas-ab12cd")
+
+    assert DeploymentReconciler._build_tls_overrides(deployment) is None

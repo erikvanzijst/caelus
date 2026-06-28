@@ -23,8 +23,18 @@ module "keycloak" {
   domain                  = "freepod.eu"
 }
 
+module "certmanager" {
+  source               = "./certmanager"
+  cloudflare_api_token = var.cloudflare_api_token
+  letsencrypt_email    = var.letsencrypt_email
+}
+
 module "system" {
-  source = "./system"
+  source          = "./system"
+  haproxy_edge_ip = var.haproxy_edge_ip
+
+  # Traefik's default cert store points at the wildcard secret cert-manager issues.
+  depends_on = [module.certmanager]
 }
 
 module "mailer" {

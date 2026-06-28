@@ -6,10 +6,20 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ include "hello-static.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- $tlsCustom := and .Values.caelus.tls.enabled (not .Values.caelus.tls.wildcard) }}
+  {{- $annotations := merge (dict) (.Values.ingress.annotations | default dict) }}
+  {{- if .Values.caelus.tls.enabled }}{{- $_ := set $annotations "traefik.ingress.kubernetes.io/router.entrypoints" "websecure" }}{{- end }}
+  {{- if $tlsCustom }}{{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.caelus.tls.issuer }}{{- end }}
   annotations:
-{{ toYaml .Values.ingress.annotations | indent 4 }}
+    {{- toYaml $annotations | nindent 4 }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
+  {{- if $tlsCustom }}
+  tls:
+    - hosts:
+        - {{ .Values.caelus.tls.host | quote }}
+      secretName: {{ .Values.caelus.tls.secretName | quote }}
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.host | quote }}
       http:

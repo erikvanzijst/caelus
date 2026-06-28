@@ -164,24 +164,26 @@ class DeploymentReconciler:
         """Combine all system-controlled value overrides under the ``caelus`` namespace.
 
         Each contributor returns a ``{"caelus": {...}}`` fragment; they are deep-merged
-        so e.g. ``caelus.plan`` and ``caelus.tls`` coexist. Returns ``None`` when nothing
+        so e.g. ``caelus.plan`` and ``caelus.ingress`` coexist. Returns ``None`` when nothing
         is contributed (preserving prior behaviour for plan-less, hostname-less releases).
         """
         overrides: dict = {}
-        for part in (cls._build_plan_overrides(deployment), cls._build_tls_overrides(deployment)):
+        for part in (cls._build_plan_overrides(deployment), cls._build_ingress_overrides(deployment)):
             if part:
                 overrides = template_values.deep_merge(overrides, part)
         return overrides or None
 
     @staticmethod
-    def _build_tls_overrides(deployment: DeploymentORM) -> dict | None:
-        """Project per-app TLS settings into the ``caelus.tls`` Helm values namespace.
+    def _build_ingress_overrides(deployment: DeploymentORM) -> dict | None:
+        """Project system ingress + TLS settings into the ``caelus.ingress`` namespace.
 
-        Hosts under a configured wildcard domain (``*.freepod.eu``) are served by
-        Traefik's default certificate store, so they need no per-app cert — only the
-        HTTP->HTTPS redirect. Custom domains get a per-app HTTP-01 certificate via
-        cert-manager (issuer + secret name injected here). Deployments without a
-        hostname get no TLS block at all.
+        ``caelus.ingress.enabled`` marks that the platform exposes this deployment via an
+        Ingress (true for any hostname-bearing deployment); ``caelus.ingress.host`` is the
+        routing host and cert SAN. ``caelus.ingress.tls`` carries only the cert strategy:
+        hosts under a configured wildcard domain (``*.freepod.eu``) are served by Traefik's
+        default certificate store (``wildcard: true``, no per-app cert), while custom
+        domains get a per-app HTTP-01 certificate via cert-manager (issuer + secret name
+        injected here). Deployments without a hostname get no block at all.
         """
         hostname = deployment.hostname
         if not hostname:
@@ -192,11 +194,11 @@ class DeploymentReconciler:
             host == domain or host.endswith(f".{domain}")
             for domain in settings.wildcard_domains
         )
-        tls: dict = {"enabled": True, "host": host, "wildcard": is_wildcard}
+        tls: dict = {"wildcard": is_wildcard}
         if not is_wildcard:
             tls["issuer"] = settings.tls_cluster_issuer
             tls["secretName"] = f"{deployment.name}-tls"
-        return {"caelus": {"tls": tls}}
+        return {"caelus": {"ingress": {"enabled": True, "host": host, "tls": tls}}}
 
     @staticmethod
     def _build_plan_overrides(deployment: DeploymentORM) -> dict | None:

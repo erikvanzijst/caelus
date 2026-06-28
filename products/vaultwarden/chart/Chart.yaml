@@ -1,8 +1,8 @@
 apiVersion: v2
 name: vaultwarden-wrapper
-description: Vaultwarden wrapper chart for Caelus — adds per-app TLS (caelus.tls) on top of the upstream gissilabs chart
+description: Vaultwarden wrapper chart for Caelus — adds per-app TLS (caelus.ingress.tls) on top of the upstream gissilabs chart
 type: application
-version: 1.0.0
+version: 1.0.2
 appVersion: "1.35.4"
 keywords:
   - vaultwarden

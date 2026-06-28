@@ -1,5 +1,5 @@
-{{- if .Values.caelus.tls.enabled }}
-{{- $tlsCustom := and .Values.caelus.tls.enabled (not .Values.caelus.tls.wildcard) }}
+{{- if .Values.caelus.ingress.enabled }}
+{{- $tlsCustom := and .Values.caelus.ingress.enabled (not .Values.caelus.ingress.tls.wildcard) }}
 {{- /* Upstream service name = vaultwarden.fullname: .Release.Name when it already
        contains "vaultwarden" (the Caelus case), else "<release>-vaultwarden". */ -}}
 {{- $svc := .Release.Name }}
@@ -10,21 +10,20 @@ metadata:
   name: {{ include "vaultwarden-wrapper.fullname" . }}-ingress
   labels:
     {{- include "vaultwarden-wrapper.labels" . | nindent 4 }}
+  {{- if $tlsCustom }}
   annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    {{- if $tlsCustom }}
-    cert-manager.io/cluster-issuer: {{ .Values.caelus.tls.issuer | quote }}
-    {{- end }}
+    cert-manager.io/cluster-issuer: {{ .Values.caelus.ingress.tls.issuer | quote }}
+  {{- end }}
 spec:
   ingressClassName: traefik
   {{- if $tlsCustom }}
   tls:
     - hosts:
-        - {{ .Values.caelus.tls.host | quote }}
-      secretName: {{ .Values.caelus.tls.secretName | quote }}
+        - {{ .Values.caelus.ingress.host | quote }}
+      secretName: {{ .Values.caelus.ingress.tls.secretName | quote }}
   {{- end }}
   rules:
-    - host: {{ .Values.caelus.tls.host | quote }}
+    - host: {{ .Values.caelus.ingress.host | quote }}
       http:
         paths:
           - path: /

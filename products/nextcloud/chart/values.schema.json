@@ -25,7 +25,20 @@
     },
     "nextcloud": {
       "type": "object",
-      "description": "Pass-through values for upstream nextcloud dependency chart"
+      "description": "Pass-through values for upstream nextcloud dependency chart",
+      "properties": {
+        "nextcloud": {
+          "type": "object",
+          "properties": {
+            "host": {
+              "type": "string",
+              "title": "hostname",
+              "minLength": 1,
+              "maxLength": 253
+            }
+          }
+        }
+      }
     },
     "caelus": {
       "type": "object",
@@ -36,6 +49,18 @@
           "properties": {
             "storageBytes": { "type": "integer" },
             "storageSize": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "tls": {
+          "type": "object",
+          "description": "Per-app TLS settings injected by the Caelus reconciler",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "host": { "type": "string" },
+            "wildcard": { "type": "boolean" },
+            "issuer": { "type": "string" },
+            "secretName": { "type": "string" }
           },
           "additionalProperties": false
         }

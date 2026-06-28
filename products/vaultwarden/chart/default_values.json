@@ -1,8 +1,11 @@
 {
-  "persistence": {
-    "enabled": true
-  },
-  "ingress": {
-    "enabled": true
+  "vaultwarden": {
+    "smtp": {
+      "host": "smtp.mailer.svc.cluster.local",
+      "port": "25",
+      "from": "vaultwarden@freepod.eu",
+      "enabled": true,
+      "security": "off"
+    }
   }
 }

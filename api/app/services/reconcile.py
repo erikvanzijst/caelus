@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlmodel import Session
 
+from app.config import get_settings
 from app.models import DeploymentORM, ProductTemplateVersionORM, DeploymentRead
 from app.provisioner import Provisioner, provisioner as default_provisioner
 from app.services import template_values
@@ -151,12 +152,51 @@ class DeploymentReconciler:
         template: ProductTemplateVersionORM,
     ) -> dict:
         template_values.validate_user_values(deployment.user_values_json, template.values_schema_json)
-        system_overrides = self._build_plan_overrides(deployment)
+        system_overrides = self._build_system_overrides(deployment)
         return template_values.merge_values_scoped(
             template.system_values_json,
             deployment.user_values_json,
             system_overrides,
         )
+
+    @classmethod
+    def _build_system_overrides(cls, deployment: DeploymentORM) -> dict | None:
+        """Combine all system-controlled value overrides under the ``caelus`` namespace.
+
+        Each contributor returns a ``{"caelus": {...}}`` fragment; they are deep-merged
+        so e.g. ``caelus.plan`` and ``caelus.tls`` coexist. Returns ``None`` when nothing
+        is contributed (preserving prior behaviour for plan-less, hostname-less releases).
+        """
+        overrides: dict = {}
+        for part in (cls._build_plan_overrides(deployment), cls._build_tls_overrides(deployment)):
+            if part:
+                overrides = template_values.deep_merge(overrides, part)
+        return overrides or None
+
+    @staticmethod
+    def _build_tls_overrides(deployment: DeploymentORM) -> dict | None:
+        """Project per-app TLS settings into the ``caelus.tls`` Helm values namespace.
+
+        Hosts under a configured wildcard domain (``*.freepod.eu``) are served by
+        Traefik's default certificate store, so they need no per-app cert — only the
+        HTTP->HTTPS redirect. Custom domains get a per-app HTTP-01 certificate via
+        cert-manager (issuer + secret name injected here). Deployments without a
+        hostname get no TLS block at all.
+        """
+        hostname = deployment.hostname
+        if not hostname:
+            return None
+        settings = get_settings()
+        host = hostname.lower()
+        is_wildcard = any(
+            host == domain or host.endswith(f".{domain}")
+            for domain in settings.wildcard_domains
+        )
+        tls: dict = {"enabled": True, "host": host, "wildcard": is_wildcard}
+        if not is_wildcard:
+            tls["issuer"] = settings.tls_cluster_issuer
+            tls["secretName"] = f"{deployment.name}-tls"
+        return {"caelus": {"tls": tls}}
 
     @staticmethod
     def _build_plan_overrides(deployment: DeploymentORM) -> dict | None:

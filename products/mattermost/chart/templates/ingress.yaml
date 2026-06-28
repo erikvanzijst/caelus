@@ -7,8 +7,22 @@ metadata:
     app.kubernetes.io/name: mattermost
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
+  {{- $tlsCustom := and .Values.caelus.tls.enabled (not .Values.caelus.tls.wildcard) }}
+  {{- $ann := dict }}
+  {{- if .Values.caelus.tls.enabled }}{{- $_ := set $ann "traefik.ingress.kubernetes.io/router.entrypoints" "websecure" }}{{- end }}
+  {{- if $tlsCustom }}{{- $_ := set $ann "cert-manager.io/cluster-issuer" .Values.caelus.tls.issuer }}{{- end }}
+  {{- with $ann }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   ingressClassName: {{ .Values.mattermost.ingress.className }}
+  {{- if $tlsCustom }}
+  tls:
+    - hosts:
+        - {{ .Values.caelus.tls.host | quote }}
+      secretName: {{ .Values.caelus.tls.secretName | quote }}
+  {{- end }}
   rules:
     - host: {{ .Values.host | quote }}
       http:

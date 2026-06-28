@@ -55,3 +55,9 @@ affinity: {}
 # Additional environment variables for advanced tuning.
 # Each entry needs `name` and either `value` or `valueFrom`.
 extraEnv: []
+
+# TLS is injected per-deployment by the Caelus reconciler (caelus.tls). This
+# default lets the chart render standalone (helm template / tests) with TLS off.
+caelus:
+  tls:
+    enabled: false

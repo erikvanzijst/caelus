@@ -33,3 +33,9 @@ postgresql:
   password: postgres
   database: postgres
   size: 10Gi
+
+# TLS is injected per-deployment by the Caelus reconciler (caelus.tls). This
+# default lets the chart render standalone (helm template / tests) with TLS off.
+caelus:
+  tls:
+    enabled: false

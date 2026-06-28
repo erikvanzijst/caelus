@@ -19,6 +19,13 @@ class CaelusSettings(BaseSettings):
     wildcard_domains: list[str] = []
     reserved_hostnames: list[str] = []
 
+    # cert-manager ClusterIssuer used for per-app HTTP-01 certs on custom domains.
+    # Override to a `-staging` issuer during rollout. `*.freepod.eu` apps do not use
+    # this — they are served Traefik's default wildcard cert store.
+    # (The ACME account email and the wildcard secret name are Terraform-side: see
+    # tf/deps/certmanager and tf/deps/system/traefik.tf — not API concerns.)
+    tls_cluster_issuer: str = "letsencrypt-http"
+
     mollie_api_key: str | None = None
     mollie_redirect_url: str | None = None
     mollie_webhook_base_url: str | None = None

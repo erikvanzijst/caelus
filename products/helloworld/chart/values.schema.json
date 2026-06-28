@@ -73,6 +73,18 @@
             "storageSize": { "type": "string" }
           },
           "additionalProperties": false
+        },
+        "tls": {
+          "type": "object",
+          "description": "Per-app TLS settings injected by the Caelus reconciler",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "host": { "type": "string" },
+            "wildcard": { "type": "boolean" },
+            "issuer": { "type": "string" },
+            "secretName": { "type": "string" }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

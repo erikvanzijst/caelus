@@ -5,12 +5,22 @@ metadata:
   name: {{ include "matrix.fullname" . }}
   labels:
     {{- include "matrix.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
+  {{- $tlsCustom := and .Values.caelus.tls.enabled (not .Values.caelus.tls.wildcard) }}
+  {{- $annotations := merge (dict) (.Values.ingress.annotations | default dict) }}
+  {{- if .Values.caelus.tls.enabled }}{{- $_ := set $annotations "traefik.ingress.kubernetes.io/router.entrypoints" "websecure" }}{{- end }}
+  {{- if $tlsCustom }}{{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.caelus.tls.issuer }}{{- end }}
+  {{- with $annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- if $tlsCustom }}
+  tls:
+    - hosts:
+        - {{ .Values.caelus.tls.host | quote }}
+      secretName: {{ .Values.caelus.tls.secretName | quote }}
+  {{- end }}
   rules:
     - host: {{ .Values.serverName | quote }}
       http:

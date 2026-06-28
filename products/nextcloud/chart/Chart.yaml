@@ -2,7 +2,7 @@ apiVersion: v2
 name: nextcloud-wrapper
 description: Nextcloud wrapper chart for Caelus with plan-enforced storage
 type: application
-version: 1.0.0
+version: 1.0.1
 appVersion: "30.0.0"
 keywords:
   - nextcloud

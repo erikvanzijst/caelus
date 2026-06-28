@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "vaultwarden wrapper values",
+  "type": "object",
+  "properties": {
+    "host": {
+      "type": "string",
+      "title": "hostname",
+      "minLength": 1,
+      "maxLength": 253
+    },
+    "vaultwarden": {
+      "type": "object",
+      "description": "Pass-through values for the upstream gissilabs vaultwarden dependency chart"
+    },
+    "caelus": {
+      "type": "object",
+      "description": "Plan-injected values from Caelus reconciler",
+      "properties": {
+        "plan": {
+          "type": "object",
+          "properties": {
+            "storageBytes": { "type": "integer" },
+            "storageSize": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "tls": {
+          "type": "object",
+          "description": "Per-app TLS settings injected by the Caelus reconciler",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "host": { "type": "string" },
+            "wildcard": { "type": "boolean" },
+            "issuer": { "type": "string" },
+            "secretName": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["vaultwarden"],
+  "additionalProperties": false
+}

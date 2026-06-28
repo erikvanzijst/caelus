@@ -1,35 +1,24 @@
-# Vaultwarden Helm Chart
+# Vaultwarden Wrapper Chart
 
-We're using the unofficial Vaultwarden Helm chart from https://github.com/gissilabs/charts/tree/master/vaultwarden
+A Caelus wrapper around the unofficial gissilabs Vaultwarden chart
+(https://github.com/gissilabs/charts/tree/master/vaultwarden). The wrapper exists so the app
+can carry **per-deployment TLS** (`caelus.tls`): it disables the upstream Ingress and provides
+its own (`templates/ingress.yaml`) that is `websecure`-only and, for custom domains, adds the
+`cert-manager` annotation + `tls:` secret. Static subchart values cannot express that
+(wildcard vs custom is per-deployment).
 
-Create a new Vaultwarden product in the Admin UI and add a template with the following values:
+- Upstream chart: `vaultwarden` `1.4.0` (appVersion `1.35.4`), repo `https://gissilabs.github.io/charts/`
+- Wrapper chart pushed to: `oci://registry.home/helm/vaultwarden-wrapper`
 
-- Chart: https://github.com/gissilabs/charts/releases/download/vaultwarden-1.3.0/vaultwarden-1.3.0.tgz
-- Tag: 1.3.0
+## Caelus product template
 
-Default values json:
+- **Chart:** `oci://registry.home/helm/vaultwarden-wrapper`
+- **Tag:** `1.0.0`
+- **Default values (system) json:** `{}` — the wrapper `values.yaml` provides the defaults
+  (upstream ingress disabled, persistence, SMTP via the in-cluster mailer). Override here only if
+  an environment needs different infra values.
 
-```json
-{
-  "vaultwarden": {
-    "smtp": {
-      "host": "smtp.mailer.svc.cluster.local",
-      "port": "25",
-      "from": "vaultwarden@deprutser.be",
-      "enabled": true,
-      "security": "off"
-    }
-  },
-  "persistence": {
-    "enabled": true
-  },
-  "ingress": {
-    "enabled": true
-  }
-}
-```
-
-User values schema:
+User values schema (paste into the template's values schema):
 
 ```json
 {
@@ -37,44 +26,45 @@ User values schema:
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "ingress": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "host": {
-          "type": "string",
-          "title": "Hostname",
-          "description": "The fully qualified domain name used to access Vaultwarden (e.g. vw.example.com)"
-        }
-      }
+    "host": {
+      "type": "string",
+      "title": "Hostname",
+      "description": "The fully qualified domain name used to access Vaultwarden (e.g. vw.example.com)"
     },
     "vaultwarden": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "allowSignups": {
-          "type": "boolean",
-          "title": "Allow open registration",
-          "description": "Allow anyone to create an account. When disabled, only users who receive an invitation can sign up."
-        },
-        "allowInvitation": {
-          "type": "boolean",
-          "title": "Allow invited users to register",
-          "description": "Allow users who have been invited by an admin to create an account, even when open registration is disabled."
-        },
-        "admin": {
+        "vaultwarden": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "enabled": {
+            "allowSignups": {
               "type": "boolean",
-              "title": "Enable admin portal",
-              "description": "Activate the /admin web interface for server management, user invitations, and configuration."
+              "title": "Allow open registration",
+              "description": "Allow anyone to create an account. When disabled, only users who receive an invitation can sign up."
             },
-            "token": {
-              "type": "string",
-              "title": "Admin token",
-              "description": "Password required to access the admin portal. Auto-generated if left empty."
+            "allowInvitation": {
+              "type": "boolean",
+              "title": "Allow invited users to register",
+              "description": "Allow users who have been invited by an admin to create an account, even when open registration is disabled.",
+              "default": true
+            },
+            "admin": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enable admin portal",
+                  "description": "Activate the /admin web interface for server management, user invitations, and configuration."
+                },
+                "token": {
+                  "type": "string",
+                  "title": "Admin token",
+                  "description": "Password required to access the admin portal. Auto-generated if left empty."
+                }
+              }
             }
           }
         }
@@ -83,3 +73,11 @@ User values schema:
   }
 }
 ```
+
+## Known limitation
+
+The vaultwarden `DOMAIN` env (`vaultwarden.vaultwarden.domain`, the full `https://host` URL) is
+**not** set — it varies per deployment and static subchart values can't express it (same
+constraint as the per-deployment TLS). This matches the previous wrapper-less behaviour. The
+vault works; admin-portal links, email invitations, and WebAuthn 2FA want `DOMAIN` — wiring it
+(e.g. reconciler-injected) is a follow-up.

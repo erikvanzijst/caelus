@@ -40,12 +40,21 @@ resource "kubernetes_ingress_v1" "caelus" {
 
     annotations = {
       "traefik.ingress.kubernetes.io/router.entrypoints" = "web, websecure"
-      "traefik.ingress.kubernetes.io/router.middlewares" = "${var.ns_login}-oauth-errors@kubernetescrd, ${var.ns_login}-forward-auth@kubernetescrd"
+      # forward-auth injects the trusted X-Auth-Request-Email and returns 401
+      # for anonymous requests. We intentionally do NOT attach oauth-errors
+      # here anymore: anonymous API calls should surface as a clean 401 that
+      # the SPA handles (by showing the public landing page), not an HTML
+      # redirect to Keycloak. Login is initiated explicitly by the SPA via
+      # /oauth2/start.
+      "traefik.ingress.kubernetes.io/router.middlewares" = "${var.ns_login}-forward-auth@kubernetescrd"
     }
-    # NOTE: /oauth2/* on this same host is served unauthenticated by the
-    # higher-priority `oauth2-endpoints` IngressRoute (tf/app/login/main.tf),
-    # which out-ranks this catch-all `/` router so the forward-auth middleware
-    # here never intercepts the login/callback/sign_out endpoints.
+    # NOTE: this ingress covers only /api and /echo. The UI (/) is served
+    # anonymously by the separate `caelus-ui-ingress` below so the public
+    # landing page can load before login. /oauth2/* on this host is served
+    # unauthenticated by the higher-priority `oauth2-endpoints` IngressRoute
+    # (tf/app/login/main.tf). Genuinely-public API GET reads are allowed
+    # through forward-auth by oauth2-proxy `skip_auth_routes` (also defined in
+    # tf/app/login/main.tf).
   }
 
   spec {
@@ -80,7 +89,34 @@ resource "kubernetes_ingress_v1" "caelus" {
             }
           }
         }
+      }
+    }
+  }
+}
 
+# The UI (SPA) is served anonymously — no forward-auth middleware — so the
+# public landing page can load before login. The bundle carries no secrets;
+# the security boundary lives at the API (forward-auth + per-endpoint
+# Depends). The SPA decides landing-vs-dashboard by calling GET /api/me.
+#
+# This is a lower-priority `/` router than the `/api` and `/echo` prefixes on
+# caelus-ingress and the `/oauth2` IngressRoute, so those more-specific paths
+# still win; everything else (the SPA and its assets) falls through to here.
+resource "kubernetes_ingress_v1" "caelus_ui" {
+  metadata {
+    name      = "caelus-ui-ingress"
+    namespace = var.namespace
+
+    annotations = {
+      "traefik.ingress.kubernetes.io/router.entrypoints" = "web, websecure"
+    }
+  }
+
+  spec {
+    rule {
+      host = var.domain
+
+      http {
         path {
           path      = "/"
           path_type = "Prefix"

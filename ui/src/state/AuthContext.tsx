@@ -36,19 +36,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const me = await getMe()
       setUser(me)
     } catch {
-      if (proxyAuth) {
-        // Production: session cookie is missing or expired. Reload once
-        // so Traefik's forward-auth redirects to Keycloak login.
-        // sessionStorage guard prevents an infinite reload loop if the
-        // redirect itself fails (e.g. stale browser cache).
-        const reloadKey = 'caelus.auth.reloading'
-        if (!sessionStorage.getItem(reloadKey)) {
-          sessionStorage.setItem(reloadKey, '1')
-          window.location.reload()
-          return
-        }
-      }
-      // Local dev (no proxy): fall through to show the email dialog.
+      // Anonymous, or an expired session: render the public landing page.
+      // We no longer force a reload into Keycloak here — the landing serves
+      // at the same root path, and login is initiated explicitly via the
+      // landing CTA (see useStartSignup). In production this relies on the
+      // edge no longer rewriting anonymous 401s into redirects; in local
+      // dev there is no proxy and /api/me simply 404s without a header.
       setUser(null)
     } finally {
       setLoading(false)

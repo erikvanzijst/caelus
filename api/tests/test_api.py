@@ -79,23 +79,38 @@ def test_endpoints_return_404_without_auth_header(db_session):
             ("GET", "/api/users/1/deployments/00000000-0000-0000-0000-000000000001"),
             ("PUT", "/api/users/1/deployments/00000000-0000-0000-0000-000000000001"),
             ("DELETE", "/api/users/1/deployments/00000000-0000-0000-0000-000000000001"),
-            ("GET", "/api/products"),
             ("POST", "/api/products"),
-            ("GET", "/api/products/1"),
             ("PUT", "/api/products/1"),
             ("DELETE", "/api/products/1"),
             ("POST", "/api/products/1/templates"),
-            ("GET", "/api/products/1/templates"),
-            ("GET", "/api/products/1/templates/1"),
             ("DELETE", "/api/products/1/templates/1"),
-            # NOTE: GET /api/hostnames/{fqdn} is intentionally public (no auth);
-            # its open-access contract is covered by
-            # TestHostnameCheckEndpoint::test_no_auth_required.
+            # NOTE: read-only GETs on products/templates/plans, plus
+            # /api/hostnames/{fqdn}, /api/domains and /api/cname-target, are
+            # intentionally public (no get_current_user). Their open-access
+            # contract is covered by test_public_get_endpoints_require_no_auth
+            # below and TestHostnameCheckEndpoint::test_no_auth_required, and
+            # is mirrored in oauth2-proxy skip_auth_routes
+            # (tf/app/login/main.tf).
         ]
         for method, path in endpoints:
             resp = no_auth_client.request(method, path)
             assert resp.status_code == 404, (
                 f"{method} {path} returned {resp.status_code}, expected 404"
+            )
+    fastapi_app.dependency_overrides.clear()
+
+
+def test_public_get_endpoints_require_no_auth(db_session):
+    """Read-only product/discovery GETs are reachable without an auth header."""
+    def override_get_db():
+        yield db_session
+
+    fastapi_app.dependency_overrides[get_session] = override_get_db
+    with TestClient(fastapi_app) as no_auth_client:
+        for path in ("/api/products", "/api/domains", "/api/cname-target"):
+            resp = no_auth_client.get(path)
+            assert resp.status_code == 200, (
+                f"GET {path} returned {resp.status_code}, expected 200 (public)"
             )
     fastapi_app.dependency_overrides.clear()
 

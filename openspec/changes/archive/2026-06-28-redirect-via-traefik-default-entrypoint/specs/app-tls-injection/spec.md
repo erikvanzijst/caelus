@@ -1,9 +1,5 @@
-# app-tls-injection Specification
+## MODIFIED Requirements
 
-## Purpose
-Expose per-app routing via a `caelus.ingress` Helm values block, mark app Ingresses as websecure-only by omitting the entrypoint annotation (so unannotated routers bind `websecure` only and HTTP falls through to a cluster-wide redirect), and wire cert-manager for custom-domain TLS.
-
-## Requirements
 ### Requirement: The reconciler injects a system-controlled caelus.ingress values block
 The deployment reconciler (`api/app/services/reconcile.py`) SHALL compute a `caelus.ingress` Helm
 values block per deployment and merge it as a system override (highest precedence, via
@@ -81,3 +77,10 @@ install.
 - **WHEN** the reconciler injects a populated `caelus.ingress` block
 - **THEN** `validate_user_values` and Helm accept it against the chart's `values.schema.json`
 
+## RENAMED Requirements
+
+- FROM: `### Requirement: The reconciler injects a system-controlled caelus.tls values block`
+- TO: `### Requirement: The reconciler injects a system-controlled caelus.ingress values block`
+
+- FROM: `### Requirement: Chart schemas and packages accept the caelus.tls block`
+- TO: `### Requirement: Chart schemas and packages accept the caelus.ingress block`

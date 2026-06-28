@@ -25,15 +25,21 @@
           },
           "additionalProperties": false
         },
-        "tls": {
+        "ingress": {
           "type": "object",
-          "description": "Per-app TLS settings injected by the Caelus reconciler",
+          "description": "Ingress and per-app TLS settings injected by the Caelus reconciler",
           "properties": {
             "enabled": { "type": "boolean" },
             "host": { "type": "string" },
-            "wildcard": { "type": "boolean" },
-            "issuer": { "type": "string" },
-            "secretName": { "type": "string" }
+            "tls": {
+              "type": "object",
+              "properties": {
+                "wildcard": { "type": "boolean" },
+                "issuer": { "type": "string" },
+                "secretName": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
           },
           "additionalProperties": false
         }

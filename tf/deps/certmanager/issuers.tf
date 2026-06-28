@@ -91,6 +91,14 @@ resource "kubernetes_manifest" "letsencrypt_http" {
           - http01:
               ingress:
                 class: traefik
+                # `web` is no longer a default entrypoint (websecure.asDefault,
+                # see tf/deps/system/traefik.tf), and the solver Ingress carries no
+                # entrypoint annotation of its own — so pin it to `web` here, or the
+                # ACME challenge would only bind :443 and HTTP-01 would deadlock.
+                ingressTemplate:
+                  metadata:
+                    annotations:
+                      traefik.ingress.kubernetes.io/router.entrypoints: web
   EOF
   )
 
@@ -113,6 +121,12 @@ resource "kubernetes_manifest" "letsencrypt_http_staging" {
           - http01:
               ingress:
                 class: traefik
+                # See letsencrypt-http above: pin the solver Ingress to `web` so the
+                # ACME challenge stays reachable on :80 despite the websecure default.
+                ingressTemplate:
+                  metadata:
+                    annotations:
+                      traefik.ingress.kubernetes.io/router.entrypoints: web
   EOF
   )
 

@@ -1,12 +1,12 @@
 # Hostname is supplied by the user (title: hostname); the reconciler derives
-# deployment.hostname from it and injects caelus.tls.host. The wrapper Ingress
-# uses caelus.tls.host, so this is just a render-time default.
+# deployment.hostname from it and injects caelus.ingress.host. The wrapper Ingress
+# uses caelus.ingress.host, so this is just a render-time default.
 host: ""
 
 # Values passed to the upstream gissilabs vaultwarden dependency chart.
 vaultwarden:
   # The wrapper provides its own Ingress (templates/ingress.yaml) so it can carry
-  # per-deployment TLS from caelus.tls (issuer/secret/host) — static subchart
+  # per-deployment TLS from caelus.ingress.tls (issuer/secret/host) — static subchart
   # values cannot. Disable the upstream ingress. Mirrors immich/nextcloud.
   ingress:
     enabled: false
@@ -28,11 +28,12 @@ vaultwarden:
       enabled: true
       host: "smtp.mailer.svc.cluster.local"
       port: "25"
-      from: "vaultwarden@deprutser.be"
+      from: "vaultwarden@freepod.eu"
       security: "off"
 
-# TLS is injected per-deployment by the Caelus reconciler (caelus.tls). This default
+# TLS is injected per-deployment by the Caelus reconciler (caelus.ingress.tls). This default
 # lets the chart render standalone with the wrapper Ingress disabled.
 caelus:
-  tls:
+  ingress:
     enabled: false
+    tls: {}

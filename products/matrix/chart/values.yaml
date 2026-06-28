@@ -56,8 +56,9 @@ affinity: {}
 # Each entry needs `name` and either `value` or `valueFrom`.
 extraEnv: []
 
-# TLS is injected per-deployment by the Caelus reconciler (caelus.tls). This
+# TLS is injected per-deployment by the Caelus reconciler (caelus.ingress.tls). This
 # default lets the chart render standalone (helm template / tests) with TLS off.
 caelus:
-  tls:
+  ingress:
     enabled: false
+    tls: {}

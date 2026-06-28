@@ -2,9 +2,10 @@
 
 A Caelus wrapper around the unofficial gissilabs Vaultwarden chart
 (https://github.com/gissilabs/charts/tree/master/vaultwarden). The wrapper exists so the app
-can carry **per-deployment TLS** (`caelus.tls`): it disables the upstream Ingress and provides
-its own (`templates/ingress.yaml`) that is `websecure`-only and, for custom domains, adds the
-`cert-manager` annotation + `tls:` secret. Static subchart values cannot express that
+can carry **per-deployment TLS** (`caelus.ingress`): it disables the upstream Ingress and provides
+its own (`templates/ingress.yaml`) that, for custom domains, adds the
+`cert-manager` annotation + `tls:` secret (HTTPS-only routing is the Traefik default, no per-app
+annotation). Static subchart values cannot express that
 (wildcard vs custom is per-deployment).
 
 - Upstream chart: `vaultwarden` `1.4.0` (appVersion `1.35.4`), repo `https://gissilabs.github.io/charts/`

@@ -28,6 +28,24 @@ resource "kubernetes_manifest" "traefik_config" {
             enabled = true
           }
         }
+        # Make `websecure` the only default entrypoint. A router (app Ingress)
+        # that does not explicitly set `router.entrypoints` then binds :443 ONLY,
+        # so its plain-HTTP :80 traffic falls through to the cluster-wide
+        # HTTP->HTTPS redirect (redirect_https.tf) instead of being served plain.
+        # This replaces the per-chart `router.entrypoints: websecure` annotation
+        # we used to inject on every app — redirect routing is now a cluster
+        # property, not a per-chart obligation. Routers that must serve :80 (the
+        # redirect IngressRoute, the OAuth2 endpoints, the webhook receiver, and
+        # cert-manager's HTTP-01 solver via its issuer ingressTemplate) declare
+        # `web` explicitly and are unaffected.
+        ports = {
+          web = {
+            asDefault = false
+          }
+          websecure = {
+            asDefault = true
+          }
+        }
         # Preserve the source IP through klipper/servicelb. The homelab HAProxy edge
         # connects to this node's :443/:80 and sends PROXY protocol; with the default
         # externalTrafficPolicy=Cluster, kube-proxy SNATs the source to the node's CNI
@@ -63,10 +81,11 @@ resource "kubernetes_manifest" "traefik_config" {
           # NOTE: deliberately NO `--entrypoints.web.http.redirections.*` here. That
           # is an ENTRYPOINT-LEVEL redirect applied before router matching, so it
           # shadows cert-manager's HTTP-01 solver Ingress and deadlocks issuance for
-          # custom domains (and leaks the internal :8443 port). HTTP->HTTPS redirect
-          # is a follow-up (a low-priority web-only IngressRoute + redirectScheme
-          # Middleware that the solver's longer rule out-ranks); apps stay reachable
-          # on plain HTTP until then.
+          # custom domains (and leaks the internal :8443 port). The HTTP->HTTPS
+          # redirect is instead a low-priority web-only IngressRoute + redirectScheme
+          # Middleware (redirect_https.tf) that the solver's longer rule out-ranks;
+          # apps reach it because `websecure` is the default entrypoint (see `ports`
+          # above), so their :80 traffic is not served by the app itself.
         ]
       })
     }

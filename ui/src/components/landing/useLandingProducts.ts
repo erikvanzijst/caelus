@@ -9,6 +9,8 @@ export interface ProductSummary {
   name: string
   description?: string | null
   iconUrl?: string | null
+  category?: string | null
+  replaces?: string | null
 }
 
 /** Fetch the public-facing products (excluding demos), preserving API order. */
@@ -21,6 +23,8 @@ export async function loadVisibleProducts(): Promise<ProductSummary[]> {
       name: product.name,
       description: product.description,
       iconUrl: product.icon_url,
+      category: product.category,
+      replaces: product.replaces,
     }))
 }
 

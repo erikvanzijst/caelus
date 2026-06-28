@@ -1,10 +1,16 @@
 ## Context
 
-The anonymous landing page renders a card per product with four pieces of
-marketing copy: `category`, `replaces`, a one-sentence blurb, and an optional
-`engine` note. Today these live in a hardcoded `APPS` array in
-`ui/src/components/landing/landingTokens.ts` and are matched to API products by
-name. The product itself already round-trips through the API as `ProductORM`
+The anonymous landing page renders a card per product. Two pieces of marketing
+copy — `category` and `replaces` — are genuinely new product data this change
+relocates onto the product. A third element, the one-sentence blurb, already
+has a home: `AppShowcase.tsx` falls back to `product.description` when no
+hardcoded blurb is present (`meta?.blurb ?? product.description`), so this
+change sources the blurb from the existing `description` field rather than
+adding a new column. (The card also carries an `engine` note today — a
+brand-vs-software label shown only on the Matrix card — which this change drops
+rather than migrates; see Decisions.) Today the hardcoded copy lives in an
+`APPS` array in `ui/src/components/landing/landingTokens.ts`, matched to API
+products by name. The product itself already round-trips through the API as `ProductORM`
 → `ProductRead`, with `ProductCreate` / `ProductUpdate` for admin writes and an
 icon stored as a relative path and derived into `icon_url` on read. The
 marketing copy is product data and fits the same pattern, so it should be moved
@@ -32,14 +38,36 @@ for schema changes; add tests for new behavior.
 
 ## Decisions
 
-- **Field names and types.** Use `category`, `replaces`, `tagline`, and
-  `engine`, each a nullable text column on `product`. `tagline` is chosen for
-  the one-sentence blurb to avoid the generic, overloaded name "blurb" and to
-  read clearly as product copy.
+- **Field names and types.** Use `category` and `replaces`, each a nullable
+  text column on `product`.
   - Alternative considered: a single JSON `marketing_json` blob. Rejected —
     discrete, queryable, individually-validatable columns match how `name`,
     `description`, and `rel_icon_path` are already modeled and keep the API
     schema explicit.
+
+- **No `tagline`; reuse `description` for the blurb.** A dedicated `tagline`
+  column is not added. Today it would duplicate the existing `description`: the
+  landing card already falls back to `product.description` for its blurb, so
+  the page sources the one-sentence blurb from `description` and no new column
+  is needed.
+  - Trade-off: `description` becomes double-duty — it feeds the landing card
+    and any other surface that shows it (product list, deploy dialog). That is
+    acceptable while there is only one piece of product prose. If a punchy
+    one-liner that differs from a longer description is wanted later, `tagline`
+    can be introduced as its own change.
+  - Alternative considered: add `tagline` now. Rejected — it would add a
+    column, schema field, CLI option, and admin input for content
+    indistinguishable from `description` as products are written today.
+
+- **Drop `engine` rather than migrate it.** The existing `engine` note (a
+  brand-vs-software label, e.g. Matrix → "Tuwunel homeserver") is not added to
+  the model, API, CLI, or admin UI. This level of granularity is misplaced on a
+  marketing landing page, so the field and its card rendering are removed from
+  the frontend instead of being relocated to the product.
+  - Alternative considered: carry `engine` onto the product like `category`
+    and `replaces`. Rejected — it is editorial detail that does not belong in the
+    landing-page value proposition, and keeping it would add a column, schema
+    field, CLI option, and admin input for content we intend to stop showing.
 
 - **Where the fields live in the schema hierarchy.** Add the fields to
   `ProductBase` so they are inherited by `ProductORM`, `ProductCreate`, and
@@ -57,7 +85,7 @@ for schema changes; add tests for new behavior.
   `description` handling and `ProductUpdate`'s "None means leave unchanged"
   convention.
 
-- **CLI parity.** Add options for the four fields to `create-product` and
+- **CLI parity.** Add options for the two fields to `create-product` and
   `update-product`, passing them through to the same service functions, so REST
   and CLI stay in lockstep.
 
@@ -77,12 +105,12 @@ for schema changes; add tests for new behavior.
   populated (via admin UI or CLI) before/with the frontend switch; the fallback
   ensures no hard failure if a field is still empty.
 - [Name-based matching of products to landing cards remains] → Out of scope
-  here; this change only relocates the four content fields. Reworking the
+  here; this change only relocates the two content fields. Reworking the
   matching can be a follow-up.
 
 ## Migration Plan
 
-1. Add the columns via a new Alembic revision (upgrade adds the four nullable
+1. Add the columns via a new Alembic revision (upgrade adds the two nullable
    text columns to `product`; downgrade drops them).
 2. Ship the model/schema/service/CLI changes; existing rows keep null values.
 3. Populate marketing copy for current products via the admin UI or CLI.
@@ -92,6 +120,6 @@ for schema changes; add tests for new behavior.
 
 ## Open Questions
 
-- Should any of the fields enforce a maximum length (e.g. `tagline`) at the API
-  layer, or remain free-form text? Defaulting to free-form nullable text unless
-  a limit is requested during implementation.
+- Should `category` or `replaces` enforce a maximum length at the API layer, or
+  remain free-form text? Defaulting to free-form nullable text unless a limit is
+  requested during implementation.

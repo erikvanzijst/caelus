@@ -198,6 +198,8 @@ def create_product(
     name: str,
     description: str,
     template_id: int | None = None,
+    category: str | None = typer.Option(None, "--category"),
+    replaces: str | None = typer.Option(None, "--replaces"),
     icon: Path | None = typer.Option(None, "--icon", help="Path to product icon image"),
 ) -> None:
     with session_scope() as session:
@@ -208,7 +210,13 @@ def create_product(
                 icon_data = icon.read_bytes()
             product = product_service.create_product(
                 session,
-                payload=ProductCreate(name=name, description=description, template_id=template_id),
+                payload=ProductCreate(
+                    name=name,
+                    description=description,
+                    template_id=template_id,
+                    category=category,
+                    replaces=replaces,
+                ),
                 icon_data=icon_data,
             )
         except CaelusException as e:
@@ -222,6 +230,8 @@ def update_product(
     *,
     template_id: int | None = typer.Option(None, "--template-id"),
     description: str | None = typer.Option(None, "--description"),
+    category: str | None = typer.Option(None, "--category"),
+    replaces: str | None = typer.Option(None, "--replaces"),
 ) -> None:
     with session_scope() as session:
         _require_cli_user(session)
@@ -232,6 +242,8 @@ def update_product(
                     id=product_id,
                     template_id=template_id,
                     description=description,
+                    category=category,
+                    replaces=replaces,
                 ),
             )
         except CaelusException as e:

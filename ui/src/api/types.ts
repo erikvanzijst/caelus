@@ -14,6 +14,8 @@ export interface Product {
   description?: string | null
   template_id?: number | null
   icon_url?: string | null
+  category?: string | null
+  replaces?: string | null
   created_at: IsoDate
 }
 

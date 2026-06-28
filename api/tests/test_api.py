@@ -130,6 +130,49 @@ def test_product(client):
     assert conflict.status_code == 409
 
 
+def test_product_marketing_metadata(client):
+    # Create with marketing metadata: the fields round-trip on the response.
+    created = client.post(
+        "/api/products",
+        json={
+            "name": "immich",
+            "description": "Photos",
+            "category": "Photos & video",
+            "replaces": "Google Photos · iCloud Photos",
+        },
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["category"] == "Photos & video"
+    assert body["replaces"] == "Google Photos · iCloud Photos"
+    product_id = body["id"]
+
+    # Read returns the persisted fields.
+    fetched = client.get(f"/api/products/{product_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["category"] == "Photos & video"
+    assert fetched.json()["replaces"] == "Google Photos · iCloud Photos"
+
+    # Partial update of one field leaves the other untouched.
+    updated = client.put(
+        f"/api/products/{product_id}", json={"category": "Memories"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["category"] == "Memories"
+    assert updated.json()["replaces"] == "Google Photos · iCloud Photos"
+
+
+def test_product_marketing_metadata_optional(client):
+    # A product created without marketing metadata is valid; fields are null.
+    created = client.post(
+        "/api/products", json={"name": "bare", "description": "No marketing copy"}
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["category"] is None
+    assert body["replaces"] is None
+
+
 def test_product_deletion(client):
     product = client.post(
         "/api/products", json={"name": "nextcloud", "description": "Nextcloud app"}

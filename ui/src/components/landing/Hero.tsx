@@ -2,13 +2,13 @@ import { Box, Button, Chip, Container, Stack, Typography } from '@mui/material'
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
 import {
   accent,
+  categoryIcon,
   DISPLAY,
   fg,
   MONO,
   SANS,
 } from './landingTokens'
 import AuroraBackground from './AuroraBackground'
-import { resolveApiPath } from '../../api/client'
 import { useLandingProducts } from './useLandingProducts'
 
 interface HeroProps {
@@ -26,6 +26,17 @@ const reveal = (i: number) => ({
 
 export function Hero({ onSignup }: HeroProps) {
   const { data: products } = useLandingProducts()
+
+  // Distinct, non-empty category labels in first-seen order. The constellation
+  // shows these instead of product names (which the Apps/Pricing sections
+  // already list), framing the breadth of the offering by category.
+  const categories = Array.from(
+    new Set(
+      (products ?? [])
+        .map((product) => product.category?.trim())
+        .filter((category): category is string => Boolean(category)),
+    ),
+  )
 
   return (
     <Box component="section" sx={{ position: 'relative', overflow: 'hidden' }}>
@@ -189,7 +200,7 @@ export function Hero({ onSignup }: HeroProps) {
           </Stack>
         </Box>
 
-        {/* App constellation preview */}
+        {/* Category constellation preview */}
         <Box sx={reveal(5)}>
           <Stack
             direction="row"
@@ -199,36 +210,32 @@ export function Hero({ onSignup }: HeroProps) {
             useFlexGap
             sx={{ mt: 7 }}
           >
-            {(products ?? []).map((product) => (
-              <Stack
-                key={product.id}
-                direction="row"
-                alignItems="center"
-                spacing={1}
-                sx={{
-                  px: 2,
-                  py: 1,
-                  borderRadius: 999,
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  backdropFilter: 'blur(8px)',
-                }}
-              >
-                {product.iconUrl && (
-                  <Box
-                    component="img"
-                    src={resolveApiPath(product.iconUrl)}
-                    alt=""
-                    sx={{ width: 18, height: 18, objectFit: 'contain' }}
-                  />
-                )}
-                <Typography
-                  sx={{ fontFamily: SANS, fontSize: 14, color: fg.primary }}
+            {categories.map((category) => {
+              const Icon = categoryIcon(category)
+              return (
+                <Stack
+                  key={category}
+                  direction="row"
+                  alignItems="center"
+                  spacing={1}
+                  sx={{
+                    px: 2,
+                    py: 1,
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    backdropFilter: 'blur(8px)',
+                  }}
                 >
-                  {product.name}
-                </Typography>
-              </Stack>
-            ))}
+                  <Icon sx={{ fontSize: 18, color: fg.muted }} />
+                  <Typography
+                    sx={{ fontFamily: SANS, fontSize: 14, color: fg.primary }}
+                  >
+                    {category}
+                  </Typography>
+                </Stack>
+              )
+            })}
           </Stack>
         </Box>
       </Container>

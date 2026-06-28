@@ -115,6 +115,10 @@ def update_product(
         product_orm.name = product.name
     if product.description is not None:
         product_orm.description = product.description
+    if product.category is not None:
+        product_orm.category = product.category
+    if product.replaces is not None:
+        product_orm.replaces = product.replaces
 
     if icon_data is not None:
         if len(icon_data) > MAX_ICON_SIZE:

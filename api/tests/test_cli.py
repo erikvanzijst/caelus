@@ -245,6 +245,38 @@ def test_cli_update_product_supports_template_and_description(cli_runner):
     assert updated["description"] == "new description"
 
 
+def test_cli_product_marketing_metadata(cli_runner):
+    runner, app = cli_runner
+
+    # Create carries the marketing-metadata options through to the product.
+    create_res = runner.invoke(
+        app,
+        [
+            "create-product",
+            "immich",
+            "Photos",
+            "--category",
+            "Photos & video",
+            "--replaces",
+            "Google Photos · iCloud Photos",
+        ],
+    )
+    assert create_res.exit_code == 0
+    created = _parse_yaml_stdout(create_res)
+    assert created["category"] == "Photos & video"
+    assert created["replaces"] == "Google Photos · iCloud Photos"
+    prod_id = created["id"]
+
+    # Partial update changes one field and leaves the other unchanged.
+    update_res = runner.invoke(
+        app, ["update-product", str(prod_id), "--category", "Memories"]
+    )
+    assert update_res.exit_code == 0
+    updated = _parse_yaml_stdout(update_res)
+    assert updated["category"] == "Memories"
+    assert updated["replaces"] == "Google Photos · iCloud Photos"
+
+
 def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
     runner, app = cli_runner
 

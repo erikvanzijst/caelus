@@ -55,6 +55,8 @@ class ProductBase(SQLModel):
     name: str
     description: str | None = None
     template_id: Optional[int] = None
+    category: str | None = None
+    replaces: str | None = None
 
 
 class ProductORM(ProductBase, table=True):
@@ -102,6 +104,8 @@ class ProductUpdate(SQLModel):
     name: str | None = None
     template_id: Optional[int] = None
     description: str | None = None
+    category: str | None = None
+    replaces: str | None = None
 
 
 class ProductReadBase(ProductBase):

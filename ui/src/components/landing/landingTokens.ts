@@ -12,6 +12,7 @@ import FolderRoundedIcon from '@mui/icons-material/FolderRounded'
 import ForumRoundedIcon from '@mui/icons-material/ForumRounded'
 import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded'
 import LockRoundedIcon from '@mui/icons-material/LockRounded'
+import AppsRoundedIcon from '@mui/icons-material/AppsRounded'
 
 /* ── Type stack ──────────────────────────────────────────────────────────── */
 /** Editorial serif for display headlines — gravitas, trust, character. */
@@ -58,72 +59,46 @@ export const cardSurface = {
   backdropFilter: 'blur(10px)',
 }
 
-/* ── Content data (honest, derived from the actual products) ─────────────── */
-export interface AppEntry {
-  name: string
-  /** Short note when the running software differs from the brand. */
-  engine?: string
-  category: string
-  replaces: string
-  blurb: string
-  icon: SvgIconComponent
-  accent: string
+/* ── Per-product accent colors ─────────────────────────────────────────────
+ * Purely presentational. Each product gets a stable accent derived from a hash
+ * of its name, so the color is deterministic (same product, same color across
+ * sections) and reasonably spread across the palette — without hardcoding any
+ * product identity here. Product marketing copy (category, replaces, blurb) is
+ * product data and comes from the API, not from here.
+ */
+const accentPalette = [accent.blue, accent.cyan, accent.magenta, accent.pink]
+
+/** Deterministic djb2 string hash, returned as an unsigned 32-bit integer. */
+function hashName(name: string): number {
+  let hash = 5381
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 33) ^ name.charCodeAt(i)
+  }
+  return hash >>> 0
 }
 
-export const APPS: AppEntry[] = [
-  {
-    name: 'Immich',
-    category: 'Photos & video',
-    replaces: 'Google Photos · iCloud Photos',
-    blurb:
-      'Automatic phone backup, lightning-fast search, albums and sharing for your entire library — without anyone mining your memories.',
-    icon: PhotoLibraryRoundedIcon,
-    accent: accent.blue,
-  },
-  {
-    name: 'Nextcloud',
-    category: 'Files & documents',
-    replaces: 'Google Drive · Dropbox',
-    blurb:
-      'Sync files across every device, share links, and keep calendars and contacts together in one private workspace.',
-    icon: FolderRoundedIcon,
-    accent: accent.cyan,
-  },
-  {
-    name: 'Matrix',
-    engine: 'Tuwunel homeserver',
-    category: 'Messaging',
-    replaces: 'WhatsApp · Signal',
-    blurb:
-      'Your own homeserver on the open, federated Matrix network — end-to-end encrypted chat you actually control.',
-    icon: ForumRoundedIcon,
-    accent: accent.magenta,
-  },
-  {
-    name: 'Mattermost',
-    category: 'Team collaboration',
-    replaces: 'Slack · Microsoft Teams',
-    blurb:
-      'Channels, threads and integrations for your team or community — self-hosted, ad-free, and yours to keep.',
-    icon: GroupsRoundedIcon,
-    accent: accent.pink,
-  },
-  {
-    name: 'Vaultwarden',
-    category: 'Passwords & passkeys',
-    replaces: '1Password · LastPass',
-    blurb:
-      'A Bitwarden-compatible vault for passwords, passkeys and secrets, synced securely across all your devices.',
-    icon: LockRoundedIcon,
-    accent: accent.blue,
-  },
-]
-
-/** Look up the marketing metadata for a product by its API name. */
-export function appMetaByName(name: string): AppEntry | undefined {
-  const needle = name.trim().toLowerCase()
-  return APPS.find((app) => app.name.toLowerCase() === needle)
+/**
+ * Resolve a product's accent color: a stable, deterministic pick from the
+ * palette based on a hash of the (normalized) product name.
+ */
+export function accentForProduct(name: string): string {
+  return accentPalette[hashName(name.trim().toLowerCase()) % accentPalette.length]
 }
 
-/** Rotating accents for products without dedicated marketing metadata. */
-export const fallbackAccents = [accent.blue, accent.magenta, accent.cyan, accent.pink]
+/* ── Category icons ─────────────────────────────────────────────────────────
+ * Categories are far more static than the product catalog, so a small icon map
+ * keyed by category label is an acceptable bit of hardcoding here. Unknown or
+ * edited categories fall back to a generic icon, so this never breaks.
+ */
+const categoryIcons: Record<string, SvgIconComponent> = {
+  'photos & video': PhotoLibraryRoundedIcon,
+  'files & documents': FolderRoundedIcon,
+  messaging: ForumRoundedIcon,
+  'team collaboration': GroupsRoundedIcon,
+  'passwords & passkeys': LockRoundedIcon,
+}
+
+/** The generic icon for a category label, with a sensible fallback. */
+export function categoryIcon(category: string): SvgIconComponent {
+  return categoryIcons[category.trim().toLowerCase()] ?? AppsRoundedIcon
+}

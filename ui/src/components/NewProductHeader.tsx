@@ -19,6 +19,8 @@ export function NewProductHeader({ onCreated, onError }: NewProductHeaderProps) 
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [category, setCategory] = useState('')
+  const [replaces, setReplaces] = useState('')
   const [iconFile, setIconFile] = useState<File | null>(null)
   const [iconPreview, setIconPreview] = useState<string | null>(null)
   const iconInputRef = useRef<HTMLInputElement>(null)
@@ -26,7 +28,12 @@ export function NewProductHeader({ onCreated, onError }: NewProductHeaderProps) 
   const createProductMutation = useMutation({
     mutationFn: () =>
       createProduct(
-        { name: name.trim(), description: description.trim() || null },
+        {
+          name: name.trim(),
+          description: description.trim() || null,
+          category: category.trim() || null,
+          replaces: replaces.trim() || null,
+        },
         iconFile || undefined,
       ),
     onSuccess: (product) => {
@@ -78,6 +85,18 @@ export function NewProductHeader({ onCreated, onError }: NewProductHeaderProps) 
             variant="standard"
             multiline
             placeholder="Description (optional)"
+          />
+          <TextField
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            variant="standard"
+            placeholder="Category (optional)"
+          />
+          <TextField
+            value={replaces}
+            onChange={(e) => setReplaces(e.target.value)}
+            variant="standard"
+            placeholder="Replaces (optional)"
           />
           <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
             <Button

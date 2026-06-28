@@ -14,6 +14,7 @@ import { resolveApiPath } from '../api/client'
 import type { Product } from '../api/types'
 import { formatDateTime } from '../utils/format'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
+import { InlineEditField } from './InlineEditField'
 
 interface SelectedProductProps {
   product: Product
@@ -24,14 +25,16 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
   const queryClient = useQueryClient()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [editingName, setEditingName] = useState(false)
-  const [editingDesc, setEditingDesc] = useState(false)
   const [draftName, setDraftName] = useState('')
-  const [draftDesc, setDraftDesc] = useState('')
   const iconInputRef = useRef<HTMLInputElement>(null)
 
   const updateProductMutation = useMutation({
-    mutationFn: (payload: { name?: string; description?: string | null }) =>
-      updateProduct(product.id, payload),
+    mutationFn: (payload: {
+      name?: string
+      description?: string | null
+      category?: string | null
+      replaces?: string | null
+    }) => updateProduct(product.id, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
     onError,
   })
@@ -71,14 +74,6 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
     setEditingName(false)
   }
 
-  function saveDescription() {
-    const trimmed = draftDesc.trim()
-    if (trimmed !== (product.description ?? '')) {
-      updateProductMutation.mutate({ description: trimmed || null })
-    }
-    setEditingDesc(false)
-  }
-
   return (
     <Stack spacing={1} sx={{ p: 2 }}>
       <input
@@ -115,32 +110,22 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
               {product.name}
             </Typography>
           )}
-          {editingDesc ? (
-            <TextField
-              value={draftDesc}
-              onChange={(e) => setDraftDesc(e.target.value)}
-              onBlur={saveDescription}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) saveDescription()
-                if (e.key === 'Escape') setEditingDesc(false)
-              }}
-              variant="standard"
-              autoFocus
-              multiline
-              placeholder="No description provided."
-            />
-          ) : (
-            <Typography
-              color="text.secondary"
-              onClick={() => {
-                setDraftDesc(product.description ?? '')
-                setEditingDesc(true)
-              }}
-              sx={{ cursor: 'pointer', '&:hover': { color: 'primary.main' } }}
-            >
-              {product.description || 'No description provided.'}
-            </Typography>
-          )}
+          <InlineEditField
+            value={product.description}
+            emptyText="No description provided."
+            multiline
+            onSave={(description) => updateProductMutation.mutate({ description })}
+          />
+          <InlineEditField
+            value={product.category}
+            emptyText="No category set."
+            onSave={(category) => updateProductMutation.mutate({ category })}
+          />
+          <InlineEditField
+            value={product.replaces}
+            emptyText="No 'replaces' set."
+            onSave={(replaces) => updateProductMutation.mutate({ replaces })}
+          />
           <Stack direction="row" spacing={2} alignItems="center">
             <Typography variant="body2" color="text.secondary">
               Created {formatDateTime(product.created_at)}

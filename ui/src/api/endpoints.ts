@@ -21,7 +21,12 @@ export function listProducts() {
 }
 
 export function createProduct(
-  payload: { name: string; description?: string | null },
+  payload: {
+    name: string
+    description?: string | null
+    category?: string | null
+    replaces?: string | null
+  },
   iconFile?: File,
 ) {
   if (iconFile) {
@@ -39,7 +44,13 @@ export function deleteProduct(productId: number) {
 
 export function updateProduct(
   productId: number,
-  payload: { name?: string; description?: string | null; template_id?: number },
+  payload: {
+    name?: string
+    description?: string | null
+    template_id?: number
+    category?: string | null
+    replaces?: string | null
+  },
   iconFile?: File,
 ) {
   if (iconFile) {

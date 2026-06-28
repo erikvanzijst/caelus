@@ -1,10 +1,9 @@
 import { Box, Container, Skeleton, Stack, Typography } from '@mui/material'
 import { resolveApiPath } from '../../api/client'
 import {
-  appMetaByName,
+  accentForProduct,
   cardSurface,
   DISPLAY,
-  fallbackAccents,
   fg,
   MONO,
   SANS,
@@ -21,10 +20,9 @@ const gridSx = {
 } as const
 
 /** A single product card, enriched with marketing metadata when available. */
-function AppCard({ product, index }: { product: ProductSummary; index: number }) {
-  const meta = appMetaByName(product.name)
-  const color = meta?.accent ?? fallbackAccents[index % fallbackAccents.length]
-  const blurb = meta?.blurb ?? product.description ?? ''
+function AppCard({ product }: { product: ProductSummary }) {
+  const color = accentForProduct(product.name)
+  const blurb = product.description ?? ''
 
   return (
     <Box
@@ -67,7 +65,7 @@ function AppCard({ product, index }: { product: ProductSummary; index: number })
             </Typography>
           )}
         </Box>
-        {meta?.category && (
+        {product.category && (
           <Typography
             sx={{
               fontFamily: MONO,
@@ -78,7 +76,7 @@ function AppCard({ product, index }: { product: ProductSummary; index: number })
               textAlign: 'right',
             }}
           >
-            {meta.category}
+            {product.category}
           </Typography>
         )}
       </Stack>
@@ -95,11 +93,6 @@ function AppCard({ product, index }: { product: ProductSummary; index: number })
         >
           {product.name}
         </Typography>
-        {meta?.engine && (
-          <Typography sx={{ fontFamily: SANS, fontSize: 12.5, color: fg.faint }}>
-            · {meta.engine}
-          </Typography>
-        )}
       </Stack>
 
       {blurb && (
@@ -110,12 +103,12 @@ function AppCard({ product, index }: { product: ProductSummary; index: number })
         </Typography>
       )}
 
-      {meta?.replaces && (
+      {product.replaces && (
         <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
           <Typography sx={{ fontFamily: SANS, fontSize: 13.5, color: fg.faint }}>
             Replaces{' '}
             <Box component="span" sx={{ color: fg.primary, fontWeight: 600 }}>
-              {meta.replaces}
+              {product.replaces}
             </Box>
           </Typography>
         </Box>
@@ -160,7 +153,7 @@ export function AppShowcase() {
           <Box sx={gridSx}>
             {data.map((product, i) => (
               <Reveal key={product.id} delay={(i % 3) * 90}>
-                <AppCard product={product} index={i} />
+                <AppCard product={product} />
               </Reveal>
             ))}
 

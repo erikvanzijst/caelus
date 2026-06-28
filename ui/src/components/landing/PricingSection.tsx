@@ -2,10 +2,9 @@ import { Box, Button, Container, Skeleton, Stack, Typography } from '@mui/materi
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
 import { resolveApiPath } from '../../api/client'
 import {
-  appMetaByName,
+  accentForProduct,
   cardSurface,
   DISPLAY,
-  fallbackAccents,
   fg,
   MONO,
   SANS,
@@ -33,13 +32,11 @@ const gridSx = {
 } as const
 
 /** A single product's "starting at" price card. */
-function PriceCard({ product, index, onSignup }: {
+function PriceCard({ product, onSignup }: {
   product: ProductPrice
-  index: number
   onSignup: () => void
 }) {
-  const meta = appMetaByName(product.name)
-  const color = meta?.accent ?? fallbackAccents[index % fallbackAccents.length]
+  const color = accentForProduct(product.name)
 
   return (
     <Box
@@ -99,7 +96,7 @@ function PriceCard({ product, index, onSignup }: {
             </Typography>
           )}
         </Box>
-        {meta?.category && (
+        {product.category && (
           <Typography
             sx={{
               fontFamily: MONO,
@@ -110,7 +107,7 @@ function PriceCard({ product, index, onSignup }: {
               textAlign: 'right',
             }}
           >
-            {meta.category}
+            {product.category}
           </Typography>
         )}
       </Stack>
@@ -156,13 +153,13 @@ function PriceCard({ product, index, onSignup }: {
         </Typography>
       </Stack>
 
-      {meta?.replaces && (
+      {product.replaces && (
         <Typography
           sx={{ fontFamily: SANS, fontSize: 14, color: fg.muted, mt: 1.5 }}
         >
           Replaces{' '}
           <Box component="span" sx={{ color: fg.primary, fontWeight: 600 }}>
-            {meta.replaces}
+            {product.replaces}
           </Box>
         </Typography>
       )}
@@ -228,7 +225,7 @@ export function PricingSection({ onSignup }: PricingSectionProps) {
           <Box sx={gridSx}>
             {data.map((product, i) => (
               <Reveal key={product.id} delay={(i % 3) * 90}>
-                <PriceCard product={product} index={i} onSignup={onSignup} />
+                <PriceCard product={product} onSignup={onSignup} />
               </Reveal>
             ))}
           </Box>

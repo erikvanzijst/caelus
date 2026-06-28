@@ -106,7 +106,6 @@ async def create_product(
 
 @router.get("", response_model=list[ProductRead])
 def list_products(
-    _current_user: UserORM = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> list[ProductRead]:
     return product_service.list_products(session)
@@ -115,7 +114,6 @@ def list_products(
 @router.get("/{product_id}", response_model=ProductRead)
 def get_product(
     product_id: int,
-    _current_user: UserORM = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> ProductRead:
     return product_service.get_product(session, product_id=product_id)
@@ -160,7 +158,6 @@ def create_template(
 @router.get("/{product_id}/templates", response_model=list[ProductTemplateVersionRead])
 def list_templates(
     product_id: int,
-    _current_user: UserORM = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> list[ProductTemplateVersionRead]:
     return template_service.list_templates(session, product_id=product_id)
@@ -170,7 +167,6 @@ def list_templates(
 def get_template(
     product_id: int,
     template_id: int,
-    _current_user: UserORM = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> ProductTemplateVersionRead:
     return template_service.get_template(session, product_id=product_id, template_id=template_id)
@@ -200,7 +196,6 @@ def upload_icon(
 @router.get("/{product_id}/icon")
 def get_icon_redirect(
     product_id: int,
-    _current_user: UserORM = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     rel_path = product_service.get_product_icon_path(session, product_id)

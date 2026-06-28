@@ -41,9 +41,11 @@ deployment lifecycle operations. Both call the same service layer.
 
 ## Authentication
 
-All API endpoints (except `/api/docs` and `/api/static`) require
-authentication via the `X-Auth-Request-Email` header. Endpoints return
-`404` when the header is absent.
+Most API endpoints require authentication via the `X-Auth-Request-Email`
+header and return `404` when it is absent. A small set of read-only
+endpoints are intentionally public (`/api/docs`, `/api/static`, and the
+product/plan reads — see "Public endpoints and the production `skip-auth`
+footgun" below).
 
 ### How it works
 
@@ -53,6 +55,70 @@ authentication via the `X-Auth-Request-Email` header. Endpoints return
   after the user enters their email in the dialog.
 - The backend trusts the header unconditionally — behavior is identical
   regardless of header source.
+
+### Public endpoints and the production `skip-auth` footgun
+
+Several read-only endpoints are intentionally anonymous (no
+`get_current_user` dependency) so the public landing page — and the
+deploy UI's live validators — can work before/without per-request auth:
+
+- Products & templates: `GET /api/products`, `GET /api/products/{id}`,
+  `GET /api/products/{id}/templates`,
+  `GET /api/products/{id}/templates/{tid}`,
+  `GET /api/products/{id}/icon`
+- Plans: `GET /api/products/{id}/plans`, `GET /api/plans/{id}`,
+  `GET /api/plans/{id}/templates`
+- Hostname/domain helpers: `GET /api/hostnames/{fqdn}`,
+  `GET /api/domains`, `GET /api/cname-target`
+- Docs & schema: `GET /api/docs`, `GET /api/redoc`,
+  `GET /api/openapi.json`
+- Static files: `GET /api/static/*` (including product icons)
+
+`GET /api/me` is a related special case: it *does* run
+`get_current_user`, returning the user when the header is present and
+`404` when anonymous — that `404` is the signal the SPA uses to show the
+landing page instead of the dashboard.
+
+The authoritative public list is the union of "no `get_current_user` in
+the route" (this codebase) and oauth2-proxy's `skip_auth_routes`
+(`tf/app/login/main.tf`). Those two **must** match — see the footgun
+below.
+
+In production there are **two authentication layers in series**:
+
+1. **Edge** (Traefik forward-auth → oauth2-proxy): rejects anonymous
+   requests *before they reach FastAPI* and injects a trusted
+   `X-Auth-Request-Email`.
+2. **App** (`Depends(get_current_user)`): authorizes using that header.
+
+Because the edge gate runs first, marking an endpoint public in the
+FastAPI code is **not sufficient** to make it anonymously reachable in
+production — the edge would still block it. The genuinely-public routes
+are therefore *also* listed in oauth2-proxy's `skip_auth_routes` (see
+`tf/app/login/main.tf`).
+
+**⚠️ Footgun:** `skip_auth_routes` bypasses oauth2-proxy entirely for
+matching requests, which has two dangerous consequences:
+
+- **No trusted identity, no sanitization.** oauth2-proxy does not inject
+  `X-Auth-Request-Email` on skipped routes, *and* it does not strip a
+  client-supplied one. Never read `X-Auth-Request-Email` for
+  authorization on any endpoint matched by a skip rule — a caller could
+  spoof it.
+- **Two lists that must stay in sync.** Whether an endpoint is public is
+  decided in *two* places — the FastAPI dependency (app layer) and the
+  `skip_auth_routes` regexes (edge layer, in Terraform) — and they can
+  drift:
+  - Adding `Depends(get_current_user)` to a route still in the skip list
+    makes it permanently anonymous in prod (the API `404`s every call).
+  - Adding a new sensitive route under an overly-broad skip regex (e.g.
+    `^/api/static/.*`, or a loose `^/api/products`) makes it anonymously
+    reachable *and* identity-spoofable.
+
+Keep skip regexes **anchored and narrow** (e.g. `GET=^/api/products$`,
+`GET=^/api/products/[0-9]+/plans$`) and treat any change to which
+endpoints are public as one that must be mirrored in **both** the API
+code and `tf/app/login/main.tf`.
 
 ### GET /api/me
 

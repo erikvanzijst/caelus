@@ -46,6 +46,9 @@ export async function requestJson<T>(
     ...rest,
     headers: {
       'Content-Type': 'application/json',
+      // Mark this as an API request so oauth2-proxy answers anonymous calls
+      // with a 401 (which the SPA handles) rather than an HTML login redirect.
+      Accept: 'application/json',
       ...authHeaders,
       ...(headers ?? {}),
     },

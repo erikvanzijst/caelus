@@ -24,6 +24,47 @@ resource "helm_release" "oauth2_proxy" {
           # user-app subdomains. whitelist_domains still guards rd= redirects.
           whitelist_domains = ["${var.domain}"]
           provider = "keycloak-oidc"
+          # Routes allowed through WITHOUT a session. forward-auth returns 202
+          # for these so the request reaches the (already-public) API/UI.
+          #
+          # FOOTGUN: skip-auth bypasses oauth2-proxy entirely, so it neither
+          # injects nor sanitizes X-Auth-Request-Email on these routes. Only
+          # list endpoints that ignore identity, keep the regexes anchored and
+          # narrow, and keep this list in sync with the public (no
+          # get_current_user) endpoints in the API. See api/README.md →
+          # "Public endpoints and the production skip-auth footgun".
+          # Each entry mirrors a GET endpoint that has no get_current_user
+          # dependency in the API (see api/app/api/*.py). The optional `/?`
+          # tolerates a trailing slash (FastAPI treats /x and /x/ as the same
+          # route). KEEP THIS LIST IN SYNC with the API: adding/removing a
+          # public GET there must be reflected here, and vice versa.
+          skip_auth_routes = [
+            # oauth2-proxy's own endpoints.
+            "GET=^/oauth2/.*",
+
+            # OpenAPI docs + schema (Swagger UI fetches openapi.json).
+            "GET=^/api/docs/?$",
+            "GET=^/api/redoc/?$",
+            "GET=^/api/openapi.json$",
+
+            # Product, template and plan reads.
+            "GET=^/api/products/?$",
+            "GET=^/api/products/[0-9]+/?$",
+            "GET=^/api/products/[0-9]+/templates/?$",
+            "GET=^/api/products/[0-9]+/templates/[0-9]+/?$",
+            "GET=^/api/products/[0-9]+/icon/?$",
+            "GET=^/api/products/[0-9]+/plans/?$",
+            "GET=^/api/plans/[0-9]+/?$",
+            "GET=^/api/plans/[0-9]+/templates/?$",
+
+            # Hostname / domain helpers used by the deploy UI.
+            "GET=^/api/hostnames/[^/]+/?$",
+            "GET=^/api/domains/?$",
+            "GET=^/api/cname-target/?$",
+
+            # Static files (product icons, etc.).
+            "GET=^/api/static/.*",
+          ]
         EOT
       }
       extraArgs = {
@@ -38,7 +79,8 @@ resource "helm_release" "oauth2_proxy" {
         reverse-proxy        = true
         skip-provider-button = true
         upstream             = "static://202"
-        skip-auth-route      = "GET=^/oauth2/.*"
+        # skip_auth_routes now lives in configFile above (it needs multiple
+        # entries; an extraArgs map can only express a single value).
         backend-logout-url   = "https://keycloak.freepod.eu/realms/master/protocol/openid-connect/logout?id_token_hint={id_token}"
       }
       service = {
@@ -111,6 +153,11 @@ resource "kubernetes_manifest" "oauth2_proxy_route" {
   }
 }
 
+# NOTE: this errors-middleware (401 -> 302 redirect to Keycloak) is no longer
+# attached to caelus-ingress. The landing page model relies on anonymous API
+# requests returning a clean 401 that the SPA handles, with login initiated
+# explicitly via /oauth2/start. The Middleware is kept defined here in case a
+# future protected route wants edge-driven login redirects again.
 resource "kubernetes_manifest" "oauth2_proxy_errors" {
   manifest = {
     apiVersion = "traefik.io/v1alpha1"

@@ -1,0 +1,304 @@
+/* ===========================================================================
+   Freepod login skin
+   ---------------------------------------------------------------------------
+   Layers the freepod.eu landing aesthetic ("digital sovereignty": dark navy,
+   drifting aurora, editorial serif headlines, gradient pill CTAs) on top of
+   Keycloak's stock keycloak.v2 / PatternFly v5 login theme.
+
+   Palette + type mirror ui/src/components/landing/landingTokens.ts so the login
+   page reads as the same product as the marketing site.
+
+   Fonts are self-hosted (resources/fonts) — a privacy product should not call
+   out to Google Fonts on its sign-in page.
+   ========================================================================== */
+
+/* ── Self-hosted brand fonts ───────────────────────────────────────────── */
+@font-face {
+  font-family: 'Fraunces';
+  src: url('../fonts/fraunces-wght-normal.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Fraunces';
+  src: url('../fonts/fraunces-wght-italic.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  src: url('../fonts/schibsted-grotesk-wght-normal.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Space Mono';
+  src: url('../fonts/space-mono-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Space Mono';
+  src: url('../fonts/space-mono-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Brand tokens ──────────────────────────────────────────────────────── */
+:root {
+  --ink-abyss: #070A14;
+  --ink-base: #0B1020;
+  --ink-raised: #10162B;
+
+  --accent-blue: #5B8CFF;
+  --accent-blue-deep: #2563EB;
+  --accent-cyan: #38BDF8;
+  --accent-purple: #7C5BFF;
+  --accent-magenta: #EC4899;
+  --accent-pink: #F472B6;
+
+  --fg-primary: #F4F6FB;
+  --fg-muted: #A6B0CC;
+  --fg-faint: #6F7C9B;
+
+  --line-soft: rgba(148, 163, 184, 0.14);
+
+  --display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --sans: 'Schibsted Grotesk', system-ui, sans-serif;
+  --mono: 'Space Mono', ui-monospace, monospace;
+
+  --cta-gradient: linear-gradient(120deg, #2563EB, #7C5BFF 55%, #EC4899);
+  --cta-gradient-hover: linear-gradient(120deg, #1d4fd0, #6d4bf0 55%, #db3b89);
+}
+
+/* ── Page background: dark navy + drifting aurora ──────────────────────── */
+body#keycloak-bg {
+  background: var(--ink-base) !important;
+  font-family: var(--sans);
+  color: var(--fg-primary);
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Aurora colour blooms (fixed, slowly drifting), behind everything. */
+body#keycloak-bg::before {
+  content: '';
+  position: fixed;
+  inset: -20vmax;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(38vmax 38vmax at 18% 12%, rgba(236, 72, 153, 0.40), transparent 60%),
+    radial-gradient(40vmax 40vmax at 85% 8%, rgba(91, 140, 255, 0.38), transparent 60%),
+    radial-gradient(42vmax 42vmax at 60% 95%, rgba(56, 189, 248, 0.30), transparent 62%);
+  filter: blur(40px);
+  animation: fp-aurora-drift 26s ease-in-out infinite;
+}
+
+/* Faint engineering grid + grain over the blooms, masked to the centre. */
+body#keycloak-bg::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 54px 54px;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 28%, transparent 76%);
+  mask-image: radial-gradient(ellipse at center, #000 28%, transparent 76%);
+}
+
+@keyframes fp-aurora-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(2%, -2%, 0) scale(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body#keycloak-bg::before { animation: none; }
+}
+
+/* Keep the actual login UI above the background layers. */
+.pf-v5-c-login {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Brand header: pin logo + "Freepod" wordmark ───────────────────────── */
+#kc-header {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 8px;
+}
+#kc-header-wrapper {
+  padding: 0;
+}
+/* Replace the stock Keycloak logo image + "Keycloak" text. */
+div.kc-logo-text {
+  background: none !important;
+  width: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 0; /* hides the inner <span>Keycloak</span> text */
+}
+div.kc-logo-text::before {
+  content: '';
+  width: 42px;
+  height: 42px;
+  background: url('../img/logo.svg') center / contain no-repeat;
+  filter: drop-shadow(0 6px 16px rgba(37, 99, 235, 0.45));
+}
+div.kc-logo-text::after {
+  content: 'Freepod';
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+  color: var(--fg-primary);
+}
+
+/* ── The card: glassy translucent panel instead of a white box ─────────── */
+.pf-v5-c-login__main {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 20px;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 30px 80px rgba(3, 5, 12, 0.55);
+  overflow: hidden;
+}
+
+/* Header inside the card. PatternFly makes this a flex row (to seat a language
+   switcher on the right); force block flow so the mono eyebrow stacks above
+   the title instead of sitting beside it. */
+.pf-v5-c-login__main-header {
+  display: block !important;
+  padding: 38px 38px 0;
+}
+/* Mono eyebrow above the title, echoing the landing hero. */
+.pf-v5-c-login__main-header::before {
+  content: 'Freepod · Secure sign-in';
+  display: block;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+  margin-bottom: 12px;
+}
+.pf-v5-c-login__main-header h1.pf-v5-c-title {
+  font-family: var(--display) !important;
+  font-weight: 500;
+  font-size: 27px;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  color: var(--fg-primary);
+}
+
+.pf-v5-c-login__main-body {
+  padding: 24px 36px 36px;
+}
+
+/* ── Labels ────────────────────────────────────────────────────────────── */
+.pf-v5-c-form__label,
+.pf-v5-c-form__label-text {
+  font-family: var(--sans) !important;
+  color: var(--fg-muted) !important;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* ── Inputs (the visible box is the .pf-v5-c-form-control span wrapper) ─── */
+.pf-v5-c-form-control {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 12px !important;
+  color: var(--fg-primary) !important;
+  transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+}
+.pf-v5-c-form-control input,
+.pf-v5-c-form-control input:focus {
+  background: transparent !important;
+  color: var(--fg-primary) !important;
+  font-family: var(--sans);
+  font-size: 15px;
+}
+.pf-v5-c-form-control input::placeholder { color: var(--fg-faint); }
+.pf-v5-c-form-control::after,
+.pf-v5-c-form-control input::after { display: none !important; } /* kill PF underline */
+.pf-v5-c-form-control:focus-within {
+  border-color: var(--accent-blue) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.25) !important;
+}
+
+/* Autofill: keep the dark field instead of the browser's yellow box. */
+.pf-v5-c-form-control input:-webkit-autofill {
+  -webkit-text-fill-color: var(--fg-primary);
+  -webkit-box-shadow: 0 0 0 1000px rgba(17, 22, 43, 0.96) inset;
+  caret-color: var(--fg-primary);
+}
+
+/* Password show/hide control */
+.pf-v5-c-button.pf-m-control {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--line-soft) !important;
+  border-left: none !important;
+  color: var(--fg-muted) !important;
+  border-radius: 0 12px 12px 0 !important;
+}
+
+/* ── Links (forgot password, register) ─────────────────────────────────── */
+a {
+  color: var(--accent-blue);
+  transition: color 0.15s;
+}
+a:hover { color: var(--accent-pink); }
+
+/* ── Primary button: gradient pill with glow, matching the landing CTA ──── */
+#kc-login,
+.pf-v5-c-button.pf-m-primary {
+  background: var(--cta-gradient) !important;
+  border: none !important;
+  border-radius: 999px !important;
+  color: #fff !important;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.01em;
+  padding: 14px 24px;
+  box-shadow: 0 14px 40px rgba(124, 91, 255, 0.40);
+  transition: transform 0.18s, box-shadow 0.18s, background 0.18s;
+}
+#kc-login:hover,
+.pf-v5-c-button.pf-m-primary:hover {
+  background: var(--cta-gradient-hover) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 18px 48px rgba(124, 91, 255, 0.52);
+}
+
+/* ── Footer / "New user? Register" ─────────────────────────────────────── */
+.pf-v5-c-login__main-footer,
+#kc-info,
+#kc-registration {
+  color: var(--fg-muted);
+}
+#kc-registration { font-family: var(--sans); }
+
+/* ── Alerts (error / info messages) ────────────────────────────────────── */
+.pf-v5-c-alert {
+  background: rgba(236, 72, 153, 0.08) !important;
+  border: 1px solid rgba(236, 72, 153, 0.30) !important;
+  border-radius: 12px !important;
+}
+.pf-v5-c-alert__title { color: var(--fg-primary) !important; }

@@ -51,7 +51,7 @@ resource "kubernetes_deployment" "keycloak" {
       spec {
         container {
           name  = "keycloak"
-          image = "quay.io/keycloak/keycloak:24.0"
+          image = var.keycloak_image
 
           args = ["start", "--hostname-debug=true"]
 

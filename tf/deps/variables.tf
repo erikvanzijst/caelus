@@ -3,6 +3,12 @@ variable "keycloak_admin_password" {
   type        = string
   sensitive   = true
 }
+
+variable "keycloak_image" {
+  description = "Keycloak container image with the Freepod theme baked in (see keycloak/Dockerfile)."
+  type        = string
+  default     = "ghcr.io/erikvanzijst/caelus-keycloak:latest"
+}
 variable "smtp_host" {
   description = "SMTP server (e.g. smtp.example.com)"
   type        = string

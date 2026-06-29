@@ -20,6 +20,7 @@ module "keycloak" {
   source                  = "./keycloak"
   namespace               = kubernetes_namespace.keycloak.metadata[0].name
   keycloak_admin_password = var.keycloak_admin_password
+  keycloak_image          = var.keycloak_image
   domain                  = "freepod.eu"
 }
 

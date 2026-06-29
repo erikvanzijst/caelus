@@ -1,0 +1,252 @@
+/* ===========================================================================
+   Freepod account-console skin
+   ---------------------------------------------------------------------------
+   Brands Keycloak's keycloak.v2 account console (a PatternFly *v4* React SPA,
+   so selectors are `pf-c-*`, not the login theme's `pf-v5-c-*`).
+
+   A settings/dashboard surface, not a hero: we go for a clean, consistently
+   branded dark theme (Freepod palette, fonts, gradient primary buttons) rather
+   than reproducing the landing hero's animated aurora.
+
+   Palette + type mirror ui/src/components/landing/landingTokens.ts. Fonts are
+   self-hosted (this theme type has its own resources root).
+   ========================================================================== */
+
+/* ── Self-hosted brand fonts ───────────────────────────────────────────── */
+@font-face {
+  font-family: 'Fraunces';
+  src: url('../fonts/fraunces-wght-normal.woff2') format('woff2');
+  font-weight: 100 900; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  src: url('../fonts/schibsted-grotesk-wght-normal.woff2') format('woff2');
+  font-weight: 100 900; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Space Mono';
+  src: url('../fonts/space-mono-400.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+
+/* ── Brand tokens + PatternFly v4 global variable overrides ─────────────── */
+:root {
+  --ink-abyss: #070A14;
+  --ink-base: #0B1020;
+  --ink-raised: #10162B;
+  --ink-panel: #141B33;
+
+  --accent-blue: #5B8CFF;
+  --accent-cyan: #38BDF8;
+  --accent-pink: #F472B6;
+
+  --fg-primary: #F4F6FB;
+  --fg-muted: #A6B0CC;
+  --fg-faint: #6F7C9B;
+
+  --line-soft: rgba(148, 163, 184, 0.16);
+
+  --display: 'Fraunces', Georgia, serif;
+  --sans: 'Schibsted Grotesk', system-ui, sans-serif;
+  --mono: 'Space Mono', ui-monospace, monospace;
+
+  --cta-gradient: linear-gradient(120deg, #2563EB, #7C5BFF 55%, #EC4899);
+  --cta-gradient-hover: linear-gradient(120deg, #1d4fd0, #6d4bf0 55%, #db3b89);
+
+  /* Broad strokes: shift PatternFly's light defaults toward our dark palette. */
+  --pf-global--BackgroundColor--100: var(--ink-base);
+  --pf-global--BackgroundColor--200: var(--ink-raised);
+  --pf-global--BackgroundColor--light-100: var(--ink-raised);
+  --pf-global--BackgroundColor--dark-100: var(--ink-abyss);
+  --pf-global--Color--100: var(--fg-primary);
+  --pf-global--Color--200: var(--fg-muted);
+  --pf-global--BorderColor--100: var(--line-soft);
+  --pf-global--BorderColor--300: var(--line-soft);
+  --pf-global--primary-color--100: var(--accent-blue);
+  --pf-global--link--Color: var(--accent-blue);
+  --pf-global--link--Color--hover: var(--accent-pink);
+  --pf-global--FontFamily--sans-serif: var(--sans);
+  --pf-global--FontFamily--heading--sans-serif: var(--display);
+}
+
+/* ── Base surface ──────────────────────────────────────────────────────── */
+html, body {
+  background: var(--ink-base) !important;
+  color: var(--fg-primary);
+  font-family: var(--sans);
+}
+/* Subtle, static brand glow at the top — atmosphere without hero drama. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(50vw 36vh at 12% -8%, rgba(124, 91, 255, 0.16), transparent 60%),
+    radial-gradient(46vw 34vh at 92% -10%, rgba(56, 189, 248, 0.12), transparent 60%);
+}
+.pf-c-page { background: transparent !important; position: relative; z-index: 1; }
+.pf-c-page__main,
+.pf-c-page__main-section { background: transparent !important; }
+
+/* Kill the white "light" welcome band. */
+.pf-c-page__main-section.pf-m-light {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ── Top header / masthead ─────────────────────────────────────────────── */
+.pf-c-page__header,
+.pf-c-masthead {
+  background: rgba(7, 10, 20, 0.72) !important;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line-soft);
+}
+.pf-c-page__header-brand .pf-c-brand,
+.pf-c-masthead__brand .pf-c-brand {
+  height: 34px;
+}
+/* "Freepod" wordmark next to the pin logo, in the brand serif. */
+.pf-c-page__header-brand-link::after,
+.pf-c-masthead__brand::after {
+  content: 'Freepod';
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  color: var(--fg-primary);
+  margin-left: 12px;
+}
+
+/* ── Left sidebar nav ──────────────────────────────────────────────────── */
+.pf-c-page__sidebar {
+  background: var(--ink-raised) !important;
+  border-right: 1px solid var(--line-soft);
+}
+.pf-c-nav__link {
+  color: var(--fg-muted) !important;
+  border-radius: 10px;
+}
+.pf-c-nav__link:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--fg-primary) !important;
+}
+.pf-c-nav__item .pf-c-nav__link.pf-m-current,
+.pf-c-nav__link[aria-current='page'] {
+  color: var(--fg-primary) !important;
+  background: rgba(91, 140, 255, 0.12) !important;
+}
+/* Accent bar on the active item. */
+.pf-c-nav__link.pf-m-current::before,
+.pf-c-nav__link[aria-current='page']::before {
+  border-left: 3px solid var(--accent-blue) !important;
+}
+
+/* ── Headings ──────────────────────────────────────────────────────────── */
+.pf-c-title,
+.pf-c-content h1,
+.pf-c-content h2 {
+  font-family: var(--display) !important;
+  color: var(--fg-primary) !important;
+  letter-spacing: -0.01em;
+}
+.pf-c-content p,
+.pf-c-content small { color: var(--fg-muted); }
+
+/* ── Cards / panels ────────────────────────────────────────────────────── */
+.pf-c-card {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  color: var(--fg-primary);
+  box-shadow: 0 18px 50px rgba(3, 5, 12, 0.45);
+}
+
+/* ── Data lists (credentials, devices, …) ──────────────────────────────────
+   PatternFly v4 components re-scope --pf-global--Color--100 to dark on
+   themselves to stay readable on their assumed-light background. We inverted
+   the background, so we must re-override the token at the component scope —
+   a global :root override alone is shadowed here. */
+.pf-c-data-list {
+  --pf-c-data-list--BorderColor: var(--line-soft);
+  background: transparent !important;
+}
+.pf-c-data-list__item { border-color: var(--line-soft) !important; }
+/* The cell sets its own `color: var(--pf-global--Color--100)`, and PatternFly
+   re-scopes that token to dark on the data-list subtree — overriding the token
+   on the parent isn't enough. Set the colour explicitly on the cells. */
+.pf-c-data-list__cell,
+.pf-c-data-list__cell *,
+.pf-c-data-list strong { color: var(--fg-primary) !important; }
+.pf-c-data-list__cell .pf-u-color-200,
+.pf-c-data-list__cell small { color: var(--fg-muted) !important; }
+
+/* Same defensive re-scoping for floating surfaces. */
+.pf-c-dropdown__menu,
+.pf-c-popover__content,
+.pf-c-menu {
+  --pf-global--Color--100: var(--fg-primary);
+  --pf-global--Color--200: var(--fg-muted);
+  background: var(--ink-panel) !important;
+  border: 1px solid var(--line-soft);
+}
+
+/* ── Forms ─────────────────────────────────────────────────────────────── */
+.pf-c-form__label,
+.pf-c-form__label-text { color: var(--fg-muted) !important; font-family: var(--sans); }
+
+.pf-c-form-control {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 10px !important;
+  color: var(--fg-primary) !important;
+}
+.pf-c-form-control:hover { border-color: rgba(148, 163, 184, 0.30) !important; }
+.pf-c-form-control:focus {
+  border-color: var(--accent-blue) !important;
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.22) !important;
+  outline: none !important;
+}
+/* Read-only fields (e.g. username) stay legible on dark. */
+.pf-c-form-control[readonly],
+.pf-c-form-control:disabled {
+  background: rgba(255, 255, 255, 0.02) !important;
+  color: var(--fg-muted) !important;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.pf-c-button.pf-m-primary {
+  background: var(--cta-gradient) !important;
+  border: none !important;
+  border-radius: 999px !important;
+  color: #fff !important;
+  font-weight: 600;
+  box-shadow: 0 12px 32px rgba(124, 91, 255, 0.35);
+  transition: transform 0.16s, box-shadow 0.16s, background 0.16s;
+}
+.pf-c-button.pf-m-primary:hover {
+  background: var(--cta-gradient-hover) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 16px 40px rgba(124, 91, 255, 0.48);
+}
+.pf-c-button.pf-m-secondary {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 999px !important;
+  color: var(--fg-primary) !important;
+}
+.pf-c-button.pf-m-link { color: var(--accent-blue) !important; }
+.pf-c-button.pf-m-link:hover { color: var(--accent-pink) !important; }
+
+/* ── Links + misc ──────────────────────────────────────────────────────── */
+a { color: var(--accent-blue); }
+a:hover { color: var(--accent-pink); }
+
+/* Right-hand "Jump to section" rail. */
+.pf-c-jump-links__link-text { color: var(--fg-muted); }
+.pf-c-jump-links__item.pf-m-current .pf-c-jump-links__link-text { color: var(--fg-primary); }
+
+/* Loading spinner screen background (pre-React paint). */
+#spinner_screen { background: var(--ink-base) !important; }

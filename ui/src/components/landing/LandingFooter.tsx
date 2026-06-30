@@ -1,5 +1,7 @@
 import { Box, Container, Stack, Typography } from '@mui/material'
+import { Link as RouterLink } from 'react-router-dom'
 import { DISPLAY, fg, line, MONO, SANS } from './landingTokens'
+import { LEGAL_NAV } from '../../content/legal'
 
 const columns = [
   {
@@ -20,13 +22,17 @@ const columns = [
   },
   {
     heading: 'Legal',
-    links: [
-      { label: 'Privacy', href: '#' },
-      { label: 'Terms', href: '#' },
-      { label: 'Data portability', href: '#' },
-    ],
+    links: LEGAL_NAV.map((doc) => ({ label: doc.title, href: `/legal/${doc.slug}` })),
   },
 ]
+
+const footerLinkSx = {
+  fontFamily: SANS,
+  fontSize: 14.5,
+  color: fg.muted,
+  transition: 'color 0.2s',
+  '&:hover': { color: fg.primary },
+}
 
 /** Landing page footer with brand, nav columns and small print. */
 export function LandingFooter() {
@@ -77,22 +83,17 @@ export function LandingFooter() {
                 >
                   {col.heading}
                 </Typography>
-                {col.links.map((link) => (
-                  <Box
-                    key={link.label}
-                    component="a"
-                    href={link.href}
-                    sx={{
-                      fontFamily: SANS,
-                      fontSize: 14.5,
-                      color: fg.muted,
-                      transition: 'color 0.2s',
-                      '&:hover': { color: fg.primary },
-                    }}
-                  >
-                    {link.label}
-                  </Box>
-                ))}
+                {col.links.map((link) =>
+                  link.href.startsWith('/') ? (
+                    <Box key={link.label} component={RouterLink} to={link.href} sx={footerLinkSx}>
+                      {link.label}
+                    </Box>
+                  ) : (
+                    <Box key={link.label} component="a" href={link.href} sx={footerLinkSx}>
+                      {link.label}
+                    </Box>
+                  ),
+                )}
               </Stack>
             ))}
           </Stack>

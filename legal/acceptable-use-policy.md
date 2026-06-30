@@ -1,0 +1,1 @@
+../ui/src/content/legal/acceptable-use-policy.md

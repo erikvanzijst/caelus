@@ -50,7 +50,7 @@ const existingTemplate: ProductTemplate = {
 }
 
 describe('TemplateTabNew', () => {
-  it('pre-populates chart ref from newest template', () => {
+  it('pre-populates chart ref from newest template', async () => {
     renderWithQuery(
       <TemplateTabNew
         product={product}
@@ -58,11 +58,13 @@ describe('TemplateTabNew', () => {
         onSave={vi.fn()}
       />,
     )
+
+    await screen.findAllByTestId('monaco-editor')
 
     expect(screen.getByLabelText('Helm chart reference')).toHaveValue('oci://registry/test')
   })
 
-  it('leaves chart version empty for new template', () => {
+  it('leaves chart version empty for new template', async () => {
     renderWithQuery(
       <TemplateTabNew
         product={product}
@@ -70,11 +72,13 @@ describe('TemplateTabNew', () => {
         onSave={vi.fn()}
       />,
     )
+
+    await screen.findAllByTestId('monaco-editor')
 
     expect(screen.getByLabelText('Helm chart version')).toHaveValue('')
   })
 
-  it('disables Add template button when chart version is empty', () => {
+  it('disables Add template button when chart version is empty', async () => {
     renderWithQuery(
       <TemplateTabNew
         product={product}
@@ -82,6 +86,8 @@ describe('TemplateTabNew', () => {
         onSave={vi.fn()}
       />,
     )
+
+    await screen.findAllByTestId('monaco-editor')
 
     expect(screen.getByRole('button', { name: 'Add template' })).toBeDisabled()
   })
@@ -117,8 +123,8 @@ describe('TemplateTabNew', () => {
       target: { value: '2.0.0' },
     })
 
-    // Make schema invalid
-    const editors = screen.getAllByTestId('monaco-editor')
+    // Make schema invalid (await the lazily-loaded editor first)
+    const editors = await screen.findAllByTestId('monaco-editor')
     const schemaEditor = editors[0]
     fireEvent.change(schemaEditor, { target: { value: '{ invalid json' } })
 
@@ -156,7 +162,7 @@ describe('TemplateTabNew', () => {
     })
   })
 
-  it('shows default schema when no templates exist', () => {
+  it('shows default schema when no templates exist', async () => {
     renderWithQuery(
       <TemplateTabNew
         product={{ ...product, template_id: null }}
@@ -165,12 +171,12 @@ describe('TemplateTabNew', () => {
       />,
     )
 
-    const editors = screen.getAllByTestId('monaco-editor')
+    const editors = await screen.findAllByTestId('monaco-editor')
     expect((editors[0] as HTMLTextAreaElement).value).toContain('$schema')
     expect(screen.getByLabelText('Helm chart reference')).toHaveValue('')
   })
 
-  it('shows green check when schema is valid', () => {
+  it('shows green check when schema is valid', async () => {
     renderWithQuery(
       <TemplateTabNew
         product={product}
@@ -178,6 +184,8 @@ describe('TemplateTabNew', () => {
         onSave={vi.fn()}
       />,
     )
+
+    await screen.findAllByTestId('monaco-editor')
 
     // CheckCircleIcon renders as an SVG with a testid or we can find by the label context
     const schemaLabel = screen.getByText('User values schema')

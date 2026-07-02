@@ -48,10 +48,13 @@ const templates: ProductTemplate[] = [
 ]
 
 describe('TemplateTabs', () => {
-  it('renders a tab for each template sorted chronologically', () => {
+  it('renders a tab for each template sorted chronologically', async () => {
     renderWithQuery(
       <TemplateTabs product={product} templates={templates} onError={vi.fn()} />,
     )
+
+    // Let the lazily-loaded editors in the active tab resolve first.
+    await screen.findAllByTestId('monaco-editor')
 
     const tabs = screen.getAllByRole('tab')
     // 3 template tabs + 1 "New" tab
@@ -62,17 +65,19 @@ describe('TemplateTabs', () => {
     expect(tabs[3]).toHaveTextContent('New')
   })
 
-  it('defaults to the canonical template tab', () => {
+  it('defaults to the canonical template tab', async () => {
     renderWithQuery(
       <TemplateTabs product={product} templates={templates} onError={vi.fn()} />,
     )
+
+    await screen.findAllByTestId('monaco-editor')
 
     // template_id is 20, so #20 tab should be selected
     const tab20 = screen.getByRole('tab', { name: /#20/ })
     expect(tab20).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('defaults to New tab when no templates exist', () => {
+  it('defaults to New tab when no templates exist', async () => {
     renderWithQuery(
       <TemplateTabs
         product={{ ...product, template_id: null }}
@@ -81,14 +86,18 @@ describe('TemplateTabs', () => {
       />,
     )
 
+    await screen.findAllByTestId('monaco-editor')
+
     const newTab = screen.getByRole('tab', { name: /New/ })
     expect(newTab).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('shows canonical star indicator on the canonical template tab', () => {
+  it('shows canonical star indicator on the canonical template tab', async () => {
     renderWithQuery(
       <TemplateTabs product={product} templates={templates} onError={vi.fn()} />,
     )
+
+    await screen.findAllByTestId('monaco-editor')
 
     // The canonical tab (#20) should have a star icon (rendered as an SVG)
     const tab20 = screen.getByRole('tab', { name: /#20/ })
@@ -101,7 +110,7 @@ describe('TemplateTabs', () => {
     expect(svg10).not.toBeInTheDocument()
   })
 
-  it('falls back to newest template when no canonical is set', () => {
+  it('falls back to newest template when no canonical is set', async () => {
     const productNoCanonical = { ...product, template_id: null }
 
     renderWithQuery(
@@ -111,6 +120,8 @@ describe('TemplateTabs', () => {
         onError={vi.fn()}
       />,
     )
+
+    await screen.findAllByTestId('monaco-editor')
 
     // Should default to newest template (#30)
     const tab30 = screen.getByRole('tab', { name: /#30/ })

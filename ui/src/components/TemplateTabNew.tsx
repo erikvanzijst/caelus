@@ -3,9 +3,9 @@ import { Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { SplitPane } from './SplitPane'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
-import Editor from '@monaco-editor/react'
 import type { Product, ProductTemplate } from '../api/types'
 import { DeployDialogContent } from './DeployDialogContent'
+import { LazyMonaco } from './LazyMonaco'
 
 const DEFAULT_VALUES_SCHEMA = `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -219,7 +219,7 @@ export function TemplateTabNew({
                 flex: 1,
               }}
             >
-              <Editor
+              <LazyMonaco
                 height="100%"
                 defaultLanguage="json"
                 value={schemaText}
@@ -258,7 +258,7 @@ export function TemplateTabNew({
           System values
         </Typography>
         <Box sx={{ ...editorBoxSx, height: 150 }}>
-          <Editor
+          <LazyMonaco
             height="100%"
             defaultLanguage="json"
             value={defaultsText}

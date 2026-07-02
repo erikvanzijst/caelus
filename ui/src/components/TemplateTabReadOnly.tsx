@@ -1,6 +1,6 @@
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
-import Editor from '@monaco-editor/react'
 import type { Product, ProductTemplate } from '../api/types'
+import { LazyMonaco } from './LazyMonaco'
 import { DeployDialogContent } from './DeployDialogContent'
 import { SplitPane } from './SplitPane'
 
@@ -71,7 +71,7 @@ export function TemplateTabReadOnly({
                 flex: 1,
               }}
             >
-              <Editor
+              <LazyMonaco
                 height="100%"
                 defaultLanguage="json"
                 value={
@@ -115,7 +115,7 @@ export function TemplateTabReadOnly({
           System values
         </Typography>
         <Box sx={editorBoxSx}>
-          <Editor
+          <LazyMonaco
             height="100%"
             defaultLanguage="json"
             value={

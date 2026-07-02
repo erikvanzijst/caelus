@@ -1,0 +1,69 @@
+# Traefik for freepod — self-managed Helm release (chart 39.0.5 = Traefik app v3.6.10),
+# replacing the k3s-bundled Traefik (disabled via /etc/rancher/k3s/config.yaml).
+#
+# Rendered by templatefile(); ${haproxy_edge_ip} is the homelab HAProxy edge IP/CIDR.
+#
+# Freepod's Traefik is reached by the homelab HAProxy SNI edge at the node's HOST :80/:443
+# (cross-cluster), so the Service is a klipper LoadBalancer with externalTrafficPolicy: Local.
+# Local is required so the edge IP survives to match proxyProtocol.trustedIPs; with the default
+# Cluster policy, kube-proxy SNATs the source to the CNI gateway (10.42.0.1) before Traefik
+# sees it, so the PROXY header would be rejected and the real client IP lost.
+
+image:
+  tag: "3.6.10"
+
+# `traefik` IngressClass, marked default — so existing app Ingresses (which carry no explicit
+# class) keep matching this controller after the migration off the bundled chart.
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+  name: traefik
+
+providers:
+  # Serve ExternalName-backed Services referenced by some app Ingresses.
+  kubernetesIngress:
+    allowExternalNameServices: true
+  # Also read nginx-annotated Ingresses (the cluster has an `nginx` IngressClass).
+  kubernetesIngressNginx:
+    enabled: true
+
+# websecure (:443) is the ONLY default entrypoint: an Ingress/router without an explicit
+# entrypoints annotation binds :443 only, so its plain :80 traffic falls through to the
+# cluster-wide HTTP->HTTPS redirect (redirect_https.tf). The HAProxy edge conveys the real
+# client IP via PROXY protocol (send-proxy-v2); trust it ONLY from the edge IP (the old
+# blanket forwardedheaders.insecure trust is deliberately gone).
+#
+# NOTE: deliberately NO ports.web.http.redirections here. An entrypoint-level redirect runs
+# before router matching, so it shadows cert-manager's HTTP-01 solver Ingress and deadlocks
+# custom-domain issuance (and leaks the internal :8443 port). The HTTP->HTTPS redirect is a
+# low-priority web-only IngressRoute + redirectScheme Middleware instead (redirect_https.tf).
+ports:
+  web:
+    asDefault: false
+    proxyProtocol:
+      trustedIPs:
+        - "${haproxy_edge_ip}"
+  websecure:
+    asDefault: true
+    proxyProtocol:
+      trustedIPs:
+        - "${haproxy_edge_ip}"
+
+# klipper LoadBalancer owning the node's host :80/:443; Local preserves the edge source IP.
+service:
+  type: LoadBalancer
+  spec:
+    externalTrafficPolicy: Local
+
+# Serve the *.freepod.eu wildcard (issued by cert-manager via Cloudflare DNS-01, stored in
+# kube-system) as the default certificate for any SNI without a more specific cert, so
+# *.freepod.eu apps need no per-app TLS secret. Custom-domain apps supply their own secret.
+tlsStore:
+  default:
+    defaultCertificate:
+      secretName: wildcard-freepod-eu-tls
+
+# Stream access logs to stdout: kubectl -n kube-system logs -f deploy/traefik
+logs:
+  access:
+    enabled: true

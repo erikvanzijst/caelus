@@ -1,19 +1,37 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import AppShell from './components/AppShell'
-import Admin from './pages/Admin'
 import Dashboard from './pages/Dashboard'
 import Landing from './pages/Landing'
 import LegalDoc from './pages/LegalDoc'
 import { AuthProvider, useAuth } from './state/AuthContext'
-import { ProductsPanel } from './components/ProductsPanel'
-import { DeploymentsPanel } from './components/DeploymentsPanel'
-import { PlansPanel } from './components/PlansPanel'
 
-/** Layout route that wraps the signed-in app pages in the AppShell chrome. */
+// The admin area is the only consumer of Monaco (via the template tabs) and is
+// visited rarely, so the whole admin surface is code-split out of the initial
+// bundle. Panels use named exports, hence the `default` adapter React.lazy
+// requires.
+const Admin = lazy(() => import('./pages/Admin'))
+const ProductsPanel = lazy(() =>
+  import('./components/ProductsPanel').then((m) => ({ default: m.ProductsPanel })),
+)
+const DeploymentsPanel = lazy(() =>
+  import('./components/DeploymentsPanel').then((m) => ({ default: m.DeploymentsPanel })),
+)
+const PlansPanel = lazy(() =>
+  import('./components/PlansPanel').then((m) => ({ default: m.PlansPanel })),
+)
+
+/**
+ * Layout route that wraps the signed-in app pages in the AppShell chrome. The
+ * Suspense boundary here covers the lazily-loaded admin routes (Admin and its
+ * panels) that render into this Outlet.
+ */
 function AppShellLayout() {
   return (
     <AppShell>
-      <Outlet />
+      <Suspense fallback={null}>
+        <Outlet />
+      </Suspense>
     </AppShell>
   )
 }

@@ -26,6 +26,9 @@ resource "kubernetes_manifest" "redirect_https_middleware" {
       }
     }
   }
+
+  # The traefik.io/v1alpha1 CRDs are installed by the Traefik Helm release.
+  depends_on = [module.traefik]
 }
 
 resource "kubernetes_manifest" "redirect_https_route" {

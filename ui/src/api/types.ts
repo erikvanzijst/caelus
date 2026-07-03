@@ -83,8 +83,8 @@ export interface Deployment {
   applied_template?: ProductTemplate | null
   subscription_id?: number | null
   subscription?: Subscription | null
-  name?: string | null
-  namespace?: string | null
+  name: string
+  namespace: string
   status?: DeploymentStatus
   generation?: number
   last_error?: string | null

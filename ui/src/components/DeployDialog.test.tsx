@@ -235,6 +235,8 @@ describe('DeployDialog', () => {
       id: '00000000-0000-0000-0000-00000000002a',
       user_id: 1,
       desired_template_id: 5,
+      name: 'hello-world-abc123',
+      namespace: 'test-example-123456789',
       hostname: 'edit-test.example.com',
       user_values_json: { hostname: 'edit-test.example.com' },
       desired_template: oldTemplate,

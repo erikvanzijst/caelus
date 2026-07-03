@@ -1,23 +1,28 @@
 import {
   AppBar,
+  Avatar,
   Box,
   Button,
-  Chip,
   Container,
   Divider,
+  ListItemIcon,
   Menu,
   MenuItem,
   Stack,
   Toolbar,
   Typography,
 } from '@mui/material'
+import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined'
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined'
+import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined'
+import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded'
 import { useState, type PropsWithChildren } from 'react'
 import { NavLink } from 'react-router-dom'
 import EmailDialog from './EmailDialog'
 import { useAuth } from '../state/AuthContext'
 import AuroraBackground from './landing/AuroraBackground'
 import AppFooter from './AppFooter'
-import { DISPLAY, fg } from './landing/landingTokens'
+import { accent, DISPLAY, fg, line } from './landing/landingTokens'
 
 const keycloakAccountUrl = import.meta.env.VITE_KEYCLOAK_ACCOUNT_URL as
   | string
@@ -27,6 +32,8 @@ function AppShell({ children }: PropsWithChildren) {
   const { user, loading, email, setEmail } = useAuth()
   const showDialog = !loading && !user
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)
+  const menuOpen = Boolean(menuAnchor)
+  const initial = user?.email?.[0]?.toUpperCase() ?? '?'
 
   function handleLogout() {
     if (keycloakAccountUrl) {
@@ -90,63 +97,103 @@ function AppShell({ children }: PropsWithChildren) {
             </Typography>
           </Stack>
           <Box sx={{ flex: 1 }} />
-          <Stack direction="row" spacing={1}>
-            <Button
-              component={NavLink}
-              to="/"
-              end
-              variant="text"
+          {/* Account menu. The wordmark handles "home", so the bar carries no
+              section nav; privileged (Admin) and session actions live here. */}
+          <Button
+            onClick={(e) => setMenuAnchor(e.currentTarget)}
+            aria-label="Account menu"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            endIcon={
+              <KeyboardArrowDownRoundedIcon
+                sx={{
+                  transition: 'transform 0.2s',
+                  transform: menuOpen ? 'rotate(180deg)' : 'none',
+                }}
+              />
+            }
+            sx={{
+              color: fg.muted,
+              textTransform: 'none',
+              fontWeight: 500,
+              borderRadius: 999,
+              pl: 0.75,
+              pr: 1.25,
+              py: 0.5,
+              border: `1px solid ${line.soft}`,
+              background: 'rgba(255,255,255,0.03)',
+              '&:hover': {
+                background: 'rgba(255,255,255,0.06)',
+                color: fg.primary,
+                borderColor: 'rgba(148,163,184,0.35)',
+              },
+              '& .MuiButton-endIcon': { ml: 0.5 },
+            }}
+          >
+            <Avatar
               sx={{
-                color: fg.muted,
-                '&:hover': { color: fg.primary, background: 'rgba(255,255,255,0.04)' },
-                '&.active': { color: fg.primary, background: 'rgba(255,255,255,0.06)' },
+                width: 26,
+                height: 26,
+                fontSize: 13,
+                fontWeight: 600,
+                mr: 1,
+                color: '#fff',
+                background: `linear-gradient(135deg, ${accent.blue}, ${accent.magenta})`,
               }}
             >
-              Dashboard
-            </Button>
+              {initial}
+            </Avatar>
+            <Box
+              component="span"
+              sx={{ display: { xs: 'none', sm: 'inline' }, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+              {user ? user.email : 'No email set'}
+            </Box>
+          </Button>
+          <Menu
+            anchorEl={menuAnchor}
+            open={menuOpen}
+            onClose={() => setMenuAnchor(null)}
+            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            slotProps={{ paper: { sx: { mt: 1, minWidth: 200 } } }}
+          >
             {user?.is_admin && (
-              <Button
+              <MenuItem
                 component={NavLink}
                 to="/admin"
-                variant="text"
-                sx={{
-                  color: fg.muted,
-                  '&:hover': { color: fg.primary, background: 'rgba(255,255,255,0.04)' },
-                  '&.active': { color: fg.primary, background: 'rgba(255,255,255,0.06)' },
-                }}
+                onClick={() => setMenuAnchor(null)}
               >
+                <ListItemIcon>
+                  <AdminPanelSettingsOutlinedIcon fontSize="small" />
+                </ListItemIcon>
                 Admin
-              </Button>
+              </MenuItem>
             )}
-          </Stack>
-          <Box sx={{ flex: 1 }} />
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Chip
-              label={user ? user.email : 'No email set'}
-              variant="outlined"
-              onClick={(e) => setMenuAnchor(e.currentTarget)}
-              sx={{ bgcolor: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
-            />
-            <Menu
-              anchorEl={menuAnchor}
-              open={Boolean(menuAnchor)}
-              onClose={() => setMenuAnchor(null)}
+            {user?.is_admin && <Divider />}
+            {/* Always shown so the menu is identical across environments. In
+                local dev VITE_KEYCLOAK_ACCOUNT_URL is unset, so the href is
+                empty; in production it points at the Keycloak account portal
+                and opens in a new tab. */}
+            <MenuItem
+              component="a"
+              href={keycloakAccountUrl ?? ''}
+              target={keycloakAccountUrl ? '_blank' : undefined}
+              rel={keycloakAccountUrl ? 'noopener noreferrer' : undefined}
+              onClick={() => setMenuAnchor(null)}
             >
-              {keycloakAccountUrl && (
-                <MenuItem
-                  component="a"
-                  href={keycloakAccountUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setMenuAnchor(null)}
-                >
-                  Profile
-                </MenuItem>
-              )}
-              {keycloakAccountUrl && <Divider />}
-              <MenuItem onClick={handleLogout}>Logout</MenuItem>
-            </Menu>
-          </Stack>
+              <ListItemIcon>
+                <PersonOutlineOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              Profile
+            </MenuItem>
+            <MenuItem onClick={handleLogout}>
+              <ListItemIcon>
+                <LogoutOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              Logout
+            </MenuItem>
+          </Menu>
         </Toolbar>
       </AppBar>
       <Container
@@ -155,7 +202,7 @@ function AppShell({ children }: PropsWithChildren) {
       >
         {children}
       </Container>
-      <AppFooter isAdmin={Boolean(user?.is_admin)} />
+      <AppFooter />
       <EmailDialog
         open={showDialog}
         current={email}

@@ -3,16 +3,6 @@ import { Link as RouterLink } from 'react-router-dom'
 import { DISPLAY, fg, line, MONO, SANS } from './landing/landingTokens'
 import { LEGAL_NAV } from '../content/legal'
 
-interface AppFooterProps {
-  /** Show the Admin link in the Navigate column. */
-  isAdmin?: boolean
-}
-
-interface FooterLink {
-  label: string
-  to: string
-}
-
 const footerLinkSx = {
   fontFamily: SANS,
   fontSize: 14.5,
@@ -23,26 +13,13 @@ const footerLinkSx = {
 
 /**
  * Footer for the authenticated app shell. Deliberately mirrors the anonymous
- * landing page's footer (brand block, mono column headers, small-print bar) so
- * the two surfaces read as one product — but its links are wired for the
- * signed-in context (in-app navigation + legal routes) rather than the landing
- * page's marketing anchors, which don't exist here.
+ * landing page's footer (brand block, mono column header, small-print bar) so
+ * the two surfaces read as one product. Unlike the landing footer it carries no
+ * "navigate" column: the signed-in app keeps its wayfinding in the sticky
+ * header (the wordmark is home; Admin lives in the account menu), so the footer
+ * is purpose-built for identity + legal — the links that genuinely belong here.
  */
-export function AppFooter({ isAdmin = false }: AppFooterProps) {
-  const columns: { heading: string; links: FooterLink[] }[] = [
-    {
-      heading: 'Navigate',
-      links: [
-        { label: 'Dashboard', to: '/' },
-        ...(isAdmin ? [{ label: 'Admin', to: '/admin' }] : []),
-      ],
-    },
-    {
-      heading: 'Legal',
-      links: LEGAL_NAV.map((doc) => ({ label: doc.title, to: `/legal/${doc.slug}` })),
-    },
-  ]
-
+export function AppFooter() {
   return (
     <Box
       component="footer"
@@ -83,27 +60,28 @@ export function AppFooter({ isAdmin = false }: AppFooterProps) {
             </Typography>
           </Box>
 
-          {/* Link columns */}
-          <Stack direction="row" spacing={{ xs: 5, sm: 8 }} flexWrap="wrap" useFlexGap>
-            {columns.map((col) => (
-              <Stack key={col.heading} spacing={1.5}>
-                <Typography
-                  sx={{
-                    fontFamily: MONO,
-                    fontSize: 11.5,
-                    letterSpacing: '0.16em',
-                    textTransform: 'uppercase',
-                    color: fg.faint,
-                  }}
-                >
-                  {col.heading}
-                </Typography>
-                {col.links.map((link) => (
-                  <Box key={link.label} component={RouterLink} to={link.to} sx={footerLinkSx}>
-                    {link.label}
-                  </Box>
-                ))}
-              </Stack>
+          {/* Legal column */}
+          <Stack spacing={1.5}>
+            <Typography
+              sx={{
+                fontFamily: MONO,
+                fontSize: 11.5,
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                color: fg.faint,
+              }}
+            >
+              Legal
+            </Typography>
+            {LEGAL_NAV.map((doc) => (
+              <Box
+                key={doc.slug}
+                component={RouterLink}
+                to={`/legal/${doc.slug}`}
+                sx={footerLinkSx}
+              >
+                {doc.title}
+              </Box>
             ))}
           </Stack>
         </Stack>

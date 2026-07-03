@@ -1,15 +1,17 @@
-import { Box, Typography } from '@mui/material'
+import { Box } from '@mui/material'
 import { Outlet } from 'react-router-dom'
 import { AdminSidebar } from '../components/AdminSidebar'
+import { PageHeading } from '../components/PageHeading'
 
 function Admin() {
   return (
     <Box>
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h3">Admin</Typography>
-        <Typography color="text.secondary">
-          Manage products, template versions, and the canonical template selection.
-        </Typography>
+        <PageHeading
+          eyebrow="Control room"
+          title="Admin"
+          subtitle="Manage products, template versions, and the canonical template selection."
+        />
       </Box>
       <Box sx={{ display: 'flex', gap: 3 }}>
         <AdminSidebar />

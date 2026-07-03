@@ -30,6 +30,7 @@ import { ensureUrl, formatDateTime } from '../utils/format'
 import { ProductList } from '../components/ProductList'
 import { DeployDialog } from '../components/DeployDialog'
 import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog'
+import { PageHeading } from '../components/PageHeading'
 
 function Dashboard() {
   const queryClient = useQueryClient()
@@ -94,12 +95,11 @@ function Dashboard() {
 
   return (
     <Stack spacing={4}>
-      <Box>
-        <Typography variant="h3">Your applications</Typography>
-        <Typography color="text.secondary">
-          Spin up new products and keep track of your live environments.
-        </Typography>
-      </Box>
+      <PageHeading
+        eyebrow="Your space"
+        title="Your applications"
+        subtitle="Spin up new products and keep track of your live environments."
+      />
 
       <Grid container spacing={2}>
         {deploymentsQuery.data

@@ -80,7 +80,7 @@ export function TemplateTabReadOnly({
                     : ''
                 }
                 options={editorOptions}
-                theme="vs-light"
+                theme="vs-dark"
               />
             </Box>
           </Box>
@@ -124,7 +124,7 @@ export function TemplateTabReadOnly({
                 : ''
             }
             options={editorOptions}
-            theme="vs-light"
+            theme="vs-dark"
           />
         </Box>
       </Box>

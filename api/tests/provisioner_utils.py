@@ -10,6 +10,10 @@ class FakeProvisioner:
         self.calls.append(("ensure_namespace", {"name": name}))
         return None
 
+    def ensure_tenant_isolation(self, *, namespace: str):
+        self.calls.append(("ensure_tenant_isolation", {"namespace": namespace}))
+        return None
+
     def helm_upgrade_install(
         self,
         *,

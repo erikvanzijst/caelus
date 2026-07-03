@@ -120,3 +120,44 @@ def test_helm_upgrade_install_timeout_raises_command_error() -> None:
             wait=False,
         )
     assert "context deadline exceeded" in str(exc_info.value).lower()
+
+
+def test_kube_label_namespace_overwrites() -> None:
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return _result(args=cmd, returncode=0, stdout="namespace/ns-a labeled")
+
+    adapter = KubeAdapter(runner=runner)
+    adapter.label_namespace("ns-a", {"caelus.dev/tenant": "true", "k": "v"})
+
+    assert calls[0][:3] == ["kubectl", "label", "namespace"]
+    assert "caelus.dev/tenant=true" in calls[0]
+    assert "k=v" in calls[0]
+    assert "--overwrite" in calls[0]
+
+
+def test_kube_apply_manifest_writes_json_and_applies() -> None:
+    applied: list[dict] = []
+
+    def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        assert cmd[:3] == ["kubectl", "apply", "-f"]
+        with open(cmd[3], encoding="utf-8") as fh:
+            applied.append(json.load(fh))
+        return _result(args=cmd, returncode=0, stdout="configured")
+
+    adapter = KubeAdapter(runner=runner)
+    adapter.apply_manifest({"kind": "NetworkPolicy", "metadata": {"name": "x"}}, error_message="boom")
+
+    assert applied == [{"kind": "NetworkPolicy", "metadata": {"name": "x"}}]
+
+
+def test_kube_apply_manifest_raises_on_failure() -> None:
+    def runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        return _result(args=cmd, returncode=1, stderr="the server could not find the requested resource")
+
+    adapter = KubeAdapter(runner=runner)
+    with pytest.raises(AdapterCommandError) as exc_info:
+        adapter.apply_manifest({"kind": "NetworkPolicy"}, error_message="apply failed")
+    assert "apply failed" in str(exc_info.value)

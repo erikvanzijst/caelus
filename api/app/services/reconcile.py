@@ -103,6 +103,7 @@ class DeploymentReconciler:
         )
 
         self._provisioner.ensure_namespace(name=deployment.namespace)
+        self._provisioner.ensure_tenant_isolation(namespace=deployment.namespace)
         self._provisioner.helm_upgrade_install(
             release_name=deployment.name,
             namespace=deployment.namespace,

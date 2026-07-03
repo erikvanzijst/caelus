@@ -7,6 +7,8 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
+from app.config import get_settings
+from app.network_policy import TENANT_NAMESPACE_LABELS, build_tenant_baseline_policy
 from app.proc import AdapterCommandError, CommandRunner, run_command
 
 logger = logging.getLogger(__name__)
@@ -70,6 +72,30 @@ class KubeAdapter:
                 return False
             raise
 
+    def label_namespace(self, name: str, labels: dict[str, str]) -> None:
+        logger.info("Labeling namespace %s: %s", name, labels)
+        pairs = [f"{key}={value}" for key, value in labels.items()]
+        run_command(
+            ["kubectl", "label", "namespace", name, *pairs, "--overwrite"],
+            runner=self._runner,
+            error_message=f"Failed to label namespace {name}",
+        )
+
+    def apply_manifest(self, manifest: dict[str, Any], *, error_message: str) -> None:
+        """Declaratively upsert a single manifest via ``kubectl apply``.
+
+        Idempotent by construction, so retries and fleet-wide re-applies are
+        no-ops when nothing changed; keyed on (kind, namespace, name), so a stable
+        name means in-place update rather than churn.
+        """
+        with NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json") as f:
+            json.dump(manifest, f)
+            f.flush()
+            run_command(
+                ["kubectl", "apply", "-f", f.name],
+                runner=self._runner,
+                error_message=error_message,
+            )
 
 
 @dataclass(frozen=True)
@@ -318,6 +344,25 @@ class Provisioner:
     # TODO: these namespace functions should not be exposed -- namespace creation/deletion should be done by the install/uninstall methods transparently
     def ensure_namespace(self, *, name: str) -> NamespaceResult:
         return self.kube.ensure_namespace(name)
+
+    def build_tenant_policy(self, *, namespace: str) -> dict[str, Any]:
+        """Render (without applying) the baseline NetworkPolicy for a namespace."""
+        return build_tenant_baseline_policy(namespace=namespace, settings=get_settings())
+
+    def ensure_tenant_isolation(self, *, namespace: str) -> None:
+        """Apply the platform-owned isolation guardrails to a tenant namespace.
+
+        Idempotent and decoupled from the Helm release: labels the namespace for
+        Pod Security Admission + tenant selection, then applies the baseline
+        NetworkPolicy. Called before Helm installs anything so no workload ever
+        runs un-jailed, and re-run cheaply for drift/fleet updates without
+        touching Helm.
+        """
+        self.kube.label_namespace(namespace, TENANT_NAMESPACE_LABELS)
+        self.kube.apply_manifest(
+            self.build_tenant_policy(namespace=namespace),
+            error_message=f"Failed to apply baseline NetworkPolicy in namespace {namespace}",
+        )
 
     def delete_namespace(self, *, name: str) -> NamespaceResult:
         return self.kube.delete_namespace(name)

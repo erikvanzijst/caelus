@@ -23,8 +23,27 @@ class CaelusSettings(BaseSettings):
     # Override to a `-staging` issuer during rollout. `*.freepod.eu` apps do not use
     # this — they are served Traefik's default wildcard cert store.
     # (The ACME account email and the wildcard secret name are Terraform-side: see
-    # tf/deps/certmanager and tf/deps/system/traefik.tf — not API concerns.)
+    # tf/deps/certmanager and tf/deps/system/traefik.tf)
     tls_cluster_issuer: str = "letsencrypt-http"
+
+    # ── Tenant network isolation ──────────────────────────────────────────
+    # Cluster-specific inputs to the baseline NetworkPolicy + Pod Security labels
+    # the reconciler (and `sync-network-policies`) apply to every tenant namespace.
+    # Defaults match the current cluster: Traefik in kube-system, the shared SMTP
+    # relay (app=smtp:25) in the `mailer` namespace, and the k3s CoreDNS ClusterIP.
+    tenant_netpol_name: str = "caelus-tenant-baseline"
+    ingress_namespace: str = "kube-system"
+    ingress_pod_label: str = "traefik"
+    mailer_namespace: str = "mailer"
+    mailer_pod_label: str = "smtp"
+    mailer_port: int = 25
+    dns_cluster_ip: str = "10.43.0.10"
+    tenant_egress_except_cidrs: list[str] = [
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16",
+    ]
 
     mollie_api_key: str | None = None
     mollie_redirect_url: str | None = None

@@ -225,7 +225,7 @@ export function TemplateTabNew({
                 value={schemaText}
                 onChange={handleSchemaChange}
                 options={editorOptions}
-                theme="vs-light"
+                theme="vs-dark"
               />
             </Box>
           </Box>
@@ -264,7 +264,7 @@ export function TemplateTabNew({
             value={defaultsText}
             onChange={handleDefaultsChange}
             options={editorOptions}
-            theme="vs-light"
+            theme="vs-dark"
           />
         </Box>
       </Box>

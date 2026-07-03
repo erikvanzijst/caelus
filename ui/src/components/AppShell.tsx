@@ -15,6 +15,9 @@ import { useState, type PropsWithChildren } from 'react'
 import { NavLink } from 'react-router-dom'
 import EmailDialog from './EmailDialog'
 import { useAuth } from '../state/AuthContext'
+import AuroraBackground from './landing/AuroraBackground'
+import AppFooter from './AppFooter'
+import { DISPLAY, fg } from './landing/landingTokens'
 
 const keycloakAccountUrl = import.meta.env.VITE_KEYCLOAK_ACCOUNT_URL as
   | string
@@ -38,62 +41,66 @@ function AppShell({ children }: PropsWithChildren) {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', position: 'relative' }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Dimmed aurora, fixed to the viewport so it sits calmly behind scrolling
+          content and ties the app to the landing page's atmosphere. */}
       <Box
         sx={{
-          position: 'absolute',
+          position: 'fixed',
           inset: 0,
+          zIndex: 0,
           pointerEvents: 'none',
-          overflow: 'hidden',
         }}
       >
-        <Box
-          sx={{
-            position: 'absolute',
-            width: 380,
-            height: 380,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(99,102,241,0.3), transparent 70%)',
-            top: -120,
-            left: -80,
-          }}
-        />
-        <Box
-          sx={{
-            position: 'absolute',
-            width: 280,
-            height: 280,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(236,72,153,0.25), transparent 70%)',
-            bottom: -120,
-            right: -60,
-          }}
-        />
+        <AuroraBackground preset="whisper" subtle />
       </Box>
       <AppBar elevation={0} position="sticky">
         <Toolbar sx={{ gap: 2 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Stack
+            component={NavLink}
+            to="/"
+            direction="row"
+            alignItems="center"
+            spacing={1.25}
+            sx={{ textDecoration: 'none' }}
+          >
             <Box
               component="img"
               src="/caelus.svg"
               alt="Freepod"
-              sx={{ width: 36, height: 36, borderRadius: '8px' }}
+              sx={{ width: 30, height: 30 }}
             />
-            <Box>
-              <Typography variant="h6">Freepod</Typography>
-              <Typography variant="caption" color="text.secondary">
-                Provisioning cockpit
-              </Typography>
-            </Box>
+            <Typography
+              sx={{
+                fontFamily: DISPLAY,
+                fontWeight: 600,
+                fontSize: 22,
+                letterSpacing: '-0.02em',
+                color: fg.primary,
+              }}
+            >
+              Freepod
+            </Typography>
           </Stack>
           <Box sx={{ flex: 1 }} />
           <Stack direction="row" spacing={1}>
             <Button
               component={NavLink}
               to="/"
-              variant="outlined"
-              color="primary"
-              sx={{ borderColor: 'rgba(37, 99, 235, 0.4)' }}
+              end
+              variant="text"
+              sx={{
+                color: fg.muted,
+                '&:hover': { color: fg.primary, background: 'rgba(255,255,255,0.04)' },
+                '&.active': { color: fg.primary, background: 'rgba(255,255,255,0.06)' },
+              }}
             >
               Dashboard
             </Button>
@@ -101,9 +108,12 @@ function AppShell({ children }: PropsWithChildren) {
               <Button
                 component={NavLink}
                 to="/admin"
-                variant="outlined"
-                color="secondary"
-                sx={{ borderColor: 'rgba(236, 72, 153, 0.35)' }}
+                variant="text"
+                sx={{
+                  color: fg.muted,
+                  '&:hover': { color: fg.primary, background: 'rgba(255,255,255,0.04)' },
+                  '&.active': { color: fg.primary, background: 'rgba(255,255,255,0.06)' },
+                }}
               >
                 Admin
               </Button>
@@ -115,7 +125,7 @@ function AppShell({ children }: PropsWithChildren) {
               label={user ? user.email : 'No email set'}
               variant="outlined"
               onClick={(e) => setMenuAnchor(e.currentTarget)}
-              sx={{ bgcolor: 'rgba(15, 23, 42, 0.04)', cursor: 'pointer' }}
+              sx={{ bgcolor: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
             />
             <Menu
               anchorEl={menuAnchor}
@@ -139,9 +149,13 @@ function AppShell({ children }: PropsWithChildren) {
           </Stack>
         </Toolbar>
       </AppBar>
-      <Container maxWidth="xl" sx={{ py: 6, position: 'relative', zIndex: 1 }}>
+      <Container
+        maxWidth="xl"
+        sx={{ py: 6, position: 'relative', zIndex: 1, flex: 1 }}
+      >
         {children}
       </Container>
+      <AppFooter isAdmin={Boolean(user?.is_admin)} />
       <EmailDialog
         open={showDialog}
         current={email}

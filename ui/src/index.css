@@ -12,9 +12,9 @@ body,
 
 body {
   margin: 0;
-  font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
-  color: #0d0f12;
-  background: radial-gradient(circle at top left, #eef6ff 0%, #f8f4ff 45%, #fdf9f1 100%);
+  font-family: "Schibsted Grotesk Variable", "Schibsted Grotesk", system-ui, -apple-system, sans-serif;
+  color: #f4f6fb;
+  background: #0b1020;
 }
 
 a {

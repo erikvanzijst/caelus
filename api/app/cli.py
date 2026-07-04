@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from uuid import UUID
 
@@ -571,6 +572,61 @@ def worker(
         poll_seconds=poll_seconds,
         emit=_echo_yaml_stream_item,
     )
+
+
+@app.command("sync-network-policies")
+def sync_network_policies(
+    concurrency: int = typer.Option(16, "--concurrency", "-c", help="Parallel kubectl applies"),
+    namespaces: str | None = typer.Option(
+        None, "--namespaces", help="Comma-separated namespaces to limit the sync to"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print rendered policies instead of applying them"
+    ),
+) -> None:
+    """Re-apply the baseline NetworkPolicy + tenant labels across running deployments.
+
+    Use this to roll out a change to the baseline policy after editing the
+    template/settings. NetworkPolicy updates reprogram the CNI dataplane without
+    restarting pods, so a fleet-wide sync is non-disruptive; individual failures
+    are reported and do not abort the rest. Canary a few namespaces with
+    ``--namespaces`` before fanning out.
+    """
+    from app.provisioner import provisioner as prov
+
+    only = {n.strip() for n in namespaces.split(",") if n.strip()} if namespaces else None
+    with session_scope() as session:
+        deployments = deployment_service.list_deployments(session)
+
+    target_ns = sorted(
+            deployment.namespace
+            for deployment in deployments
+            if deployment.namespace and (only is None or deployment.namespace in only)
+    )
+    if not target_ns:
+        typer.echo("No matching deployment namespaces to sync.")
+        return
+
+    if dry_run:
+        for ns in target_ns:
+            _echo_yaml_stream_item(prov.build_tenant_policy(namespace=ns))
+        return
+
+    failures: list[str] = []
+    with ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
+        futures = {pool.submit(prov.ensure_tenant_isolation, namespace=ns): ns for ns in target_ns}
+        for future in as_completed(futures):
+            ns = futures[future]
+            try:
+                future.result()
+                typer.echo(f"synced {ns}")
+            except Exception as exc:  # noqa: BLE001 - report per-namespace, keep going
+                failures.append(ns)
+                typer.echo(f"FAILED {ns}: {exc}", err=True)
+
+    typer.echo(f"Synced {len(target_ns) - len(failures)}/{len(target_ns)} namespaces.")
+    if failures:
+        raise typer.Exit(code=1)
 
 
 @app.command("jobs")

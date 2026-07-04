@@ -877,6 +877,9 @@ def test_cli_reconcile_command_reconciles_deployment(cli_runner, monkeypatch):
         def ensure_namespace(self, *, name: str):
             return None
 
+        def ensure_tenant_isolation(self, *, namespace: str):
+            return None
+
         def helm_upgrade_install(self, **kwargs):
             return None
 
@@ -914,6 +917,9 @@ class _FakeProvisioner:
     def ensure_namespace(self, *, name: str):
         return None
 
+    def ensure_tenant_isolation(self, *, namespace: str):
+        return None
+
     def helm_upgrade_install(self, **kwargs):
         return None
 
@@ -928,6 +934,9 @@ class _FailingProvisioner:
     def ensure_namespace(self, *, name: str):
         raise RuntimeError("fail")
 
+    def ensure_tenant_isolation(self, *, namespace: str):
+        raise RuntimeError("fail")
+
     def helm_upgrade_install(self, **kwargs):
         raise RuntimeError("fail")
 
@@ -936,6 +945,64 @@ class _FailingProvisioner:
 
     def delete_namespace(self, *, name: str):
         raise RuntimeError("fail")
+
+
+def test_cli_sync_network_policies_dry_run_renders_without_applying(cli_runner, monkeypatch):
+    runner, app = cli_runner
+    _, deployment_id = _seed_deployment_via_services()
+    namespace = _get_deployment_by_id(deployment_id).namespace
+
+    import app.provisioner as provisioner_module
+
+    called: list[str] = []
+    monkeypatch.setattr(
+        provisioner_module.provisioner,
+        "ensure_tenant_isolation",
+        lambda *, namespace: called.append(namespace),
+    )
+
+    result = runner.invoke(app, ["sync-network-policies", "--dry-run"])
+    assert result.exit_code == 0
+    assert "NetworkPolicy" in result.output
+    assert namespace in result.output
+    assert called == []  # dry-run must not apply anything
+
+
+def test_cli_sync_network_policies_applies_to_active_namespaces(cli_runner, monkeypatch):
+    runner, app = cli_runner
+    _, deployment_id = _seed_deployment_via_services()
+    namespace = _get_deployment_by_id(deployment_id).namespace
+
+    import app.provisioner as provisioner_module
+
+    synced: list[str] = []
+    monkeypatch.setattr(
+        provisioner_module.provisioner,
+        "ensure_tenant_isolation",
+        lambda *, namespace: synced.append(namespace),
+    )
+
+    result = runner.invoke(app, ["sync-network-policies", "--concurrency", "1"])
+    assert result.exit_code == 0
+    assert synced == [namespace]
+    assert f"synced {namespace}" in result.output
+
+
+def test_cli_sync_network_policies_reports_failures_and_exits_nonzero(cli_runner, monkeypatch):
+    runner, app = cli_runner
+    _, deployment_id = _seed_deployment_via_services()
+    namespace = _get_deployment_by_id(deployment_id).namespace
+
+    import app.provisioner as provisioner_module
+
+    def _boom(*, namespace: str) -> None:
+        raise RuntimeError("apply exploded")
+
+    monkeypatch.setattr(provisioner_module.provisioner, "ensure_tenant_isolation", _boom)
+
+    result = runner.invoke(app, ["sync-network-policies", "--concurrency", "1"])
+    assert result.exit_code == 1
+    assert f"FAILED {namespace}" in result.output
 
 
 def test_cli_worker_processes_job_successfully(cli_runner, monkeypatch):

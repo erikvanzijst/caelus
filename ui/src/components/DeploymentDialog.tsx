@@ -8,6 +8,7 @@ import { isTransitionalStatus } from '../utils/deploymentStatus'
 import { formatLocalIso } from '../utils/formatDate'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 import { DeployDialogContent } from './DeployDialogContent'
+import { SftpAccessPanel } from './SftpAccessPanel'
 
 interface DeploymentDialogProps {
   deployment: Deployment | null
@@ -147,6 +148,7 @@ export function DeploymentDialog({ deployment: initialDeployment, onClose }: Dep
           <MetadataRow label="Current template" value={deployment.applied_template ? `#${deployment.applied_template.id}` : '—'} />
           <MetadataRow label="Status" value={deployment.status ?? '—'} />
         </Box>
+        <SftpAccessPanel userId={deployment.user_id} deploymentId={deployment.id} />
       </DialogContent>
       <DialogActions>
         <Button

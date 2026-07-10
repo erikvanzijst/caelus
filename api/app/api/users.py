@@ -12,6 +12,7 @@ from app.models import (
     DeploymentCreate,
     DeploymentCreateResponse,
     DeploymentRead,
+    SftpCredentialsRead,
     UserCreate,
     UserORM,
     UserRead, DeploymentUpdate,
@@ -109,6 +110,21 @@ def get_deployment(
     session: Session = Depends(get_session),
 ) -> DeploymentRead:
     return deployment_service.get_deployment(session, user_id=user_id, deployment_id=deployment_id)
+
+
+@router.get(
+    "/{user_id}/deployments/{deployment_id}/sftp",
+    response_model=SftpCredentialsRead,
+)
+def get_deployment_sftp(
+    user_id: int,
+    deployment_id: UUID,
+    current_user: UserORM = Depends(require_self),
+    session: Session = Depends(get_session),
+) -> SftpCredentialsRead:
+    return deployment_service.get_sftp_credentials(
+        session, user_id=user_id, deployment_id=deployment_id
+    )
 
 
 @router.put("/{user_id}/deployments/{deployment_id}", response_model=DeploymentRead)

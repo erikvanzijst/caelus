@@ -14,3 +14,14 @@ resource "kubernetes_namespace" "login" {
     name = local.is_prod_workspace ? "login" : "login-dev"
   }
 }
+
+resource "kubernetes_namespace" "sshpiper" {
+  metadata {
+    name = local.ns_sshpiper
+
+    labels = {
+      name        = local.ns_sshpiper
+      environment = local.environment
+    }
+  }
+}

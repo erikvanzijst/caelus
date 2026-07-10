@@ -2,5 +2,8 @@ dependencies:
 - name: nextcloud
   repository: https://nextcloud.github.io/helm/
   version: 8.9.1
-digest: sha256:1afb134a2b70d97169dea613f85c38119445a90306f5c50cbd1fcb1d1ab67994
-generated: "2026-03-22T23:45:03.837533313Z"
+- name: caelus-sftp
+  repository: file://../../_lib/caelus-sftp
+  version: 0.1.0
+digest: sha256:3abd150fcbdf02b5effa89258035d623674f538652f73d7a42ecd717ec646026
+generated: "2026-07-07T10:02:53.995930492Z"

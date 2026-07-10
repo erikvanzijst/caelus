@@ -1,0 +1,3 @@
+{{- /* Read-only SFTP access to the data PVC. See the caelus-sftp library
+       chart (products/_lib/caelus-sftp) for the full contract. */}}
+{{ include "caelus-sftp.resources" (dict "root" .) }}

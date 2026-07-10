@@ -498,6 +498,21 @@ def get_deployment(user_id: int, deployment_id: UUID) -> None:
         _echo_yaml_entity(deployment)
 
 
+@app.command("get-deployment-sftp")
+def get_deployment_sftp(user_id: int, deployment_id: UUID) -> None:
+    with session_scope() as session:
+        _require_cli_user(session)
+        try:
+            creds = deployment_service.get_sftp_credentials(
+                session,
+                user_id=user_id,
+                deployment_id=deployment_id,
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(creds)
+
+
 @app.command("delete-deployment")
 def delete_deployment(user_id: int, deployment_id: UUID) -> None:
     with session_scope() as session:

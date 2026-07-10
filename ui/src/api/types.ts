@@ -95,3 +95,10 @@ export interface DeploymentCreateResponse {
   deployment: Deployment
   checkout_url: string | null
 }
+
+export interface SftpCredentials {
+  host: string
+  port: number
+  username: string
+  password: string
+}

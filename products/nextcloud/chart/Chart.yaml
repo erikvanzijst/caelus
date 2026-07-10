@@ -2,7 +2,7 @@ apiVersion: v2
 name: nextcloud-wrapper
 description: Nextcloud wrapper chart for Caelus with plan-enforced storage
 type: application
-version: 1.0.3
+version: 1.0.4
 appVersion: "30.0.0"
 keywords:
   - nextcloud
@@ -15,3 +15,6 @@ dependencies:
   - name: nextcloud
     version: "8.9.1"
     repository: "https://nextcloud.github.io/helm/"
+  - name: caelus-sftp
+    version: "0.1.0"
+    repository: "file://../../_lib/caelus-sftp"

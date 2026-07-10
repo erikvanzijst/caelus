@@ -1,0 +1,7 @@
+{{- /* Read-only SFTP access to the Mattermost data PVC (file uploads and
+       attachments). The postgres and plugins PVCs are intentionally not
+       exposed. See products/_lib/caelus-sftp for the contract. */}}
+{{- /* uid 2000 = the mattermost image's runtime user, which owns the data
+       PVC files; the sftp user must match to read them (see caelus-sftp
+       README on the uid-ownership rule). */}}
+{{ include "caelus-sftp.resources" (dict "root" . "internalUid" 2000) }}

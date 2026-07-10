@@ -6,6 +6,13 @@ module "oauth2-proxy" {
   oauth2_proxy_cookie_secret = var.oauth2_proxy_cookie_secret
 }
 
+module "sshpiper" {
+  source    = "./sshpiper"
+  namespace = kubernetes_namespace.sshpiper.metadata[0].name
+  ssh_port  = local.sshpiper_port
+  rbac_name = "sshpiper-${local.ns_sshpiper}"
+}
+
 module "caelus" {
   source         = "./caelus"
   namespace      = kubernetes_namespace.caelus.metadata[0].name
@@ -17,6 +24,7 @@ module "caelus" {
   db_password    = var.db_password
   wildcard_domains = [local.domain]
   mollie_api_key = var.mollie_api_key
+  sshpiper_namespace = kubernetes_namespace.sshpiper.metadata[0].name
 
   depends_on = [kubernetes_namespace.caelus]
 }

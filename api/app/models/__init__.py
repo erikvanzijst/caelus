@@ -31,6 +31,7 @@ from app.models.core import (  # noqa: F401
     ProductTemplateVersionORM,
     ProductTemplateVersionRead,
     ProductUpdate,
+    SftpCredentialsRead,
     SQLModel,
     UserBase,
     UserCreate,

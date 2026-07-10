@@ -67,3 +67,10 @@ variable "mollie_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "sshpiper_port" {
+  description = "Cluster-side SSH port for the SFTP entry point (null = workspace default: 2222 prod, 2223 dev)"
+  type        = number
+  default     = null
+  nullable    = true
+}

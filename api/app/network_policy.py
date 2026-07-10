@@ -24,7 +24,10 @@ def build_tenant_baseline_policy(*, namespace: str, settings: CaelusSettings) ->
     then allow exactly:
 
     - ingress from the shared Traefik edge (any port, so per-chart service ports
-      never need standardizing) plus free traffic within the namespace;
+      never need standardizing), from this environment's SFTP router (sshpiper,
+      sidecar port only -- it has no business on app ports, and the port scoping
+      is also what keeps the other environment's router out), plus free traffic
+      within the namespace;
     - egress: free traffic within the namespace, DNS, the shared SMTP relay, and
       the public internet minus every internal range (LAN, node, other tenants,
       the service CIDR, and link-local/cloud-metadata).
@@ -63,6 +66,21 @@ def build_tenant_baseline_policy(*, namespace: str, settings: CaelusSettings) ->
                             },
                         }
                     ]
+                },
+                {  # this environment's SFTP router -> sidecar port only
+                    "from": [
+                        {
+                            "namespaceSelector": {
+                                "matchLabels": {
+                                    "kubernetes.io/metadata.name": settings.sshpiper_namespace
+                                }
+                            },
+                            "podSelector": {
+                                "matchLabels": {"app": settings.sshpiper_pod_label}
+                            },
+                        }
+                    ],
+                    "ports": [{"port": settings.sftp_sidecar_port, "protocol": "TCP"}],
                 },
                 {"from": [{"podSelector": {}}]},  # free traffic within the namespace
             ],

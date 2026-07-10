@@ -42,6 +42,47 @@ nextcloud:
         name: ""
         password: ""
 
+    # Read-only SFTP sidecar (caelus-sftp), injected into the upstream nextcloud
+    # pod via its extraSidecarContainers hook (we cannot edit its template).
+    # Static YAML (no .Release.Name): the Pipe maps the external username to the
+    # fixed internal user "sftp"; resources use fixed per-namespace names. Only
+    # the data/ subdir of nextcloud-main is exposed -- the PVC root also holds
+    # config/config.php (DB credentials), which must not be readable.
+    extraSidecarContainers:
+      - name: sftp
+        image: atmoz/sftp:alpine
+        ports:
+          - containerPort: 2222
+        volumeMounts:
+          - name: nextcloud-main
+            mountPath: /home/sftp/data
+            subPath: data
+            readOnly: true
+          - name: sftp-users
+            mountPath: /etc/sftp
+            readOnly: true
+          - name: sftp-scripts
+            mountPath: /etc/sftp.d
+            readOnly: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            memory: 64Mi
+
+    extraVolumes:
+      - name: sftp-users
+        secret:
+          secretName: sftp-credentials
+          items:
+            - key: users.conf
+              path: users.conf
+      - name: sftp-scripts
+        configMap:
+          name: sftp-scripts
+          defaultMode: 0755
+
   persistence:
     enabled: true
     existingClaim: nextcloud-data

@@ -1,20 +1,10 @@
 import {
-  Alert,
-  Avatar,
   Box,
-  Button,
   Card,
-  CardActions,
-  CardContent,
-  Chip,
   Grid,
-  LinearProgress,
   Stack,
-  Tooltip,
   Typography,
 } from '@mui/material'
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -23,13 +13,12 @@ import {
   listProducts,
 } from '../api/endpoints'
 import type { Deployment, Product } from '../api/types'
-import { resolveApiPath } from '../api/client'
 import { useAuth } from '../state/AuthContext'
-import { isTransitionalStatus, statusColor } from '../utils/deploymentStatus'
-import { ensureUrl, formatDateTime } from '../utils/format'
+import { isTransitionalStatus } from '../utils/deploymentStatus'
 import { ProductList } from '../components/ProductList'
 import { DeployDialog } from '../components/DeployDialog'
 import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog'
+import { DeploymentCard } from '../components/DeploymentCard'
 import { PageHeading } from '../components/PageHeading'
 
 function Dashboard() {
@@ -105,102 +94,13 @@ function Dashboard() {
         {deploymentsQuery.data
           ?.map((deployment) => (
           <Grid size={{ xs: 12, md: 6 }} key={deployment.id}>
-            <Card>
-              <CardContent>
-                <Stack spacing={1.5}>
-                  <Stack direction="row" spacing={2} alignItems="flex-start">
-                    <Stack spacing={1} sx={{ minWidth: 0, flex: 1 }}>
-                      <Typography variant="h6" noWrap>{deployment.hostname}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {deployment.desired_template?.product?.name ?? 'Unknown product'}
-                        {deployment.subscription?.plan_template?.plan?.name
-                          ? ` — ${deployment.subscription.plan_template.plan.name}`
-                          : ''}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Created {formatDateTime(deployment.created_at)}
-                      </Typography>
-                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                        <Chip
-                          size="small"
-                          label={deployment.status === 'pending' ? 'Waiting for payment' : `Status: ${deployment.status ?? 'unknown'}`}
-                          color={statusColor(deployment.status)}
-                          icon={deployment.status === 'pending' ? <HourglassEmptyIcon /> : undefined}
-                          variant="outlined"
-                        />
-                        {deployment.subscription?.payment_status === 'arrears' && deployment.status !== 'pending' && (
-                          <Tooltip title="A recent payment has failed. Please update your payment method.">
-                            <Chip
-                              size="small"
-                              label="Payment issue"
-                              color="warning"
-                              icon={<WarningAmberIcon />}
-                              variant="outlined"
-                            />
-                          </Tooltip>
-                        )}
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        Last reconcile {formatDateTime(deployment.last_reconcile_at)}
-                      </Typography>
-                    </Stack>
-                    <Avatar
-                      src={deployment.desired_template?.product?.icon_url ? resolveApiPath(deployment.desired_template.product.icon_url) : undefined}
-                      alt={deployment.desired_template?.product?.name}
-                      variant="rounded"
-                      sx={{ width: 64, height: 64, flexShrink: 0 }}
-                    >
-                      {deployment.desired_template?.product?.name?.[0] ?? '?'}
-                    </Avatar>
-                  </Stack>
-                  {deployment.last_error && (
-                    <Alert severity="error" sx={{ mt: 0.5 }}>
-                      {deployment.last_error}
-                    </Alert>
-                  )}
-                </Stack>
-              </CardContent>
-              {isTransitionalStatus(deployment.status) && deployment.status !== 'pending' && (
-                <LinearProgress
-                  color={deployment.status === 'deleting' ? 'secondary' : 'primary'}
-                  sx={{ mx: 2, borderRadius: 1 }}
-                />
-              )}
-              <CardActions sx={{ px: 2, pb: 2 }}>
-                {deployment.hostname && !(deployment.status === 'pending' || deployment.status === 'deleting' || (deployment.status === 'provisioning' && deployment.generation === 1)) ? (
-                  <Button
-                    href={ensureUrl(deployment.hostname)}
-                    target="_blank"
-                    rel="noreferrer"
-                    variant="contained"
-                  >
-                    Open
-                  </Button>
-                ) : (
-                  <Button variant="contained" disabled>
-                    Open
-                  </Button>
-                )}
-                {deployment.status === 'ready' && (
-                  <Button
-                    variant="outlined"
-                    onClick={() => setEditDeployment(deployment)}
-                  >
-                    Edit
-                  </Button>
-                )}
-                {deployment.status !== 'deleting' && deployment.status !== 'deleted' && (
-                  <Button
-                    variant="outlined"
-                    color="secondary"
-                    disabled={deletePendingIds.has(deployment.id)}
-                    onClick={() => setDeleteTarget(deployment)}
-                  >
-                    {deletePendingIds.has(deployment.id) ? 'Deleting...' : 'Delete'}
-                  </Button>
-                )}
-              </CardActions>
-            </Card>
+            <DeploymentCard
+              deployment={deployment}
+              userId={user!.id}
+              deletePending={deletePendingIds.has(deployment.id)}
+              onEdit={setEditDeployment}
+              onDelete={setDeleteTarget}
+            />
           </Grid>
         ))}
         {!deploymentsQuery.isLoading &&

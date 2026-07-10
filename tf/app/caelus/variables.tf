@@ -67,3 +67,13 @@ variable "sshpiper_namespace" {
   description = "Namespace of this environment's sshpiper SFTP router (for the tenant NetworkPolicy carve-out)"
   type        = string
 }
+
+variable "sftp_host" {
+  description = "User-facing SFTP host advertised by the API/UI (e.g. freepod.eu / dev.freepod.eu)"
+  type        = string
+}
+
+variable "sftp_port" {
+  description = "User-facing SFTP port advertised by the API/UI (22 prod, 23 dev)"
+  type        = number
+}

@@ -25,6 +25,8 @@ module "caelus" {
   wildcard_domains = [local.domain]
   mollie_api_key = var.mollie_api_key
   sshpiper_namespace = kubernetes_namespace.sshpiper.metadata[0].name
+  sftp_host = local.sftp_host
+  sftp_port = local.sftp_port
 
   depends_on = [kubernetes_namespace.caelus]
 }

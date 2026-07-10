@@ -31,6 +31,30 @@ resource "kubernetes_service_account" "sshpiper" {
   }
 }
 
+# sshpiperd daemon configuration (all non-secret; the host key is a mounted
+# Secret, not here). See https://github.com/tg123/sshpiper for the flags.
+resource "kubernetes_config_map" "sshpiper" {
+  metadata {
+    name      = "sshpiper-config"
+    namespace = var.namespace
+  }
+
+  data = {
+    PLUGIN                              = "kubernetes"
+    SSHPIPERD_KUBERNETES_ALL_NAMESPACES = "true"
+    SSHPIPERD_SERVER_KEY                = "/serverkey/ssh_host_ed25519_key"
+    SSHPIPERD_LOG_LEVEL                 = "info"
+
+    # Drop the upstream sidecar's hostkeys-00@openssh.com advertisement so the
+    # OpenSSH client does not attempt (and fail) host-key rotation across the
+    # proxy -- the "server gave bad signature" warning. Opt-in because it
+    # disables OpenSSH's host-key-rotation guard, which is intended here: the
+    # client should only ever pin sshpiper's stable key, never the sidecars'
+    # ephemeral keys. (tg123/sshpiper#131, PR #140.)
+    SSHPIPERD_DROP_HOSTKEYS_MESSAGE = "true"
+  }
+}
+
 # Pipes live in tenant namespaces, so the watch is cluster-scoped.
 resource "kubernetes_cluster_role" "sshpiper" {
   metadata {
@@ -92,6 +116,11 @@ resource "kubernetes_deployment" "sshpiper" {
         labels = {
           app = "sshpiper"
         }
+        # Roll the pod when the config changes; env_from does not restart pods
+        # on its own, so without this a config edit would silently run stale.
+        annotations = {
+          "checksum/config" = sha256(jsonencode(kubernetes_config_map.sshpiper.data))
+        }
       }
 
       spec {
@@ -105,24 +134,10 @@ resource "kubernetes_deployment" "sshpiper" {
             container_port = 2222
           }
 
-          env {
-            name  = "PLUGIN"
-            value = "kubernetes"
-          }
-
-          env {
-            name  = "SSHPIPERD_KUBERNETES_ALL_NAMESPACES"
-            value = "true"
-          }
-
-          env {
-            name  = "SSHPIPERD_SERVER_KEY"
-            value = "/serverkey/ssh_host_ed25519_key"
-          }
-
-          env {
-            name  = "SSHPIPERD_LOG_LEVEL"
-            value = "info"
+          env_from {
+            config_map_ref {
+              name = kubernetes_config_map.sshpiper.metadata[0].name
+            }
           }
 
           volume_mount {

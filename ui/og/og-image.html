@@ -1,0 +1,319 @@
+<!doctype html>
+<!--
+  Source template for the Freepod social preview card (Open Graph / Twitter).
+
+  This HTML is the editable source of truth. The shipped asset is a rasterized
+  PNG at ui/public/og-image.png (referenced by ui/index.html's og:image tags).
+  Regenerate the PNG after editing:
+
+      ui/og/generate.sh
+
+  Fonts are loaded from the workspace's @fontsource packages via relative
+  paths, so the render matches the live site's Fraunces / Space Mono type.
+  The card is a fixed 1200x630 — the size crawlers (Slack, LinkedIn, iMessage,
+  Discord, X, WhatsApp) expect for a large summary image.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      @font-face {
+        font-family: 'Fraunces';
+        font-style: normal;
+        font-weight: 100 900;
+        src: url('../node_modules/@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2')
+          format('woff2-variations');
+      }
+      @font-face {
+        font-family: 'Fraunces';
+        font-style: italic;
+        font-weight: 100 900;
+        src: url('../node_modules/@fontsource-variable/fraunces/files/fraunces-latin-wght-italic.woff2')
+          format('woff2-variations');
+      }
+      @font-face {
+        font-family: 'Schibsted Grotesk';
+        font-style: normal;
+        font-weight: 100 900;
+        src: url('../node_modules/@fontsource-variable/schibsted-grotesk/files/schibsted-grotesk-latin-wght-normal.woff2')
+          format('woff2-variations');
+      }
+      @font-face {
+        font-family: 'Space Mono';
+        font-style: normal;
+        font-weight: 400;
+        src: url('../node_modules/@fontsource/space-mono/files/space-mono-latin-400-normal.woff2')
+          format('woff2');
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+      }
+
+      /* The card. Deep "digital sovereignty" ink with an aurora wash, matching
+         the landing page's palette (landingTokens.ts). */
+      .card {
+        position: relative;
+        width: 1200px;
+        height: 630px;
+        background:
+          radial-gradient(
+            600px 480px at 22% 46%,
+            rgba(37, 99, 235, 0.20),
+            transparent 70%
+          ),
+          radial-gradient(
+            560px 420px at 82% 40%,
+            rgba(124, 91, 255, 0.14),
+            transparent 70%
+          ),
+          radial-gradient(
+            700px 500px at 70% 108%,
+            rgba(236, 72, 153, 0.10),
+            transparent 70%
+          ),
+          linear-gradient(155deg, #070a14 0%, #0b1020 55%, #10162b 100%);
+        overflow: hidden;
+      }
+
+      /* Fine dot-grid texture for depth. */
+      .card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(
+          rgba(255, 255, 255, 0.04) 1px,
+          transparent 1px
+        );
+        background-size: 26px 26px;
+        mask-image: radial-gradient(
+          circle at 50% 45%,
+          black,
+          transparent 78%
+        );
+      }
+
+      /* Hairline gradient accent along the bottom edge. */
+      .card::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 6px;
+        background: linear-gradient(
+          90deg,
+          #2563eb 0%,
+          #7c5bff 50%,
+          #ec4899 100%
+        );
+      }
+
+      .content {
+        position: relative;
+        z-index: 2;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        gap: 56px;
+        padding: 0 84px;
+      }
+
+      .logo {
+        flex: 0 0 auto;
+        width: 208px;
+        height: 208px;
+        filter: drop-shadow(0 24px 60px rgba(37, 99, 235, 0.45));
+      }
+
+      .text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .eyebrow {
+        font-family: 'Space Mono', monospace;
+        font-size: 15px;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+        color: #38bdf8;
+        margin-bottom: 22px;
+      }
+
+      .wordmark {
+        font-family: 'Fraunces', Georgia, serif;
+        font-weight: 500;
+        font-size: 104px;
+        line-height: 0.98;
+        letter-spacing: -3px;
+        color: #f4f6fb;
+      }
+
+      .tagline {
+        font-family: 'Fraunces', Georgia, serif;
+        font-style: italic;
+        font-weight: 400;
+        font-size: 38px;
+        line-height: 1.1;
+        letter-spacing: -0.5px;
+        margin-top: 18px;
+        color: transparent;
+        background: linear-gradient(100deg, #89a9ff 0%, #c9b3ff 50%, #f9a8d4 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+      }
+
+      .desc {
+        font-family: 'Schibsted Grotesk', system-ui, sans-serif;
+        font-size: 21px;
+        line-height: 1.5;
+        color: #a6b0cc;
+        margin-top: 26px;
+        max-width: 620px;
+      }
+
+      .badges {
+        display: flex;
+        gap: 12px;
+        margin-top: 34px;
+      }
+
+      .badge {
+        font-family: 'Schibsted Grotesk', system-ui, sans-serif;
+        font-size: 15px;
+        color: #cdd5ea;
+        padding: 9px 18px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        white-space: nowrap;
+      }
+
+      .domain {
+        position: absolute;
+        right: 84px;
+        bottom: 40px;
+        z-index: 2;
+        font-family: 'Space Mono', monospace;
+        font-size: 15px;
+        letter-spacing: 1px;
+        color: #6f7c9b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="content">
+        <!-- The Freepod map-pin logo (identical to ui/public/caelus.svg). -->
+        <svg
+          class="logo"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 512 512"
+        >
+          <defs>
+            <linearGradient id="bg2b" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#2563eb" />
+              <stop offset="100%" stop-color="#1e40af" />
+            </linearGradient>
+            <radialGradient id="starfield2b" cx="0.5" cy="0.38" r="0.45">
+              <stop offset="0%" stop-color="#1e3a8a" />
+              <stop offset="100%" stop-color="#0c1631" />
+            </radialGradient>
+            <linearGradient id="pin-stroke2b" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#e0e7ff" />
+              <stop offset="100%" stop-color="#818cf8" />
+            </linearGradient>
+            <clipPath id="pin-clip2b">
+              <path
+                d="M256 82 C168 82 100 150 100 232 C100 335 256 438 256 438 C256 438 412 335 412 232 C412 150 344 82 256 82Z"
+              />
+            </clipPath>
+            <filter id="pin-shadow">
+              <feDropShadow
+                dx="0"
+                dy="4"
+                stdDeviation="8"
+                flood-color="#000"
+                flood-opacity="0.3"
+              />
+            </filter>
+          </defs>
+          <rect width="512" height="512" rx="112" fill="url(#bg2b)" />
+          <circle cx="256" cy="250" r="180" fill="#3b82f6" opacity="0.15" />
+          <g filter="url(#pin-shadow)">
+            <path
+              d="M256 82 C168 82 100 150 100 232 C100 335 256 438 256 438 C256 438 412 335 412 232 C412 150 344 82 256 82Z"
+              fill="url(#starfield2b)"
+              stroke="url(#pin-stroke2b)"
+              stroke-width="5"
+            />
+          </g>
+          <g clip-path="url(#pin-clip2b)">
+            <circle cx="170" cy="150" r="2.5" fill="white" opacity="0.85" />
+            <circle cx="215" cy="185" r="1.8" fill="white" opacity="0.6" />
+            <circle cx="320" cy="138" r="3" fill="white" opacity="0.8" />
+            <circle cx="350" cy="205" r="1.8" fill="white" opacity="0.55" />
+            <circle cx="195" cy="260" r="2" fill="white" opacity="0.65" />
+            <circle cx="300" cy="290" r="1.8" fill="white" opacity="0.5" />
+            <circle cx="155" cy="215" r="1.5" fill="white" opacity="0.45" />
+            <circle cx="360" cy="265" r="2.5" fill="white" opacity="0.6" />
+            <circle cx="248" cy="128" r="2" fill="white" opacity="0.75" />
+            <circle cx="280" cy="230" r="1.5" fill="white" opacity="0.5" />
+            <circle cx="140" cy="175" r="1.5" fill="white" opacity="0.4" />
+            <circle cx="370" cy="170" r="2" fill="white" opacity="0.65" />
+            <circle cx="230" cy="310" r="1.5" fill="white" opacity="0.4" />
+            <g stroke="white" stroke-width="0.8" opacity="0.25">
+              <line x1="170" y1="150" x2="215" y2="185" />
+              <line x1="215" y1="185" x2="248" y2="128" />
+              <line x1="320" y1="138" x2="370" y2="170" />
+              <line x1="370" y1="170" x2="360" y2="265" />
+              <line x1="360" y1="265" x2="280" y2="230" />
+              <line x1="280" y1="230" x2="195" y2="260" />
+            </g>
+            <g transform="translate(256,215)">
+              <path
+                d="M0-22 L4-4 L22 0 L4 4 L0 22 L-4 4 L-22 0 L-4-4Z"
+                fill="white"
+                opacity="0.85"
+              />
+              <path
+                d="M0-12 L2-2 L12 0 L2 2 L0 12 L-2 2 L-12 0 L-2-2Z"
+                fill="white"
+                opacity="0.95"
+              />
+              <circle cx="0" cy="0" r="3.5" fill="white" />
+            </g>
+          </g>
+          <ellipse cx="220" cy="185" rx="50" ry="65" fill="white" opacity="0.05" />
+        </svg>
+
+        <div class="text">
+          <div class="eyebrow">The European cloud · Open source · No lock-in</div>
+          <div class="wordmark">Freepod</div>
+          <div class="tagline">Your digital life, truly yours.</div>
+          <div class="desc">
+            Private, dedicated pods for your photos, files, chat and passwords —
+            hosted in Europe, owned by you.
+          </div>
+          <div class="badges">
+            <span class="badge">EU-hosted</span>
+            <span class="badge">No ads, ever</span>
+            <span class="badge">Open source</span>
+            <span class="badge">Export anytime</span>
+          </div>
+        </div>
+      </div>
+      <div class="domain">freepod.eu</div>
+    </div>
+  </body>
+</html>

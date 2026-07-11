@@ -84,7 +84,7 @@ export function Hero({ onSignup }: HeroProps) {
           >
             Your digital life,
             <br />
-            finally{' '}
+            truly{' '}
             <Box
               component="em"
               sx={{

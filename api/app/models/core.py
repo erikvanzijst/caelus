@@ -329,6 +329,19 @@ class DeploymentRead(DeploymentBase):
     last_reconcile_at: Optional[datetime] = None
 
 
+class SftpCredentialsRead(SQLModel):
+    """SFTP connection details for a deployment with file access.
+
+    host/port are the user-facing platform endpoint (from settings); username
+    and password come from the deployment's credentials Secret in the cluster
+    and are never persisted in the Caelus database.
+    """
+    host: str
+    port: int
+    username: str
+    password: str
+
+
 class DeploymentCreateResponse(SQLModel):
     """Envelope returned by the deployment creation endpoint only."""
     deployment: DeploymentRead

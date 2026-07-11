@@ -81,6 +81,38 @@ class KubeAdapter:
             error_message=f"Failed to label namespace {name}",
         )
 
+    def read_secret_data_by_label(
+        self, *, namespace: str, selector: str
+    ) -> dict[str, str] | None:
+        """Return the base64-decoded string data of the single Secret matching
+        ``selector`` in ``namespace``, or ``None`` if none match.
+
+        Used to read a deployment's SFTP credentials Secret, whose name varies
+        by product (``<release>-sftp-credentials`` for wrapper-owned charts,
+        a fixed name for subchart-owned ones) but which always carries the
+        SFTP component labels. Returns ``None`` when the namespace is absent
+        too, which the caller maps to "SFTP not available".
+        """
+        try:
+            result = run_command(
+                ["kubectl", "get", "secret", "-n", namespace, "-l", selector, "-o", "json"],
+                runner=self._runner,
+                error_message=f"Failed to read SFTP secret in namespace {namespace}",
+            )
+        except AdapterCommandError as exc:
+            text = f"{exc.result.stderr}\n{exc.result.stdout}".lower()
+            if "not found" in text:
+                return None
+            raise
+
+        items = json.loads(result.stdout).get("items", [])
+        if not items:
+            return None
+        raw = items[0].get("data", {})
+        import base64
+
+        return {k: base64.b64decode(v).decode("utf-8") for k, v in raw.items()}
+
     def apply_manifest(self, manifest: dict[str, Any], *, error_message: str) -> None:
         """Declaratively upsert a single manifest via ``kubectl apply``.
 
@@ -369,6 +401,13 @@ class Provisioner:
 
     def namespace_exists(self, *, name: str) -> bool:
         return self.kube.namespace_exists(name)
+
+    def read_sftp_credentials(self, *, namespace: str, instance: str) -> dict[str, str] | None:
+        """Read a deployment's SFTP credentials Secret (or None if absent)."""
+        return self.kube.read_secret_data_by_label(
+            namespace=namespace,
+            selector=f"caelus.dev/component=sftp,app.kubernetes.io/instance={instance}",
+        )
 
     def helm_upgrade_install(
         self,

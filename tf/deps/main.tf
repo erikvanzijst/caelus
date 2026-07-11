@@ -38,6 +38,10 @@ module "system" {
   depends_on = [module.certmanager]
 }
 
+module "sshpiper_crd" {
+  source = "./sshpiper"
+}
+
 module "mailer" {
   source = "./mailer"
   namespace = kubernetes_namespace.mailer.metadata[0].name

@@ -20,15 +20,42 @@ def test_policy_is_namespaced_and_default_deny_both_directions() -> None:
     assert set(spec["policyTypes"]) == {"Ingress", "Egress"}
 
 
-def test_only_traefik_and_own_namespace_may_ingress() -> None:
+def test_only_traefik_sshpiper_and_own_namespace_may_ingress() -> None:
     ingress = _policy()["spec"]["ingress"]
     traefik = ingress[0]["from"][0]
     assert traefik["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] == "kube-system"
     assert traefik["podSelector"]["matchLabels"]["app.kubernetes.io/name"] == "traefik"
     # No port restriction on the trusted edge, so per-chart service ports don't matter.
     assert "ports" not in ingress[0]
+    sshpiper = ingress[1]["from"][0]
+    assert sshpiper["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] == "sshpiper"
+    assert sshpiper["podSelector"]["matchLabels"]["app"] == "sshpiper"
     # Free traffic within the namespace (multi-pod apps).
-    assert ingress[1]["from"] == [{"podSelector": {}}]
+    assert ingress[2]["from"] == [{"podSelector": {}}]
+    assert len(ingress) == 3
+
+
+def test_sftp_router_ingress_is_port_scoped() -> None:
+    # Unlike the Traefik rule, the SFTP router may only reach the sidecar port:
+    # it has no business on app ports, and the scoping keeps a compromised (or
+    # cross-environment) router from becoming a bridge into tenant workloads.
+    sshpiper_rule = _policy()["spec"]["ingress"][1]
+    assert sshpiper_rule["ports"] == [{"port": 2222, "protocol": "TCP"}]
+
+
+def test_sftp_router_selector_is_environment_scoped() -> None:
+    # Each environment's reconciler renders its own router namespace, so the
+    # dev router never matches prod tenant policies and vice versa. This is the
+    # sole enforcement layer: sshpiper's kubernetes plugin cannot filter its
+    # cluster-wide Pipe watch by namespace (spike finding).
+    settings = CaelusSettings(
+        _env_file=None, sshpiper_namespace="sshpiper-dev", sftp_sidecar_port=2323
+    )
+    policy = build_tenant_baseline_policy(namespace="tenant-abc", settings=settings)
+    rule = policy["spec"]["ingress"][1]
+    selector = rule["from"][0]["namespaceSelector"]["matchLabels"]
+    assert selector["kubernetes.io/metadata.name"] == "sshpiper-dev"
+    assert rule["ports"] == [{"port": 2323, "protocol": "TCP"}]
 
 
 def test_egress_allows_intra_namespace_dns_and_mailer_only_internally() -> None:

@@ -39,7 +39,11 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /usr/share/nginx/html
+        # Read-only SFTP sidecar (caelus-sftp library chart). Exposes the data
+        # PVC as /home/<release>/data; never mount the DB/state volumes here.
+        {{- include "caelus-sftp.sidecar" (dict "root" . "mounts" (list (dict "volume" "data" "path" "data"))) | nindent 8 }}
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "hello-static.fullname" . }}-data
+        {{- include "caelus-sftp.volumes" (dict "root" .) | nindent 8 }}

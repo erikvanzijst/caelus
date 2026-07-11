@@ -44,6 +44,19 @@ class CaelusSettings(BaseSettings):
         "192.168.0.0/16",
         "169.254.0.0/16",
     ]
+    # SFTP router (sshpiper) admitted into tenant namespaces on the sidecar
+    # port only. Per-environment: the dev instance must point at its own
+    # router namespace (sshpiper-dev) so the environments cannot cross-route
+    # even though both routers watch Pipes cluster-wide.
+    sshpiper_namespace: str = "sshpiper"
+    sshpiper_pod_label: str = "sshpiper"
+    sftp_sidecar_port: int = 2222
+
+    # User-facing SFTP endpoint shown in the UI/API. These are the public
+    # router values, NOT the internal HAProxy/cluster ports (2222/2223):
+    # prod freepod.eu:22, dev dev.freepod.eu:23. Set per environment.
+    sftp_host: str = "freepod.eu"
+    sftp_port: int = 22
 
     mollie_api_key: str | None = None
     mollie_redirect_url: str | None = None

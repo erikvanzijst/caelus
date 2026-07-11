@@ -104,3 +104,23 @@ terraform destroy
 - Cluster-scoped RBAC names include the namespace (e.g.
   `caelus-api-caelus-dev` vs `caelus-api-caelus`) so dev/prod can coexist.
 - State is local by default. Use a remote backend for shared/team usage.
+
+## SFTP entry point (sshpiper)
+
+Each workspace deploys an sshpiperd instance (`sshpiper` module) that
+terminates all tenant SFTP traffic for its environment and routes by SSH
+username via `Pipe` CRs (CRD installed by `tf/deps/sshpiper`). klipper
+ServiceLB binds the cluster-side port directly on the node.
+
+Port chain (all internal hops avoid 22 — the hosts' own sshd lives there):
+
+| Tier                      | prod            | dev                 |
+|---------------------------|-----------------|---------------------|
+| User-facing (home router) | `freepod.eu:22` | `dev.freepod.eu:23` |
+| Homelab HAProxy           | `:2222`         | `:2223`             |
+| Cluster node (this repo)  | `:2222`         | `:2223`             |
+
+The HAProxy frontends live in the homelab repo
+(github.com/erikvanzijst/homelab, OpenSpec change `sftp-haproxy-routes`);
+the router port-forwards (`:22→2222`, `:23→2223`) are manual router
+configuration. Override the cluster-side port with `-var sshpiper_port=<n>`.

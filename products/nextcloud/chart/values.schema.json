@@ -73,6 +73,11 @@
       },
       "additionalProperties": false
     }
+    ,
+    "caelus-sftp": {
+      "type": "object",
+      "description": "Values namespace for the caelus-sftp library dependency (unused; library charts render no values but Helm reserves the key)."
+    }
   },
   "required": ["storage", "nextcloud"],
   "additionalProperties": false

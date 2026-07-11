@@ -18,6 +18,7 @@ from app.models import (
     PaymentStatus,
     PlanTemplateVersionORM,
     ProductTemplateVersionORM,
+    SftpCredentialsRead,
     UserORM,
     DeploymentUpdate,
 )
@@ -28,6 +29,7 @@ from app.services.errors import DeploymentInProgressException, IntegrityExceptio
 from app.services.hostnames import require_valid_hostname_for_deployment
 from app.util import set_value_at_path, value_for_path
 from app.config import get_settings
+from app.provisioner import Provisioner, provisioner as default_provisioner
 from app.services.mollie import PaymentProvider
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_DELETING,
@@ -300,6 +302,41 @@ def get_deployment(session: Session, *, deployment_id: UUID, user_id: int | None
     if deployment.status == DEPLOYMENT_STATUS_DELETED:
         raise NotFoundException("Deployment not found")
     return DeploymentRead.model_validate(deployment)
+
+
+def get_sftp_credentials(
+    session: Session,
+    *,
+    deployment_id: UUID,
+    user_id: int | None = None,
+    provisioner: Provisioner | None = None,
+) -> SftpCredentialsRead:
+    """Return a deployment's SFTP connection details, or raise NotFoundException.
+
+    Enforces the same ownership rules as ``get_deployment`` (the ORM lookup is
+    scoped by ``user_id`` when provided). Credentials come from the credentials
+    Secret in the deployment's namespace, read live via the provisioner; nothing
+    is persisted in the DB. A 404 covers both "no such deployment" and "this
+    product exposes no files" (no Secret), which is what the UI keys on to hide
+    the feature.
+    """
+    prov: Provisioner = default_provisioner if provisioner is None else provisioner
+
+    deployment = _get_deployment_orm(session, user_id=user_id, deployment_id=deployment_id)
+    if deployment.status == DEPLOYMENT_STATUS_DELETED:
+        raise NotFoundException("Deployment not found")
+
+    data = prov.read_sftp_credentials(namespace=deployment.namespace, instance=deployment.name)
+    if not data or "username" not in data or "password" not in data:
+        raise NotFoundException("SFTP access is not available for this deployment")
+
+    settings = get_settings()
+    return SftpCredentialsRead(
+        host=settings.sftp_host,
+        port=settings.sftp_port,
+        username=data["username"],
+        password=data["password"],
+    )
 
 
 def delete_deployment(session: Session, *, user_id: int, deployment_id: UUID) -> DeploymentRead:

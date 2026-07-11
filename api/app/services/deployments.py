@@ -330,13 +330,9 @@ def get_sftp_credentials(
     if not data or "username" not in data or "password" not in data:
         raise NotFoundException("SFTP access is not available for this deployment")
 
-    # All app hostnames resolve to the platform's single SFTP IP, and SSH routes
-    # by IP:port (no SNI), so the deployment's own hostname reaches the same
-    # sshpiper as the canonical endpoint -- but shows the user a friendlier host.
-    # Fall back to the configured endpoint for deployments without a hostname.
     settings = get_settings()
     return SftpCredentialsRead(
-        host=deployment.hostname or settings.sftp_host,
+        host=settings.sftp_host,
         port=settings.sftp_port,
         username=data["username"],
         password=data["password"],

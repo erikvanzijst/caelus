@@ -1,0 +1,22 @@
+{{- /*
+Read-only SFTP access to the Immich library (photos/videos).
+
+Immich's pods come from the upstream (bjw-s) subchart, so the sidecar is
+injected via values (immich.server.controllers.main.containers.sftp) as static
+YAML that cannot reference .Release.Name. The Pipe therefore maps the unique
+external username (release name) to a fixed internal user "sftp", and the
+sidecar references fixed-named resources (one deployment per namespace).
+
+The selector targets the immich server pod (bjw-s labels). Only the library
+PVC is exposed read-only; the postgres and valkey PVCs are never mounted.
+See products/_lib/caelus-sftp.
+*/}}
+{{ include "caelus-sftp.resources" (dict
+     "root" .
+     "internalUser" "sftp"
+     "credsSecret" "sftp-credentials"
+     "scriptsConfigMap" "sftp-scripts"
+     "selector" (dict
+       "app.kubernetes.io/name" "server"
+       "app.kubernetes.io/instance" .Release.Name
+       "app.kubernetes.io/controller" "main")) }}

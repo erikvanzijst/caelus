@@ -64,10 +64,25 @@ immich:
   server:
     controllers:
       main:
+        # The library PVC is ReadWriteOnce, so the old and new server pods
+        # cannot both hold it during an upgrade -- a surge pod would hang in
+        # ContainerCreating while the old pod keeps the volume, deadlocking the
+        # rollout. Keep RollingUpdate (switching an existing Deployment to
+        # Recreate fails: the API forbids the K8s-defaulted rollingUpdate field)
+        # but set maxSurge=0 so the old pod scales down FIRST, releasing the
+        # library, before the new pod starts. Brief downtime, which is fine.
+        strategy: RollingUpdate
+        rollingUpdate:
+          surge: "0"
+          unavailable: 1
         containers:
           main:
             env:
               IMMICH_CONFIG_FILE: /config/immich-config.yaml
+          sftp:
+            image:
+              repository: atmoz/sftp
+              tag: alpine
     persistence:
       immich-config:
         enabled: true
@@ -76,6 +91,36 @@ immich:
         globalMounts:
           - path: /config
             readOnly: true
+      # The library claim is already mounted as the "data" volume (immich's
+      # server chart). Override its mounts with advancedMounts so the SAME
+      # single volume serves both containers: the app at /data (unchanged) and
+      # the sftp sidecar at /home/sftp/library read-only.
+      data:
+        advancedMounts:
+          main:
+            main:
+              - path: /data
+            sftp:
+              - path: /home/sftp/library
+                readOnly: true
+      sftp-users:
+        type: secret
+        name: sftp-credentials
+        advancedMounts:
+          main:
+            sftp:
+              - path: /etc/sftp/users.conf
+                subPath: users.conf
+                readOnly: true
+      sftp-scripts:
+        type: configMap
+        name: sftp-scripts
+        defaultMode: 0755
+        advancedMounts:
+          main:
+            sftp:
+              - path: /etc/sftp.d
+                readOnly: true
     ingress:
       main:
         enabled: false

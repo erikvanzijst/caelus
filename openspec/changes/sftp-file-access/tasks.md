@@ -27,7 +27,7 @@
 - [x] 4.4a nextcloud: SFTP over data subPath via upstream extraSidecarContainers; fixed internal user + uid 33; live-tested end-to-end
 - [x] 4.4b mattermost: SFTP over data PVC (wrapper Deployment); uid 2000; render-verified (uid set to image user; not live-installed)
 - [x] 4.4c matrix + vaultwarden: confirmed zero-SFTP rendering (only PVCs are DB/secret stores; no dependency added)
-- [ ] 4.4d immich: SFTP over library PVC via bjw-s common-lib `advancedMounts` (distinct injection model); needs wiring + live test
+- [x] 4.4d immich: SFTP over library PVC via bjw-s `advancedMounts` (single volume, two mounts — a second volume for the RWO claim deadlocks on local-path); `maxSurge: 0` so the old server pod releases the library before the new one starts. Upgrade-safety verified live: PVC UIDs unchanged, data markers survived, no PVC/DB recreation.
 
 ## 5. Credentials API
 

@@ -60,13 +60,13 @@ files / ~400KB — too much for a ConfigMap). `keycloak/Dockerfile` is just
 roll out:
 
 ```bash
-./scripts/build-images.sh --keycloak     # build + push ghcr.io/<owner>/caelus-keycloak
+./scripts/build-images.sh --keycloak     # build + push ghcr.io/<owner>/caelus/keycloak
 cd tf/deps && terraform apply            # if var.keycloak_image / digest changed
 kubectl rollout restart deployment/keycloak -n keycloak
 ```
 
 The deployment references `var.keycloak_image`
-(default `ghcr.io/erikvanzijst/caelus-keycloak:latest`).
+(default `ghcr.io/erikvanzijst/caelus/keycloak:latest`).
 
 ### Assigning the theme to the realm
 

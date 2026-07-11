@@ -1,13 +1,13 @@
 variable "api_image" {
   description = "API container image (including registry and tag)"
   type        = string
-  default     = "ghcr.io/erikvanzijst/caelus-api:latest"
+  default     = "ghcr.io/erikvanzijst/caelus/api:latest"
 }
 
 variable "ui_image" {
   description = "UI container image (including registry and tag)"
   type        = string
-  default     = "ghcr.io/erikvanzijst/caelus-ui:latest"
+  default     = "ghcr.io/erikvanzijst/caelus/ui:latest"
 }
 
 variable "namespace" {

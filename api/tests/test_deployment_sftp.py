@@ -66,6 +66,8 @@ def test_owner_gets_sftp_credentials(client, db_session, stub_sftp, monkeypatch)
 
     assert resp.status_code == 200
     body = resp.json()
+    # This deployment has no hostname, so host falls back to the configured
+    # endpoint; port always comes from settings.
     assert body == {
         "host": "dev.freepod.eu",
         "port": 23,
@@ -73,6 +75,25 @@ def test_owner_gets_sftp_credentials(client, db_session, stub_sftp, monkeypatch)
         "password": "s3cret-pw",
     }
     get_settings.cache_clear()
+
+
+def test_host_is_the_deployment_hostname_when_set(client, db_session, stub_sftp):
+    from app.models import DeploymentORM
+
+    stub_sftp({"username": "u", "password": "p"})
+    user_id = client.get("/api/me").json()["id"]
+    deployment_id = _create_deployment(client, db_session, user_id=user_id)
+
+    # Give the deployment its own hostname; it resolves to the same SFTP IP, so
+    # the API should advertise it (friendlier) instead of the generic endpoint.
+    dep = db_session.get(DeploymentORM, UUID(deployment_id))
+    dep.hostname = "cloud.example.com"
+    db_session.add(dep)
+    db_session.commit()
+
+    resp = client.get(f"/api/users/{user_id}/deployments/{deployment_id}/sftp")
+    assert resp.status_code == 200
+    assert resp.json()["host"] == "cloud.example.com"
 
 
 def test_absent_secret_returns_404(client, db_session, stub_sftp):

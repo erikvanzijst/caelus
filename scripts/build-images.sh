@@ -74,6 +74,9 @@ done
 
 GIT_COMMIT=$(git rev-parse --short HEAD)
 
+GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+BRANCH_TAG=$(echo "$GIT_BRANCH" | sed -E 's/[^A-Za-z0-9_.-]+/-/g; s/^[.-]+//')
+
 if [ -z "$TAG" ]; then
   TAG="$GIT_COMMIT"
 fi
@@ -82,6 +85,7 @@ echo "=============================================="
 echo "Building Caelus Images"
 echo "Registry: ${REGISTRY}"
 echo "Tag: ${TAG}"
+echo "Branch tag: ${BRANCH_TAG}"
 echo "Target: ${TARGET}"
 echo "=============================================="
 
@@ -92,6 +96,7 @@ if [[ "$TARGET" == "both" || "$TARGET" == "all" || "$TARGET" == "api" ]]; then
     --push \
     --build-arg GIT_COMMIT="${GIT_COMMIT}" \
     --tag "${REGISTRY}/api:${TAG}" \
+    --tag "${REGISTRY}/api:${BRANCH_TAG}" \
     --tag "${REGISTRY}/api:latest" \
     ./api
 fi
@@ -102,6 +107,7 @@ if [[ "$TARGET" == "keycloak" || "$TARGET" == "all" ]]; then
   docker buildx build \
     --push \
     --tag "${REGISTRY}/keycloak:${TAG}" \
+    --tag "${REGISTRY}/keycloak:${BRANCH_TAG}" \
     --tag "${REGISTRY}/keycloak:latest" \
     ./tf/deps/keycloak
 fi
@@ -113,6 +119,7 @@ if [[ "$TARGET" == "both" || "$TARGET" == "all" || "$TARGET" == "ui" ]]; then
     --push \
     --build-arg GIT_COMMIT="${GIT_COMMIT}" \
     --tag "${REGISTRY}/ui:${TAG}" \
+    --tag "${REGISTRY}/ui:${BRANCH_TAG}" \
     --tag "${REGISTRY}/ui:latest" \
     ./ui
 fi
@@ -125,14 +132,17 @@ echo "=============================================="
 echo "Images pushed:"
 if [[ "$TARGET" == "both" || "$TARGET" == "all" || "$TARGET" == "api" ]]; then
   echo "  ${REGISTRY}/api:${TAG}"
+  echo "  ${REGISTRY}/api:${BRANCH_TAG}"
   echo "  ${REGISTRY}/api:latest"
 fi
 if [[ "$TARGET" == "both" || "$TARGET" == "all" || "$TARGET" == "ui" ]]; then
   echo "  ${REGISTRY}/ui:${TAG}"
+  echo "  ${REGISTRY}/ui:${BRANCH_TAG}"
   echo "  ${REGISTRY}/ui:latest"
 fi
 if [[ "$TARGET" == "keycloak" || "$TARGET" == "all" ]]; then
   echo "  ${REGISTRY}/keycloak:${TAG}"
+  echo "  ${REGISTRY}/keycloak:${BRANCH_TAG}"
   echo "  ${REGISTRY}/keycloak:latest"
 fi
 

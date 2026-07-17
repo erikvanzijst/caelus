@@ -33,8 +33,9 @@ resource "kubernetes_deployment" "ui" {
 
       spec {
         container {
-          image = var.ui_image
-          name  = "ui"
+          image             = var.ui_image
+          image_pull_policy = "Always"
+          name              = "ui"
 
           port {
             name           = "http"

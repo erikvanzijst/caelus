@@ -1,8 +1,9 @@
 #!/bin/bash
 #
 # Perform a rolling restart of Caelus deployments to pick up new container
-# images. Since deployments use :latest tags, this triggers Kubernetes to
-# pull the newest image and roll out new pods with zero downtime.
+# images. Deployments set imagePullPolicy: Always, so a restart pulls the
+# newest image behind the deployment's tag (dev :latest, prod :master) and
+# rolls out new pods with zero downtime.
 #
 # Usage:
 #   ./scripts/rollout.sh dev      # Rollout to caelus-dev namespace

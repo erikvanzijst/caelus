@@ -29,6 +29,11 @@ resource "kubernetes_deployment" "ui" {
         labels = {
           app = "caelus-ui"
         }
+        # Roll the deployment whenever the rendered config.js changes. subPath
+        # mounts don't live-update, so a content change needs a fresh pod.
+        annotations = {
+          "caelus/config-hash" = sha256(kubernetes_config_map.ui.data["config.js"])
+        }
       }
 
       spec {
@@ -42,16 +47,19 @@ resource "kubernetes_deployment" "ui" {
             protocol       = "TCP"
           }
 
-          # resources {
-          #   requests = {
-          #     memory = "64Mi"
-          #     cpu    = "100m"
-          #   }
-          #   limits = {
-          #     memory = "128Mi"
-          #     cpu    = "200m"
-          #   }
-          # }
+          volume_mount {
+            name       = "ui-config"
+            mount_path = "/usr/share/nginx/html/config.js"
+            sub_path   = "config.js"
+            read_only  = true
+          }
+        }
+
+        volume {
+          name = "ui-config"
+          config_map {
+            name = kubernetes_config_map.ui.metadata[0].name
+          }
         }
       }
     }

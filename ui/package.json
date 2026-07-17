@@ -20,6 +20,7 @@
     "@fontsource-variable/schibsted-grotesk": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.10",
     "@fontsource/space-mono": "^5.2.9",
+    "@googleworkspace/drive-picker-element": "^0.7.3",
     "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^7.3.7",
     "@mui/material": "^7.3.7",

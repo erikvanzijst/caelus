@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import AppShell from './components/AppShell'
+import GoogleTakeoutSpike from './components/spike/GoogleTakeoutSpike' // SPIKE
 import Dashboard from './pages/Dashboard'
 import Landing from './pages/Landing'
 import LegalDoc from './pages/LegalDoc'
@@ -51,6 +52,8 @@ function AuthedApp() {
   return (
     <Routes>
       <Route path="/legal/:slug" element={<LegalDoc />} />
+      {/* SPIKE: reachable regardless of Keycloak auth state (dev has no proxy). */}
+      <Route path="/spike/gphotos" element={<GoogleTakeoutSpike />} />
       {user ? (
         <Route element={<AppShellLayout />}>
           <Route path="/" element={<Dashboard />} />

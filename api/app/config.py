@@ -62,6 +62,13 @@ class CaelusSettings(BaseSettings):
     mollie_redirect_url: str | None = None
     mollie_webhook_base_url: str | None = None
 
+    # ── Google Photos → Immich migration SPIKE (drive.file + Picker) ──────
+    # Client ID is non-secret (also handed to the browser via VITE_GOOGLE_*);
+    # the client secret stays server-side only, used for the code->token and
+    # refresh_token->access_token exchanges.
+    google_client_id: str
+    google_client_secret: str
+
 
 @lru_cache
 def get_settings() -> CaelusSettings:

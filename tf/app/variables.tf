@@ -74,3 +74,24 @@ variable "sshpiper_port" {
   default     = null
   nullable    = true
 }
+
+variable "google_client_id" {
+  description = "Google OAuth Client ID for Google Drive API integration"
+  type = string
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth Client Secret for Google Drive API integration"
+  type = string
+  sensitive = true
+}
+
+variable "google_app_id" {
+  description = "The Freepod project/app number in the Google Developer Console linking the Picker API Key and Drive OAuth client"
+  type = string
+}
+
+variable "google_api_key" {
+  description = "Google Picker API identifier"
+  type = string
+}

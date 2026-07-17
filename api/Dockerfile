@@ -18,6 +18,8 @@ RUN uv pip install . --no-deps
 
 EXPOSE 8000
 
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=${GIT_COMMIT}
 ENV PATH="/app/.venv/bin:$PATH"
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

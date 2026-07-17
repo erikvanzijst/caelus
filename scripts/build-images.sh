@@ -72,8 +72,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+GIT_COMMIT=$(git rev-parse --short HEAD)
+
 if [ -z "$TAG" ]; then
-  TAG=$(git rev-parse --short HEAD)
+  TAG="$GIT_COMMIT"
 fi
 
 echo "=============================================="
@@ -88,6 +90,7 @@ if [[ "$TARGET" == "both" || "$TARGET" == "all" || "$TARGET" == "api" ]]; then
   echo "[1/$(if [[ "$TARGET" == "both" ]]; then echo "2"; elif [[ "$TARGET" == "all" ]]; then echo "3"; else echo "1"; fi)] Building and pushing API image..."
   docker buildx build \
     --push \
+    --build-arg GIT_COMMIT="${GIT_COMMIT}" \
     --tag "${REGISTRY}/api:${TAG}" \
     --tag "${REGISTRY}/api:latest" \
     ./api
@@ -108,6 +111,7 @@ if [[ "$TARGET" == "both" || "$TARGET" == "all" || "$TARGET" == "ui" ]]; then
   echo "[1/$(if [[ "$TARGET" == "both" ]]; then echo "2"; elif [[ "$TARGET" == "all" ]]; then echo "3"; else echo "1"; fi)] Building and pushing UI image..."
   docker buildx build \
     --push \
+    --build-arg GIT_COMMIT="${GIT_COMMIT}" \
     --tag "${REGISTRY}/ui:${TAG}" \
     --tag "${REGISTRY}/ui:latest" \
     ./ui

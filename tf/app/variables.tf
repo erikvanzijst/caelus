@@ -1,25 +1,12 @@
 variable "api_image" {
-  description = "API container image (including registry and tag)"
-  type        = string
-  default     = "ghcr.io/erikvanzijst/caelus/api:latest"
-}
-
-variable "ui_image" {
-  description = "UI container image (including registry and tag)"
-  type        = string
-  default     = "ghcr.io/erikvanzijst/caelus/ui:latest"
-}
-
-variable "namespace" {
-  description = "Kubernetes namespace for all resources (null = workspace default)"
+  description = "API container image incl. registry and tag (null = workspace default: :master prod, :latest dev)"
   type        = string
   default     = null
   nullable    = true
 }
 
-
-variable "domain" {
-  description = "External domain for ingress (null = workspace default)"
+variable "ui_image" {
+  description = "UI container image incl. registry and tag (null = workspace default: :master prod, :latest dev)"
   type        = string
   default     = null
   nullable    = true

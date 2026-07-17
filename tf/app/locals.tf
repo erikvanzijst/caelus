@@ -11,6 +11,13 @@ locals {
   # Cluster-scoped RBAC object names must be unique per deployment.
   rbac_name = "caelus-api-${local.ns_caelus}"
 
+  # Container images track a moving tag per environment: prod rolls to :master
+  # (published by scripts/build-images.sh as the branch tag), dev to :latest.
+  # var.api_image/var.ui_image override for pinning a specific SHA (rollback).
+  image_tag = local.is_prod_workspace ? "master" : "latest"
+  api_image = var.api_image != null ? var.api_image : "ghcr.io/erikvanzijst/caelus/api:${local.image_tag}"
+  ui_image  = var.ui_image != null ? var.ui_image : "ghcr.io/erikvanzijst/caelus/ui:${local.image_tag}"
+
   # SFTP entry point (see the sftp-file-access OpenSpec change). The cluster
   # port is what klipper ServiceLB binds on the node and the homelab HAProxy
   # dials; internal hops avoid 22 because the hosts' own sshd lives there.

@@ -35,9 +35,10 @@ resource "kubernetes_deployment" "api" {
         service_account_name = kubernetes_service_account.api.metadata[0].name
 
         init_container {
-          name    = "migrate"
-          image   = var.api_image
-          command = ["alembic", "upgrade", "head"]
+          name              = "migrate"
+          image             = var.api_image
+          image_pull_policy = "Always"
+          command           = ["alembic", "upgrade", "head"]
 
           env_from {
             config_map_ref {
@@ -58,8 +59,9 @@ resource "kubernetes_deployment" "api" {
         }
 
         container {
-          image = var.api_image
-          name  = "api"
+          image             = var.api_image
+          image_pull_policy = "Always"
+          name              = "api"
 
           port {
             name           = "http"

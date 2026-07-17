@@ -25,13 +25,13 @@ This project uses Terraform workspaces for environment separation.
 - `default` workspace: **dev** (safe default on fresh clone)
 - `prod` workspace: **prod**
 
-Workspace defaults:
+Namespace and domain are fixed per workspace in [`locals.tf`](./locals.tf):
 
 - Dev namespace/domain: `caelus-dev` + `dev.freepod.eu`
 - Prod namespace/domain: `caelus` + `freepod.eu`
 
-These defaults can still be overridden with variables (`namespace`, `domain`)
-or `-var-file`.
+The namespace's `environment` label defaults to `dev`/`prod` but can be
+overridden with `-var environment=...`.
 
 ## Prerequisites
 
@@ -43,14 +43,13 @@ or `-var-file`.
 
 ### Non-secret variables
 
-Set in [`terraform.tfvars`](./terraform.tfvars):
+Container images are workspace-derived in [`locals.tf`](./locals.tf): prod
+tracks `:master`, dev tracks `:latest`. Override `api_image` / `ui_image` via
+`-var` (or a `-var-file`) only to pin a specific tag, e.g. a SHA for rollback:
 
-- `api_image`
-- `ui_image`
-
-### Environment var files (optional)
-
-- [`prod.tfvars`](./prod.tfvars)
+```bash
+terraform apply -var 'api_image=ghcr.io/erikvanzijst/caelus/api:<sha>'
+```
 
 ### Secret variables
 

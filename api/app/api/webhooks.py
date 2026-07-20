@@ -43,16 +43,59 @@ BILLING_INTERVAL_MONTHS = {
 }
 
 
-@router.post("/webhooks/mollie", status_code=200)
+@router.post(
+    "/webhooks/mollie",
+    status_code=200,
+    summary="Receive Mollie payment notifications",
+    response_description="Always an empty JSON object `{}` with HTTP 200.",
+    responses={
+        200: {
+            "description": (
+                "Always returned. Every request is acknowledged with 200 — "
+                "including unknown or unrecognized payment IDs — to avoid "
+                "leaking information. The response body is always an empty "
+                "object `{}`."
+            )
+        },
+    },
+)
 def mollie_webhook(
-    id: str = Form(...),
+    id: str = Form(..., description="Mollie payment ID (e.g. `tr_xxxxx`), form-encoded."),
     session: Session = Depends(get_session),
     payment_provider: PaymentProvider | None = Depends(get_payment_provider),
 ) -> dict:
-    """Receive Mollie payment status notifications.
+    """Receive and process a Mollie payment status notification.
 
-    Unauthenticated — Mollie POSTs form-encoded ``id=tr_xxxxx``.
-    Always returns 200 to avoid leaking information.
+    Mollie calls this endpoint whenever a payment changes state. The body is
+    treated as untrusted: the handler re-fetches the authoritative payment from
+    the Mollie API and never acts on the posted values directly.
+
+    ## Authorization
+    Unauthenticated. This endpoint is invoked by the Mollie payment provider,
+    not by API clients; the request is never rejected with 401/403.
+
+    ## Request body
+    `application/x-www-form-urlencoded` with a single field:
+    - **id** — the Mollie payment ID (e.g. `tr_xxxxx`).
+
+    ## Behavior
+    The current status of the referenced payment is retrieved directly from
+    Mollie; the request body is not trusted. The associated subscription is
+    then updated according to the payment's outcome:
+    - A successful first payment activates the subscription's billing and
+      begins provisioning the associated deployment.
+    - A failed, expired, or cancelled first payment marks the subscription as
+      in arrears.
+    - A successful recurring payment keeps (or restores) the subscription's
+      billing status as current; a failed one marks it in arrears.
+
+    Processing is idempotent: re-delivering the same notification produces no
+    duplicate effects.
+
+    ## Errors
+    None are surfaced to the caller. The endpoint always returns HTTP 200 with
+    `{}` — including for unknown payments and payments with no matching
+    subscription — to avoid leaking information.
     """
     if payment_provider is None:
         logger.warning("Webhook received but no payment provider configured, ignoring id=%s", id)

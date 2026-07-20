@@ -13,7 +13,6 @@ from app.models import (
     DeploymentCreateResponse,
     DeploymentRead,
     SftpCredentialsRead,
-    UserCreate,
     UserORM,
     UserRead, DeploymentUpdate,
 )
@@ -50,54 +49,7 @@ def get_me(current_user: UserORM = Depends(get_current_user)) -> UserRead:
     return UserRead.model_validate(current_user)
 
 
-# TODO: Why do we have this? Users are auto-created.
-@router.post(
-    "",
-    response_model=UserRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a user (admin)",
-    response_description="The newly created user record.",
-    responses={
-        403: {"description": "Caller lacks administrator privileges."},
-        409: {"description": "A user with this email already exists (case-insensitive)."},
-    },
-)
-def create_user(
-    payload: UserCreate,
-    current_user: UserORM = Depends(require_admin),
-    session: Session = Depends(get_session),
-) -> UserRead:
-    """Explicitly create a user record.
-
-    Rarely needed in practice: an account's user record is created
-    automatically on its first API call (see `/me`). This administrator-only
-    endpoint exists to provision a user out of band.
-
-    ## Authorization
-    Requires administrator privileges. Other callers receive `403 Forbidden`.
-
-    ## Parameters
-    - **payload.email** — the email address of the user to create.
-
-    ## Behavior
-    Emails are unique (case-insensitive); a duplicate raises `409`.
-
-    ## Errors
-    - **403 Forbidden** — the caller is not an administrator.
-    - **409 Conflict** — a user already exists with this email.
-    """
-    return user_service.create_user(session, payload)
-
-
-@router.get(
-    "",
-    response_model=list[UserRead],
-    summary="List all users (admin)",
-    response_description="All users.",
-    responses={
-        403: {"description": "Caller lacks administrator privileges."},
-    },
-)
+@router.get("", response_model=list[UserRead])
 def list_users(
     current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),

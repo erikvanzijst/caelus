@@ -9,13 +9,6 @@ export function listUsers() {
   return requestJson<User[]>('/users')
 }
 
-export function createUser(email: string) {
-  return requestJson<User>('/users', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  })
-}
-
 export function listProducts() {
   return requestJson<Product[]>('/products')
 }

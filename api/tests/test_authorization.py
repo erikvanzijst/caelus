@@ -107,7 +107,6 @@ def authz_setup(db_session):
 
 ADMIN_ONLY_ENDPOINTS = [
     ("GET", "/api/users", None),
-    ("POST", "/api/users", {"email": "paramtest@example.com"}),
 ]
 
 

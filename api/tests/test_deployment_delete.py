@@ -6,14 +6,12 @@ from app.models import DeploymentReconcileJobORM
 from app.services.jobs import JobService
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETING
 from tests.conftest import client
-from tests.conftest import create_free_plan_template
+from tests.conftest import create_free_plan_template, create_user
 
 
 def test_delete_deployment_flow(client, db_session):
     # create user
-    user_resp = client.post("/api/users", json={"email": "deldep@example.com"})
-    assert user_resp.status_code == 201
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "deldep@example.com")["id"]
     # create product
     prod_resp = client.post("/api/products", json={"name": "prod1", "description": "desc"})
     assert prod_resp.status_code == 201

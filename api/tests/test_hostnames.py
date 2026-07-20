@@ -28,7 +28,7 @@ from sqlmodel import select
 from starlette.testclient import TestClient
 
 from tests.conftest import client, db_session
-from tests.conftest import create_free_plan_template
+from tests.conftest import create_free_plan_template, create_user
 
 
 def _settings(**overrides) -> CaelusSettings:
@@ -460,8 +460,7 @@ class TestHostnameCheckEndpoint:
         # Make it the canonical template
         client.put(f"/api/products/{product_id}", json={"template_id": template_id})
         ptv_id = create_free_plan_template(db_session, product_id)
-        user = client.post("/api/users", json={"email": "hn-test@example.com"})
-        user_id = user.json()["id"]
+        user_id = create_user(client, "hn-test@example.com")["id"]
         client.post(
             f"/api/users/{user_id}/deployments",
             json={
@@ -607,8 +606,7 @@ class TestServerSideEnforcement:
         # Make it the canonical template
         client.put(f"/api/products/{product_id}", json={"template_id": template_id})
         ptv_id = create_free_plan_template(db_session, product_id)
-        user = client.post("/api/users", json={"email": "enforce@example.com"})
-        user_id = user.json()["id"]
+        user_id = create_user(client, "enforce@example.com")["id"]
 
         resp = client.post(
             f"/api/users/{user_id}/deployments",
@@ -639,8 +637,7 @@ class TestServerSideEnforcement:
         # Make it the canonical template
         client.put(f"/api/products/{product_id}", json={"template_id": template_id})
         ptv_id = create_free_plan_template(db_session, product_id)
-        user = client.post("/api/users", json={"email": "enforce-inuse@example.com"})
-        user_id = user.json()["id"]
+        user_id = create_user(client, "enforce-inuse@example.com")["id"]
 
         # First deployment succeeds
         resp1 = client.post(
@@ -654,8 +651,7 @@ class TestServerSideEnforcement:
         assert resp1.status_code == 201
 
         # Second deployment with same hostname is rejected
-        user2 = client.post("/api/users", json={"email": "enforce-inuse2@example.com"})
-        user2_id = user2.json()["id"]
+        user2_id = create_user(client, "enforce-inuse2@example.com")["id"]
         resp2 = client.post(
             f"/api/users/{user2_id}/deployments",
             json={
@@ -686,8 +682,7 @@ class TestServerSideEnforcement:
         # Make it the canonical template
         client.put(f"/api/products/{product_id}", json={"template_id": template_id})
         ptv_id = create_free_plan_template(db_session, product_id)
-        user = client.post("/api/users", json={"email": "enforce-nohost@example.com"})
-        user_id = user.json()["id"]
+        user_id = create_user(client, "enforce-nohost@example.com")["id"]
 
         resp = client.post(
             f"/api/users/{user_id}/deployments",
@@ -718,8 +713,7 @@ class TestServerSideEnforcement:
             f"/api/products/{product_id}/templates",
             json={"chart_ref": "oci://example/chart", "chart_version": "2.0.0", "values_schema_json": schema},
         )
-        user = client.post("/api/users", json={"email": "enforce-update@example.com"})
-        user_id = user.json()["id"]
+        user_id = create_user(client, "enforce-update@example.com")["id"]
 
         ptv_id = create_free_plan_template(db_session, product_id)
 

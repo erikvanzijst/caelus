@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Path, status
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -44,7 +44,7 @@ def require_admin(
 
 
 def require_self(
-    user_id: int,
+    user_id: int = Path(..., description="ID of the user whose resources are being accessed."),
     current_user: UserORM = Depends(get_current_user),
 ) -> UserORM:
     if current_user.id != user_id and not current_user.is_admin:

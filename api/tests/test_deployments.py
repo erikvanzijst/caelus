@@ -7,7 +7,7 @@ from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_READY,
 )
 from tests.conftest import client, db_session, user_client, USER_AUTH_HEADER
-from tests.conftest import create_free_plan_template
+from tests.conftest import create_free_plan_template, create_user
 from sqlmodel import select
 
 from app.models import DeploymentORM, DeploymentReconcileJobORM, UserORM
@@ -32,9 +32,7 @@ def _finish_create_job(db_session, deployment_id):
 
 def test_delete_deployment_flow(client, db_session):
     # Setup: create user, product, template, deployment
-    user_resp = client.post("/api/users", json={"email": "deldep@example.com"})
-    assert user_resp.status_code == 201
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "deldep@example.com")["id"]
 
     product_resp = client.post(
         "/api/products", json={"name": "nextcloud", "description": "Nextcloud app"}
@@ -113,9 +111,7 @@ def test_delete_deployment_flow(client, db_session):
 
 
 def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_session):
-    user_resp = client.post("/api/users", json={"email": "upgrade-api@example.com"})
-    assert user_resp.status_code == 201
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "upgrade-api@example.com")["id"]
 
     product_resp = client.post(
         "/api/products", json={"name": "upgrade-api-prod", "description": "desc"}
@@ -197,9 +193,7 @@ def test_upgrade_deployment_endpoint_sets_state_and_enqueues_job(client, db_sess
 
 
 def test_create_deployment_user_values_with_empty_schema(client, db_session):
-    user_resp = client.post("/api/users", json={"email": "noscope@example.com"})
-    assert user_resp.status_code == 201
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "noscope@example.com")["id"]
 
     product_resp = client.post(
         "/api/products", json={"name": "noscope-prod", "description": "desc"}
@@ -235,9 +229,7 @@ def test_create_deployment_user_values_with_empty_schema(client, db_session):
 
 
 def test_create_deployment_rejects_unknown_user_keys_against_schema(client, db_session):
-    user_resp = client.post("/api/users", json={"email": "unknownkeys@example.com"})
-    assert user_resp.status_code == 201
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "unknownkeys@example.com")["id"]
 
     product_resp = client.post(
         "/api/products", json={"name": "unknownkeys-prod", "description": "desc"}
@@ -285,9 +277,7 @@ def test_create_deployment_rejects_unknown_user_keys_against_schema(client, db_s
 
 
 def test_create_deployment_derives_hostname_recursively_case_insensitive_and_first_match(client, db_session):
-    user_resp = client.post("/api/users", json={"email": "recursive@example.com"})
-    assert user_resp.status_code == 201
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "recursive@example.com")["id"]
 
     product_resp = client.post(
         "/api/products", json={"name": "recursive-prod", "description": "desc"}
@@ -335,9 +325,7 @@ def test_create_deployment_derives_hostname_recursively_case_insensitive_and_fir
 
 
 def test_update_deployment_rederives_hostname_from_user_values(client, db_session):
-    user_resp = client.post("/api/users", json={"email": "rederive@example.com"})
-    assert user_resp.status_code == 201
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "rederive@example.com")["id"]
 
     product_resp = client.post(
         "/api/products", json={"name": "rederive-prod", "description": "desc"}
@@ -389,8 +377,7 @@ def test_update_deployment_rederives_hostname_from_user_values(client, db_sessio
 
 def test_same_version_update_with_new_values(client, db_session):
     """Updating user_values_json without changing template version should succeed."""
-    user_resp = client.post("/api/users", json={"email": "same-ver@example.com"})
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "same-ver@example.com")["id"]
 
     product_resp = client.post(
         "/api/products", json={"name": "same-ver-prod", "description": "desc"}
@@ -436,8 +423,7 @@ def test_same_version_update_with_new_values(client, db_session):
 
 def test_update_deployment_rejects_non_ready_status(client, db_session):
     """Update should return 409 when deployment is not in ready state."""
-    user_resp = client.post("/api/users", json={"email": "notready@example.com"})
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "notready@example.com")["id"]
 
     product_resp = client.post(
         "/api/products", json={"name": "notready-prod", "description": "desc"}
@@ -476,8 +462,7 @@ def test_update_deployment_rejects_non_ready_status(client, db_session):
 
 def test_update_deployment_rejects_non_ready_error_status(client, db_session):
     """Update should return 409 when deployment is in error state."""
-    user_resp = client.post("/api/users", json={"email": "errstate@example.com"})
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "errstate@example.com")["id"]
 
     product_resp = client.post(
         "/api/products", json={"name": "errstate-prod", "description": "desc"}
@@ -546,8 +531,7 @@ def _create_deployment_for_user(client, db_session, user_id, product_suffix=""):
 
 def test_list_deployments_excludes_deleted(client, db_session):
     """User-scoped list should not include deleted deployments."""
-    user_resp = client.post("/api/users", json={"email": "excl@example.com"})
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "excl@example.com")["id"]
 
     dep_id = _create_deployment_for_user(client, db_session, user_id, "-excl")
 
@@ -564,8 +548,7 @@ def test_list_deployments_excludes_deleted(client, db_session):
 
 def test_list_deployments_includes_deleting(client, db_session):
     """User-scoped list should still include deployments with status 'deleting'."""
-    user_resp = client.post("/api/users", json={"email": "deleting@example.com"})
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "deleting@example.com")["id"]
 
     dep_id = _create_deployment_for_user(client, db_session, user_id, "-deleting")
 
@@ -582,10 +565,8 @@ def test_list_deployments_includes_deleting(client, db_session):
 
 def test_admin_list_all_deployments(client, db_session):
     """Admin endpoint returns deployments from multiple users."""
-    user1_resp = client.post("/api/users", json={"email": "admin-list1@example.com"})
-    user1_id = user1_resp.json()["id"]
-    user2_resp = client.post("/api/users", json={"email": "admin-list2@example.com"})
-    user2_id = user2_resp.json()["id"]
+    user1_id = create_user(client, "admin-list1@example.com")["id"]
+    user2_id = create_user(client, "admin-list2@example.com")["id"]
 
     dep1_id = _create_deployment_for_user(client, db_session, user1_id, "-admin1")
     dep2_id = _create_deployment_for_user(client, db_session, user2_id, "-admin2")
@@ -599,8 +580,7 @@ def test_admin_list_all_deployments(client, db_session):
 
 def test_admin_list_deployments_excludes_deleted(client, db_session):
     """Admin endpoint should not include deleted deployments."""
-    user_resp = client.post("/api/users", json={"email": "admin-excl@example.com"})
-    user_id = user_resp.json()["id"]
+    user_id = create_user(client, "admin-excl@example.com")["id"]
 
     dep_id = _create_deployment_for_user(client, db_session, user_id, "-admin-excl")
 

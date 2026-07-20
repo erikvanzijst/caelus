@@ -9,6 +9,7 @@ from tests.conftest import (
     OTHER_AUTH_HEADER,
     USER_AUTH_HEADER,
     create_free_plan_template,
+    create_user,
 )
 
 
@@ -86,7 +87,7 @@ def test_absent_secret_returns_404(client, db_session, stub_sftp):
 def test_admin_can_read_other_users_credentials(client, db_session, stub_sftp):
     stub_sftp({"username": "files-app-zz99", "password": "pw"})
     # client is admin; create a deployment owned by a regular user
-    regular_id = client.post("/api/users", json={"email": "owner@example.com"}).json()["id"]
+    regular_id = create_user(client, "owner@example.com")["id"]
     product_id = client.post(
         "/api/products", json={"name": "a", "description": "a"}
     ).json()["id"]

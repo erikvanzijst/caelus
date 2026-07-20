@@ -137,6 +137,19 @@ OTHER_EMAIL = "other@example.com"
 OTHER_AUTH_HEADER = {"X-Auth-Request-Email": OTHER_EMAIL}
 
 
+def create_user(client, email: str) -> dict:
+    """Provision a regular (non-admin) user and return its ``UserRead`` dict.
+
+    Users are created on their first authenticated request, so hitting
+    ``GET /api/me`` with the target email auto-provisions the user. Use the
+    returned dict's ``["id"]`` for the user id. Replaces the removed
+    ``POST /api/users`` endpoint for test setup.
+    """
+    resp = client.get("/api/me", headers={"X-Auth-Request-Email": email})
+    assert resp.status_code == 200, f"provisioning {email}: {resp.status_code}"
+    return resp.json()
+
+
 @pytest.fixture
 def client(db_session):
     """Test client authenticated as an admin user (no payment provider)."""

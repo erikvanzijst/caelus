@@ -16,6 +16,7 @@ from tests.conftest import (
     OTHER_AUTH_HEADER,
     OTHER_EMAIL,
     create_free_plan_template,
+    create_user,
 )
 from app.db import get_session
 from app.main import app as fastapi_app
@@ -211,9 +212,7 @@ class TestSubscriptionAPI:
         product_id, template_id = _setup_product_and_template(client)
         ptv_id = create_free_plan_template(db_session, product_id)
 
-        user_resp = client.post("/api/users", json={"email": "sub-user@example.com"})
-        assert user_resp.status_code == 201
-        user_id = user_resp.json()["id"]
+        user_id = create_user(client, "sub-user@example.com")["id"]
 
         dep_resp = client.post(
             f"/api/users/{user_id}/deployments",
@@ -309,10 +308,7 @@ class TestDeploymentPlanTemplate:
     def test_deployment_without_plan_template_id_returns_422(self, client, db_session):
         product_id, template_id = _setup_product_and_template(client)
 
-        user_resp = client.post(
-            "/api/users", json={"email": "noptv@example.com"}
-        )
-        user_id = user_resp.json()["id"]
+        user_id = create_user(client, "noptv@example.com")["id"]
 
         resp = client.post(
             f"/api/users/{user_id}/deployments",
@@ -327,10 +323,7 @@ class TestDeploymentPlanTemplate:
         product_id, template_id = _setup_product_and_template(client)
         ptv_id = create_free_plan_template(db_session, product_id)
 
-        user_resp = client.post(
-            "/api/users", json={"email": "validptv@example.com"}
-        )
-        user_id = user_resp.json()["id"]
+        user_id = create_user(client, "validptv@example.com")["id"]
 
         resp = client.post(
             f"/api/users/{user_id}/deployments",
@@ -350,10 +343,7 @@ class TestDeploymentPlanTemplate:
     ):
         product_id, template_id = _setup_product_and_template(client)
 
-        user_resp = client.post(
-            "/api/users", json={"email": "badptv@example.com"}
-        )
-        user_id = user_resp.json()["id"]
+        user_id = create_user(client, "badptv@example.com")["id"]
 
         resp = client.post(
             f"/api/users/{user_id}/deployments",
@@ -393,8 +383,7 @@ class TestDeploymentPlanTemplate:
         plan.template_id = new_ptv.id  # new_ptv is canonical, old_ptv is stale
         db_session.commit()
 
-        user_resp = client.post("/api/users", json={"email": "stale-ptv@example.com"})
-        user_id = user_resp.json()["id"]
+        user_id = create_user(client, "stale-ptv@example.com")["id"]
 
         resp = client.post(
             f"/api/users/{user_id}/deployments",
@@ -420,8 +409,7 @@ class TestDeploymentPlanTemplate:
         other_product_id = other_product.json()["id"]
         other_ptv_id = create_free_plan_template(db_session, other_product_id)
 
-        user_resp = client.post("/api/users", json={"email": "cross-product@example.com"})
-        user_id = user_resp.json()["id"]
+        user_id = create_user(client, "cross-product@example.com")["id"]
 
         resp = client.post(
             f"/api/users/{user_id}/deployments",

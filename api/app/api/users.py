@@ -13,7 +13,6 @@ from app.models import (
     DeploymentCreateResponse,
     DeploymentRead,
     SftpCredentialsRead,
-    UserCreate,
     UserORM,
     UserRead, DeploymentUpdate,
 )
@@ -29,16 +28,6 @@ me_router = APIRouter(tags=["users"])
 @me_router.get("/me", response_model=UserRead)
 def get_me(current_user: UserORM = Depends(get_current_user)) -> UserRead:
     return UserRead.model_validate(current_user)
-
-
-# TODO: Why do we have this? Users are auto-created.
-@router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def create_user(
-    payload: UserCreate,
-    current_user: UserORM = Depends(require_admin),
-    session: Session = Depends(get_session),
-) -> UserRead:
-    return user_service.create_user(session, payload)
 
 
 @router.get("", response_model=list[UserRead])

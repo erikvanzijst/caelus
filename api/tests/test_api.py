@@ -1,7 +1,7 @@
 from starlette.testclient import TestClient
 
 from tests.conftest import client, db_session
-from tests.conftest import create_free_plan_template
+from tests.conftest import create_free_plan_template, create_user
 
 from app.db import get_session
 from app.main import app as fastapi_app
@@ -11,9 +11,8 @@ from app.main import app as fastapi_app
 
 
 def test_me_returns_user_for_known_email(client, db_session):
-    # Pre-create a user via the normal endpoint
-    resp = client.post("/api/users", json={"email": "known@example.com"})
-    assert resp.status_code == 201
+    # Pre-create the user (auto-provisioned on first authenticated request)
+    create_user(client, "known@example.com")
 
     # Now call /api/me with that email
     me_resp = client.get("/api/me", headers={"X-Auth-Request-Email": "known@example.com"})
@@ -39,7 +38,7 @@ def test_me_auto_creates_unknown_email(client):
 
 def test_me_case_insensitive_email(client, db_session):
     # Create a user with lowercase email
-    client.post("/api/users", json={"email": "alice@example.com"})
+    create_user(client, "alice@example.com")
 
     # Call /api/me with mixed-case variant
     me_resp = client.get("/api/me", headers={"X-Auth-Request-Email": "Alice@Example.COM"})
@@ -71,7 +70,6 @@ def test_endpoints_return_404_without_auth_header(db_session):
     with TestClient(fastapi_app) as no_auth_client:
         endpoints = [
             ("GET", "/api/users"),
-            ("POST", "/api/users"),
             ("GET", "/api/users/1"),
             ("DELETE", "/api/users/1"),
             ("GET", "/api/users/1/deployments"),
@@ -184,9 +182,7 @@ def test_product_deletion(client):
 
 
 def test_user_deployment_flow(client, db_session):
-    user = client.post("/api/users", json={"email": "user@example.com"})
-    assert user.status_code == 201
-    user_id = user.json()["id"]
+    user_id = create_user(client, "user@example.com")["id"]
 
     product = client.post(
         "/api/products", json={"name": "nextcloud", "description": "Nextcloud app"}
@@ -239,9 +235,7 @@ def test_user_deployment_flow(client, db_session):
 
 
 def test_user_deployment_flow_with_user_values(client, db_session):
-    user = client.post("/api/users", json={"email": "user-values@example.com"})
-    assert user.status_code == 201
-    user_id = user.json()["id"]
+    user_id = create_user(client, "user-values@example.com")["id"]
 
     product = client.post(
         "/api/products", json={"name": "nextcloud-values", "description": "Nextcloud app"}
@@ -294,9 +288,7 @@ def test_user_deployment_flow_with_user_values(client, db_session):
 
 
 def test_deployment_write_contract_rejects_hostname(client, db_session):
-    user = client.post("/api/users", json={"email": "contract@example.com"})
-    assert user.status_code == 201
-    user_id = user.json()["id"]
+    user_id = create_user(client, "contract@example.com")["id"]
 
     product = client.post(
         "/api/products", json={"name": "contract-product", "description": "Contract app"}
@@ -359,9 +351,7 @@ def test_deployment_write_contract_rejects_hostname(client, db_session):
 
 def test_user_delete_returns_501(client):
     # Create a user
-    user = client.post("/api/users", json={"email": "del@example.com"})
-    assert user.status_code == 201
-    user_id = user.json()["id"]
+    user_id = create_user(client, "del@example.com")["id"]
     # User deletion is disabled
     delete_resp = client.delete(f"/api/users/{user_id}")
     assert delete_resp.status_code == 501

@@ -1,7 +1,11 @@
 # deploy-tos-consent-ui Specification
 
 ## Purpose
-TBD - created by archiving change deploy-tos-acceptance. Update Purpose after archive.
+Gate deployment launch on Terms of Service agreement without adding friction for
+users who have already accepted: the deploy dialog shows the agreement checkbox
+only for unaccepted users (per `GET /api/me/tos-acceptance`), lets them read the
+full ToS in a nested modal without losing form state, and on first launch records
+acceptance before creating the deployment.
 ## Requirements
 ### Requirement: Deploy dialog requires ToS agreement only from users who have not accepted
 

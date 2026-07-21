@@ -1,7 +1,11 @@
 # legal-doc-versioning Specification
 
 ## Purpose
-TBD - created by archiving change deploy-tos-acceptance. Update Purpose after archive.
+Expose a stable, human-readable `version` for each legal document, parsed once
+from its `**Effective date:**` line, so consumers (the consent UI, recorded
+acceptances) share one source of truth for "which version." A build-time guard
+fails loudly if a document lacks a parseable ISO date, turning a malformed legal
+record into a failed build rather than a silent runtime error.
 ## Requirements
 ### Requirement: Each legal document exposes a parsed version
 

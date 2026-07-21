@@ -1,7 +1,12 @@
 # user-tos-record Specification
 
 ## Purpose
-TBD - created by archiving change deploy-tos-acceptance. Update Purpose after archive.
+Record Terms of Service acceptance as a user-level fact captured once — not per
+deployment — via the `/api/me/tos-acceptance` resource (POST to record, GET to
+read status). Storing the accepted version and timestamp on the user gives a
+durable consent record and a clean basis for a future re-approval flow
+(`accepted_version < current`), while keeping acceptance off the user identity
+model.
 ## Requirements
 ### Requirement: ToS acceptance is a user resource recorded once
 

@@ -1,7 +1,11 @@
 # api-current-tos-version Specification
 
 ## Purpose
-TBD - created by archiving change deploy-tos-acceptance. Update Purpose after archive.
+Give the API a single, authoritative notion of the *current* Terms of Service
+version — a code-default release constant (`settings.current_tos_version`) — so it
+can validate submitted acceptances without ever importing the ToS text (which is
+UI-owned). A CI test binds this constant to the ToS markdown's effective date so
+the two cannot silently drift.
 ## Requirements
 ### Requirement: The API exposes a current ToS version as a release constant
 

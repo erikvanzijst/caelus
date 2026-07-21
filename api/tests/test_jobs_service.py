@@ -37,7 +37,7 @@ def _seed_deployment(db_session):
     ptv_id = create_free_plan_template(db_session, product.id)
     deployment = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(
+        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
             user_id=user.id,
             desired_template_id=template.id,
             user_values_json={"domain": "jobs.example.test"},

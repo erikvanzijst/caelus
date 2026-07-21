@@ -61,7 +61,7 @@ def _seed_deployment_via_services() -> tuple[int, int]:
         ptv_id = create_free_plan_template(session, product.id)
         deployment = deployment_service.create_deployment(
             session,
-            payload=DeploymentCreate(
+            payload=DeploymentCreate(tos_version="2026-07-01", 
                 user_id=user.id,
                 desired_template_id=template.id,
                 user_values_json={"domain": "dep.example.com"},
@@ -534,6 +534,8 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
             str(template_id),
             "--user-values-json",
             '{"domain":"cli-audit.example.test"}',
+            "--tos-version",
+            "2026-07-01",
             "--plan-template-id",
             str(ptv_id),
         ],
@@ -583,6 +585,8 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
             str(template_id),
             "--user-values-json",
             '{"domain":"cli-json.example.test","message":"hi"}',
+            "--tos-version",
+            "2026-07-01",
             "--plan-template-id",
             str(ptv_id),
         ],
@@ -591,6 +595,49 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
     created_deployment = _parse_yaml_stdout(create_dep_res)
     assert created_deployment["hostname"] == "cli-json.example.test"
     assert created_deployment["user_values_json"] == {"domain": "cli-json.example.test", "message": "hi"}
+    assert created_deployment["tos_version"] == "2026-07-01"
+
+
+def test_cli_create_deployment_requires_tos_version(cli_runner):
+    runner, app = cli_runner
+
+    assert runner.invoke(app, ["create-user", "deptos@example.com"]).exit_code == 0
+    assert runner.invoke(app, ["create-product", "dep-tos-product", "dep tos desc"]).exit_code == 0
+    template_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            "1",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "1.0.0",
+            "--values-schema-json",
+            '{"type":"object","properties":{"domain":{"type":"string","title":"hostname"}}}',
+        ],
+    )
+    assert template_res.exit_code == 0
+    template_id = _parse_yaml_stdout(template_res)["id"]
+    assert runner.invoke(app, ["update-product", "1", "--template-id", str(template_id)]).exit_code == 0
+    ptv_id = _create_free_plan_template_via_services(1)
+
+    # Omit --tos-version: Typer must reject the required option before any create.
+    res = runner.invoke(
+        app,
+        [
+            "create-deployment",
+            "--user-id",
+            "1",
+            "--desired-template-id",
+            str(template_id),
+            "--user-values-json",
+            '{"domain":"cli-notos.example.test"}',
+            "--plan-template-id",
+            str(ptv_id),
+        ],
+    )
+    assert res.exit_code != 0
 
 
 def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
@@ -639,6 +686,8 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
             str(template_id),
             "--user-values-file",
             str(values_file),
+            "--tos-version",
+            "2026-07-01",
             "--plan-template-id",
             str(ptv_id),
         ],
@@ -666,6 +715,8 @@ def test_cli_create_deployment_user_values_invalid_json_returns_stable_error(cli
             "1",
             "--user-values-json",
             "{not-json}",
+            "--tos-version",
+            "2026-07-01",
             "--plan-template-id",
             "1",
         ],
@@ -686,6 +737,8 @@ def test_cli_create_deployment_not_found_returns_stable_error(cli_runner):
             "99999",
             "--desired-template-id",
             "1",
+            "--tos-version",
+            "2026-07-01",
             "--plan-template-id",
             "1",
         ],
@@ -706,6 +759,8 @@ def test_cli_rejects_removed_hostname_write_option(cli_runner):
             "1",
             "--desired-template-id",
             "1",
+            "--tos-version",
+            "2026-07-01",
             "--plan-template-id",
             "1",
             "--hostname",
@@ -791,6 +846,8 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
             str(tmpl1_id),
             "--user-values-json",
             json.dumps({"domain": domain}),
+            "--tos-version",
+            "2026-07-01",
             "--plan-template-id",
             str(ptv_id),
         ],
@@ -1098,7 +1155,7 @@ def test_cli_worker_parallel_processes_multiple_jobs(cli_runner, monkeypatch):
             ptv_id = create_free_plan_template(session, product.id)
             deployment = deployment_service.create_deployment(
                 session,
-                payload=DeploymentCreate(
+                payload=DeploymentCreate(tos_version="2026-07-01", 
                     user_id=user.id,
                     desired_template_id=template.id,
                     plan_template_id=ptv_id,

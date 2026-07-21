@@ -218,7 +218,7 @@ class TestSubscriptionAPI:
             f"/api/users/{user_id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "plan_template_id": ptv_id,
+                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
                 "user_values_json": {"user": {"host": "sub.example.com"}},
             },
         )
@@ -329,7 +329,7 @@ class TestDeploymentPlanTemplate:
             f"/api/users/{user_id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "plan_template_id": ptv_id,
+                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
                 "user_values_json": {"user": {"host": "validptv.example.com"}},
             },
         )
@@ -349,7 +349,7 @@ class TestDeploymentPlanTemplate:
             f"/api/users/{user_id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "plan_template_id": 99999,
+                "tos_version": "2026-07-01", "plan_template_id": 99999,
                 "user_values_json": {"user": {"host": "badptv.example.com"}},
             },
         )
@@ -389,7 +389,7 @@ class TestDeploymentPlanTemplate:
             f"/api/users/{user_id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "plan_template_id": old_ptv.id,
+                "tos_version": "2026-07-01", "plan_template_id": old_ptv.id,
                 "user_values_json": {"user": {"host": "stale.example.com"}},
             },
         )
@@ -415,7 +415,7 @@ class TestDeploymentPlanTemplate:
             f"/api/users/{user_id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "plan_template_id": other_ptv_id,
+                "tos_version": "2026-07-01", "plan_template_id": other_ptv_id,
                 "user_values_json": {"user": {"host": "cross.example.com"}},
             },
         )
@@ -465,7 +465,7 @@ def authz_setup(db_session):
             f"/api/users/{user.id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "plan_template_id": ptv_id,
+                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
                 "user_values_json": {"user": {"host": "authz.example.com"}},
             },
         )
@@ -482,7 +482,7 @@ def authz_setup(db_session):
             "product_id": product_id,
             "template_id": template_id,
             "plan_id": plan_id,
-            "plan_template_id": ptv_id,
+            "tos_version": "2026-07-01", "plan_template_id": ptv_id,
             "subscription_id": subscription_id,
         }
 

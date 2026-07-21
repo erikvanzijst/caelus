@@ -9,6 +9,10 @@ Customer's behalf.
 In case of conflict between this DPA and the Terms, this DPA prevails with
 respect to the processing of Personal Data.
 
+**Effective date:** 2026-07-01  
+This DPA takes effect on the effective date of the Terms and is versioned
+alongside them.
+
 ---
 
 ## 1. Definitions

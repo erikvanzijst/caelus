@@ -172,7 +172,7 @@ class TestCheckAvailable:
         _check_available(db_session, "free.example.com")
 
     def test_in_use_raises(self, db_session, seed_parents):
-        dep = DeploymentORM(
+        dep = DeploymentORM(tos_version="2026-07-01", 
             user_id=seed_parents["user_id"],
             desired_template_id=seed_parents["template_id"],
             hostname="taken.example.com",
@@ -186,7 +186,7 @@ class TestCheckAvailable:
             _check_available(db_session, "taken.example.com")
 
     def test_deleted_deployment_not_in_use(self, db_session, seed_parents):
-        dep = DeploymentORM(
+        dep = DeploymentORM(tos_version="2026-07-01", 
             user_id=seed_parents["user_id"],
             desired_template_id=seed_parents["template_id"],
             hostname="recycled.example.com",
@@ -363,7 +363,7 @@ class TestRequireValidHostname:
 
     def test_mixed_case_detected_as_in_use(self, db_session, seed_parents):
         """Mixed-case FQDN should be detected as in-use when lowercase variant exists."""
-        dep = DeploymentORM(
+        dep = DeploymentORM(tos_version="2026-07-01", 
             user_id=seed_parents["user_id"],
             desired_template_id=seed_parents["template_id"],
             hostname="taken.example.com",
@@ -391,7 +391,7 @@ class TestRequireValidHostname:
 
     def test_short_circuits_on_in_use(self, db_session, seed_parents):
         """In-use failure should not perform DNS resolution."""
-        dep = DeploymentORM(
+        dep = DeploymentORM(tos_version="2026-07-01", 
             user_id=seed_parents["user_id"],
             desired_template_id=seed_parents["template_id"],
             hostname="taken.example.com",
@@ -466,7 +466,7 @@ class TestHostnameCheckEndpoint:
             json={
                 "desired_template_id": template_id,
                 "user_values_json": {"host": "occupied.example.com"},
-                "plan_template_id": ptv_id,
+                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
             },
         )
         resp = client.get("/api/hostnames/occupied.example.com")
@@ -613,7 +613,7 @@ class TestServerSideEnforcement:
             json={
                 "desired_template_id": template_id,
                 "user_values_json": {"host": "reserved.example.com"},
-                "plan_template_id": ptv_id,
+                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
             },
         )
         assert resp.status_code == 409
@@ -645,7 +645,7 @@ class TestServerSideEnforcement:
             json={
                 "desired_template_id": template_id,
                 "user_values_json": {"host": "taken.enforce.example.com"},
-                "plan_template_id": ptv_id,
+                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
             },
         )
         assert resp1.status_code == 201
@@ -657,7 +657,7 @@ class TestServerSideEnforcement:
             json={
                 "desired_template_id": template_id,
                 "user_values_json": {"host": "taken.enforce.example.com"},
-                "plan_template_id": ptv_id,
+                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
             },
         )
         assert resp2.status_code == 409
@@ -689,7 +689,7 @@ class TestServerSideEnforcement:
             json={
                 "desired_template_id": template_id,
                 "user_values_json": {"message": "hello"},
-                "plan_template_id": ptv_id,
+                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
             },
         )
         assert resp.status_code == 201
@@ -719,7 +719,7 @@ class TestServerSideEnforcement:
 
         dep = client.post(
             f"/api/users/{user_id}/deployments",
-            json={"desired_template_id": tmpl1.json()["id"], "user_values_json": {"host": "same.example.com"}, "plan_template_id": ptv_id},
+            json={"desired_template_id": tmpl1.json()["id"], "user_values_json": {"host": "same.example.com"}, "tos_version": "2026-07-01", "plan_template_id": ptv_id},
         )
         assert dep.status_code == 201
         dep_id = dep.json()["deployment"]["id"]

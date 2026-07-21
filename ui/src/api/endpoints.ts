@@ -136,7 +136,12 @@ export function listDeployments(userId: number) {
 
 export function createDeployment(
   userId: number,
-  payload: { desired_template_id: number; user_values_json?: object; plan_template_id?: number },
+  payload: {
+    desired_template_id: number
+    user_values_json?: object
+    plan_template_id?: number
+    tos_version: string
+  },
 ) {
   return requestJson<DeploymentCreateResponse>(`/users/${userId}/deployments`, {
     method: 'POST',

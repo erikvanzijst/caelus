@@ -35,7 +35,7 @@ def _create_deployment(client, db_session, *, user_id: int) -> str:
     ptv_id = create_free_plan_template(db_session, product_id)
     resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_id, "plan_template_id": ptv_id},
+        json={"desired_template_id": template_id, "tos_version": "2026-07-01", "plan_template_id": ptv_id},
     )
     assert resp.status_code == 201
     return resp.json()["deployment"]["id"]
@@ -99,7 +99,7 @@ def test_admin_can_read_other_users_credentials(client, db_session, stub_sftp):
     ptv_id = create_free_plan_template(db_session, product_id)
     deployment_id = client.post(
         f"/api/users/{regular_id}/deployments",
-        json={"desired_template_id": template_id, "plan_template_id": ptv_id},
+        json={"desired_template_id": template_id, "tos_version": "2026-07-01", "plan_template_id": ptv_id},
     ).json()["deployment"]["id"]
 
     resp = client.get(f"/api/users/{regular_id}/deployments/{deployment_id}/sftp")

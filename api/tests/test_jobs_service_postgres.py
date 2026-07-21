@@ -42,7 +42,7 @@ def _seed_jobs(engine, *, job_count: int) -> None:
         )
         deployment = deployments.create_deployment(
             session,
-            payload=deployments.DeploymentCreate(
+            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
                 user_id=user.id,
                 desired_template_id=template.id,
                 user_values_json={"domain": f"pg-jobs-{token}.example.test"},

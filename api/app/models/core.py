@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Optional, Any
 from uuid import UUID, uuid4
 
-from pydantic import ConfigDict, model_validator
+from pydantic import ConfigDict, field_validator, model_validator
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String, Uuid, func
 
@@ -262,6 +262,10 @@ class DeploymentORM(DeploymentBase, table=True):
     user_values_json: Optional[dict[str, Any]] = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
+    # ISO-8601 effective date of the Terms of Service the user accepted when
+    # creating this deployment. Recorded verbatim from the client; NOT NULL so
+    # every deployment carries a comparable version for future re-approval.
+    tos_version: str = Field(sa_column=Column(String(), nullable=False))
     status: str = Field(default="pending", nullable=False, index=True)
     generation: int = Field(default=1, nullable=False)
     last_error: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
@@ -302,6 +306,19 @@ class DeploymentCreate(DeploymentBase):
     plan_template_id: int
     user_values_json: dict[str, Any] = Field(default=dict())
     user_id: Optional[int] = None
+    # The ToS version (effective date) the user accepted. Required: creating a
+    # deployment is the explicit act of agreement. Validated for shape only; the
+    # server records what the client displayed, it does not check "currency".
+    tos_version: str
+
+    @field_validator("tos_version")
+    @classmethod
+    def _validate_tos_version(cls, v: str) -> str:
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except (ValueError, TypeError):
+            raise ValueError("tos_version must be an ISO-8601 date (YYYY-MM-DD)")
+        return v
 
 
 class DeploymentUpdate(SQLModel):
@@ -315,6 +332,7 @@ class DeploymentUpdate(SQLModel):
 class DeploymentRead(DeploymentBase):
     id: UUID
     created_at: datetime
+    tos_version: str
     user: UserRead
     hostname: Optional[str] = None
     desired_template: ProductTemplateVersionRead

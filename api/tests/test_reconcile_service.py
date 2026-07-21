@@ -92,7 +92,7 @@ def _seed_deployment(db_session, *, storage_bytes: int | None = 0) -> int:
     ptv_id = _create_plan_template(db_session, product.id, storage_bytes)
     deployment = deployments.create_deployment(
         db_session,
-        payload=DeploymentCreate(
+        payload=DeploymentCreate(tos_version="2026-07-01", 
             user_id=user.id,
             desired_template_id=template.id,
             user_values_json={"user": {"message": "hello", "domain": "reconcile.example.test"}},

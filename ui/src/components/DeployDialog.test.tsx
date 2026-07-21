@@ -157,6 +157,10 @@ describe('DeployDialog', () => {
     const hostnameInput = screen.getByRole('textbox', { name: /hostname/i })
     fireEvent.change(hostnameInput, { target: { value: 'test.example.com' } })
 
+    // Launch stays disabled until the Terms of Service checkbox is checked.
+    expect(screen.getByRole('button', { name: 'Launch' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox'))
+
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Launch' })).toBeEnabled()
     })
@@ -168,6 +172,7 @@ describe('DeployDialog', () => {
         desired_template_id: 10,
         user_values_json: { hostname: 'test.example.com' },
         plan_template_id: 100,
+        tos_version: '2026-07-01',
       })
     })
 
@@ -193,6 +198,7 @@ describe('DeployDialog', () => {
 
     const hostnameInput = screen.getByRole('textbox', { name: /hostname/i })
     fireEvent.change(hostnameInput, { target: { value: 'test.example.com' } })
+    fireEvent.click(screen.getByRole('checkbox'))
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Launch' })).toBeEnabled()
@@ -202,6 +208,36 @@ describe('DeployDialog', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Server error')).toBeInTheDocument()
+    })
+  })
+
+  it('opening and closing the ToS modal preserves the entered hostname', async () => {
+    listTemplatesMock.mockResolvedValue([helloTemplate])
+    listPlansMock.mockResolvedValue([freePlan])
+    listDomainsMock.mockResolvedValue([])
+    checkHostnameMock.mockResolvedValue({ fqdn: 'keep.example.com', usable: true, reason: null })
+
+    renderWithQuery(<DeployDialog product={helloWorld} userId={1} onClose={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Configure application values:')).toBeInTheDocument()
+    })
+
+    const hostnameInput = screen.getByRole('textbox', { name: /hostname/i })
+    fireEvent.change(hostnameInput, { target: { value: 'keep.example.com' } })
+
+    // Open the ToS document from the agreement text.
+    fireEvent.click(screen.getByRole('button', { name: 'Terms of Service' }))
+    await waitFor(() => {
+      expect(screen.getByText(/Effective date:/i)).toBeInTheDocument()
+    })
+
+    // Close it and confirm the deploy form kept the hostname. The background
+    // dialog is aria-hidden while the modal is open and during its close
+    // transition, so retry until the field is reachable again.
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: /hostname/i })).toHaveValue('keep.example.com')
     })
   })
 
@@ -234,6 +270,7 @@ describe('DeployDialog', () => {
     const deployment: Deployment = {
       id: '00000000-0000-0000-0000-00000000002a',
       user_id: 1,
+      tos_version: '2026-07-01',
       desired_template_id: 5,
       name: 'hello-world-abc123',
       namespace: 'test-example-123456789',

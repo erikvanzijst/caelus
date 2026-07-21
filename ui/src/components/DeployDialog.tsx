@@ -5,6 +5,12 @@ import { createDeployment, updateDeployment, listTemplates, listPlans } from '..
 import type { Deployment, Plan, Product, ProductTemplate } from '../api/types'
 import { validateUserValues } from './UserValuesForm'
 import { DeployDialogContent } from './DeployDialogContent'
+import { LEGAL_DOCS } from '../content/legal'
+
+// Version (effective date) of the Terms of Service this build displays; recorded
+// on the deployment when the user accepts. Sourced from the bundled document so
+// it stays in lockstep with the text shown in the agreement modal.
+const TOS_VERSION = LEGAL_DOCS.terms.version
 
 interface DeployDialogProps {
   product: Product
@@ -20,6 +26,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
   const [userValuesErrors, setUserValuesErrors] = useState<string[]>([])
   const [hostnameValid, setHostnameValid] = useState(true)
   const [selectedPlanTemplateId, setSelectedPlanTemplateId] = useState<number | null>(null)
+  const [tosAccepted, setTosAccepted] = useState(false)
 
   const isEditMode = Boolean(deployment)
 
@@ -66,6 +73,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
         desired_template_id: payload.templateId,
         user_values_json: payload.userValuesJson,
         plan_template_id: payload.planTemplateId,
+        tos_version: TOS_VERSION,
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
@@ -172,7 +180,8 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
             activeMutation.isPending ||
             !activeTemplate ||
             !hostnameValid ||
-            (!isEditMode && !effectivePlanTemplateId)
+            (!isEditMode && !effectivePlanTemplateId) ||
+            (!isEditMode && !tosAccepted)
           }
           launchPending={activeMutation.isPending}
           formError={formError}
@@ -184,6 +193,9 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
           plans={plans}
           selectedPlanTemplateId={isEditMode ? (deployment?.subscription?.plan_template?.id ?? null) : effectivePlanTemplateId}
           onSelectPlan={isEditMode ? undefined : (planTemplateId) => setSelectedPlanTemplateId(planTemplateId)}
+          showTosAgreement={!isEditMode}
+          tosAccepted={tosAccepted}
+          onTosAcceptedChange={setTosAccepted}
         />
       </DialogContent>
     </Dialog>

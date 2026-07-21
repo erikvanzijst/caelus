@@ -413,6 +413,11 @@ def create_deployment(
     user_id: int = typer.Option(..., "--user-id"),
     desired_template_id: int = typer.Option(..., "--desired-template-id"),
     plan_template_id: int = typer.Option(..., "--plan-template-id"),
+    tos_version: str = typer.Option(
+        ...,
+        "--tos-version",
+        help="ISO-8601 effective date (YYYY-MM-DD) of the Terms of Service being accepted.",
+    ),
     user_values_json: str | None = typer.Option(
         None,
         "--user-values-json",
@@ -459,6 +464,7 @@ def create_deployment(
                     user_id=user_id,
                     desired_template_id=desired_template_id,
                     plan_template_id=plan_template_id,
+                    tos_version=tos_version,
                     user_values_json=parsed_user_values,
                 ),
             )

@@ -80,7 +80,7 @@ def authz_setup(db_session):
             f"/api/users/{user.id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "plan_template_id": ptv_id,
+                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
                 "user_values_json": {"user": {"host": "authz.example.com"}},
             },
         )
@@ -96,7 +96,7 @@ def authz_setup(db_session):
             "product_id": product_id,
             "template_id": template_id,
             "deployment_id": deployment_id,
-            "plan_template_id": ptv_id,
+            "tos_version": "2026-07-01", "plan_template_id": ptv_id,
         }
 
     fastapi_app.dependency_overrides.clear()
@@ -205,7 +205,7 @@ def test_other_user_rejected_from_resources(authz_setup):
         ("DELETE", f"/api/users/{s['user'].id}/deployments/{s['deployment_id']}", None),
         ("POST", f"/api/users/{s['user'].id}/deployments", {
             "desired_template_id": s["template_id"],
-            "plan_template_id": s["plan_template_id"],
+            "tos_version": "2026-07-01", "plan_template_id": s["plan_template_id"],
             "user_values_json": {"user": {"host": "other.example.com"}},
         }),
     ]

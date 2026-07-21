@@ -87,7 +87,7 @@ def test_deployment_unique_constraint(db_session):
     # Create first deployment
     dep1 = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(
+        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
             user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"},
             plan_template_id=ptv_id,
         ),
@@ -96,7 +96,7 @@ def test_deployment_unique_constraint(db_session):
     with pytest.raises(HostnameException, match="in_use"):
         deployments.create_deployment(
             db_session,
-            payload=deployments.DeploymentCreate(
+            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
                 user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"},
                 plan_template_id=ptv_id,
             ),
@@ -120,7 +120,7 @@ def test_deployment_unique_constraint(db_session):
     # Now creating same deployment should succeed
     dep2 = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(
+        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
             user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"},
             plan_template_id=ptv_id,
         ),
@@ -168,7 +168,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
 
     dep_a = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(
+        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
             user_id=user_a.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "shared.example.com"},
@@ -185,7 +185,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
     with pytest.raises(HostnameException, match="in_use"):
         deployments.create_deployment(
             db_session,
-            payload=deployments.DeploymentCreate(
+            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
                 user_id=user_b.id,
                 desired_template_id=template_v2.id,
                 user_values_json={"domain": "shared.example.com"},
@@ -205,7 +205,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
 
     dep_b = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(
+        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
             user_id=user_b.id,
             desired_template_id=template_v2.id,
             user_values_json={"domain": "shared.example.com"},
@@ -241,7 +241,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
 
     dep_a = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(
+        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
             user_id=user.id,
             desired_template_id=template.id,
             user_values_json={"domain": "active.example.com"},
@@ -251,7 +251,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
     with pytest.raises(HostnameException, match="in_use"):
         deployments.create_deployment(
             db_session,
-            payload=deployments.DeploymentCreate(
+            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
                 user_id=user.id,
                 desired_template_id=template.id,
                 user_values_json={"domain": "active.example.com"},
@@ -268,7 +268,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
 
     dep_b = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(
+        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
             user_id=user.id,
             desired_template_id=template.id,
             user_values_json={"domain": "active.example.com"},

@@ -59,12 +59,13 @@ describe('endpoints payload contracts', () => {
   it('creates deployments with desired_template_id payload', async () => {
     vi.mocked(requestJson).mockResolvedValueOnce({} as never)
 
-    await createDeployment(3, { desired_template_id: 7 })
+    await createDeployment(3, { desired_template_id: 7, tos_version: '2026-07-01' })
 
     expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
       method: 'POST',
       body: JSON.stringify({
         desired_template_id: 7,
+        tos_version: '2026-07-01',
       }),
     })
   })
@@ -78,7 +79,7 @@ describe('endpoints payload contracts', () => {
 
     await createDeployment(
       3,
-      { desired_template_id: 7, user_values_json: userValues },
+      { desired_template_id: 7, user_values_json: userValues, tos_version: '2026-07-01' },
     )
 
     expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
@@ -86,6 +87,7 @@ describe('endpoints payload contracts', () => {
       body: JSON.stringify({
         desired_template_id: 7,
         user_values_json: userValues,
+        tos_version: '2026-07-01',
       }),
     })
   })
@@ -98,13 +100,14 @@ describe('endpoints payload contracts', () => {
       user: { message: 'Hello' },
     }
 
-    await createDeployment(3, { desired_template_id: 7, user_values_json: userValues })
+    await createDeployment(3, { desired_template_id: 7, user_values_json: userValues, tos_version: '2026-07-01' })
 
     expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
       method: 'POST',
       body: JSON.stringify({
         desired_template_id: 7,
         user_values_json: userValues,
+        tos_version: '2026-07-01',
       }),
     })
   })

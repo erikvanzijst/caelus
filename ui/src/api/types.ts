@@ -78,6 +78,7 @@ export interface Deployment {
   user_values_json?: Record<string, unknown> | null
   id: string
   created_at: IsoDate
+  tos_version: string
   user: User
   desired_template: ProductTemplate
   applied_template?: ProductTemplate | null

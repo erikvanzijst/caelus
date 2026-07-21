@@ -556,7 +556,7 @@ class TestDeploymentSubscriptionAtomic:
 
         dep = deployments.create_deployment(
             db_session,
-            payload=deployments.DeploymentCreate(
+            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
                 user_id=user.id,
                 desired_template_id=template.id,
                 user_values_json={"domain": "atomic.example.com"},
@@ -580,7 +580,7 @@ class TestDeploymentSubscriptionAtomic:
         # Create the first deployment to claim the hostname
         deployments.create_deployment(
             db_session,
-            payload=deployments.DeploymentCreate(
+            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
                 user_id=user.id,
                 desired_template_id=template.id,
                 user_values_json={"domain": "conflict.example.com"},
@@ -600,7 +600,7 @@ class TestDeploymentSubscriptionAtomic:
         with pytest.raises(HostnameException):
             deployments.create_deployment(
                 db_session,
-                payload=deployments.DeploymentCreate(
+                payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
                     user_id=user.id,
                     desired_template_id=template.id,
                     user_values_json={"domain": "conflict.example.com"},

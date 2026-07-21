@@ -88,7 +88,7 @@ def _create_paid_deployment(client, db_session, product_id, template_id):
 
     resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_id, "plan_template_id": ptv_id},
+        json={"desired_template_id": template_id, "tos_version": "2026-07-01", "plan_template_id": ptv_id},
     )
     return user_id, resp
 
@@ -178,7 +178,7 @@ def test_free_deployment_unchanged(paid_client, db_session):
 
     resp = paid_client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_id, "plan_template_id": ptv_id},
+        json={"desired_template_id": template_id, "tos_version": "2026-07-01", "plan_template_id": ptv_id},
     )
 
     assert resp.status_code == 201
@@ -224,7 +224,7 @@ def test_paid_plan_no_provider_treated_as_free(client, db_session):
 
     resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_id, "plan_template_id": ptv_id},
+        json={"desired_template_id": template_id, "tos_version": "2026-07-01", "plan_template_id": ptv_id},
     )
 
     assert resp.status_code == 201
@@ -263,7 +263,7 @@ def test_mollie_failure_returns_error_no_db_records(
     with pytest.raises(RuntimeError, match="Mollie API unreachable"):
         paid_client.post(
             f"/api/users/{user_id}/deployments",
-            json={"desired_template_id": template_id, "plan_template_id": ptv_id},
+            json={"desired_template_id": template_id, "tos_version": "2026-07-01", "plan_template_id": ptv_id},
         )
 
     fake_payment_provider.ensure_customer = original
@@ -703,6 +703,8 @@ def test_cli_refuses_paid_plan_deployment(cli_runner, monkeypatch):
             "create-deployment",
             "--user-id", str(user_id),
             "--desired-template-id", str(template_id),
+            "--tos-version",
+            "2026-07-01",
             "--plan-template-id", str(ptv_id),
         ],
     )
@@ -765,6 +767,8 @@ def test_cli_creates_free_plan_deployment(cli_runner, monkeypatch):
             "create-deployment",
             "--user-id", str(user_id),
             "--desired-template-id", str(template_id),
+            "--tos-version",
+            "2026-07-01",
             "--plan-template-id", str(ptv_id),
         ],
     )

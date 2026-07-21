@@ -758,6 +758,11 @@ def test_cli_creates_free_plan_deployment(cli_runner, monkeypatch):
     user = yaml.safe_load(result.output)
     user_id = user["id"]
 
+    # Deploying requires prior ToS acceptance.
+    assert runner.invoke(
+        app, ["accept-tos", "--user-id", str(user_id), "--version", "2026-07-01"]
+    ).exit_code == 0
+
     # Deploy with free plan — should succeed
     result = runner.invoke(
         app,

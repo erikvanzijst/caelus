@@ -9,11 +9,11 @@ from app.models import DeploymentReconcileJobORM, ProductORM
 from app.services import deployments, products, templates, users
 from app.services.jobs import JobService
 from app.services.errors import DeploymentInProgressException, NotFoundException
-from tests.conftest import create_free_plan_template
+from tests.conftest import create_free_plan_template, make_accepted_user
 
 
 def _seed_deployment(db_session):
-    user = users.create_user(db_session, payload=users.UserCreate(email="jobs-user@example.com"))
+    user = make_accepted_user(db_session, "jobs-user@example.com")
     product = products.create_product(
         db_session,
         payload=products.ProductCreate(name="jobs-product", description="jobs desc"),

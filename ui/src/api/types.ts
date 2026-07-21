@@ -8,6 +8,13 @@ export interface User {
   created_at: IsoDate
 }
 
+// The current user's Terms of Service acceptance status. `version` is null until
+// they have accepted. Sourced from GET /api/me/tos-acceptance.
+export interface TosAcceptance {
+  version: string | null
+  accepted_at: IsoDate | null
+}
+
 export interface Product {
   id: number
   name: string

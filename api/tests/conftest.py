@@ -9,12 +9,18 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 from typer.testing import CliRunner
 
+from app.config import get_settings
 from app.db import get_session, init_db
 from app.deps import get_payment_provider
 from app.main import app
 from app.models import UserORM, PlanORM, PlanTemplateVersionORM, BillingInterval
 from app.models.core import _utcnow
 from app.services.mollie import FakePaymentProvider
+
+# The current ToS version, used to pre-accept test users so deployment tests
+# (which now require prior acceptance) work without threading acceptance through
+# every case. Tests that specifically exercise the acceptance flow opt out.
+CURRENT_TOS_VERSION = get_settings().current_tos_version
 
 
 @pytest.fixture(autouse=True)
@@ -137,17 +143,45 @@ OTHER_EMAIL = "other@example.com"
 OTHER_AUTH_HEADER = {"X-Auth-Request-Email": OTHER_EMAIL}
 
 
-def create_user(client, email: str) -> dict:
+def create_user(client, email: str, accept_tos: bool = True) -> dict:
     """Provision a regular (non-admin) user and return its ``UserRead`` dict.
 
     Users are created on their first authenticated request, so hitting
     ``GET /api/me`` with the target email auto-provisions the user. Use the
     returned dict's ``["id"]`` for the user id. Replaces the removed
     ``POST /api/users`` endpoint for test setup.
+
+    By default the user is also marked as having accepted the current Terms of
+    Service, since deploying now requires prior acceptance. Pass
+    ``accept_tos=False`` to leave them unaccepted (for tests of the acceptance
+    flow itself).
     """
     resp = client.get("/api/me", headers={"X-Auth-Request-Email": email})
     assert resp.status_code == 200, f"provisioning {email}: {resp.status_code}"
+    if accept_tos:
+        acc = client.post(
+            "/api/me/tos-acceptance",
+            json={"version": CURRENT_TOS_VERSION},
+            headers={"X-Auth-Request-Email": email},
+        )
+        assert acc.status_code == 200, f"accepting tos for {email}: {acc.status_code}"
     return resp.json()
+
+
+def make_accepted_user(session, email: str):
+    """Create a user via the service *and* record ToS acceptance; return UserRead.
+
+    For service-level tests that create deployments directly through
+    ``create_deployment`` (which now requires the owning user to have accepted
+    the current Terms).
+    """
+    from app.services import users as _users
+
+    user = _users.create_user(session, _users.UserCreate(email=email))
+    _users.record_tos_acceptance(
+        session, user=session.get(UserORM, user.id), version=CURRENT_TOS_VERSION
+    )
+    return user
 
 
 @pytest.fixture
@@ -160,7 +194,8 @@ def client(db_session):
     app.dependency_overrides[get_payment_provider] = lambda: None
 
     # Pre-create the default test user as admin so existing tests pass
-    admin_user = UserORM(email=ADMIN_EMAIL, is_admin=True)
+    admin_user = UserORM(email=ADMIN_EMAIL, is_admin=True,
+                         tos_accepted_version=CURRENT_TOS_VERSION, tos_accepted_at=_utcnow())
     db_session.add(admin_user)
     db_session.commit()
 
@@ -191,7 +226,8 @@ def paid_client(db_session, fake_payment_provider, monkeypatch):
     app.dependency_overrides[get_session] = override_get_db
     app.dependency_overrides[get_payment_provider] = lambda: fake_payment_provider
 
-    admin_user = UserORM(email=ADMIN_EMAIL, is_admin=True)
+    admin_user = UserORM(email=ADMIN_EMAIL, is_admin=True,
+                         tos_accepted_version=CURRENT_TOS_VERSION, tos_accepted_at=_utcnow())
     db_session.add(admin_user)
     db_session.commit()
 
@@ -211,8 +247,14 @@ def user_client(db_session):
     app.dependency_overrides[get_session] = override_get_db
 
     # Pre-create admin user (some tests need resources created by admin)
-    admin_user = UserORM(email=ADMIN_EMAIL, is_admin=True)
+    admin_user = UserORM(email=ADMIN_EMAIL, is_admin=True,
+                         tos_accepted_version=CURRENT_TOS_VERSION, tos_accepted_at=_utcnow())
     db_session.add(admin_user)
+    # Pre-create the acting regular user as already-accepted so deploy tests
+    # under this client don't trip the acceptance precondition.
+    regular_user = UserORM(email=USER_EMAIL,
+                           tos_accepted_version=CURRENT_TOS_VERSION, tos_accepted_at=_utcnow())
+    db_session.add(regular_user)
     db_session.commit()
     db_session.refresh(admin_user)
 

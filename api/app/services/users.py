@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app.models import UserRead, UserORM, UserCreate
+from app.config import get_settings
+from app.models import TosAcceptanceRead, UserRead, UserORM, UserCreate
 from app.services.errors import NotFoundException, IntegrityException
 
 
@@ -27,6 +30,34 @@ def get_user(session: Session, *, user_id: int) -> UserRead:
     if not user:
         raise NotFoundException("User not found")
     return UserRead.model_validate(user)
+
+
+def get_tos_acceptance(user: UserORM) -> TosAcceptanceRead:
+    """Return the user's ToS acceptance status. Always readable; `version` is
+    null when the user has not yet accepted."""
+    return TosAcceptanceRead(
+        version=user.tos_accepted_version,
+        accepted_at=user.tos_accepted_at,
+    )
+
+
+def record_tos_acceptance(session: Session, *, user: UserORM, version: str) -> TosAcceptanceRead:
+    """Record the current user's acceptance of the Terms of Service.
+
+    The submitted version MUST equal the current ToS version; a mismatch is a
+    409 (the terms changed under the user). Recording is idempotent for the
+    current version — re-accepting simply re-stamps the acceptance time.
+    """
+    if version != get_settings().current_tos_version:
+        raise IntegrityException(
+            "Terms of Service have changed; please re-review and accept the current version"
+        )
+    user.tos_accepted_version = version
+    user.tos_accepted_at = datetime.now(UTC)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return get_tos_acceptance(user)
 
 
 def delete_user(session: Session, *, user_id: int) -> UserRead:

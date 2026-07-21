@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Optional, Any
 from uuid import UUID, uuid4
 
-from pydantic import ConfigDict, model_validator
+from pydantic import ConfigDict, field_validator, model_validator
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String, Uuid, func
 
@@ -32,6 +32,13 @@ class UserORM(UserBase, table=True):
     email: str = Field(nullable=False, unique=False)
     is_admin: bool = Field(default=False, nullable=False)
     mollie_customer_id: Optional[str] = Field(default=None)
+    # Terms of Service acceptance is a user-level fact recorded once, not per
+    # deployment. Both are NULL until the user's first deployment records
+    # consent. `tos_accepted_version` is the accepted ToS effective date
+    # (YYYY-MM-DD, recorded verbatim as displayed); `tos_accepted_at` is the
+    # instant of the click (a timestamp, the evidentiary value).
+    tos_accepted_version: Optional[str] = Field(default=None, nullable=True)
+    tos_accepted_at: Optional[datetime] = Field(default=None, nullable=True)
     created_at: datetime = Field(default_factory=_utcnow, nullable=False)
     deployments: list["DeploymentORM"] = Relationship(back_populates="user")
     subscriptions: list["SubscriptionORM"] = Relationship(
@@ -49,6 +56,32 @@ class UserRead(UserBase):
     id: int
     is_admin: bool
     created_at: datetime
+
+
+class TosAcceptanceCreate(SQLModel):
+    """Request body for recording the current user's ToS acceptance."""
+    model_config = ConfigDict(extra="forbid")
+    # The ToS version (effective date) the user is accepting, as displayed to
+    # them. Shape-validated here; the service additionally requires it to equal
+    # the current version before recording.
+    version: str
+
+    @field_validator("version")
+    @classmethod
+    def _validate_version(cls, v: str) -> str:
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except (ValueError, TypeError):
+            raise ValueError("version must be an ISO-8601 date (YYYY-MM-DD)")
+        return v
+
+
+class TosAcceptanceRead(SQLModel):
+    """The current user's ToS acceptance status. `version` is null until the
+    user has accepted; this resource is always readable (a 200 status document,
+    not a 404-when-absent)."""
+    version: Optional[str] = None
+    accepted_at: Optional[datetime] = None
 
 
 class ProductBase(SQLModel):

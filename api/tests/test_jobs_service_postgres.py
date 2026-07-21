@@ -10,6 +10,7 @@ from sqlmodel import Session, create_engine
 from app.db import init_db
 from app.services import deployments, products, templates, users
 from app.services.jobs import JobService
+from tests.conftest import make_accepted_user
 
 
 PG_TEST_DATABASE_URL = os.getenv("POSTGRES_TEST_DATABASE_URL")
@@ -23,7 +24,7 @@ pytestmark = pytest.mark.skipif(
 def _seed_jobs(engine, *, job_count: int) -> None:
     token = uuid4().hex[:8]
     with Session(engine) as session:
-        user = users.create_user(session, payload=users.UserCreate(email=f"pg-jobs-user-{token}@example.com"))
+        user = make_accepted_user(session, f"pg-jobs-user-{token}@example.com")
         product = products.create_product(
             session,
             payload=products.ProductCreate(name=f"pg-jobs-product-{token}", description="desc"),

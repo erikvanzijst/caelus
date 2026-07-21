@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createDeployment, createTemplate } from './endpoints'
+import { createDeployment, createTemplate, getTosAcceptance, recordTosAcceptance } from './endpoints'
 import { requestJson } from './client'
 
 vi.mock('./client', () => ({
@@ -106,6 +106,25 @@ describe('endpoints payload contracts', () => {
         desired_template_id: 7,
         user_values_json: userValues,
       }),
+    })
+  })
+
+  it('reads the ToS acceptance status', async () => {
+    vi.mocked(requestJson).mockResolvedValueOnce({ version: null, accepted_at: null } as never)
+
+    await getTosAcceptance()
+
+    expect(requestJson).toHaveBeenCalledWith('/me/tos-acceptance')
+  })
+
+  it('records ToS acceptance with the displayed version', async () => {
+    vi.mocked(requestJson).mockResolvedValueOnce({ version: '2026-07-01', accepted_at: 'x' } as never)
+
+    await recordTosAcceptance('2026-07-01')
+
+    expect(requestJson).toHaveBeenCalledWith('/me/tos-acceptance', {
+      method: 'POST',
+      body: JSON.stringify({ version: '2026-07-01' }),
     })
   })
 })

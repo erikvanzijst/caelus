@@ -13,6 +13,8 @@ from app.models import (
     DeploymentCreateResponse,
     DeploymentRead,
     SftpCredentialsRead,
+    TosAcceptanceCreate,
+    TosAcceptanceRead,
     UserORM,
     UserRead, DeploymentUpdate,
 )
@@ -47,6 +49,53 @@ def get_me(current_user: UserORM = Depends(get_current_user)) -> UserRead:
     is case-insensitive.
     """
     return UserRead.model_validate(current_user)
+
+
+@me_router.get(
+    "/me/tos-acceptance",
+    response_model=TosAcceptanceRead,
+    summary="Get the current user's Terms of Service acceptance",
+    response_description="The caller's ToS acceptance status; `version` is null "
+    "if they have not accepted.",
+)
+def get_my_tos_acceptance(
+    current_user: UserORM = Depends(get_current_user),
+) -> TosAcceptanceRead:
+    """Return whether — and which version of — the Terms of Service the caller
+    has accepted.
+
+    This is always readable and returns **200** even when the caller has not yet
+    accepted (in which case `version` and `accepted_at` are null), so clients can
+    treat "not accepted" as a normal state rather than a 404.
+    """
+    return user_service.get_tos_acceptance(current_user)
+
+
+@me_router.post(
+    "/me/tos-acceptance",
+    response_model=TosAcceptanceRead,
+    summary="Record the current user's Terms of Service acceptance",
+    response_description="The updated ToS acceptance status.",
+    responses={
+        409: {"description": "The submitted version is not the current Terms of "
+                             "Service version (the terms have changed)."},
+        422: {"description": "The submitted version is not a well-formed date."},
+    },
+)
+def record_my_tos_acceptance(
+    payload: TosAcceptanceCreate,
+    current_user: UserORM = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> TosAcceptanceRead:
+    """Record the caller's acceptance of the current Terms of Service.
+
+    The submitted `version` MUST equal the current ToS version; a mismatch is
+    rejected with **409** (the terms changed under the user, who must re-review).
+    Recording is idempotent for the current version.
+    """
+    return user_service.record_tos_acceptance(
+        session, user=current_user, version=payload.version
+    )
 
 
 @router.get("", response_model=list[UserRead])

@@ -191,6 +191,13 @@ def create_deployment(
     # Validate the plan template: must exist, belong to the same product, and be canonical.
     plan_template: PlanTemplateVersionORM = _validate_plan_template(session, payload.plan_template_id, template.product_id)
 
+    # Terms of Service acceptance is a precondition, recorded separately on the
+    # user via POST /api/me/tos-acceptance. Deploying without having accepted is
+    # rejected here (defense-in-depth: the two-step flow cannot be skipped by a
+    # direct API client).
+    if user.tos_accepted_version is None:
+        raise ValidationException("Terms of Service must be accepted before deploying")
+
     # Determine if this is a paid plan requiring payment.
     is_paid = payment_provider is not None and plan_template.price_cents > 0
 

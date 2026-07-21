@@ -9,6 +9,7 @@ from app.config import CaelusSettings
 from app.models import DeploymentCreate, DeploymentORM, ProductORM, PlanORM, PlanTemplateVersionORM, BillingInterval
 from app.models.core import _utcnow
 from app.services import deployments, products, templates, users
+from tests.conftest import make_accepted_user
 from app.services.reconcile import DeploymentReconciler
 from tests.provisioner_utils import FakeProvisioner
 
@@ -54,7 +55,7 @@ def _seed_deployment(db_session, *, storage_bytes: int | None = 0) -> int:
     Pass an explicit int to test plan storage injection, or ``None`` for a plan
     with no storage quota.
     """
-    user = users.create_user(db_session, payload=users.UserCreate(email="reconcile-user@example.com"))
+    user = make_accepted_user(db_session, "reconcile-user@example.com")
     product = products.create_product(
         db_session,
         payload=products.ProductCreate(name="reconcile-product", description="desc"),

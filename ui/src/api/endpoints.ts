@@ -1,8 +1,19 @@
 import { requestJson, requestMultipart } from './client'
-import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplateVersion, Product, ProductTemplate, SftpCredentials, User } from './types'
+import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplateVersion, Product, ProductTemplate, SftpCredentials, TosAcceptance, User } from './types'
 
 export function getMe() {
   return requestJson<User>('/me')
+}
+
+export function getTosAcceptance() {
+  return requestJson<TosAcceptance>('/me/tos-acceptance')
+}
+
+export function recordTosAcceptance(version: string) {
+  return requestJson<TosAcceptance>('/me/tos-acceptance', {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  })
 }
 
 export function listUsers() {
@@ -136,7 +147,11 @@ export function listDeployments(userId: number) {
 
 export function createDeployment(
   userId: number,
-  payload: { desired_template_id: number; user_values_json?: object; plan_template_id?: number },
+  payload: {
+    desired_template_id: number
+    user_values_json?: object
+    plan_template_id?: number
+  },
 ) {
   return requestJson<DeploymentCreateResponse>(`/users/${userId}/deployments`, {
     method: 'POST',

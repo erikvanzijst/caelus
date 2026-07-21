@@ -27,7 +27,7 @@ from app.services.errors import (
     NotFoundException,
     ValidationException,
 )
-from tests.conftest import create_free_plan_template, db_session
+from tests.conftest import create_free_plan_template, db_session, make_accepted_user
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ def _make_product(session, name="TestProduct"):
 
 
 def _make_user(session, email="plantest@example.com"):
-    return users.create_user(session, payload=users.UserCreate(email=email))
+    return make_accepted_user(session, email)
 
 
 def _make_plan(session, product_id, name="Basic", sort_order=None):

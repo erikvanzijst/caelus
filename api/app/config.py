@@ -11,6 +11,16 @@ class CaelusSettings(BaseSettings):
 
     base_url: str = "http://localhost:5173"
     base_url_api: str = "http://localhost:8000/api"
+
+    # Current Terms of Service version (the ToS markdown's effective date). This
+    # is a *release* constant, not per-environment config: it must match the ToS
+    # document bundled in the same image, which is identical in dev and prod. It
+    # is intentionally NOT set in .env/Terraform — a code default gives dev/prod
+    # parity by construction, and a CI test binds it to the ToS markdown so the
+    # two cannot drift. The CAELUS_CURRENT_TOS_VERSION override exists only as an
+    # emergency escape hatch and is not populated in normal operation.
+    current_tos_version: str = "2026-07-01"
+
     database_url: str = "postgresql+psycopg://caelus:caelus@localhost:5432/caelus"
     static_path: Path = Path(__file__).parent.parent / "static"
     log_level: str = "INFO"

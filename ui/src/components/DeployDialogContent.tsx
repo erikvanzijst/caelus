@@ -15,6 +15,7 @@ import { resolveApiPath } from '../api/client'
 import type { Plan, Product } from '../api/types'
 import { UserValuesForm } from './UserValuesForm'
 import { PlanCardContent } from './PlanCardContent'
+import { TosAgreement } from './TosAgreement'
 
 interface DeployDialogContentProps {
   product: Product
@@ -36,6 +37,9 @@ interface DeployDialogContentProps {
   plans?: Plan[]
   selectedPlanTemplateId?: number | null
   onSelectPlan?: (planTemplateId: number) => void
+  showTosAgreement?: boolean
+  tosAccepted?: boolean
+  onTosAcceptedChange?: (accepted: boolean) => void
 }
 
 export function DeployDialogContent({
@@ -58,6 +62,9 @@ export function DeployDialogContent({
   plans,
   selectedPlanTemplateId,
   onSelectPlan,
+  showTosAgreement,
+  tosAccepted = false,
+  onTosAcceptedChange,
 }: DeployDialogContentProps) {
   return (
     <>
@@ -164,6 +171,11 @@ export function DeployDialogContent({
           />
         )}
       </Stack>
+      {showTosAgreement && !loading && (
+        <Box sx={{ mt: 2.5 }}>
+          <TosAgreement checked={tosAccepted} onChange={(v) => onTosAcceptedChange?.(v)} />
+        </Box>
+      )}
       {(onCancel || onLaunch) && (
         <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 3 }}>
           {onCancel && <Button onClick={onCancel} variant="outlined">Cancel</Button>}

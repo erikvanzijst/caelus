@@ -28,7 +28,7 @@ def _parse_yaml_stdout(result) -> Any:
 
 def _seed_deployment_via_services() -> tuple[int, int]:
     from app.db import session_scope
-    from app.models import UserCreate, ProductCreate, ProductTemplateVersionCreate, DeploymentCreate
+    from app.models import UserCreate, ProductCreate, ProductTemplateVersionCreate, DeploymentCreate, UserORM
     from app.services import (
         users as user_service,
         products as product_service,
@@ -38,6 +38,10 @@ def _seed_deployment_via_services() -> tuple[int, int]:
 
     with session_scope() as session:
         user = user_service.create_user(session, UserCreate(email="getdep@example.com"))
+        # Deploying requires prior ToS acceptance (recorded on the user).
+        user_service.record_tos_acceptance(
+            session, user=session.get(UserORM, user.id), version="2026-07-01"
+        )
         product = product_service.create_product(
             session, payload=ProductCreate(name="dep-product", description="dep desc")
         )
@@ -524,6 +528,7 @@ def test_cli_create_deployment_uses_current_payload_shape(cli_runner):
     assert update_prod_res.exit_code == 0
 
     ptv_id = _create_free_plan_template_via_services(1)
+    runner.invoke(app, ["accept-tos", "--user-id", "1", "--version", "2026-07-01"])
     create_dep_res = runner.invoke(
         app,
         [
@@ -573,6 +578,9 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
     assert update_prod_res.exit_code == 0
 
     ptv_id = _create_free_plan_template_via_services(1)
+    accept_res = runner.invoke(app, ["accept-tos", "--user-id", "1", "--version", "2026-07-01"])
+    assert accept_res.exit_code == 0
+    assert _parse_yaml_stdout(accept_res)["version"] == "2026-07-01"
     create_dep_res = runner.invoke(
         app,
         [
@@ -591,6 +599,60 @@ def test_cli_create_deployment_accepts_user_values_json(cli_runner):
     created_deployment = _parse_yaml_stdout(create_dep_res)
     assert created_deployment["hostname"] == "cli-json.example.test"
     assert created_deployment["user_values_json"] == {"domain": "cli-json.example.test", "message": "hi"}
+
+
+def test_cli_create_deployment_requires_tos_acceptance(cli_runner):
+    runner, app = cli_runner
+
+    user_res = runner.invoke(app, ["create-user", "deptos@example.com"])
+    assert user_res.exit_code == 0
+    user_id = _parse_yaml_stdout(user_res)["id"]
+    assert runner.invoke(app, ["create-product", "dep-tos-product", "dep tos desc"]).exit_code == 0
+    template_res = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            "1",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "1.0.0",
+            "--values-schema-json",
+            '{"type":"object","properties":{"domain":{"type":"string","title":"hostname"}}}',
+        ],
+    )
+    assert template_res.exit_code == 0
+    template_id = _parse_yaml_stdout(template_res)["id"]
+    assert runner.invoke(app, ["update-product", "1", "--template-id", str(template_id)]).exit_code == 0
+    ptv_id = _create_free_plan_template_via_services(1)
+
+    create_args = [
+        "create-deployment",
+        "--user-id",
+        str(user_id),
+        "--desired-template-id",
+        str(template_id),
+        "--user-values-json",
+        '{"domain":"cli-notos.example.test"}',
+        "--plan-template-id",
+        str(ptv_id),
+    ]
+
+    # Without prior acceptance, deploying is rejected (parity with the API guard).
+    blocked = runner.invoke(app, create_args)
+    assert blocked.exit_code != 0
+
+    # Recording acceptance unblocks the same create.
+    accept = runner.invoke(
+        app, ["accept-tos", "--user-id", str(user_id), "--version", "2026-07-01"]
+    )
+    assert accept.exit_code == 0
+    assert _parse_yaml_stdout(accept)["version"] == "2026-07-01"
+
+    ok = runner.invoke(app, create_args)
+    assert ok.exit_code == 0
+    assert _parse_yaml_stdout(ok)["hostname"] == "cli-notos.example.test"
 
 
 def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
@@ -629,6 +691,7 @@ def test_cli_create_deployment_accepts_user_values_file(cli_runner, tmp_path):
     )
 
     ptv_id = _create_free_plan_template_via_services(1)
+    runner.invoke(app, ["accept-tos", "--user-id", "1", "--version", "2026-07-01"])
     create_dep_res = runner.invoke(
         app,
         [
@@ -780,6 +843,7 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
     assert update_prod_res.exit_code == 0
 
     ptv_id = _create_free_plan_template_via_services(1)
+    runner.invoke(app, ["accept-tos", "--user-id", "1", "--version", "2026-07-01"])
     domain = "upgrade-cli.example.test"
     create_dep_res = runner.invoke(
         app,
@@ -1064,7 +1128,7 @@ def test_cli_worker_parallel_processes_multiple_jobs(cli_runner, monkeypatch):
 
     # Seed multiple deployments to create multiple queued jobs
     from app.db import session_scope
-    from app.models import UserCreate, ProductCreate, ProductTemplateVersionCreate, DeploymentCreate
+    from app.models import UserCreate, ProductCreate, ProductTemplateVersionCreate, DeploymentCreate, UserORM
     from app.services import (
         users as user_service,
         products as product_service,
@@ -1077,6 +1141,9 @@ def test_cli_worker_parallel_processes_multiple_jobs(cli_runner, monkeypatch):
     deployment_ids = []
     with session_scope() as session:
         user = user_service.create_user(session, UserCreate(email="parallel@example.com"))
+        user_service.record_tos_acceptance(
+            session, user=session.get(UserORM, user.id), version="2026-07-01"
+        )
         for i in range(3):
             product = product_service.create_product(
                 session,

@@ -1,11 +1,9 @@
 """record ToS acceptance on the user
 
-Terms of Service acceptance is a user-level fact recorded once, not a
-per-deployment one. This adds two nullable columns to `user`
-(`tos_accepted_version`, `tos_accepted_at`) — NULL means "has not accepted yet",
-so no backfill is needed — and drops the earlier per-deployment
-`deployment.tos_version` column. There is no production data; the dev/test
-database is reset to match.
+Terms of Service acceptance is a user-level fact recorded once. This adds two
+nullable columns to `user` (`tos_accepted_version`, `tos_accepted_at`) — NULL
+means "has not accepted yet", so no backfill is needed. Acceptance is recorded
+via POST /api/me/tos-acceptance; the deployment table carries no ToS field.
 
 Revision ID: d7e8f9a0b1c2
 Revises: c7d8e9f0a1b2
@@ -28,16 +26,8 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column('tos_accepted_version', sa.String(), nullable=True))
         batch_op.add_column(sa.Column('tos_accepted_at', sa.DateTime(), nullable=True))
 
-    # Drop the superseded per-deployment column (batch mode so SQLite rebuilds).
-    with op.batch_alter_table('deployment') as batch_op:
-        batch_op.drop_column('tos_version')
-
 
 def downgrade() -> None:
-    # Re-add the per-deployment column as nullable (no data to restore).
-    with op.batch_alter_table('deployment') as batch_op:
-        batch_op.add_column(sa.Column('tos_version', sa.String(), nullable=True))
-
     with op.batch_alter_table('user') as batch_op:
         batch_op.drop_column('tos_accepted_at')
         batch_op.drop_column('tos_accepted_version')

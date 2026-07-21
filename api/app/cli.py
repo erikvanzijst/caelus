@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.db import session_scope
 from app.logging_config import configure_logging
 from app.models import (
+    TosAcceptanceCreate,
     UserCreate,
     DeploymentCreate,
     ProductTemplateVersionCreate,
@@ -413,11 +414,6 @@ def create_deployment(
     user_id: int = typer.Option(..., "--user-id"),
     desired_template_id: int = typer.Option(..., "--desired-template-id"),
     plan_template_id: int = typer.Option(..., "--plan-template-id"),
-    tos_version: str = typer.Option(
-        ...,
-        "--tos-version",
-        help="ISO-8601 effective date (YYYY-MM-DD) of the Terms of Service being accepted.",
-    ),
     user_values_json: str | None = typer.Option(
         None,
         "--user-values-json",
@@ -464,13 +460,46 @@ def create_deployment(
                     user_id=user_id,
                     desired_template_id=desired_template_id,
                     plan_template_id=plan_template_id,
-                    tos_version=tos_version,
                     user_values_json=parsed_user_values,
                 ),
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
         _echo_yaml_entity(result.deployment)
+
+
+@app.command("accept-tos")
+def accept_tos(
+    *,
+    user_id: int = typer.Option(..., "--user-id"),
+    version: str = typer.Option(
+        ...,
+        "--version",
+        help="ISO-8601 effective date (YYYY-MM-DD) of the Terms of Service being "
+        "accepted. Must equal the current Terms version.",
+    ),
+) -> None:
+    """Record a user's acceptance of the current Terms of Service.
+
+    Mirrors POST /api/me/tos-acceptance. Deploying requires that the owning user
+    has accepted first; run this before create-deployment for a new user.
+    """
+    with session_scope() as session:
+        _require_cli_user(session)
+        user = session.get(UserORM, user_id)
+        if not user or user.deleted_at:
+            typer.echo(f"Error: User {user_id} not found.", err=True)
+            raise typer.Exit(code=1)
+        try:
+            # Construct the request model to get the same ISO shape validation the
+            # API applies before the service's equal-to-current check.
+            payload = TosAcceptanceCreate(version=version)
+            acceptance = user_service.record_tos_acceptance(
+                session, user=user, version=payload.version
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(acceptance)
 
 
 @app.command("list-deployments")

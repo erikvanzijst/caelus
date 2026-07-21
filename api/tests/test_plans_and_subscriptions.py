@@ -27,7 +27,7 @@ from app.services.errors import (
     NotFoundException,
     ValidationException,
 )
-from tests.conftest import create_free_plan_template, db_session
+from tests.conftest import create_free_plan_template, db_session, make_accepted_user
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ def _make_product(session, name="TestProduct"):
 
 
 def _make_user(session, email="plantest@example.com"):
-    return users.create_user(session, payload=users.UserCreate(email=email))
+    return make_accepted_user(session, email)
 
 
 def _make_plan(session, product_id, name="Basic", sort_order=None):
@@ -556,7 +556,7 @@ class TestDeploymentSubscriptionAtomic:
 
         dep = deployments.create_deployment(
             db_session,
-            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+            payload=deployments.DeploymentCreate(
                 user_id=user.id,
                 desired_template_id=template.id,
                 user_values_json={"domain": "atomic.example.com"},
@@ -580,7 +580,7 @@ class TestDeploymentSubscriptionAtomic:
         # Create the first deployment to claim the hostname
         deployments.create_deployment(
             db_session,
-            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+            payload=deployments.DeploymentCreate(
                 user_id=user.id,
                 desired_template_id=template.id,
                 user_values_json={"domain": "conflict.example.com"},
@@ -600,7 +600,7 @@ class TestDeploymentSubscriptionAtomic:
         with pytest.raises(HostnameException):
             deployments.create_deployment(
                 db_session,
-                payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+                payload=deployments.DeploymentCreate(
                     user_id=user.id,
                     desired_template_id=template.id,
                     user_values_json={"domain": "conflict.example.com"},

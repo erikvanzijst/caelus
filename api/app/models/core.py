@@ -32,6 +32,13 @@ class UserORM(UserBase, table=True):
     email: str = Field(nullable=False, unique=False)
     is_admin: bool = Field(default=False, nullable=False)
     mollie_customer_id: Optional[str] = Field(default=None)
+    # Terms of Service acceptance is a user-level fact recorded once, not per
+    # deployment. Both are NULL until the user's first deployment records
+    # consent. `tos_accepted_version` is the accepted ToS effective date
+    # (YYYY-MM-DD, recorded verbatim as displayed); `tos_accepted_at` is the
+    # instant of the click (a timestamp, the evidentiary value).
+    tos_accepted_version: Optional[str] = Field(default=None, nullable=True)
+    tos_accepted_at: Optional[datetime] = Field(default=None, nullable=True)
     created_at: datetime = Field(default_factory=_utcnow, nullable=False)
     deployments: list["DeploymentORM"] = Relationship(back_populates="user")
     subscriptions: list["SubscriptionORM"] = Relationship(
@@ -49,6 +56,32 @@ class UserRead(UserBase):
     id: int
     is_admin: bool
     created_at: datetime
+
+
+class TosAcceptanceCreate(SQLModel):
+    """Request body for recording the current user's ToS acceptance."""
+    model_config = ConfigDict(extra="forbid")
+    # The ToS version (effective date) the user is accepting, as displayed to
+    # them. Shape-validated here; the service additionally requires it to equal
+    # the current version before recording.
+    version: str
+
+    @field_validator("version")
+    @classmethod
+    def _validate_version(cls, v: str) -> str:
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except (ValueError, TypeError):
+            raise ValueError("version must be an ISO-8601 date (YYYY-MM-DD)")
+        return v
+
+
+class TosAcceptanceRead(SQLModel):
+    """The current user's ToS acceptance status. `version` is null until the
+    user has accepted; this resource is always readable (a 200 status document,
+    not a 404-when-absent)."""
+    version: Optional[str] = None
+    accepted_at: Optional[datetime] = None
 
 
 class ProductBase(SQLModel):
@@ -262,10 +295,6 @@ class DeploymentORM(DeploymentBase, table=True):
     user_values_json: Optional[dict[str, Any]] = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
-    # ISO-8601 effective date of the Terms of Service the user accepted when
-    # creating this deployment. Recorded verbatim from the client; NOT NULL so
-    # every deployment carries a comparable version for future re-approval.
-    tos_version: str = Field(sa_column=Column(String(), nullable=False))
     status: str = Field(default="pending", nullable=False, index=True)
     generation: int = Field(default=1, nullable=False)
     last_error: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
@@ -306,19 +335,6 @@ class DeploymentCreate(DeploymentBase):
     plan_template_id: int
     user_values_json: dict[str, Any] = Field(default=dict())
     user_id: Optional[int] = None
-    # The ToS version (effective date) the user accepted. Required: creating a
-    # deployment is the explicit act of agreement. Validated for shape only; the
-    # server records what the client displayed, it does not check "currency".
-    tos_version: str
-
-    @field_validator("tos_version")
-    @classmethod
-    def _validate_tos_version(cls, v: str) -> str:
-        try:
-            datetime.strptime(v, "%Y-%m-%d")
-        except (ValueError, TypeError):
-            raise ValueError("tos_version must be an ISO-8601 date (YYYY-MM-DD)")
-        return v
 
 
 class DeploymentUpdate(SQLModel):
@@ -332,7 +348,6 @@ class DeploymentUpdate(SQLModel):
 class DeploymentRead(DeploymentBase):
     id: UUID
     created_at: datetime
-    tos_version: str
     user: UserRead
     hostname: Optional[str] = None
     desired_template: ProductTemplateVersionRead

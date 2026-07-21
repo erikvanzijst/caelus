@@ -8,7 +8,7 @@ from app.models import DeploymentORM, DeploymentReconcileJobORM, ProductORM, SQL
 from app.services.errors import HostnameException, IntegrityException
 from app.services.reconcile import DeploymentReconciler
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
-from tests.conftest import db_session
+from tests.conftest import db_session, make_accepted_user
 from tests.conftest import create_free_plan_template
 from tests.provisioner_utils import FakeProvisioner
 
@@ -55,14 +55,14 @@ def test_product_name_unique_constraint_is_case_insensitive(db_session):
 
 
 def test_user_email_unique_constraint_is_case_insensitive(db_session):
-    users.create_user(db_session, payload=users.UserCreate(email="CaseUser@example.com"))
+    make_accepted_user(db_session, "CaseUser@example.com")
     with pytest.raises(IntegrityException):
-        users.create_user(db_session, payload=users.UserCreate(email="caseuser@example.com"))
+        make_accepted_user(db_session, "caseuser@example.com")
 
 
 def test_deployment_unique_constraint(db_session):
     # Setup user
-    user = users.create_user(db_session, payload=users.UserCreate(email="user@example.com"))
+    user = make_accepted_user(db_session, "user@example.com")
     # Setup product and template
     product = products.create_product(
         db_session, payload=products.ProductCreate(name="prod2", description="desc")
@@ -87,7 +87,7 @@ def test_deployment_unique_constraint(db_session):
     # Create first deployment
     dep1 = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+        payload=deployments.DeploymentCreate(
             user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"},
             plan_template_id=ptv_id,
         ),
@@ -96,7 +96,7 @@ def test_deployment_unique_constraint(db_session):
     with pytest.raises(HostnameException, match="in_use"):
         deployments.create_deployment(
             db_session,
-            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+            payload=deployments.DeploymentCreate(
                 user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"},
                 plan_template_id=ptv_id,
             ),
@@ -120,7 +120,7 @@ def test_deployment_unique_constraint(db_session):
     # Now creating same deployment should succeed
     dep2 = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+        payload=deployments.DeploymentCreate(
             user_id=user.id, desired_template_id=template.id, user_values_json={"domain": "example.com"},
             plan_template_id=ptv_id,
         ),
@@ -129,8 +129,8 @@ def test_deployment_unique_constraint(db_session):
 
 
 def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_session):
-    user_a = users.create_user(db_session, payload=users.UserCreate(email="domain-a@example.com"))
-    user_b = users.create_user(db_session, payload=users.UserCreate(email="domain-b@example.com"))
+    user_a = make_accepted_user(db_session, "domain-a@example.com")
+    user_b = make_accepted_user(db_session, "domain-b@example.com")
     product = products.create_product(
         db_session,
         payload=products.ProductCreate(name="domain-uniq-product", description="desc"),
@@ -168,7 +168,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
 
     dep_a = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+        payload=deployments.DeploymentCreate(
             user_id=user_a.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "shared.example.com"},
@@ -185,7 +185,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
     with pytest.raises(HostnameException, match="in_use"):
         deployments.create_deployment(
             db_session,
-            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+            payload=deployments.DeploymentCreate(
                 user_id=user_b.id,
                 desired_template_id=template_v2.id,
                 user_values_json={"domain": "shared.example.com"},
@@ -205,7 +205,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
 
     dep_b = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+        payload=deployments.DeploymentCreate(
             user_id=user_b.id,
             desired_template_id=template_v2.id,
             user_values_json={"domain": "shared.example.com"},
@@ -216,7 +216,7 @@ def test_hostname_active_unique_constraint_across_non_deleted_deployments(db_ses
 
 
 def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_session):
-    user = users.create_user(db_session, payload=users.UserCreate(email="active-uniq@example.com"))
+    user = make_accepted_user(db_session, "active-uniq@example.com")
     product = products.create_product(
         db_session, payload=products.ProductCreate(name="active-uniq-product", description="desc")
     )
@@ -241,7 +241,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
 
     dep_a = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+        payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template.id,
             user_values_json={"domain": "active.example.com"},
@@ -251,7 +251,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
     with pytest.raises(HostnameException, match="in_use"):
         deployments.create_deployment(
             db_session,
-            payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+            payload=deployments.DeploymentCreate(
                 user_id=user.id,
                 desired_template_id=template.id,
                 user_values_json={"domain": "active.example.com"},
@@ -268,7 +268,7 @@ def test_deployment_active_unique_constraint_ignores_deleted_status_rows(db_sess
 
     dep_b = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+        payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template.id,
             user_values_json={"domain": "active.example.com"},

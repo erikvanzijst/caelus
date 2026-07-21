@@ -1,14 +1,14 @@
 import { Dialog, DialogContent } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo, useState } from 'react'
-import { createDeployment, updateDeployment, listTemplates, listPlans } from '../api/endpoints'
+import { createDeployment, updateDeployment, listTemplates, listPlans, getTosAcceptance, recordTosAcceptance } from '../api/endpoints'
 import type { Deployment, Plan, Product, ProductTemplate } from '../api/types'
 import { validateUserValues } from './UserValuesForm'
 import { DeployDialogContent } from './DeployDialogContent'
 import { LEGAL_DOCS } from '../content/legal'
 
 // Version (effective date) of the Terms of Service this build displays; recorded
-// on the deployment when the user accepts. Sourced from the bundled document so
+// as the user's acceptance on first launch. Sourced from the bundled document so
 // it stays in lockstep with the text shown in the agreement modal.
 const TOS_VERSION = LEGAL_DOCS.terms.version
 
@@ -42,6 +42,15 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
     enabled: !isEditMode,
   })
 
+  // Whether the current user has already accepted the current Terms. Only new
+  // launches care; a null version means "not yet accepted" -> show the checkbox.
+  const tosAcceptanceQuery = useQuery({
+    queryKey: ['tos-acceptance'],
+    queryFn: getTosAcceptance,
+    enabled: !isEditMode,
+  })
+  const hasAcceptedTos = tosAcceptanceQuery.data?.version != null
+
   const canonicalTemplate: ProductTemplate | undefined = useMemo(() => {
     return templatesQuery.data?.find((t) => t.id === product.template_id)
   }, [templatesQuery.data, product.template_id])
@@ -68,13 +77,21 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
   }, [isEditMode, selectedPlanTemplateId, plans])
 
   const createMutation = useMutation({
-    mutationFn: (payload: { templateId: number; userValuesJson?: object; planTemplateId?: number }) =>
-      createDeployment(userId, {
+    mutationFn: async (payload: { templateId: number; userValuesJson?: object; planTemplateId?: number }) => {
+      // First launch: record ToS acceptance (a separate user-level resource)
+      // before creating the deployment. Already-accepted users skip this. If
+      // acceptance fails (e.g. the terms changed -> 409), the error surfaces and
+      // no deployment is created.
+      if (!hasAcceptedTos) {
+        await recordTosAcceptance(TOS_VERSION)
+        queryClient.invalidateQueries({ queryKey: ['tos-acceptance'] })
+      }
+      return createDeployment(userId, {
         desired_template_id: payload.templateId,
         user_values_json: payload.userValuesJson,
         plan_template_id: payload.planTemplateId,
-        tos_version: TOS_VERSION,
-      }),
+      })
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
       if (data.checkout_url) {
@@ -181,7 +198,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
             !activeTemplate ||
             !hostnameValid ||
             (!isEditMode && !effectivePlanTemplateId) ||
-            (!isEditMode && !tosAccepted)
+            (!isEditMode && !hasAcceptedTos && !tosAccepted)
           }
           launchPending={activeMutation.isPending}
           formError={formError}
@@ -193,7 +210,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
           plans={plans}
           selectedPlanTemplateId={isEditMode ? (deployment?.subscription?.plan_template?.id ?? null) : effectivePlanTemplateId}
           onSelectPlan={isEditMode ? undefined : (planTemplateId) => setSelectedPlanTemplateId(planTemplateId)}
-          showTosAgreement={!isEditMode}
+          showTosAgreement={!isEditMode && !hasAcceptedTos}
           tosAccepted={tosAccepted}
           onTosAcceptedChange={setTosAccepted}
         />

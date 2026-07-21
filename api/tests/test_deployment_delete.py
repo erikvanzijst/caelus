@@ -36,7 +36,7 @@ def test_delete_deployment_flow(client, db_session):
     # create deployment
     dep_resp = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "example.com"}, "tos_version": "2026-07-01", "plan_template_id": ptv_id},
+        json={"desired_template_id": tmpl_id, "user_values_json": {"domain": "example.com"}, "plan_template_id": ptv_id},
     )
     assert dep_resp.status_code == 201
     dep_id = dep_resp.json()["deployment"]["id"]

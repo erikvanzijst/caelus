@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createDeployment, createTemplate } from './endpoints'
+import { createDeployment, createTemplate, getTosAcceptance, recordTosAcceptance } from './endpoints'
 import { requestJson } from './client'
 
 vi.mock('./client', () => ({
@@ -59,13 +59,12 @@ describe('endpoints payload contracts', () => {
   it('creates deployments with desired_template_id payload', async () => {
     vi.mocked(requestJson).mockResolvedValueOnce({} as never)
 
-    await createDeployment(3, { desired_template_id: 7, tos_version: '2026-07-01' })
+    await createDeployment(3, { desired_template_id: 7 })
 
     expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
       method: 'POST',
       body: JSON.stringify({
         desired_template_id: 7,
-        tos_version: '2026-07-01',
       }),
     })
   })
@@ -79,7 +78,7 @@ describe('endpoints payload contracts', () => {
 
     await createDeployment(
       3,
-      { desired_template_id: 7, user_values_json: userValues, tos_version: '2026-07-01' },
+      { desired_template_id: 7, user_values_json: userValues },
     )
 
     expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
@@ -87,7 +86,6 @@ describe('endpoints payload contracts', () => {
       body: JSON.stringify({
         desired_template_id: 7,
         user_values_json: userValues,
-        tos_version: '2026-07-01',
       }),
     })
   })
@@ -100,15 +98,33 @@ describe('endpoints payload contracts', () => {
       user: { message: 'Hello' },
     }
 
-    await createDeployment(3, { desired_template_id: 7, user_values_json: userValues, tos_version: '2026-07-01' })
+    await createDeployment(3, { desired_template_id: 7, user_values_json: userValues })
 
     expect(requestJson).toHaveBeenCalledWith('/users/3/deployments', {
       method: 'POST',
       body: JSON.stringify({
         desired_template_id: 7,
         user_values_json: userValues,
-        tos_version: '2026-07-01',
       }),
+    })
+  })
+
+  it('reads the ToS acceptance status', async () => {
+    vi.mocked(requestJson).mockResolvedValueOnce({ version: null, accepted_at: null } as never)
+
+    await getTosAcceptance()
+
+    expect(requestJson).toHaveBeenCalledWith('/me/tos-acceptance')
+  })
+
+  it('records ToS acceptance with the displayed version', async () => {
+    vi.mocked(requestJson).mockResolvedValueOnce({ version: '2026-07-01', accepted_at: 'x' } as never)
+
+    await recordTosAcceptance('2026-07-01')
+
+    expect(requestJson).toHaveBeenCalledWith('/me/tos-acceptance', {
+      method: 'POST',
+      body: JSON.stringify({ version: '2026-07-01' }),
     })
   })
 })

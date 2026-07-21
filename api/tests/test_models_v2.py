@@ -32,7 +32,7 @@ def test_deployment_create_supports_user_values_alias() -> None:
         {
             "user_id": 1,
             "desired_template_id": 2,
-            "tos_version": "2026-07-01", "plan_template_id": 1,
+            "plan_template_id": 1,
             "user_values_json": {"message": "hi"},
         }
     )
@@ -45,7 +45,7 @@ def test_deployment_write_models_forbid_hostname_field() -> None:
             {
                 "user_id": 1,
                 "desired_template_id": 2,
-                "tos_version": "2026-07-01", "plan_template_id": 1,
+                "plan_template_id": 1,
                 "hostname": "cloud.example.com",
                 "user_values_json": {"message": "hi"},
             }

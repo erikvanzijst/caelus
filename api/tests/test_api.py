@@ -219,7 +219,7 @@ def test_user_deployment_flow(client, db_session):
         json={
             "desired_template_id": template_id,
             "user_values_json": {"user": {"host": "cloud.example.com"}},
-            "tos_version": "2026-07-01", "plan_template_id": ptv_id,
+            "plan_template_id": ptv_id,
         },
     )
     assert deployment.status_code == 201
@@ -279,7 +279,7 @@ def test_user_deployment_flow_with_user_values(client, db_session):
         json={
             "desired_template_id": template_id,
             "user_values_json": {"user": {"message": "hi", "domain": "values.example.com"}},
-            "tos_version": "2026-07-01", "plan_template_id": ptv_id,
+            "plan_template_id": ptv_id,
         },
     )
     assert deployment.status_code == 201
@@ -331,13 +331,13 @@ def test_deployment_write_contract_rejects_hostname(client, db_session):
 
     bad_create = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_1_id, "hostname": "bad.example.com", "tos_version": "2026-07-01", "plan_template_id": ptv_id},
+        json={"desired_template_id": template_1_id, "hostname": "bad.example.com", "plan_template_id": ptv_id},
     )
     assert bad_create.status_code == 422
 
     created = client.post(
         f"/api/users/{user_id}/deployments",
-        json={"desired_template_id": template_1_id, "user_values_json": {"user": {}}, "tos_version": "2026-07-01", "plan_template_id": ptv_id},
+        json={"desired_template_id": template_1_id, "user_values_json": {"user": {}}, "plan_template_id": ptv_id},
     )
     assert created.status_code == 201
     deployment_id = created.json()["deployment"]["id"]

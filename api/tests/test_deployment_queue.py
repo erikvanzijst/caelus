@@ -7,7 +7,7 @@ from app.models import DeploymentReconcileJobORM, ProductORM
 from app.services import deployments, products, templates, users
 from app.services.jobs import JobService
 from app.services.errors import IntegrityException
-from tests.conftest import create_free_plan_template
+from tests.conftest import create_free_plan_template, make_accepted_user
 from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_PROVISIONING,
     DEPLOYMENT_STATUS_DELETING,
@@ -16,7 +16,7 @@ from app.services.reconcile_constants import (
 
 
 def _setup_user_and_templates(db_session):
-    user = users.create_user(db_session, payload=users.UserCreate(email="queue-user@example.com"))
+    user = make_accepted_user(db_session, "queue-user@example.com")
     product = products.create_product(
         db_session,
         payload=products.ProductCreate(name="queue-product", description="queue desc"),
@@ -58,7 +58,7 @@ def test_create_deployment_enqueues_create_job(db_session):
 
     dep = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+        payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "queue-create.example.test"},
@@ -79,7 +79,7 @@ def test_delete_deployment_sets_state_and_enqueues_delete_job(db_session):
     user, template_v1, _, ptv_id = _setup_user_and_templates(db_session)
     dep = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+        payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "queue-delete.example.test"},
@@ -112,7 +112,7 @@ def test_upgrade_deployment_enqueues_update_and_rejects_downgrade(db_session):
     user, template_v1, template_v2, ptv_id = _setup_user_and_templates(db_session)
     dep = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+        payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "queue-upgrade.example.test"},
@@ -157,7 +157,7 @@ def test_update_rejects_non_ready_deployment(db_session):
     user, template_v1, template_v2, ptv_id = _setup_user_and_templates(db_session)
     dep = deployments.create_deployment(
         db_session,
-        payload=deployments.DeploymentCreate(tos_version="2026-07-01", 
+        payload=deployments.DeploymentCreate(
             user_id=user.id,
             desired_template_id=template_v1.id,
             user_values_json={"domain": "queue-rollback.example.test"},

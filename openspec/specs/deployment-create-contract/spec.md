@@ -85,15 +85,14 @@ The UI Dashboard MUST not render a dedicated `Domain name` TextField and MUST no
 - **WHEN** the user completes and submits the deployment create form
 - **THEN** the generated request payload excludes `hostname`
 
-## Requirements from edit-deployment-config
-
 ### Requirement: Update payload allows same template version
+The system MUST accept a `PUT /deployments` request whose `desired_template_id`
+equals the deployment's current value (a no-op re-apply) instead of rejecting it
+as a downgrade.
 
 #### Scenario: Update payload allows same template version
 - **WHEN** a client sends a `PUT /deployments` request with `desired_template_id` equal to the current value
 - **THEN** the API accepts the request (previously rejected with "Can only upgrade to newer versions")
-
-## Requirements from mollie-external-payment-provider
 
 ### Requirement: Deployment creation response includes checkout URL for paid plans
 
@@ -143,9 +142,9 @@ resource unchanged.
 
 ### Requirement: Frontend redirects to Mollie checkout for paid plans
 
-When the deployment creation API response includes a non-null `checkout_url`, the
-frontend SHALL redirect the user's browser to that URL using
-`window.location.href = checkout_url`. This abandons the current SPA state.
+The frontend SHALL redirect the user's browser to a non-null `checkout_url` from
+the deployment creation API response using `window.location.href = checkout_url`.
+This abandons the current SPA state.
 
 After payment (or cancellation), Mollie redirects the user back to the configured
 `CAELUS_MOLLIE_REDIRECT_URL` (the dashboard). The app reloads and shows the
@@ -182,3 +181,32 @@ Free plan deployments via CLI SHALL continue to work as before.
 - **GIVEN** a plan template with `price_cents = 0`
 - **WHEN** `deploy create --plan-template-id <free_id> --template-id <id>` is run
 - **THEN** the deployment is created successfully (existing behavior)
+
+### Requirement: Deployment create requires prior ToS acceptance
+
+Deployment create MUST NOT carry any ToS field, for either REST
+`POST /users/{user_id}/deployments` or the equivalent CLI command. Instead it
+MUST require that the owning user has already accepted the current Terms of
+Service (recorded via `POST /api/me/tos-acceptance`). A create for a user who has not accepted MUST be
+rejected with a client error (**400**) and MUST NOT create a deployment. This
+guard is enforced server-side so the two-step accept-then-deploy flow cannot be
+bypassed by a direct API or CLI client.
+
+#### Scenario: Deploy after acceptance succeeds
+
+- **WHEN** a user who has recorded ToS acceptance creates a deployment with an
+  otherwise valid payload
+- **THEN** the API creates the deployment, and its payload and response contain
+  no ToS field
+
+#### Scenario: Deploy without acceptance is rejected
+
+- **WHEN** a user who has not accepted the Terms attempts to create a deployment
+- **THEN** the API responds **400** and no deployment is created
+
+#### Scenario: CLI deploy without acceptance is rejected
+
+- **WHEN** an operator runs the CLI create-deployment command for a user who has
+  not accepted
+- **THEN** the command fails without creating a deployment
+

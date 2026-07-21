@@ -10,6 +10,10 @@ const createDeploymentMock = vi.fn()
 const updateDeploymentMock = vi.fn()
 const checkHostnameMock = vi.fn()
 const listDomainsMock = vi.fn()
+// Default: user has NOT accepted the Terms -> checkbox is shown. Individual
+// tests override to simulate an already-accepted user.
+const getTosAcceptanceMock = vi.fn().mockResolvedValue({ version: null, accepted_at: null })
+const recordTosAcceptanceMock = vi.fn().mockResolvedValue({ version: '2026-07-01', accepted_at: '2026-07-01T00:00:00Z' })
 
 vi.mock('../api/endpoints', () => ({
   listTemplates: (...args: unknown[]) => listTemplatesMock(...args),
@@ -19,6 +23,8 @@ vi.mock('../api/endpoints', () => ({
   checkHostname: (...args: unknown[]) => checkHostnameMock(...args),
   listDomains: (...args: unknown[]) => listDomainsMock(...args),
   getCnameTarget: vi.fn().mockResolvedValue(''),
+  getTosAcceptance: (...args: unknown[]) => getTosAcceptanceMock(...args),
+  recordTosAcceptance: (...args: unknown[]) => recordTosAcceptanceMock(...args),
 }))
 
 const freePlan = {
@@ -167,18 +173,65 @@ describe('DeployDialog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Launch' }))
 
+    // First launch records ToS acceptance (with the displayed version) before
+    // creating the deployment; the create payload carries no ToS field.
+    await waitFor(() => {
+      expect(recordTosAcceptanceMock).toHaveBeenCalledWith('2026-07-01')
+    })
     await waitFor(() => {
       expect(createDeploymentMock).toHaveBeenCalledWith(42, {
         desired_template_id: 10,
         user_values_json: { hostname: 'test.example.com' },
         plan_template_id: 100,
-        tos_version: '2026-07-01',
       })
     })
 
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled()
     })
+  })
+
+  it('already-accepted user sees no ToS checkbox and deploys without recording again', async () => {
+    listTemplatesMock.mockResolvedValue([helloTemplate])
+    listPlansMock.mockResolvedValue([freePlan])
+    listDomainsMock.mockResolvedValue([])
+    checkHostnameMock.mockResolvedValue({ fqdn: 'accepted.example.com', usable: true, reason: null })
+    createDeploymentMock.mockResolvedValue({ deployment: { id: '1' }, checkout_url: null })
+    // This user already accepted the current Terms.
+    getTosAcceptanceMock.mockResolvedValueOnce({ version: '2026-07-01', accepted_at: '2026-07-01T00:00:00Z' })
+    recordTosAcceptanceMock.mockClear()
+    const onClose = vi.fn()
+
+    renderWithQuery(
+      <DeployDialog product={helloWorld} userId={7} onClose={onClose} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Configure application values:')).toBeInTheDocument()
+    })
+
+    // No agreement checkbox is shown once the user has accepted.
+    await waitFor(() => {
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    })
+
+    const hostnameInput = screen.getByRole('textbox', { name: /hostname/i })
+    fireEvent.change(hostnameInput, { target: { value: 'accepted.example.com' } })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Launch' })).toBeEnabled()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Launch' }))
+
+    await waitFor(() => {
+      expect(createDeploymentMock).toHaveBeenCalledWith(7, {
+        desired_template_id: 10,
+        user_values_json: { hostname: 'accepted.example.com' },
+        plan_template_id: 100,
+      })
+    })
+    // No acceptance recorded — the user had already accepted.
+    expect(recordTosAcceptanceMock).not.toHaveBeenCalled()
   })
 
   it('shows error alert on deployment failure', async () => {
@@ -270,7 +323,6 @@ describe('DeployDialog', () => {
     const deployment: Deployment = {
       id: '00000000-0000-0000-0000-00000000002a',
       user_id: 1,
-      tos_version: '2026-07-01',
       desired_template_id: 5,
       name: 'hello-world-abc123',
       namespace: 'test-example-123456789',

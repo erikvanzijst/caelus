@@ -33,6 +33,8 @@ from app.models.core import (  # noqa: F401
     ProductUpdate,
     SftpCredentialsRead,
     SQLModel,
+    TosAcceptanceCreate,
+    TosAcceptanceRead,
     UserBase,
     UserCreate,
     UserORM,

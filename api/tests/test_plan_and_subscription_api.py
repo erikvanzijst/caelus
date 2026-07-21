@@ -8,6 +8,7 @@ Covers:
 """
 import pytest
 
+from tests.conftest import CURRENT_TOS_VERSION
 from tests.conftest import (
     ADMIN_EMAIL,
     AUTH_HEADER,
@@ -218,7 +219,7 @@ class TestSubscriptionAPI:
             f"/api/users/{user_id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
+                "plan_template_id": ptv_id,
                 "user_values_json": {"user": {"host": "sub.example.com"}},
             },
         )
@@ -329,7 +330,7 @@ class TestDeploymentPlanTemplate:
             f"/api/users/{user_id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
+                "plan_template_id": ptv_id,
                 "user_values_json": {"user": {"host": "validptv.example.com"}},
             },
         )
@@ -349,7 +350,7 @@ class TestDeploymentPlanTemplate:
             f"/api/users/{user_id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "tos_version": "2026-07-01", "plan_template_id": 99999,
+                "plan_template_id": 99999,
                 "user_values_json": {"user": {"host": "badptv.example.com"}},
             },
         )
@@ -389,7 +390,7 @@ class TestDeploymentPlanTemplate:
             f"/api/users/{user_id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "tos_version": "2026-07-01", "plan_template_id": old_ptv.id,
+                "plan_template_id": old_ptv.id,
                 "user_values_json": {"user": {"host": "stale.example.com"}},
             },
         )
@@ -415,7 +416,7 @@ class TestDeploymentPlanTemplate:
             f"/api/users/{user_id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "tos_version": "2026-07-01", "plan_template_id": other_ptv_id,
+                "plan_template_id": other_ptv_id,
                 "user_values_json": {"user": {"host": "cross.example.com"}},
             },
         )
@@ -436,9 +437,12 @@ def authz_setup(db_session):
 
     fastapi_app.dependency_overrides[get_session] = override_get_db
 
-    admin = UserORM(email=ADMIN_EMAIL, is_admin=True)
-    user = UserORM(email=USER_EMAIL, is_admin=False)
-    other = UserORM(email=OTHER_EMAIL, is_admin=False)
+    admin = UserORM(email=ADMIN_EMAIL, is_admin=True,
+                    tos_accepted_version=CURRENT_TOS_VERSION)
+    user = UserORM(email=USER_EMAIL, is_admin=False,
+                   tos_accepted_version=CURRENT_TOS_VERSION)
+    other = UserORM(email=OTHER_EMAIL, is_admin=False,
+                    tos_accepted_version=CURRENT_TOS_VERSION)
     db_session.add_all([admin, user, other])
     db_session.commit()
     db_session.refresh(admin)
@@ -465,7 +469,7 @@ def authz_setup(db_session):
             f"/api/users/{user.id}/deployments",
             json={
                 "desired_template_id": template_id,
-                "tos_version": "2026-07-01", "plan_template_id": ptv_id,
+                "plan_template_id": ptv_id,
                 "user_values_json": {"user": {"host": "authz.example.com"}},
             },
         )
@@ -482,7 +486,7 @@ def authz_setup(db_session):
             "product_id": product_id,
             "template_id": template_id,
             "plan_id": plan_id,
-            "tos_version": "2026-07-01", "plan_template_id": ptv_id,
+            "plan_template_id": ptv_id,
             "subscription_id": subscription_id,
         }
 

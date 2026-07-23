@@ -9,9 +9,9 @@
 
 - [x] 2.1 Install the cluster-scoped Pipe CRD via `tf/deps/`
 - [x] 2.2 Add a per-environment sshpiperd module to `tf/app/`: Deployment, host-key Secret, ServiceAccount + cluster RBAC for Pipes, node exposure on the cluster-side SSH port as a workspace variable (defaults: prod 2222, dev 2223; binding mechanism per spike finding)
-- [ ] 2.3 Apply to the dev workspace and add the dev HAProxy TCP frontend :2223 → cluster node :2223; configure router forward :23 → HAProxy :2223; document the edge config location
-- [ ] 2.4 End-to-end smoke test on dev: `sftp -P 23 <user>@dev.freepod.eu` from outside the LAN using the spike Pipe; verify `ssh -p 22` to the homelab host and cluster node still reaches their system OpenSSH
-- [ ] 2.5 Apply to the prod workspace, add the prod HAProxy TCP frontend :2222 → cluster node :2222, and configure router forward :22 → HAProxy :2222 once dev is validated
+- [x] 2.3 Apply to the dev workspace and add the dev HAProxy TCP frontend :2223 → cluster node :2223; configure router forward :23 → HAProxy :2223; document the edge config location
+- [x] 2.4 End-to-end smoke test on dev: `sftp -P 23 <user>@dev.freepod.eu` from outside the LAN using the spike Pipe; verify `ssh -p 22` to the homelab host and cluster node still reaches their system OpenSSH
+- [x] 2.5 Apply to the prod workspace, add the prod HAProxy TCP frontend :2222 → cluster node :2222, and configure router forward :22 → HAProxy :2222 once dev is validated
 
 ## 3. Network isolation carve-out
 
@@ -43,6 +43,6 @@
 
 ## 7. Verification & docs
 
-- [ ] 7.1 Full e2e on dev: deploy nextcloud via the UI, read credentials from the UI, connect with an SFTP client from outside, browse and download; confirm DB PVC invisible
+- [x] 7.1 Full e2e on dev: deploy nextcloud via the UI, read credentials from the UI, connect with an SFTP client from outside, browse and download; confirm DB PVC invisible
 - [x] 7.2 Concurrent-session check: deploy a new app while an SFTP session is open; session survives (verified in task 1.3 — Pipe add/delete with an open session undisturbed, zero proxy restarts)
 - [x] 7.3 Update k8s/architecture.md (or a new doc) with the SFTP architecture and the future extension notes (pubkey auth, rsync/rclone/borg, standalone SFTP pods post-CephFS) — see k8s/docs/sftp-file-access.md

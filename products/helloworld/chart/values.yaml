@@ -22,9 +22,12 @@ storage:
 user:
   message: "Hello from Caelus"
 
-# TLS is injected per-deployment by the Caelus reconciler (caelus.ingress.tls). This
-# default lets the chart render standalone (helm template / tests) with TLS off.
+# Plan- and TLS-related values are injected per-deployment by the Caelus reconciler
+# (caelus.plan.*, caelus.ingress.tls). These defaults let the chart render standalone
+# (helm template / lint / tests): plan is empty so the PVC falls back to storage.size,
+# and TLS is off.
 caelus:
+  plan: {}
   ingress:
     enabled: false
     tls: {}

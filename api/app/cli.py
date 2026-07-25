@@ -567,14 +567,44 @@ def update_deployment(
     user_id: int = typer.Option(..., "--user-id"),
     deployment_id: UUID = typer.Option(..., "--deployment-id"),
     desired_template_id: int = typer.Option(..., "--desired-template-id"),
+    user_values_json: str | None = typer.Option(
+        None,
+        "--user-values-json",
+        help='JSON object string for new deployment user values, e.g. \'{"key":"value"}\'. '
+        "Omit to reuse the deployment's existing stored values.",
+    ),
+    user_values_file: Path | None = typer.Option(
+        None,
+        "--user-values-file",
+        help="Path to a JSON file containing a JSON object for new deployment user values.",
+    ),
 ) -> None:
+    # Only override user values when a flag is given; otherwise pass None so the
+    # service reuses the deployment's existing stored values (unchanged behavior).
+    parsed_user_values: dict | None = None
+    if user_values_json is not None or user_values_file is not None:
+        try:
+            parsed_user_values = _parse_json_object_input(
+                json_text=user_values_json,
+                json_file=user_values_file,
+                json_option_name="--user-values-json",
+                file_option_name="--user-values-file",
+            )
+        except ValueError as e:
+            logger.warning("Invalid deployment user values JSON input: %s", e)
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1)
+
     with session_scope() as session:
         _require_cli_user(session)
         try:
             deployment = deployment_service.update_deployment(
                 session,
                 update=DeploymentUpdate(
-                    user_id=user_id, id=deployment_id, desired_template_id=desired_template_id
+                    user_id=user_id,
+                    id=deployment_id,
+                    desired_template_id=desired_template_id,
+                    user_values_json=parsed_user_values,
                 ),
             )
         except CaelusException as e:

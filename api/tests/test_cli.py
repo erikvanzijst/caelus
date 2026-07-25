@@ -894,6 +894,70 @@ def test_cli_upgrade_deployment_and_delete_enqueue_jobs(cli_runner):
     assert reasons == ["create", "update", "delete"]
 
 
+def test_cli_update_deployment_user_values_json_migrates_layout(cli_runner):
+    """update-deployment --user-values-json lets an upgrade supply transformed
+    values when the target template's schema layout differs. Reusing the stored
+    (old-shape) values must fail validation; supplying the new shape succeeds.
+    """
+    runner, app = cli_runner
+
+    assert runner.invoke(app, ["create-user", "migratecli@example.com"]).exit_code == 0
+    assert runner.invoke(app, ["create-product", "migrate-cli-product", "desc"]).exit_code == 0
+
+    # tmpl1: hostname nested under old_host; tmpl2: hostname hoisted to top-level host.
+    old_schema = '{"type":"object","properties":{"old_host":{"type":"string","title":"hostname"}},"required":["old_host"],"additionalProperties":false}'
+    new_schema = '{"type":"object","properties":{"host":{"type":"string","title":"hostname"}},"required":["host"],"additionalProperties":false}'
+
+    tmpl1_res = runner.invoke(
+        app,
+        ["create-template", "--product-id", "1", "--chart-ref", "oci://example/chart",
+         "--chart-version", "1.0.0", "--values-schema-json", old_schema],
+    )
+    assert tmpl1_res.exit_code == 0
+    tmpl1_id = _parse_yaml_stdout(tmpl1_res)["id"]
+
+    tmpl2_res = runner.invoke(
+        app,
+        ["create-template", "--product-id", "1", "--chart-ref", "oci://example/chart",
+         "--chart-version", "2.0.0", "--values-schema-json", new_schema],
+    )
+    assert tmpl2_res.exit_code == 0
+    tmpl2_id = _parse_yaml_stdout(tmpl2_res)["id"]
+
+    assert runner.invoke(app, ["update-product", "1", "--template-id", str(tmpl1_id)]).exit_code == 0
+    ptv_id = _create_free_plan_template_via_services(1)
+    assert runner.invoke(app, ["accept-tos", "--user-id", "1", "--version", "2026-07-01"]).exit_code == 0
+
+    domain = "migrate-cli.example.test"
+    create_res = runner.invoke(
+        app,
+        ["create-deployment", "--user-id", "1", "--desired-template-id", str(tmpl1_id),
+         "--user-values-json", json.dumps({"old_host": domain}), "--plan-template-id", str(ptv_id)],
+    )
+    assert create_res.exit_code == 0
+    dep_id = _get_deployment_by_domain(domain).id
+    _finish_reconcile(dep_id)
+
+    # Reusing the stored old-shape values against tmpl2's schema must fail.
+    reuse_res = runner.invoke(
+        app,
+        ["update-deployment", "--user-id", "1", "--deployment-id", str(dep_id),
+         "--desired-template-id", str(tmpl2_id)],
+    )
+    assert reuse_res.exit_code != 0
+
+    # Supplying the transformed (new-shape) values succeeds and is persisted.
+    migrate_res = runner.invoke(
+        app,
+        ["update-deployment", "--user-id", "1", "--deployment-id", str(dep_id),
+         "--desired-template-id", str(tmpl2_id), "--user-values-json", json.dumps({"host": domain})],
+    )
+    assert migrate_res.exit_code == 0
+    upgraded = _parse_yaml_stdout(migrate_res)
+    assert upgraded["desired_template_id"] == tmpl2_id
+    assert upgraded["user_values_json"] == {"host": domain}
+
+
 def test_cli_duplicate_create_commands_return_stable_errors(cli_runner):
     runner, app = cli_runner
 

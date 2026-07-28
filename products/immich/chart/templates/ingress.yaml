@@ -1,13 +1,19 @@
 {{- if .Values.ingress.enabled }}
+{{- /*
+Wrapper-owned ingress. When the Caelus reconciler injects a per-deployment TLS
+cert (caelus.ingress.enabled and not a wildcard), add the cert-manager issuer
+annotation and a tls block; otherwise render plain (wildcard TLS is terminated
+upstream). Mirrors the helloworld/immich ingress contract.
+*/}}
+{{- $tlsCustom := and .Values.caelus.ingress.enabled (not .Values.caelus.ingress.tls.wildcard) }}
+{{- $annotations := merge (dict) (.Values.ingress.annotations | default dict) }}
+{{- if $tlsCustom }}{{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.caelus.ingress.tls.issuer }}{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "immich-wrapper.fullname" . }}-ingress
+  name: {{ .Release.Name }}-ingress
   labels:
-    {{- include "immich-wrapper.labels" . | nindent 4 }}
-  {{- $tlsCustom := and .Values.caelus.ingress.enabled (not .Values.caelus.ingress.tls.wildcard) }}
-  {{- $annotations := merge (dict) (.Values.ingress.annotations | default dict) }}
-  {{- if $tlsCustom }}{{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.caelus.ingress.tls.issuer }}{{- end }}
+    {{- include "immich.labels" . | nindent 4 }}
   annotations:
     {{- toYaml $annotations | nindent 4 }}
 spec:
@@ -19,7 +25,7 @@ spec:
       secretName: {{ .Values.caelus.ingress.tls.secretName | quote }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.host | quote }}
+    - host: {{ .Values.host | quote }}
       http:
         paths:
           - path: /

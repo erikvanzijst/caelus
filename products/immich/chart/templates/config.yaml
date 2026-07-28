@@ -1,0 +1,24 @@
+{{- /*
+Immich runtime config, mounted read-only into the server at /config and
+referenced via IMMICH_CONFIG_FILE. Carries the external URL (so generated
+links/emails are correct behind the TLS proxy) and optional SMTP.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels:
+    {{- include "immich.labels" . | nindent 4 }}
+data:
+  immich-config.yaml: |
+    server:
+      externalDomain: {{ printf "https://%s" .Values.host | quote }}
+    {{- if .Values.smtp.host }}
+    notifications:
+      smtp:
+        enabled: true
+        from: {{ .Values.smtp.from | quote }}
+        transport:
+          host: {{ .Values.smtp.host | quote }}
+          port: {{ .Values.smtp.port }}
+    {{- end }}

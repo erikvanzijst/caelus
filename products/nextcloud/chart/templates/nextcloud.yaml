@@ -120,6 +120,9 @@ spec:
             # sources non-executable hooks instead of running them, which would
             # leak our script into its own shell.
             - { name: hooks, mountPath: /docker-entrypoint-hooks.d/before-starting }
+            # HSTS for Nextcloud's server-side header check (edge Traefik owns the
+            # real header). subPath: single conf file, not the whole conf-enabled.
+            - { name: apache-conf, mountPath: /etc/apache2/conf-enabled/hsts.conf, subPath: hsts.conf }
           livenessProbe:
             httpGet:
               path: /status.php
@@ -162,4 +165,7 @@ spec:
           configMap:
             name: {{ .Release.Name }}-hooks
             defaultMode: 0755  # entrypoint only executes hook files that are +x
+        - name: apache-conf
+          configMap:
+            name: {{ .Release.Name }}-apache
         {{- include "caelus-sftp.volumes" (dict "root" .) | nindent 8 }}

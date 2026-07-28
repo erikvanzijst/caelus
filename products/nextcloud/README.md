@@ -13,7 +13,7 @@ read-only SFTP access to the data volume.
 | PostgreSQL | StatefulSet `<release>-postgresql` on `postgres:17-alpine` + headless Service + Secret `<release>-db` (auto-generated password); data on PVC `data-<release>-postgresql-0` |
 | Data | PVC `<release>-data` (plan-sized), mounted into the app via subPaths (`html`, `data`, `config`, `custom_apps`, `themes`, `tmp`) |
 | App secrets | Secret `<release>-app` (admin bootstrap + SMTP) |
-| App config | ConfigMap `<release>-config` (non-secret env via `envFrom`) + ConfigMap `<release>-hooks` (a `before-starting` entrypoint hook that runs `occ db:add-missing-indices/columns/primary-keys` and `occ maintenance:repair --include-expensive` after each upgrade, clearing the "missing indices" and "mimetype migrations available" admin warnings) |
+| App config | ConfigMap `<release>-config` (non-secret env via `envFrom`) + ConfigMap `<release>-hooks` (a `before-starting` entrypoint hook that runs `occ db:add-missing-indices/columns/primary-keys` and `occ maintenance:repair --include-expensive` after each upgrade, clearing the "missing indices" and "mimetype migrations available" admin warnings) + ConfigMap `<release>-apache` (`hsts.conf` so Nextcloud's server-side HTTP-headers check sees HSTS; edge Traefik still owns the browser-facing header) |
 | Ingress | `<release>-ingress` (per-deployment TLS via `caelus.ingress.tls`) |
 | SFTP | Secret + ConfigMap + Service + sshpiper Pipe (`caelus-sftp`, uid 33 to match Nextcloud's `www-data`) |
 

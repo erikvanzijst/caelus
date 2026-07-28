@@ -48,3 +48,21 @@ data:
     # --include-expensive: runs the deferred repair steps, notably the mimetype
     # migration ("mimetype migrations available" warning).
     php /var/www/html/occ maintenance:repair --include-expensive
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-apache
+  labels:
+    {{- include "nextcloud.labels" . | nindent 4 }}
+data:
+  hsts.conf: |
+    # TLS terminates at the edge (Traefik), which owns the browser-facing HSTS
+    # header. But Nextcloud's server-side "HTTP headers" setup check inspects a
+    # loopback request that reaches Apache directly, bypassing that middleware,
+    # so it reports HSTS as missing. Emit it here too to satisfy the check;
+    # Traefik still overwrites it with the authoritative value on external
+    # responses, so browsers never see a duplicate.
+    <IfModule mod_headers.c>
+      Header always set Strict-Transport-Security "max-age=15552000; includeSubDomains"
+    </IfModule>

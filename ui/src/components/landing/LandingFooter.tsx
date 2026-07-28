@@ -2,6 +2,7 @@ import { Box, Container, Stack, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import { DISPLAY, fg, line, MONO, SANS } from './landingTokens'
 import { LEGAL_NAV } from '../../content/legal'
+import { RepoLink } from '../RepoLink'
 
 const columns = [
   {
@@ -66,6 +67,7 @@ export function LandingFooter() {
               The European cloud that keeps your data yours. Private, open-source
               apps — free of ads, tracking and lock-in.
             </Typography>
+            <RepoLink />
           </Box>
 
           {/* Link columns */}

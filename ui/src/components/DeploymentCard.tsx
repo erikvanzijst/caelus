@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Alert,
   Avatar,
@@ -47,8 +47,12 @@ export function DeploymentCard({
   // Doubles as the availability gate: the "Files" action only appears once the
   // credentials query resolves, so products that expose no files (404) show no
   // button, and opening the dialog is an instant cache hit.
-  const { data: sftpCreds } = useSftpCredentials(userId, deployment.id)
+  const { data: sftpCreds, refetch: refetchSftp } = useSftpCredentials(userId, deployment.id)
   const sftpAvailable = Boolean(sftpCreds)
+  const settled = !isTransitionalStatus(deployment.status)
+  useEffect(() => {
+    if (settled && !sftpCreds) refetchSftp()
+  }, [settled, sftpCreds, refetchSftp])
 
   const openable =
     deployment.hostname &&

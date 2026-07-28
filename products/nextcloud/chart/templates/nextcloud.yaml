@@ -51,6 +51,10 @@ spec:
       {{- include "nextcloud.componentSelector" (dict "root" . "name" "nextcloud") | nindent 6 }}
   template:
     metadata:
+      annotations:
+        # Roll the pods when the non-secret config or hook script changes;
+        # envFrom/volume-mounted ConfigMaps don't alter the pod-template hash.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
         {{- include "nextcloud.componentSelector" (dict "root" . "name" "nextcloud") | nindent 8 }}
     spec:
@@ -79,19 +83,12 @@ spec:
             # POSTGRES_DB/USER/PASSWORD -- same keys the nextcloud image expects.
             - secretRef:
                 name: {{ .Release.Name }}-db
+            # POSTGRES_HOST, OVERWRITEPROTOCOL, trusted domains/proxies, non-secret
+            # SMTP settings -- see the -config ConfigMap.
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+          # Only secret-derived vars stay inline (must be valueFrom, not a ConfigMap).
           env:
-            - name: POSTGRES_HOST
-              value: {{ .Release.Name }}-postgresql
-            - name: OVERWRITEPROTOCOL
-              value: "https"
-            {{- if .Values.trustedProxies }}
-            - name: TRUSTED_PROXIES
-              value: {{ join " " .Values.trustedProxies | quote }}
-            {{- end }}
-            - name: NEXTCLOUD_TRUSTED_DOMAINS
-              value: {{ .Values.host | quote }}
-            - name: NEXTCLOUD_DATA_DIR
-              value: /var/www/html/data
             - name: NEXTCLOUD_ADMIN_USER
               valueFrom:
                 secretKeyRef: { name: {{ .Release.Name }}-app, key: admin-username }
@@ -99,19 +96,9 @@ spec:
               valueFrom:
                 secretKeyRef: { name: {{ .Release.Name }}-app, key: admin-password }
             {{- if .Values.smtp.host }}
-            - name: MAIL_FROM_ADDRESS
-              value: {{ .Values.smtp.fromAddress | quote }}
-            - name: MAIL_DOMAIN
-              value: {{ .Values.smtp.domain | quote }}
             - name: SMTP_HOST
               valueFrom:
                 secretKeyRef: { name: {{ .Release.Name }}-app, key: smtp-host }
-            - name: SMTP_PORT
-              value: {{ .Values.smtp.port | quote }}
-            - name: SMTP_SECURE
-              value: {{ .Values.smtp.secure | quote }}
-            - name: SMTP_AUTHTYPE
-              value: {{ .Values.smtp.authtype | quote }}
             - name: SMTP_NAME
               valueFrom:
                 secretKeyRef: { name: {{ .Release.Name }}-app, key: smtp-username }
@@ -127,6 +114,12 @@ spec:
             - { name: data, mountPath: /var/www/html/custom_apps, subPath: custom_apps }
             - { name: data, mountPath: /var/www/html/themes,     subPath: themes }
             - { name: data, mountPath: /var/www/tmp,             subPath: tmp }
+            # Entrypoint hook: deferred DB maintenance (missing indices, mimetype
+            # repair) after `occ upgrade`. Mounted as the whole hook dir (not a
+            # subPath file) so defaultMode's +x bit applies -- the entrypoint
+            # sources non-executable hooks instead of running them, which would
+            # leak our script into its own shell.
+            - { name: hooks, mountPath: /docker-entrypoint-hooks.d/before-starting }
           livenessProbe:
             httpGet:
               path: /status.php
@@ -165,4 +158,8 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-data
+        - name: hooks
+          configMap:
+            name: {{ .Release.Name }}-hooks
+            defaultMode: 0755  # entrypoint only executes hook files that are +x
         {{- include "caelus-sftp.volumes" (dict "root" .) | nindent 8 }}

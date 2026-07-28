@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels:
+    {{- include "nextcloud.labels" . | nindent 4 }}
+data:
+  POSTGRES_HOST: {{ .Release.Name }}-postgresql
+  OVERWRITEPROTOCOL: "https"
+  NEXTCLOUD_TRUSTED_DOMAINS: {{ .Values.host | quote }}
+  NEXTCLOUD_DATA_DIR: /var/www/html/data
+  {{- if .Values.trustedProxies }}
+  TRUSTED_PROXIES: {{ join " " .Values.trustedProxies | quote }}
+  {{- end }}
+  {{- if .Values.smtp.host }}
+  MAIL_FROM_ADDRESS: {{ .Values.smtp.fromAddress | quote }}
+  MAIL_DOMAIN: {{ .Values.smtp.domain | quote }}
+  SMTP_PORT: {{ .Values.smtp.port | quote }}
+  SMTP_SECURE: {{ .Values.smtp.secure | quote }}
+  SMTP_AUTHTYPE: {{ .Values.smtp.authtype | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-hooks
+  labels:
+    {{- include "nextcloud.labels" . | nindent 4 }}
+data:
+  db-maintenance.sh: |
+    #!/bin/sh
+    # Runs from /docker-entrypoint-hooks.d/before-starting on every boot, after
+    # the entrypoint's `occ upgrade`. DB migrations are therefore already applied
+    # and the schema version matches the code, which is exactly the state these
+    # commands require. Everything here is what Nextcloud deliberately defers out
+    # of the automatic upgrade (because it can be slow on big instances) and then
+    # nags the admin to run by hand -- work that is trivial at Freepod's scale.
+    #
+    # All steps are idempotent no-ops once applied, so re-running each boot is
+    # cheap and also catches changes that later-installed apps introduce without
+    # a core upgrade. Best-effort (no `set -e`): a failed step must not keep the
+    # instance from starting.
+    #
+    # add-missing-*: clears the "missing indices/columns/primary keys" warning.
+    php /var/www/html/occ db:add-missing-indices
+    php /var/www/html/occ db:add-missing-columns
+    php /var/www/html/occ db:add-missing-primary-keys
+    # --include-expensive: runs the deferred repair steps, notably the mimetype
+    # migration ("mimetype migrations available" warning).
+    php /var/www/html/occ maintenance:repair --include-expensive

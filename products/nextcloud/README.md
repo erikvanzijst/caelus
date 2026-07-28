@@ -77,7 +77,7 @@ hostname:
   "type": "object",
   "properties": {
     "host": {
-      "title": "domainname",
+      "title": "Hostname",
       "type": "string",
       "minLength": 1,
       "description": "The hostname for your Nextcloud instance"
@@ -103,14 +103,13 @@ auto-generated DB password go.
     "tag": "32.0.6-apache"
   },
   "admin": {
-    "username": "admin",
-    "password": "<set-a-strong-password>"
+    "username": "admin"
   },
   "smtp": {
     "host": "smtp.mailer.svc.cluster.local",
     "port": 25,
     "fromAddress": "nextcloud",
-    "domain": "deprutser.be"
+    "domain": "freepod.eu"
   }
 }
 ```

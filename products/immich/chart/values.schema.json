@@ -1,24 +1,42 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "immich wrapper values",
+  "title": "immich bespoke chart values",
   "type": "object",
   "properties": {
+    "host": { "type": "string", "title": "hostname", "minLength": 1, "maxLength": 253 },
+    "image": {
+      "type": "object",
+      "properties": {
+        "server": {
+          "type": "object",
+          "properties": { "repository": { "type": "string", "minLength": 1 } }
+        },
+        "machineLearning": {
+          "type": "object",
+          "properties": { "repository": { "type": "string", "minLength": 1 } }
+        },
+        "tag": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      },
+      "additionalProperties": false
+    },
     "ingress": {
       "type": "object",
       "properties": {
         "enabled": { "type": "boolean" },
         "className": { "type": "string" },
-        "annotations": {
-          "type": "object",
-          "additionalProperties": { "type": "string" }
-        },
-        "host": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 253
-        }
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
       },
-      "required": ["enabled", "className", "annotations", "host"],
+      "required": ["enabled", "className"],
+      "additionalProperties": false
+    },
+    "smtp": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer" },
+        "from": { "type": "string" }
+      },
       "additionalProperties": false
     },
     "storage": {
@@ -27,10 +45,7 @@
         "library": {
           "type": "object",
           "properties": {
-            "accessMode": {
-              "type": "string",
-              "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"]
-            },
+            "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] },
             "size": { "type": "string", "minLength": 1 },
             "storageClassName": { "type": "string" }
           },
@@ -59,7 +74,7 @@
           "type": "object",
           "properties": {
             "username": { "type": "string", "minLength": 1 },
-            "password": { "type": "string", "minLength": 1 },
+            "password": { "type": "string", "minLength": 1, "description": "Fixed superuser password; must match what the database was initialised with" },
             "database": { "type": "string", "minLength": 1 }
           },
           "required": ["username", "password", "database"],
@@ -68,10 +83,7 @@
         "persistence": {
           "type": "object",
           "properties": {
-            "accessMode": {
-              "type": "string",
-              "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"]
-            },
+            "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] },
             "size": { "type": "string", "minLength": 1 },
             "storageClassName": { "type": "string" }
           },
@@ -82,23 +94,36 @@
       "required": ["enabled", "image", "auth", "persistence"],
       "additionalProperties": false
     },
-    "smtp": {
+    "valkey": {
       "type": "object",
       "properties": {
-        "host": { "type": "string" },
-        "port": { "type": "integer" },
-        "from": { "type": "string" }
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          },
+          "required": ["repository", "tag", "pullPolicy"],
+          "additionalProperties": false
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] },
+            "size": { "type": "string", "minLength": 1 },
+            "storageClassName": { "type": "string" }
+          },
+          "required": ["accessMode", "size", "storageClassName"],
+          "additionalProperties": false
+        }
       },
-      "required": ["host", "port", "from"],
+      "required": ["image", "persistence"],
       "additionalProperties": false
-    },
-    "immich": {
-      "type": "object",
-      "description": "Pass-through values for upstream dependency chart"
     },
     "caelus": {
       "type": "object",
-      "description": "Plan-injected values from Caelus reconciler",
+      "description": "Plan-injected values from the Caelus reconciler",
       "properties": {
         "plan": {
           "type": "object",
@@ -110,7 +135,6 @@
         },
         "ingress": {
           "type": "object",
-          "description": "Ingress and per-app TLS settings injected by the Caelus reconciler",
           "properties": {
             "enabled": { "type": "boolean" },
             "host": { "type": "string" },
@@ -131,32 +155,9 @@
     },
     "caelus-sftp": {
       "type": "object",
-      "description": "Values namespace for the caelus-sftp library dependency (unused; library charts render no values but Helm reserves the key)."
+      "description": "Values namespace reserved by the caelus-sftp library dependency (unused)."
     }
   },
-  "required": ["ingress", "smtp", "storage", "postgresql", "immich"],
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "ingress": {
-            "properties": {
-              "enabled": { "const": true }
-            },
-            "required": ["enabled"]
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "ingress": {
-            "properties": {
-              "host": { "minLength": 1 }
-            }
-          }
-        }
-      }
-    }
-  ],
+  "required": ["host", "ingress", "storage", "postgresql", "valkey"],
   "additionalProperties": false
 }

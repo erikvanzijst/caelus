@@ -1,21 +1,43 @@
-# Wrapper ingress exposed by this chart (upstream ingress is disabled).
+# Bespoke Immich chart values. Flat and explicit: every image, size and env the
+# deployment uses is declared here, not buried under an upstream chart's values.
+
+# Immich application images. server and machine-learning share a tag (they are
+# released together upstream).
+image:
+  server:
+    repository: ghcr.io/immich-app/immich-server
+  machineLearning:
+    repository: ghcr.io/immich-app/immich-machine-learning
+  # Shared tag for server + machine-learning; defaults to the chart appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Public hostname. Used as the ingress rule host and the server externalDomain
+# (so generated links/emails are correct behind the TLS proxy). This is the one
+# value a tenant sets in the deployment dialog.
+host: "immich.local"
+
+# Wrapper ingress. TLS is injected per-deployment by the Caelus reconciler via
+# the caelus.ingress.* block below.
 ingress:
   enabled: true
   className: traefik
   annotations: {}
-  host: "immich.local"
 
+# Cluster-internal SMTP relay for notifications. Leave host empty to disable.
 smtp:
   host: ""
   port: 25
   from: ""
 
+# Immich library PVC (photos/videos). caelus.plan.storageSize overrides size.
 storage:
   library:
     accessMode: ReadWriteOnce
     size: 100Gi
     storageClassName: ""
 
+# Bundled PostgreSQL (immich's pgvecto.rs/vectorchord image -- NOT stock postgres).
 postgresql:
   enabled: true
   image:
@@ -24,6 +46,9 @@ postgresql:
     pullPolicy: IfNotPresent
   auth:
     username: postgres
+    # Fixed, well-known password. POSTGRES_PASSWORD only seeds the superuser when
+    # the data directory is first initialised, so this must match whatever the
+    # database was created with; a generated value would not.
     password: postgres
     database: immich
   persistence:
@@ -31,103 +56,21 @@ postgresql:
     size: 20Gi
     storageClassName: ""
 
-# Values passed to upstream immich dependency chart.
-immich:
-  enabled: true
+# Bundled Valkey (Redis-compatible) for the job queue.
+valkey:
+  image:
+    repository: docker.io/valkey/valkey
+    tag: 9.0-alpine
+    pullPolicy: IfNotPresent
+  persistence:
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    storageClassName: ""
 
-  controllers:
-    main:
-      containers:
-        main:
-          envFrom:
-            - secretRef:
-                name: postgresql-auth
-          env:
-            DB_HOSTNAME: postgresql
-            DB_PORT: "5432"
-            DB_VECTOR_EXTENSION: vectorchord
-
-  immich:
-    persistence:
-      library:
-        existingClaim: library
-
-  valkey:
-    enabled: true
-    persistence:
-      data:
-        enabled: true
-        type: persistentVolumeClaim
-        accessMode: ReadWriteOnce
-        size: 5Gi
-
-  server:
-    controllers:
-      main:
-        # The library PVC is ReadWriteOnce, so the old and new server pods
-        # cannot both hold it during an upgrade -- a surge pod would hang in
-        # ContainerCreating while the old pod keeps the volume, deadlocking the
-        # rollout. Keep RollingUpdate (switching an existing Deployment to
-        # Recreate fails: the API forbids the K8s-defaulted rollingUpdate field)
-        # but set maxSurge=0 so the old pod scales down FIRST, releasing the
-        # library, before the new pod starts. Brief downtime, which is fine.
-        strategy: RollingUpdate
-        rollingUpdate:
-          surge: "0"
-          unavailable: 1
-        containers:
-          main:
-            env:
-              IMMICH_CONFIG_FILE: /config/immich-config.yaml
-          sftp:
-            image:
-              repository: atmoz/sftp
-              tag: alpine
-    persistence:
-      immich-config:
-        enabled: true
-        type: configMap
-        name: immich-config
-        globalMounts:
-          - path: /config
-            readOnly: true
-      # The library claim is already mounted as the "data" volume (immich's
-      # server chart). Override its mounts with advancedMounts so the SAME
-      # single volume serves both containers: the app at /data (unchanged) and
-      # the sftp sidecar at /home/sftp/library read-only.
-      data:
-        advancedMounts:
-          main:
-            main:
-              - path: /data
-            sftp:
-              - path: /home/sftp/library
-                readOnly: true
-      sftp-users:
-        type: secret
-        name: sftp-credentials
-        advancedMounts:
-          main:
-            sftp:
-              - path: /etc/sftp/users.conf
-                subPath: users.conf
-                readOnly: true
-      sftp-scripts:
-        type: configMap
-        name: sftp-scripts
-        defaultMode: 0755
-        advancedMounts:
-          main:
-            sftp:
-              - path: /etc/sftp.d
-                readOnly: true
-    ingress:
-      main:
-        enabled: false
-
-# TLS is injected per-deployment by the Caelus reconciler (caelus.ingress.tls). This
-# default lets the chart render standalone (helm template / tests) with TLS off.
+# TLS is injected per-deployment by the Caelus reconciler (caelus.ingress.tls).
+# These defaults let the chart render standalone (helm template / tests).
 caelus:
+  plan: {}
   ingress:
     enabled: false
     tls: {}

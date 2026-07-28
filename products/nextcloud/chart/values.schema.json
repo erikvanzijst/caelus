@@ -1,18 +1,63 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "nextcloud wrapper values",
+  "title": "Caelus Nextcloud chart values",
   "type": "object",
   "properties": {
+    "host": { "type": "string", "title": "hostname", "minLength": 1, "maxLength": 253 },
+    "trustedProxies": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Reverse-proxy source IPs/CIDRs trusted for X-Forwarded-* headers"
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      },
+      "additionalProperties": false
+    },
+    "admin": {
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "minLength": 1 },
+        "password": { "type": "string", "minLength": 1 }
+      },
+      "required": ["username", "password"],
+      "additionalProperties": false
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "required": ["enabled", "className"],
+      "additionalProperties": false
+    },
+    "smtp": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer" },
+        "fromAddress": { "type": "string" },
+        "domain": { "type": "string" },
+        "secure": { "type": "string" },
+        "authtype": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "storage": {
       "type": "object",
       "properties": {
         "data": {
           "type": "object",
           "properties": {
-            "accessMode": {
-              "type": "string",
-              "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"]
-            },
+            "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] },
             "size": { "type": "string", "minLength": 1 },
             "storageClassName": { "type": "string" }
           },
@@ -23,26 +68,47 @@
       "required": ["data"],
       "additionalProperties": false
     },
-    "nextcloud": {
+    "postgresql": {
       "type": "object",
-      "description": "Pass-through values for upstream nextcloud dependency chart",
       "properties": {
-        "nextcloud": {
+        "enabled": { "type": "boolean" },
+        "image": {
           "type": "object",
           "properties": {
-            "host": {
-              "type": "string",
-              "title": "hostname",
-              "minLength": 1,
-              "maxLength": 253
-            }
-          }
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          },
+          "required": ["repository", "tag", "pullPolicy"],
+          "additionalProperties": false
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "username": { "type": "string", "minLength": 1 },
+            "password": { "type": "string", "description": "Empty auto-generates a stable password; set a value to pin one" },
+            "database": { "type": "string", "minLength": 1 }
+          },
+          "required": ["username", "password", "database"],
+          "additionalProperties": false
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] },
+            "size": { "type": "string", "minLength": 1 },
+            "storageClassName": { "type": "string" }
+          },
+          "required": ["accessMode", "size", "storageClassName"],
+          "additionalProperties": false
         }
-      }
+      },
+      "required": ["enabled", "image", "auth", "persistence"],
+      "additionalProperties": false
     },
     "caelus": {
       "type": "object",
-      "description": "Plan-injected values from Caelus reconciler",
+      "description": "Plan-injected values from the Caelus reconciler",
       "properties": {
         "plan": {
           "type": "object",
@@ -54,7 +120,6 @@
         },
         "ingress": {
           "type": "object",
-          "description": "Ingress and per-app TLS settings injected by the Caelus reconciler",
           "properties": {
             "enabled": { "type": "boolean" },
             "host": { "type": "string" },
@@ -72,13 +137,12 @@
         }
       },
       "additionalProperties": false
-    }
-    ,
+    },
     "caelus-sftp": {
       "type": "object",
-      "description": "Values namespace for the caelus-sftp library dependency (unused; library charts render no values but Helm reserves the key)."
+      "description": "Values namespace reserved by the caelus-sftp library dependency (unused)."
     }
   },
-  "required": ["storage", "nextcloud"],
+  "required": ["host", "storage", "postgresql"],
   "additionalProperties": false
 }

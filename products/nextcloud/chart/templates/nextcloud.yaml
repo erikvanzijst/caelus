@@ -1,0 +1,168 @@
+{{- /*
+Nextcloud app (official apache image). Owns the data PVC via subPath mounts and
+carries the read-only SFTP sidecar (RWO volume shared in-pod). An init container
+blocks startup until Postgres answers. fsGroup 33 (www-data) so the app and the
+uid-33 SFTP user can both read the files.
+*/}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-app
+  labels:
+    {{- include "nextcloud.labels" . | nindent 4 }}
+type: Opaque
+data:
+  admin-username: {{ .Values.admin.username | b64enc | quote }}
+  admin-password: {{ .Values.admin.password | b64enc | quote }}
+  smtp-host: {{ .Values.smtp.host | b64enc | quote }}
+  smtp-username: {{ .Values.smtp.username | b64enc | quote }}
+  smtp-password: {{ .Values.smtp.password | b64enc | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-nextcloud
+  labels:
+    {{- include "nextcloud.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "nextcloud.componentSelector" (dict "root" . "name" "nextcloud") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-nextcloud
+  labels:
+    {{- include "nextcloud.labels" . | nindent 4 }}
+    {{- include "nextcloud.componentSelector" (dict "root" . "name" "nextcloud") | nindent 4 }}
+spec:
+  replicas: 1
+  # Single RWO data volume: never two app pods at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "nextcloud.componentSelector" (dict "root" . "name" "nextcloud") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nextcloud.componentSelector" (dict "root" . "name" "nextcloud") | nindent 8 }}
+    spec:
+      securityContext:
+        # Mount all files as www-data (uid/gid 33); matches the SFTP user uid.
+        fsGroup: 33
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}
+          command:
+            - sh
+            - -c
+            - until pg_isready -h {{ .Release.Name }}-postgresql -U "$POSTGRES_USER"; do sleep 2; done
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-db
+      containers:
+        - name: nextcloud
+          image: {{ .Values.image.repository }}:{{ include "nextcloud.imageTag" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          envFrom:
+            # POSTGRES_DB/USER/PASSWORD -- same keys the nextcloud image expects.
+            - secretRef:
+                name: {{ .Release.Name }}-db
+          env:
+            - name: POSTGRES_HOST
+              value: {{ .Release.Name }}-postgresql
+            - name: OVERWRITEPROTOCOL
+              value: "https"
+            {{- if .Values.trustedProxies }}
+            - name: TRUSTED_PROXIES
+              value: {{ join " " .Values.trustedProxies | quote }}
+            {{- end }}
+            - name: NEXTCLOUD_TRUSTED_DOMAINS
+              value: {{ .Values.host | quote }}
+            - name: NEXTCLOUD_DATA_DIR
+              value: /var/www/html/data
+            - name: NEXTCLOUD_ADMIN_USER
+              valueFrom:
+                secretKeyRef: { name: {{ .Release.Name }}-app, key: admin-username }
+            - name: NEXTCLOUD_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Release.Name }}-app, key: admin-password }
+            {{- if .Values.smtp.host }}
+            - name: MAIL_FROM_ADDRESS
+              value: {{ .Values.smtp.fromAddress | quote }}
+            - name: MAIL_DOMAIN
+              value: {{ .Values.smtp.domain | quote }}
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef: { name: {{ .Release.Name }}-app, key: smtp-host }
+            - name: SMTP_PORT
+              value: {{ .Values.smtp.port | quote }}
+            - name: SMTP_SECURE
+              value: {{ .Values.smtp.secure | quote }}
+            - name: SMTP_AUTHTYPE
+              value: {{ .Values.smtp.authtype | quote }}
+            - name: SMTP_NAME
+              valueFrom:
+                secretKeyRef: { name: {{ .Release.Name }}-app, key: smtp-username }
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Release.Name }}-app, key: smtp-password }
+            {{- end }}
+          volumeMounts:
+            - { name: data, mountPath: /var/www,                 subPath: root }
+            - { name: data, mountPath: /var/www/html,            subPath: html }
+            - { name: data, mountPath: /var/www/html/data,       subPath: data }
+            - { name: data, mountPath: /var/www/html/config,     subPath: config }
+            - { name: data, mountPath: /var/www/html/custom_apps, subPath: custom_apps }
+            - { name: data, mountPath: /var/www/html/themes,     subPath: themes }
+            - { name: data, mountPath: /var/www/tmp,             subPath: tmp }
+          livenessProbe:
+            httpGet:
+              path: /status.php
+              port: http
+              httpHeaders:
+                - { name: Host, value: {{ .Values.host | quote }} }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /status.php
+              port: http
+              httpHeaders:
+                - { name: Host, value: {{ .Values.host | quote }} }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /status.php
+              port: http
+              httpHeaders:
+                - { name: Host, value: {{ .Values.host | quote }} }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+        # Read-only SFTP sidecar. Exposes ONLY the data/ subPath (the PVC root
+        # also holds config/config.php with DB credentials). uid 33 = www-data.
+        {{- include "caelus-sftp.sidecar" (dict "root" . "mounts" (list
+             (dict "volume" "data" "path" "data" "subPath" "data"))) | nindent 8 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-data
+        {{- include "caelus-sftp.volumes" (dict "root" .) | nindent 8 }}

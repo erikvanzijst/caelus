@@ -1,20 +1,21 @@
 apiVersion: v2
-name: nextcloud-wrapper
-description: Nextcloud wrapper chart for Caelus with plan-enforced storage
+name: nextcloud
+description: >-
+  Lean Caelus-native chart for Nextcloud: the Nextcloud Deployment plus a bundled
+  PostgreSQL StatefulSet on the official postgres image.
 type: application
-version: 1.0.4
-appVersion: "30.0.0"
+version: 0.1.4
+appVersion: "32.0.6"
 keywords:
   - nextcloud
   - files
   - storage
+  - postgres
 maintainers:
   - name: Caelus Team
 
+# Only dependency is Freepod's own SFTP library chart.
 dependencies:
-  - name: nextcloud
-    version: "8.9.1"
-    repository: "https://nextcloud.github.io/helm/"
   - name: caelus-sftp
     version: "0.1.0"
     repository: "file://../../_lib/caelus-sftp"

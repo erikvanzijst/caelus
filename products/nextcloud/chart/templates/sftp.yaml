@@ -1,23 +1,16 @@
 {{- /*
-Read-only SFTP access to the Nextcloud user data.
+Standalone SFTP objects (Secret, sshd-init ConfigMap, Service, sshpiper Pipe).
+The sidecar rides in the nextcloud pod (see nextcloud.yaml).
 
-Nextcloud's pod is owned by the upstream subchart, so the sidecar is injected
-via nextcloud.extraSidecarContainers / extraVolumes in values.yaml (static YAML,
-which cannot reference .Release.Name). The Pipe therefore maps the unique
-external username (release name) to a fixed internal user "sftp", and the
-sidecar references fixed-named resources (one deployment per namespace).
-
-Only the data/ subdirectory of the nextcloud-main PVC is exposed (subPath) --
-the PVC root also holds the app source and config/config.php with DB
-credentials, which must not be readable. See products/_lib/caelus-sftp.
+internalUid/Gid 33: Nextcloud locks its data dir to www-data (33), so the SFTP
+user must run as 33 or `ls` fails with "Permission denied" despite a good login.
+selector targets the nextcloud pod specifically (the default instance-only
+selector would also match the postgres pod).
 */}}
 {{ include "caelus-sftp.resources" (dict
      "root" .
-     "internalUser" "sftp"
      "internalUid" 33
      "internalGid" 33
-     "credsSecret" "sftp-credentials"
-     "scriptsConfigMap" "sftp-scripts"
      "selector" (dict
        "app.kubernetes.io/name" "nextcloud"
        "app.kubernetes.io/instance" .Release.Name)) }}

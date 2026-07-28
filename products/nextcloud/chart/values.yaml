@@ -1,101 +1,72 @@
-# Wrapper-level storage configuration for the Nextcloud data PVC.
-# caelus.plan.storageSize (injected by reconciler) overrides storage.data.size.
+# Bespoke Nextcloud chart values.
+
+# Public hostname. Used as the ingress rule host, NEXTCLOUD_TRUSTED_DOMAINS, and
+# the Host header on the health probes.
+host: "nextcloud.local"
+
+trustedProxies:
+  - "10.42.0.0/16"
+
+image:
+  repository: docker.io/library/nextcloud
+  # Tag defaults to the chart appVersion (an -apache variant is appended).
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Admin bootstrap account (only consumed on first init).
+admin:
+  username: admin
+  password: changeme
+
+# Wrapper ingress. TLS injected per-deployment by the Caelus reconciler.
+ingress:
+  enabled: true
+  className: traefik
+  annotations: {}
+
+# Cluster-internal SMTP relay. Leave host empty to disable mail.
+smtp:
+  host: "smtp.mailer.svc.cluster.local"
+  port: 25
+  fromAddress: "nextcloud@freepod.eu"
+  domain: "freepod.eu"
+  secure: ""
+  authtype: ""
+  username: ""
+  password: ""
+
+# Nextcloud data PVC (files + config + apps). caelus.plan.storageSize overrides.
 storage:
   data:
     accessMode: ReadWriteOnce
     size: 100Gi
     storageClassName: ""
 
-# Values passed to upstream nextcloud dependency chart.
-nextcloud:
-  # Upstream ingress is disabled; the wrapper provides its own Ingress
-  # (templates/ingress.yaml) so it can carry per-deployment TLS from caelus.ingress.tls
-  # (issuer/secret/host) — static subchart values cannot. Mirrors the immich wrapper.
-  ingress:
-    enabled: false
-    className: traefik
-
-  phpClientHttpsFix:
-    enabled: true
-    protocol: "https"
-
-  internalDatabase:
-    enabled: false
-
-  postgresql:
-    enabled: true
-    primary:
-      persistence:
-        enabled: true
-
-  nextcloud:
-    host: "nextcloud.local"
-    mail:
-      enabled: true
-      fromAddress: "nextcloud"
-      domain: "deprutser.be"
-      smtp:
-        host: "smtp.mailer.svc.cluster.local"
-        port: 25
-        secure: ""
-        authtype: ""
-        name: ""
-        password: ""
-
-    # Read-only SFTP sidecar (caelus-sftp), injected into the upstream nextcloud
-    # pod via its extraSidecarContainers hook (we cannot edit its template).
-    # Static YAML (no .Release.Name): the Pipe maps the external username to the
-    # fixed internal user "sftp"; resources use fixed per-namespace names. Only
-    # the data/ subdir of nextcloud-main is exposed -- the PVC root also holds
-    # config/config.php (DB credentials), which must not be readable.
-    extraSidecarContainers:
-      - name: sftp
-        image: atmoz/sftp:alpine
-        ports:
-          - containerPort: 2222
-        volumeMounts:
-          - name: nextcloud-main
-            mountPath: /home/sftp/data
-            subPath: data
-            readOnly: true
-          - name: sftp-users
-            mountPath: /etc/sftp
-            readOnly: true
-          - name: sftp-scripts
-            mountPath: /etc/sftp.d
-            readOnly: true
-        resources:
-          requests:
-            cpu: 10m
-            memory: 16Mi
-          limits:
-            memory: 64Mi
-
-    extraVolumes:
-      - name: sftp-users
-        secret:
-          secretName: sftp-credentials
-          items:
-            - key: users.conf
-              path: users.conf
-      - name: sftp-scripts
-        configMap:
-          name: sftp-scripts
-          defaultMode: 0755
-
+# Bundled PostgreSQL: a lean StatefulSet on the official postgres image (see
+# templates/postgres.yaml).
+postgresql:
+  enabled: true
+  image:
+    repository: docker.io/library/postgres
+    tag: "17-alpine"
+    pullPolicy: IfNotPresent
+  auth:
+    username: nextcloud
+    # Empty = auto-generate a strong password on first install and reuse it from
+    # the <release>-db Secret on upgrade (see nextcloud.postgresPassword). Set a
+    # literal value only to pin an explicit password.
+    password: ""
+    database: nextcloud
   persistence:
-    enabled: true
-    existingClaim: nextcloud-data
+    accessMode: ReadWriteOnce
+    size: 8Gi
+    storageClassName: ""
 
-  cronjob:
-    enabled: false
-
-  startupProbe:
-    enabled: true
-
-# TLS is injected per-deployment by the Caelus reconciler (caelus.ingress.tls). This default
-# lets the chart render standalone with the wrapper Ingress disabled.
+# Plan- and TLS-related values are injected per-deployment by the Caelus reconciler
+# (caelus.plan.*, caelus.ingress.tls). These defaults let the chart render standalone
+# (helm template / lint / tests): plan is empty so the PVC falls back to storage sizes.
 caelus:
+  plan: {}
   ingress:
     enabled: false
     tls: {}

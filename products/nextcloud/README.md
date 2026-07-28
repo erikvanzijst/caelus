@@ -1,165 +1,121 @@
-# Nextcloud Helm Chart
+# Nextcloud
 
-Wrapper chart around the official Nextcloud Helm chart from
-https://github.com/nextcloud/helm/tree/main/charts/nextcloud
+A self-contained Nextcloud chart: it renders the Nextcloud application and a
+bundled PostgreSQL database directly, on the official `nextcloud` and `postgres`
+images. Its only dependency is Freepod's `caelus-sftp` library chart, which adds
+read-only SFTP access to the data volume.
 
-The wrapper manages its own PVC for Nextcloud data storage,
-allowing Caelus to enforce plan-level storage limits via
-`.Values.caelus.plan.storageSize`. The upstream chart is
-configured with `persistence.existingClaim` to use the
-wrapper's PVC instead of creating its own.
+## What it deploys
 
-## Building
+| Component | Object(s) |
+|-----------|-----------|
+| Nextcloud | Deployment `<release>-nextcloud` (+ read-only SFTP sidecar, + wait-for-DB init), Service `<release>-nextcloud` `:8080→80` |
+| PostgreSQL | StatefulSet `<release>-postgresql` on `postgres:17-alpine` + headless Service + Secret `<release>-db` (auto-generated password); data on PVC `data-<release>-postgresql-0` |
+| Data | PVC `<release>-data` (plan-sized), mounted into the app via subPaths (`html`, `data`, `config`, `custom_apps`, `themes`, `tmp`) |
+| App secrets | Secret `<release>-app` (admin bootstrap + SMTP) |
+| Ingress | `<release>-ingress` (per-deployment TLS via `caelus.ingress.tls`) |
+| SFTP | Secret + ConfigMap + Service + sshpiper Pipe (`caelus-sftp`, uid 33 to match Nextcloud's `www-data`) |
+
+The bundled PostgreSQL password is generated on first install and reused from the
+`<release>-db` Secret on upgrade, so it never rotates a live credential. Set
+`postgresql.auth.password` to pin an explicit value instead.
+
+## Manual install
+
+```bash
+helm dependency build products/nextcloud/chart
+helm upgrade --install nextcloud products/nextcloud/chart \
+  --namespace nextcloud --create-namespace \
+  --set host=cloud.example.com
+```
+
+`image.tag` defaults to `<appVersion>-apache`. Set `admin.password` and the
+`smtp.*` values for a real deployment (defaults are dev-only).
+
+## Build and publish
+
+Caelus deploys charts by OCI reference, so the chart must be packaged and pushed
+to the registry before a product template can point at it. `helm dependency
+build` vendors the `caelus-sftp` library into `charts/`; skipping it fails the
+package with a missing-dependency error.
 
 ```bash
 cd products/nextcloud/chart
-helm dependency update
-helm package .
+helm dependency build .        # vendor caelus-sftp-*.tgz into charts/
+helm lint .
+helm package .                 # -> nextcloud-0.1.4.tgz
+helm push nextcloud-0.1.4.tgz oci://registry.home/helm --insecure-skip-tls-verify
 ```
 
-This produces `nextcloud-wrapper-1.0.0.tgz`. Create a new
-Nextcloud product in the Admin UI and add a template
-pointing to the packaged chart.
+Optionally verify the push:
 
-## Default values (system_values_json)
-
-The wrapper's `values.yaml` contains sensible defaults.
-When creating a product template in Caelus, the
-`system_values_json` can be left empty if the defaults
-suffice, or it can override specific fields.
-
-Note that upstream chart values are nested under the
-`nextcloud` key (the Helm dependency name):
-
-```json
-{
-  "nextcloud": {
-    "ingress": {
-      "enabled": true,
-      "className": "traefik"
-    },
-    "phpClientHttpsFix": {
-      "enabled": true,
-      "protocol": "https"
-    },
-    "internalDatabase": {
-      "enabled": false
-    },
-    "postgresql": {
-      "enabled": true,
-      "primary": {
-        "persistence": {
-          "enabled": true
-        }
-      }
-    },
-    "nextcloud": {
-      "mail": {
-        "enabled": true,
-        "fromAddress": "nextcloud",
-        "domain": "deprutser.be",
-        "smtp": {
-          "host": "smtp.mailer.svc.cluster.local",
-          "port": 25,
-          "secure": "",
-          "authtype": "",
-          "name": "",
-          "password": ""
-        }
-      }
-    },
-    "persistence": {
-      "enabled": true,
-      "existingClaim": "nextcloud-data"
-    },
-    "cronjob": {
-      "enabled": false
-    },
-    "startupProbe": {
-      "enabled": true
-    }
-  }
-}
+```bash
+helm pull oci://registry.home/helm/nextcloud --version 0.1.4 \
+  --insecure-skip-tls-verify --destination /tmp
 ```
 
-### Why these defaults matter
+The published chart is then referenced from a Caelus product template:
 
-**Ingress** (`nextcloud.ingress.enabled`,
-`nextcloud.ingress.className`): The upstream chart ships
-with ingress disabled. Without these, the Nextcloud pod
-runs but is not reachable from outside the cluster. We use
-`traefik` as our ingress class.
-
-**HTTPS fix** (`nextcloud.phpClientHttpsFix`): Nextcloud
-sits behind a TLS-terminating reverse proxy (Traefik).
-Without this fix, Nextcloud thinks it's being served over
-plain HTTP and generates incorrect URLs, redirect loops,
-and mixed-content warnings.
-
-**PostgreSQL sidecar** (`nextcloud.postgresql.enabled`,
-`nextcloud.internalDatabase.enabled`): By default the
-upstream chart uses an embedded SQLite database. SQLite is
-single-writer and not suitable for production. Setting
-`postgresql.enabled: true` deploys a PostgreSQL pod
-alongside Nextcloud as a subchart (Bitnami PostgreSQL).
-This automatically configures Nextcloud to connect to
-it — no manual database credentials or connection strings
-are needed. We explicitly set `internalDatabase.enabled:
-false` to disable SQLite.
-
-**PostgreSQL persistence**
-(`nextcloud.postgresql.primary.persistence.enabled`): The
-bundled PostgreSQL subchart defaults to ephemeral storage.
-Without persistence enabled, all database contents are lost
-when the PostgreSQL pod restarts. This creates a PVC for
-the PostgreSQL data directory.
-
-**Mail** (`nextcloud.nextcloud.mail`): Preconfigures
-Nextcloud to send email through the cluster-internal SMTP
-relay at `smtp.mailer.svc.cluster.local:25`. This enables
-notifications, password resets, and sharing invitations
-out of the box without requiring users to configure mail
-settings themselves.
-
-**Nextcloud persistence** (`nextcloud.persistence`): The
-wrapper creates its own PVC (`nextcloud-data`) whose size
-is controlled by `caelus.plan.storageSize` (falling back
-to `storage.data.size`). The upstream chart is told to use
-this PVC via `persistence.existingClaim: nextcloud-data`.
+| Field | Value |
+|---|---|
+| Chart ref | `oci://registry.home/helm/nextcloud` |
+| Chart version | `0.1.4` |
+| User values schema | see [User values schema](#user-values-schema) below |
+| Default Helm values | see [Default values (system_values_json)](#default-values-system_values_json) below |
 
 ## User values schema
 
-Because upstream chart values are nested under the
-`nextcloud` dependency key, the user schema uses
-`nextcloud.nextcloud.host`:
+Defines the form fields on the user-facing deployment dialog — the only values a
+tenant may override when creating a Nextcloud instance. Everything else (images,
+storage sizing, DB credentials, admin/SMTP secrets, TLS) is operator- or
+plan-controlled and is not exposed here. The one tenant-chosen value is the
+hostname:
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "nextcloud": {
-      "type": "object",
-      "properties": {
-        "nextcloud": {
-          "type": "object",
-          "properties": {
-            "host": {
-              "title": "Hostname",
-              "type": "string",
-              "minLength": 1,
-              "description": "The hostname for your Nextcloud instance"
-            }
-          },
-          "required": ["host"],
-          "additionalProperties": false
-        }
-      },
-      "required": ["nextcloud"],
-      "additionalProperties": false
+    "host": {
+      "title": "domainname",
+      "type": "string",
+      "minLength": 1,
+      "description": "The hostname for your Nextcloud instance"
     }
   },
-  "required": ["nextcloud"],
+  "required": ["host"],
   "additionalProperties": false
 }
 ```
+
+## Default values (system_values_json)
+
+The admin configures a static default-values blob (`system_values_json`) on the
+product template. It is merged over the chart's `values.yaml` for every
+deployment created from that template, and is where operator-wide settings live —
+SMTP, the admin bootstrap account, and a pinned image tag. It is not where
+per-tenant values (the hostname), plan-injected values (storage sizing), or the
+auto-generated DB password go.
+
+```json
+{
+  "image": {
+    "tag": "32.0.6-apache"
+  },
+  "admin": {
+    "username": "admin",
+    "password": "<set-a-strong-password>"
+  },
+  "smtp": {
+    "host": "smtp.mailer.svc.cluster.local",
+    "port": 25,
+    "fromAddress": "nextcloud",
+    "domain": "deprutser.be"
+  }
+}
+```
+
+`image.tag` pins the Nextcloud release, including the `-apache` suffix (otherwise
+it floats on `<appVersion>-apache`); leave `smtp.host` empty to disable mail.
+`admin.password` seeds the first-run admin account and is shared by every
+deployment created from the template.

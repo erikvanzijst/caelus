@@ -1,36 +1,35 @@
-{{- if .Values.caelus.ingress.enabled }}
+{{- if .Values.ingress.enabled }}
+{{- /*
+When TLS is a wildcard (terminated upstream) the tls block and issuer annotation are omitted.
+*/}}
 {{- $tlsCustom := and .Values.caelus.ingress.enabled (not .Values.caelus.ingress.tls.wildcard) }}
-{{- /* Upstream service name = nextcloud.fullname: .Release.Name when it already
-       contains "nextcloud" (the Caelus case), else "<release>-nextcloud". */ -}}
-{{- $svc := .Release.Name }}
-{{- if not (contains "nextcloud" .Release.Name) }}{{- $svc = printf "%s-nextcloud" .Release.Name }}{{- end }}
+{{- $annotations := merge (dict) (.Values.ingress.annotations | default dict) }}
+{{- if $tlsCustom }}{{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.caelus.ingress.tls.issuer }}{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "nextcloud-wrapper.fullname" . }}-ingress
+  name: {{ .Release.Name }}-ingress
   labels:
-    {{- include "nextcloud-wrapper.labels" . | nindent 4 }}
-  {{- if $tlsCustom }}
+    {{- include "nextcloud.labels" . | nindent 4 }}
   annotations:
-    cert-manager.io/cluster-issuer: {{ .Values.caelus.ingress.tls.issuer | quote }}
-  {{- end }}
+    {{- toYaml $annotations | nindent 4 }}
 spec:
-  ingressClassName: {{ .Values.nextcloud.ingress.className | default "traefik" }}
+  ingressClassName: {{ .Values.ingress.className }}
   {{- if $tlsCustom }}
   tls:
     - hosts:
-        - {{ .Values.caelus.ingress.host | quote }}
+        - {{ .Values.host | quote }}
       secretName: {{ .Values.caelus.ingress.tls.secretName | quote }}
   {{- end }}
   rules:
-    - host: {{ .Values.caelus.ingress.host | quote }}
+    - host: {{ .Values.host | quote }}
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ $svc }}
+                name: {{ .Release.Name }}-nextcloud
                 port:
-                  number: {{ .Values.nextcloud.service.port | default 8080 }}
+                  number: 8080
 {{- end }}

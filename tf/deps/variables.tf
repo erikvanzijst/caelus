@@ -54,3 +54,29 @@ variable "haproxy_edge_ip" {
   type        = string
   default     = "192.168.0.12/32"
 }
+
+# --- Monitoring stack (Loki/Grafana/Prometheus) ---
+
+variable "grafana_admin_password" {
+  description = "Grafana local admin password (break-glass; primary auth is Keycloak OIDC). Use secrets.auto.tfvars."
+  type        = string
+  sensitive   = true
+}
+
+variable "alert_email_to" {
+  description = "Recipient address for Prometheus/Alertmanager alert emails (delivered via the in-cluster mailer relay)."
+  type        = string
+  default     = "erik.van.zijst@gmail.com"
+}
+
+variable "grafana_oidc_client_id" {
+  description = "Keycloak OIDC client ID for Grafana (the `grafana` client in the master realm)."
+  type        = string
+  default     = "grafana"
+}
+
+variable "grafana_oidc_client_secret" {
+  description = "Keycloak OIDC client secret for the Grafana client. Use secrets.auto.tfvars."
+  type        = string
+  sensitive   = true
+}

@@ -13,7 +13,7 @@ resource "kubernetes_manifest" "headers_hsts_middleware" {
     }
     spec = {
       headers = {
-        stsSeconds          = 31536000
+        stsSeconds           = 31536000
         stsIncludeSubdomains = true
         stsPreload           = true
         forceSTSHeader       = true
@@ -22,5 +22,9 @@ resource "kubernetes_manifest" "headers_hsts_middleware" {
   }
 
   # The traefik.io/v1alpha1 CRDs are installed by the Traefik Helm release.
+  # NOTE: this object is created AFTER Traefik, but the Helm values reference it
+  # as a `websecure` default middleware. Until it exists, Traefik cannot resolve
+  # that default and returns 500 for all :443 traffic — a transient first-apply /
+  # restart window that self-heals once this applies. See design.md Risks.
   depends_on = [module.traefik]
 }

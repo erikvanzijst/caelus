@@ -135,6 +135,20 @@ should not be coupled at proposal time.
   the `kubernetes_manifest` plan fails. Mitigation: `depends_on =
   [module.traefik]`, matching the working `redirect_https.tf`; apply Traefik
   first on a cold cluster.
+- **Missing default middleware → transient 500s on `websecure`** → The Traefik
+  Helm static config references `kube-system-headers-hsts@kubernetescrd` as a
+  default middleware on the `websecure` entrypoint, but the `Middleware` object
+  is created *after* the Traefik release (`depends_on = [module.traefik]`).
+  While that object is absent — the first-apply window before it is created, or
+  a Traefik restart that re-reads config before it exists — Traefik cannot
+  resolve the entrypoint default and returns 500 for **all** :443 traffic
+  (`websecure` is `asDefault: true`). This is distinct from the
+  `redirect_https.tf` pattern despite the shared `depends_on`: that middleware
+  backs only the low-priority `web` catch-all, so its absence never breaks
+  primary HTTPS. Mitigation: the same `terraform apply` creates the object
+  moments later and the condition self-heals; on a cold cluster let the apply
+  finish before relying on :443. If the window is ever unacceptable, split the
+  apply so the `Middleware` object exists before the Helm values reference it.
 - **Wrong entrypoint attachment** → Accidentally attaching to `web` could
   interfere with ACME HTTP-01 / the redirect. Mitigation: the spec and tasks
   make `websecure`-only explicit and the verification step includes an HTTP-01

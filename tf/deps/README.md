@@ -10,6 +10,9 @@ independent state and does not use Terraform workspaces.
   Keycloak runs a **custom image** (`var.keycloak_image`) with the Freepod
   login/account/email theme baked in — see [Keycloak theming](#keycloak-theming).
 - `echo` namespace, deployment, service, ingress
+- `monitoring` namespace with the cluster-wide observability stack (Loki +
+  Promtail, Prometheus + node-exporter + kube-state-metrics + Alertmanager,
+  Grafana) — see [Monitoring stack](#monitoring-stack).
 
 ## Prerequisites
 
@@ -22,7 +25,17 @@ Create `secrets.auto.tfvars` (gitignored):
 
 ```hcl
 keycloak_admin_password = "replace-with-actual-password"
+
+# Monitoring stack
+grafana_admin_password     = "replace-with-actual-password" # break-glass local admin
+alert_email_to             = "ops@example.com"              # Alertmanager recipient
+grafana_oidc_client_secret = "replace-with-keycloak-secret" # Grafana OIDC client secret
+# grafana_oidc_client_id defaults to "grafana"; override only if the Keycloak
+# client is named differently.
 ```
+
+The monitoring stack needs no external SMTP credentials: Alertmanager relays
+email through the in-cluster `mailer` service.
 
 ## Deploy
 
@@ -31,6 +44,118 @@ cd tf/deps
 terraform init
 terraform apply
 ```
+
+## Monitoring stack
+
+A **cluster-wide** observability stack in the `monitoring` namespace, shared by
+all Caelus environments (it is *not* duplicated per env). Modules:
+
+- `loki/` — Loki (SingleBinary, filesystem-backed, ~10Gi PVC) + a Promtail
+  DaemonSet that ships every pod's logs to Loki, including parsed Traefik
+  access logs.
+- `prometheus/` — the `prometheus-community/prometheus` chart (bundles
+  node-exporter for node CPU/mem/net/disk, kube-state-metrics for workload
+  state, and Alertmanager), plus **Grafana** (mirrors the homelab layout). A
+  forked `prometheus/scrape_configs.yaml` drops high-cardinality control-plane
+  histogram buckets for the single node — **reconcile it when bumping the chart
+  version**.
+
+Runtime dependencies on other `tf/deps` singletons:
+
+- **`keycloak`** — Grafana authenticates via OIDC and whitelists users by
+  Keycloak group (see bootstrap below).
+- **`mailer`** — Alertmanager delivers alert email through
+  `smtp.mailer.svc.cluster.local:25` (no external SMTP secrets here).
+
+### Access
+
+Only **Grafana** is exposed, at `https://grafana.freepod.eu` (bare Traefik
+ingress, app-level HSTS, no forward-auth — Grafana runs its own Keycloak login).
+
+Prometheus and Alertmanager are **ClusterIP only** — reach them with
+`kubectl port-forward`:
+
+```bash
+kubectl -n monitoring port-forward svc/prometheus-server 9090:80        # Prometheus UI → http://localhost:9090
+kubectl -n monitoring port-forward svc/prometheus-alertmanager 9093:9093 # Alertmanager  → http://localhost:9093
+```
+
+### Grafana OIDC bootstrap (one-time, manual)
+
+There is no Keycloak Terraform provider here (same as the theme/realm setup
+below), so create the Grafana OIDC client, the whitelist group, and a
+group-membership mapper once — either through the **admin console UI** or via
+**`kcadm`** (both produce the same result). The whitelist is then pure group
+membership — no Terraform apply to add/remove a user.
+
+The three things to create, whichever path you use: a confidential `grafana`
+client, a `freepod-observability` group, and a group-membership mapper that puts
+a `groups` claim in the token (so Grafana's `allowed_groups` /
+`role_attribute_path` can read it).
+
+#### Via the admin console (UI)
+
+1. **Clients → Create client** (realm `master`), type **OpenID Connect**,
+   Client ID `grafana`.
+   - *Capability config:* **Client authentication ON** (confidential — this is
+     what generates the secret), **Authorization OFF** (Grafana does its own
+     role mapping; leave Keycloak's authorization services off), and check
+     **Standard flow** only (leave Direct access grants / Implicit / Service
+     account roles off).
+   - *Login settings:* **Root URL** and **Home URL** `https://grafana.freepod.eu`;
+     **Valid redirect URIs** `https://grafana.freepod.eu/login/generic_oauth`;
+     **Web origins** `https://grafana.freepod.eu`; **Valid post logout redirect
+     URIs** `+` (reuses the redirect URIs).
+2. **Client → Credentials tab** → copy the **Client secret** into
+   `secrets.auto.tfvars` as `grafana_oidc_client_secret`.
+3. **Client scopes → Create client scope** `groups` (type **Default**,
+   OpenID Connect). Open it → **Mappers → Add mapper → By configuration →
+   Group Membership**: Name `groups`, Token Claim Name `groups`, **Full group
+   path OFF**, add to ID token / Access token / Userinfo all **ON**. Then on the
+   **grafana** client → **Client scopes** tab → **Add client scope** → `groups`
+   as **Default**.
+4. **Groups → Create group** `freepod-observability`, then its **Members** tab →
+   **Add member** → add each user who should have Grafana access.
+5. *(Verify)* grafana client → **Client scopes → Evaluate** → pick your user →
+   **Generated ID token** should contain `"groups": ["freepod-observability"]`
+   (no leading slash — if you see `/freepod-observability`, turn **Full group
+   path OFF**).
+
+#### Via `kcadm`
+
+```bash
+# Run kcadm inside the Keycloak pod (adjust the pod selector as needed).
+K="kubectl -n keycloak exec -i deploy/keycloak -- /opt/keycloak/bin/kcadm.sh"
+$K config credentials --server http://localhost:8080 --realm master \
+    --user admin --password "$KEYCLOAK_ADMIN_PASSWORD"
+
+# 1) Confidential client for Grafana (standard flow). Note the generated secret
+#    and put it in secrets.auto.tfvars as grafana_oidc_client_secret.
+$K create clients -r master \
+    -s clientId=grafana -s enabled=true -s publicClient=false \
+    -s standardFlowEnabled=true \
+    -s 'redirectUris=["https://grafana.freepod.eu/login/generic_oauth"]' \
+    -s 'webOrigins=["https://grafana.freepod.eu"]'
+CID=$($K get clients -r master -q clientId=grafana --fields id --format csv --noquotes | head -1)
+$K get clients/$CID/client-secret -r master   # copy the "value"
+
+# 2) Whitelist group. Add the users who should have Grafana access to it.
+$K create groups -r master -s name=freepod-observability
+
+# 3) Map group membership into a `groups` claim so Grafana's allowed_groups /
+#    role_attribute_path can read it. Include the full path off (top-level names).
+$K create clients/$CID/protocol-mappers/models -r master \
+    -s name=groups -s protocol=openid-connect \
+    -s protocolMapper=oidc-group-membership-mapper \
+    -s 'config={"claim.name":"groups","full.path":"false","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}'
+```
+
+(The `kcadm` path attaches the mapper to the client's **dedicated** scope, which
+is always included in tokens; the UI path above uses a standalone `groups`
+client scope. Both emit the same `groups` claim — use whichever you prefer.)
+
+Grafana login stays (safely) denied until the client, group, and mapper exist
+and the user is a group member.
 
 ## Keycloak theming
 

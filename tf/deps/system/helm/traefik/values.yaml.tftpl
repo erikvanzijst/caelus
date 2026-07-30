@@ -67,3 +67,13 @@ tlsStore:
 logs:
   access:
     enabled: true
+
+metrics:
+  prometheus:
+    addRoutersLabels: true
+    service:
+      enabled: true
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: "/metrics"

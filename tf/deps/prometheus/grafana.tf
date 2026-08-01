@@ -95,6 +95,15 @@ resource "helm_release" "grafana" {
               url       = "http://prometheus-server.${var.namespace}.svc.cluster.local"
               access    = "proxy"
               isDefault = true
+              # MUST match Prometheus's global scrape_interval (prometheus.tf).
+              # Grafana floors $__rate_interval at 4x this value; leaving it unset
+              # defaults to 15s, so with a 60s scrape the floor (60s) holds only
+              # ~1 sample and irate()-based panels (Node Exporter Full's CPU
+              # Basic, Network Basic, Forks, schedstat) render empty on wide/
+              # high-resolution panels. 60s -> 240s floor -> >=4 samples.
+              jsonData = {
+                timeInterval = "60s"
+              }
             },
             {
               name      = "Loki"

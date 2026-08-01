@@ -81,7 +81,12 @@ resource "helm_release" "prometheus" {
         retention = "10d"
 
         global = {
-          scrape_interval = "30s"
+          # 60s (up from 30s) to halve sample-ingest and scrape CPU on this
+          # dense single-node k3s cluster. The two intentional `*-slow` jobs in
+          # scrape_configs.yaml pin their own 5m interval; every other job
+          # inherits this global. Note: keep dashboard/alert rate() windows >=4m
+          # so they still span multiple samples at this interval.
+          scrape_interval = "60s"
           scrape_timeout  = "10s"
         }
       }

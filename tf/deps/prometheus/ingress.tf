@@ -2,7 +2,7 @@
 # Alertmanager stay ClusterIP (reach them via `kubectl port-forward`).
 #
 # Deliberately NO forward-auth middleware: Grafana performs its own Keycloak
-# OIDC login (grafana.tf). HSTS is set at the app level in grafana.ini.
+# OIDC login (grafana.tf).
 resource "kubernetes_ingress_v1" "grafana" {
   metadata {
     name      = "grafana"

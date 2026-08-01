@@ -70,7 +70,7 @@ Runtime dependencies on other `tf/deps` singletons:
 ### Access
 
 Only **Grafana** is exposed, at `https://grafana.freepod.eu` (bare Traefik
-ingress, app-level HSTS, no forward-auth — Grafana runs its own Keycloak login).
+ingress, no forward-auth — Grafana runs its own Keycloak login).
 
 Prometheus and Alertmanager are **ClusterIP only** — reach them with
 `kubectl port-forward`:
@@ -314,10 +314,3 @@ docker rm -f freepod-kc freepod-mailpit
   `websecure` entrypoint only — see `system/helm/traefik/values.yaml.tftpl`.
   The `web` (:80) entrypoint is deliberately left untouched so ACME HTTP-01
   and the HTTP->HTTPS redirect are unaffected.
-
-## Follow-ups
-
-- Once the cluster-wide HSTS middleware from `global-hsts-headers` is applied,
-  the per-app Grafana HSTS in the `add-monitoring-stack` change's `grafana.ini`
-  becomes redundant and can be dropped. Do not make that change here — address
-  it in the `add-monitoring-stack` change when it lands.

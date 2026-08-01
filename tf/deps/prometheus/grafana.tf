@@ -39,25 +39,13 @@ resource "helm_release" "grafana" {
           root_url = "https://${var.grafana_domain}/"
         }
 
-        # HSTS is emitted by Grafana itself because nothing else in the request
-        # path does: the homelab HAProxy edge is L4 TCP passthrough (mode tcp,
-        # never sees plaintext) and freepod's Traefik has no headers middleware.
-        # A shared Traefik `headers` middleware would cover all apps but is a
-        # broader, cluster-wide change; app-level HSTS keeps this self-contained.
-        security = {
-          strict_transport_security                 = true
-          strict_transport_security_max_age_seconds = 31536000
-          strict_transport_security_subdomains      = true
-          strict_transport_security_preload         = true
-        }
-
         # Native Keycloak OIDC. Access is restricted to members of the
         # `freepod-observability` Keycloak group: allowed_groups gates login and
         # role_attribute_strict denies anyone the JMESPath maps to no role.
         "auth.generic_oauth" = {
-          enabled   = true
-          name      = "Keycloak"
-          client_id = var.grafana_oidc_client_id
+          enabled              = true
+          name                 = "Keycloak"
+          client_id            = var.grafana_oidc_client_id
           client_secret        = "$__env{GRAFANA_OAUTH_CLIENT_SECRET}"
           scopes               = "openid email profile groups"
           auth_url             = "https://keycloak.freepod.eu/realms/master/protocol/openid-connect/auth"

@@ -45,6 +45,9 @@ ports:
         - "${haproxy_edge_ip}"
   websecure:
     asDefault: true
+    http:
+      middlewares:
+        - "kube-system-headers-hsts@kubernetescrd"
     proxyProtocol:
       trustedIPs:
         - "${haproxy_edge_ip}"

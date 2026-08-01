@@ -309,3 +309,15 @@ docker rm -f freepod-kc freepod-mailpit
   OAuth2-proxy depends on a running Keycloak instance.
 - Do NOT run `terraform destroy` here without understanding that it will
   take down Keycloak for all environments.
+- A cluster-wide HSTS middleware (`headers-hsts`, `traefik.io/v1alpha1`) is
+  defined in `system/hsts.tf` and attached as a default middleware on the
+  `websecure` entrypoint only — see `system/helm/traefik/values.yaml.tftpl`.
+  The `web` (:80) entrypoint is deliberately left untouched so ACME HTTP-01
+  and the HTTP->HTTPS redirect are unaffected.
+
+## Follow-ups
+
+- Once the cluster-wide HSTS middleware from `global-hsts-headers` is applied,
+  the per-app Grafana HSTS in the `add-monitoring-stack` change's `grafana.ini`
+  becomes redundant and can be dropped. Do not make that change here — address
+  it in the `add-monitoring-stack` change when it lands.

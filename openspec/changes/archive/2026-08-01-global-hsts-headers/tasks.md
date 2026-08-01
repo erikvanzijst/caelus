@@ -30,16 +30,16 @@
 
 ## 4. Deploy and verify
 
-- [ ] 4.1 `terraform plan` / `apply` in `tf/deps/` (Traefik release applied
+- [x] 4.1 `terraform plan` / `apply` in `tf/deps/` (Traefik release applied
       first on a cold cluster so the CRDs exist at plan time).
       ```bash
       cd tf/deps && terraform apply
       ```
-- [ ] 4.2 Verify HSTS is present:
+- [x] 4.2 Verify HSTS is present:
       ```bash
       curl -sI https://keycloak.freepod.eu | grep -i strict-transport-security
       # Expected: strict-transport-security: max-age=31536000; includeSubDomains; preload
       ```
-- [ ] 4.3 Verify the `web` entrypoint is unaffected: an ACME HTTP-01 challenge
+- [x] 4.3 Verify the `web` entrypoint is unaffected: an ACME HTTP-01 challenge
       on :80 still succeeds (custom-domain cert issuance works) and the
       HTTP->HTTPS redirect still returns 301.

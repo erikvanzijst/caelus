@@ -23,6 +23,12 @@ from app.services.reconcile_constants import (
 
 logger = logging.getLogger(__name__)
 
+# Wall-clock budget handed to Helm for install/upgrade/uninstall waits. Chart
+# readiness behavior is the chart's own concern, so this is a single
+# platform-level timeout rather than a per-template knob.
+HELM_TIMEOUT_SEC = 300
+
+
 @dataclass(frozen=True)
 class ReconcileResult:
     status: str
@@ -111,7 +117,7 @@ class DeploymentReconciler:
             chart_version=template.chart_version,
             chart_digest=template.chart_digest,
             values=merged_values,
-            timeout=template.health_timeout_sec or 300,
+            timeout=HELM_TIMEOUT_SEC,
             atomic=True,
             wait=True,
         )
@@ -130,12 +136,10 @@ class DeploymentReconciler:
             deployment.name,
             deployment.namespace,
         )
-        timeout = (deployment.desired_template.health_timeout_sec or 300) if deployment.desired_template else 300
-
         self._provisioner.helm_uninstall(
             release_name=deployment.name,
             namespace=deployment.namespace,
-            timeout=timeout,
+            timeout=HELM_TIMEOUT_SEC,
             wait=True,
         )
         self._provisioner.delete_namespace(name=deployment.namespace)

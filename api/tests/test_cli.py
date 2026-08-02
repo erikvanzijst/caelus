@@ -302,8 +302,6 @@ def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
             "2.1.0",
             "--chart-digest",
             "sha256:abc123",
-            "--version-label",
-            "stable-2.1.0",
             "--system-values-json",
             '{"message":"hello"}',
             "--values-schema-file",
@@ -317,7 +315,6 @@ def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
 
     template = _get_template_from_services(1, template_id)
     assert template.chart_digest == "sha256:abc123"
-    assert template.version_label == "stable-2.1.0"
     assert template.system_values_json == {"message": "hello"}
     assert template.values_schema_json == {"type": "object", "properties": {"message": {"type": "string"}}}
     assert template.capabilities_json == {"requires_admin_upgrade": True}

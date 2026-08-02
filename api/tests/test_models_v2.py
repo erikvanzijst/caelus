@@ -14,7 +14,6 @@ def test_product_template_v2_fields_supported() -> None:
     payload = ProductTemplateVersionCreate.model_validate(
         {
             "product_id": 10,
-            "version_label": "hello-static-0.1.0",
             "chart_ref": "oci://registry.example.com/hello-static",
             "chart_version": "0.1.0",
             "system_values_json": {"user": {"message": "hello"}},

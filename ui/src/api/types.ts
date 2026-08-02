@@ -32,7 +32,6 @@ export interface ProductTemplate {
   chart_ref: string
   chart_version: string
   chart_digest?: string | null
-  version_label?: string | null
   system_values_json?: Record<string, unknown> | null
   values_schema_json?: Record<string, unknown> | null
   capabilities_json?: Record<string, unknown> | null

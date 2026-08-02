@@ -338,9 +338,9 @@ def create_template(
     ## Request body
     A `ProductTemplateVersionCreate` JSON body describing the chart binding and
     template payload: `chart_ref`, `chart_version`, and the optional
-    `chart_digest`, `version_label`, `system_values_json` (default values for
-    the template), `values_schema_json` (JSON Schema for the user values form),
-    and `capabilities_json`.
+    `chart_digest`, `system_values_json` (default values for the template),
+    `values_schema_json` (JSON Schema for the user values form), and
+    `capabilities_json`.
 
     ## Parameters
     - **product_id** — the parent product. The server forces the payload's

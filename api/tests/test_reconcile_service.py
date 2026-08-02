@@ -83,7 +83,6 @@ def _seed_deployment(db_session, *, storage_bytes: int | None = 0) -> int:
             chart_version="1.2.3",
             system_values_json={"replicas": 1},
             values_schema_json=schema,
-            health_timeout_sec=120,
         ),
     )
     product_orm = db_session.get(ProductORM, product.id)

@@ -193,7 +193,6 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     values_schema_json: Optional[dict[str, Any]] = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
-    health_timeout_sec: Optional[int] = Field(default=None)
     product_id: int = Field(
         sa_column=Column(Integer, ForeignKey("product.id"), nullable=False, index=True)
     )

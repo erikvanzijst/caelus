@@ -314,16 +314,6 @@ def create_template(
         "--values-schema-file",
         help="Path to JSON file containing template values schema object.",
     ),
-    capabilities_json: str | None = typer.Option(
-        None,
-        "--capabilities-json",
-        help="JSON object string for template capabilities.",
-    ),
-    capabilities_file: Path | None = typer.Option(
-        None,
-        "--capabilities-file",
-        help="Path to JSON file containing template capabilities object.",
-    ),
 ) -> None:
     try:
         parsed_system_values = _parse_json_object_input(
@@ -337,12 +327,6 @@ def create_template(
             json_file=values_schema_file,
             json_option_name="--values-schema-json",
             file_option_name="--values-schema-file",
-        )
-        parsed_capabilities = _parse_json_object_input(
-            json_text=capabilities_json,
-            json_file=capabilities_file,
-            json_option_name="--capabilities-json",
-            file_option_name="--capabilities-file",
         )
     except ValueError as e:
         logger.warning("Invalid template JSON input: %s", e)
@@ -361,7 +345,6 @@ def create_template(
                     chart_digest=chart_digest,
                     system_values_json=parsed_system_values,
                     values_schema_json=parsed_values_schema,
-                    capabilities_json=parsed_capabilities,
                 ),
             )
         except CaelusException as e:

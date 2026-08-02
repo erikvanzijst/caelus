@@ -18,7 +18,6 @@ def test_product_template_v2_fields_supported() -> None:
             "chart_version": "0.1.0",
             "system_values_json": {"user": {"message": "hello"}},
             "values_schema_json": {"type": "object"},
-            "capabilities_json": {"requires_admin_upgrade": True},
             "health_timeout_sec": 600,
         }
     )

@@ -306,8 +306,6 @@ def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
             '{"message":"hello"}',
             "--values-schema-file",
             str(values_schema_file),
-            "--capabilities-json",
-            '{"requires_admin_upgrade":true}',
         ],
     )
     assert template_res.exit_code == 0
@@ -317,7 +315,6 @@ def test_cli_create_template_supports_rest_extra_fields(cli_runner, tmp_path):
     assert template.chart_digest == "sha256:abc123"
     assert template.system_values_json == {"message": "hello"}
     assert template.values_schema_json == {"type": "object", "properties": {"message": {"type": "string"}}}
-    assert template.capabilities_json == {"requires_admin_upgrade": True}
 
 
 def test_cli_create_template_invalid_json_returns_stable_error(cli_runner):

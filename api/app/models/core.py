@@ -179,7 +179,6 @@ class ProductTemplateVersionBase(SQLModel):
     chart_digest: Optional[str] = None
     system_values_json: Optional[dict[str, Any]] = None
     values_schema_json: Optional[dict[str, Any]] = None
-    capabilities_json: Optional[dict[str, Any]] = None
 
 
 class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
@@ -192,9 +191,6 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
         default=None, sa_column=Column(JSON, nullable=True)
     )
     values_schema_json: Optional[dict[str, Any]] = Field(
-        default=None, sa_column=Column(JSON, nullable=True)
-    )
-    capabilities_json: Optional[dict[str, Any]] = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
     health_timeout_sec: Optional[int] = Field(default=None)

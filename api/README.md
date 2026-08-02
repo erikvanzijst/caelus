@@ -259,7 +259,6 @@ This works for any `caelus` command that returns a YAML list or object.
 - Chart identity: `chart_ref`, `chart_version`, optional immutable `chart_digest`.
 - Values contract includes `system_values_json`.
 - Values contract includes `values_schema_json`.
-- Values contract includes `capabilities_json`.
 - Soft deletion via `deleted_at`.
 
 ### Deployment

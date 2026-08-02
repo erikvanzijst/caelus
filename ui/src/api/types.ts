@@ -34,7 +34,6 @@ export interface ProductTemplate {
   chart_digest?: string | null
   system_values_json?: Record<string, unknown> | null
   values_schema_json?: Record<string, unknown> | null
-  capabilities_json?: Record<string, unknown> | null
   created_at: IsoDate
   product: Product
 }

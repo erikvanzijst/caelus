@@ -294,9 +294,6 @@ def create_template(
     chart_digest: str | None = typer.Option(
         None, "--chart-digest", help="Optional immutable digest for the chart artifact."
     ),
-    version_label: str | None = typer.Option(
-        None, "--version-label", help="Optional human-readable version label."
-    ),
     system_values_json: str | None = typer.Option(
         None,
         "--system-values-json",
@@ -362,7 +359,6 @@ def create_template(
                     chart_ref=chart_ref,
                     chart_version=chart_version,
                     chart_digest=chart_digest,
-                    version_label=version_label,
                     system_values_json=parsed_system_values,
                     values_schema_json=parsed_values_schema,
                     capabilities_json=parsed_capabilities,

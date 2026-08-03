@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from jsonschema import ValidationError
+from jsonschema import SchemaError, ValidationError
 from jsonschema import validate as jsonschema_validate
 
 from app.services.errors import IntegrityException
@@ -44,6 +44,15 @@ def validate_user_values(
 
     try:
         jsonschema_validate(instance=user_values_json, schema=values_schema_json)
+    except SchemaError as exc:
+        # SchemaError is a *sibling* of ValidationError, not a subclass, so it
+        # would otherwise escape as an unhandled 500. It means the template's
+        # own schema is broken, not the user's values. Templates created since
+        # the meta-validation in `templates.create_template` cannot hit this;
+        # this is a safety net for any that predate it.
+        raise IntegrityException(
+            f"product template has an invalid values_schema_json: {exc.message}"
+        ) from exc
     except ValidationError as exc:
         raise IntegrityException(f"user_values_json is invalid: {exc.message}") from exc
 

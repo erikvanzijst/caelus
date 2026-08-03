@@ -347,11 +347,15 @@ def create_template(
       ignored.
 
     ## Behavior
-    The parent product must exist or a 404 is raised. Creating a template does
-    not by itself make it the product's current template version; that is set
-    via the product's `template_id`.
+    The parent product must exist or a 404 is raised. When `values_schema_json`
+    is supplied it is meta-validated as a JSON Schema document (the dialect is
+    taken from its own `$schema` key); a malformed schema is rejected with a 400
+    rather than being stored and failing later for a tenant. Creating a template
+    does not by itself make it the product's current template version; that is
+    set via the product's `template_id`.
 
     ## Errors
+    - **400 Bad Request** — `values_schema_json` is not a valid JSON Schema.
     - **404 Not Found** — the parent product does not exist.
     - **403 Forbidden** — the caller is not an administrator.
     - **409 Conflict** — a template for this product version already exists.

@@ -342,6 +342,36 @@ def test_cli_create_template_invalid_json_returns_stable_error(cli_runner):
     assert "Traceback" not in result.output
 
 
+def test_cli_create_template_rejects_malformed_values_schema(cli_runner):
+    """Well-formed JSON that is not a valid JSON Schema must fail at create time.
+
+    `strng` is a typo for `string`. Before meta-validation this was stored
+    happily and only blew up later, for a tenant creating a deployment.
+    """
+    runner, app = cli_runner
+
+    create_res = runner.invoke(app, ["create-product", "template-bad-schema", "desc"])
+    assert create_res.exit_code == 0
+
+    result = runner.invoke(
+        app,
+        [
+            "create-template",
+            "--product-id",
+            "1",
+            "--chart-ref",
+            "oci://example/chart",
+            "--chart-version",
+            "1.0.0",
+            "--values-schema-json",
+            '{"type":"object","properties":{"host":{"type":"strng"}}}',
+        ],
+    )
+    assert result.exit_code == 1
+    assert "values_schema_json" in result.output
+    assert "Traceback" not in result.output
+
+
 def test_cli_create_template_rejects_both_json_and_file_for_same_field(cli_runner, tmp_path):
     runner, app = cli_runner
 

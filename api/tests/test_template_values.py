@@ -16,6 +16,34 @@ def test_validate_user_values_rejects_non_object_payload() -> None:
         validate_user_values(["not", "object"], {"type": "object", "properties": {"user": {"type": "object"}}})
 
 
+def test_validate_user_values_rejects_malformed_template_schema() -> None:
+    """A broken *template* schema must surface as a domain error, not SchemaError.
+
+    `jsonschema.SchemaError` is a sibling of `ValidationError`, not a subclass,
+    so it used to escape this function's handler and become an HTTP 500 for the
+    tenant. Templates created after the `create_template` meta-validation cannot
+    reach this path, but older rows might.
+    """
+    with pytest.raises(IntegrityException) as exc_info:
+        validate_user_values(
+            {"host": "example.test"},
+            {"type": "object", "properties": {"host": {"type": "strng"}}},
+        )
+    assert "values_schema_json" in str(exc_info.value)
+
+
+def test_validate_user_values_accepts_2020_12_only_construct() -> None:
+    """Dialect comes from the document's `$schema`, so 2020-12 keywords apply."""
+    schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {"ports": {"type": "array", "prefixItems": [{"type": "integer"}]}},
+    }
+    validate_user_values({"ports": [8080]}, schema)
+    with pytest.raises(IntegrityException):
+        validate_user_values({"ports": ["nope"]}, schema)
+
+
 def test_validate_user_values_allows_empty_when_user_scope_missing() -> None:
     validate_user_values({}, {"type": "object", "properties": {"system": {"type": "object"}}})
 

@@ -1,14 +1,14 @@
 ## 1. Phase 1 — Product visibility
 
-- [ ] 1.1 Add `visibility` to `ProductBase`/`ProductORM` in `api/app/models/core.py` as a non-null column accepting `public` and `admin`, defaulting to `admin` for new rows
-- [ ] 1.2 Add an Alembic migration creating the column and backfilling every existing product to `public`
-- [ ] 1.3 Add `visibility` to `ProductCreate`, `ProductUpdate`, and `ProductRead`
-- [ ] 1.4 Filter end-user product listings to `visibility = 'public'` in `api/app/services/products.py`, leaving admin listings filtered on `deleted_at` alone
-- [ ] 1.5 Add `--visibility` to `create-product` and `update-product` in `api/app/cli.py`
-- [ ] 1.6 Add `visibility` to `ui/src/api/types.ts` and to the product update mutation
-- [ ] 1.7 Build a `ProductVisibilityControl` component under `ui/src/components/` showing the current setting and persisting changes via the product update API; render it in the product detail panel rather than inlining it
-- [ ] 1.8 Write tests: hidden products excluded from the end-user list, admins see all non-deleted products, migration backfills existing rows to `public`, new products default to `admin`
-- [ ] 1.9 Write tests: changing visibility to `public` makes a product appear in the end-user list and to `admin` removes it, with existing deployments unaffected; REST and CLI produce identical results
+- [x] 1.1 Add `visibility` to `ProductBase`/`ProductORM` in `api/app/models/core.py` as a non-null column accepting `public` and `admin`, defaulting to `admin` for new rows
+- [x] 1.2 Add an Alembic migration creating the column and backfilling every existing product to `public`
+- [x] 1.3 Add `visibility` to `ProductCreate`, `ProductUpdate`, and `ProductRead`
+- [x] 1.4 Filter end-user product listings to `visibility = 'public'` in `api/app/services/products.py`, leaving admin listings filtered on `deleted_at` alone
+- [x] 1.5 Add `--visibility` to `create-product` and `update-product` in `api/app/cli.py`
+- [x] 1.6 Add `visibility` to `ui/src/api/types.ts` and to the product update mutation
+- [x] 1.7 Build a `ProductVisibilityControl` component under `ui/src/components/` showing the current setting and persisting changes via the product update API; render it in the product detail panel rather than inlining it
+- [x] 1.8 Write tests: hidden products excluded from the end-user list, admins see all non-deleted products, migration backfills existing rows to `public`, new products default to `admin`
+- [x] 1.9 Write tests: changing visibility to `public` makes a product appear in the end-user list and to `admin` removes it, with existing deployments unaffected; REST and CLI produce identical results
 
 ## 2. Phase 2 — Governance columns and write guards
 

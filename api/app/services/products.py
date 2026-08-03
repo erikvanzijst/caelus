@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app.models import ProductRead, ProductORM, ProductCreate, ProductUpdate
+from app.models import (
+    ProductRead,
+    ProductORM,
+    ProductCreate,
+    ProductUpdate,
+    ProductVisibility,
+    UserORM,
+)
 from app.services import templates as template_service
 from app.services.errors import NotFoundException, IntegrityException, ValidationException
 from app.services.images import process_icon, generate_icon_filename, save_icon, MAX_ICON_SIZE
+
+logger = logging.getLogger(__name__)
 
 
 def create_product(
@@ -56,11 +66,21 @@ def create_product(
         raise ValidationException(str(exc)) from exc
 
 
-def list_products(session: Session) -> list[ProductRead]:
-    return [
-        ProductRead.model_validate(p)
-        for p in session.exec(select(ProductORM).where(ProductORM.deleted_at == None)).all()
-    ]
+def list_products(session: Session, *, include_hidden: bool = False) -> list[ProductRead]:
+    """List non-deleted products.
+
+    Args:
+        session: Database session
+        include_hidden: When False (the end-user listing) only products with
+            ``visibility = public`` are returned. When True (the administrative
+            listing) every non-deleted product is returned, filtered on
+            ``deleted_at`` alone, so experimental and deprecated products stay
+            discoverable to operators.
+    """
+    statement = select(ProductORM).where(ProductORM.deleted_at == None)
+    if not include_hidden:
+        statement = statement.where(ProductORM.visibility == ProductVisibility.PUBLIC)
+    return [ProductRead.model_validate(p) for p in session.exec(statement).all()]
 
 
 def get_product(session: Session, product_id: int) -> ProductRead:
@@ -91,13 +111,21 @@ def delete_product(session: Session, *, product_id: int) -> ProductRead:
 
 
 def update_product(
-    session: Session, *, product: ProductUpdate, icon_data: bytes | None = None
+    session: Session,
+    *,
+    product: ProductUpdate,
+    icon_data: bytes | None = None,
+    actor: UserORM | None = None,
 ) -> ProductRead:
     """Update a product's fields and/or icon.
 
     Validates that the product exists and that the template belongs to the product.
     Raises NotFoundException if either is missing.
     Raises ValidationException if icon processing fails.
+
+    ``actor`` is the administrator performing the update, used only to attribute
+    visibility changes in the log; callers that cannot supply one still update
+    normally.
     """
     if not (
         product_orm := session.exec(
@@ -120,6 +148,10 @@ def update_product(
     if product.replaces is not None:
         product_orm.replaces = product.replaces
 
+    previous_visibility = product_orm.visibility
+    if product.visibility is not None:
+        product_orm.visibility = product.visibility
+
     if icon_data is not None:
         if len(icon_data) > MAX_ICON_SIZE:
             raise ValidationException(
@@ -136,6 +168,15 @@ def update_product(
     session.add(product_orm)
     session.commit()
     session.refresh(product_orm)
+    if product.visibility is not None and product.visibility != previous_visibility:
+        logger.info(
+            "Product visibility changed product_id=%s name=%s from=%s to=%s actor=%s",
+            product_orm.id,
+            product_orm.name,
+            previous_visibility.value,
+            product_orm.visibility.value,
+            actor.email if actor else "unknown",
+        )
     return ProductRead.model_validate(product_orm)
 
 

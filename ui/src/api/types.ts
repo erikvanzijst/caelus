@@ -15,6 +15,9 @@ export interface TosAcceptance {
   accepted_at: IsoDate | null
 }
 
+/** Whether a product is offered to end users ('public') or hidden ('admin'). */
+export type ProductVisibility = 'public' | 'admin'
+
 export interface Product {
   id: number
   name: string
@@ -23,6 +26,7 @@ export interface Product {
   icon_url?: string | null
   category?: string | null
   replaces?: string | null
+  visibility: ProductVisibility
   created_at: IsoDate
 }
 

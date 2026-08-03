@@ -35,6 +35,20 @@ def get_current_user(
     return user
 
 
+def get_optional_user(
+    x_auth_request_email: str | None = Header(None),
+    session: Session = Depends(get_session),
+) -> UserORM | None:
+    """The caller when the request carries an identity, else None.
+
+    ``get_current_user`` 404s an anonymous request; endpoints that are public
+    but shaped by who is asking need it to be None instead.
+    """
+    if not x_auth_request_email:
+        return None
+    return get_current_user(x_auth_request_email, session)
+
+
 def require_admin(
     current_user: UserORM = Depends(get_current_user),
 ) -> UserORM:

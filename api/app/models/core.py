@@ -1,10 +1,22 @@
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Optional, Any
 from uuid import UUID, uuid4
 
 from pydantic import ConfigDict, field_validator, model_validator
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String, Uuid, func
+from sqlalchemy import (
+    Column,
+    Enum as SAEnum,
+    ForeignKey,
+    Integer,
+    Index,
+    JSON,
+    Text,
+    String,
+    Uuid,
+    func,
+)
 
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
 
@@ -84,12 +96,25 @@ class TosAcceptanceRead(SQLModel):
     accepted_at: Optional[datetime] = None
 
 
+class ProductVisibility(StrEnum):
+    """Whether a product is offered to end users.
+
+    Runtime state, deliberately independent of curation: a catalog-managed
+    product may be hidden, and a database-authored one may be public. New
+    products start ADMIN so onboarding is never visible before it is ready.
+    """
+
+    PUBLIC = "public"
+    ADMIN = "admin"
+
+
 class ProductBase(SQLModel):
     name: str
     description: str | None = None
     template_id: Optional[int] = None
     category: str | None = None
     replaces: str | None = None
+    visibility: ProductVisibility = ProductVisibility.ADMIN
 
 
 class ProductORM(ProductBase, table=True):
@@ -112,6 +137,14 @@ class ProductORM(ProductBase, table=True):
     )
     # Relative path to product icon under STATIC_PATH (e.g., "icons/<sha1>.png")
     rel_icon_path: Optional[str] = Field(default=None, nullable=True)
+    visibility: ProductVisibility = Field(
+        default=ProductVisibility.ADMIN,
+        sa_column=Column(
+            SAEnum(ProductVisibility, values_callable=lambda e: [m.value for m in e]),
+            nullable=False,
+            server_default=ProductVisibility.ADMIN.value,
+        ),
+    )
     template: "ProductTemplateVersionORM" = Relationship(
         back_populates="products",
         sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id", "lazy": "joined"},
@@ -139,6 +172,7 @@ class ProductUpdate(SQLModel):
     description: str | None = None
     category: str | None = None
     replaces: str | None = None
+    visibility: ProductVisibility | None = None
 
 
 class ProductReadBase(ProductBase):

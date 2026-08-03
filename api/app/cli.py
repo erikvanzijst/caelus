@@ -22,6 +22,7 @@ from app.models import (
     ProductTemplateVersionCreate,
     ProductCreate,
     ProductUpdate,
+    ProductVisibility,
     DeploymentUpdate,
     PlanCreate,
     PlanUpdate,
@@ -202,6 +203,11 @@ def create_product(
     template_id: int | None = None,
     category: str | None = typer.Option(None, "--category"),
     replaces: str | None = typer.Option(None, "--replaces"),
+    visibility: ProductVisibility = typer.Option(
+        ProductVisibility.ADMIN.value,
+        "--visibility",
+        help="Whether the product is offered to end users. New products stay hidden by default.",
+    ),
     icon: Path | None = typer.Option(None, "--icon", help="Path to product icon image"),
 ) -> None:
     with session_scope() as session:
@@ -218,6 +224,7 @@ def create_product(
                     template_id=template_id,
                     category=category,
                     replaces=replaces,
+                    visibility=visibility,
                 ),
                 icon_data=icon_data,
             )
@@ -234,9 +241,14 @@ def update_product(
     description: str | None = typer.Option(None, "--description"),
     category: str | None = typer.Option(None, "--category"),
     replaces: str | None = typer.Option(None, "--replaces"),
+    visibility: ProductVisibility | None = typer.Option(
+        None,
+        "--visibility",
+        help="Publish the product to end users ('public') or withdraw it ('admin').",
+    ),
 ) -> None:
     with session_scope() as session:
-        _require_cli_user(session)
+        actor = _require_cli_user(session)
         try:
             product = product_service.update_product(
                 session,
@@ -246,7 +258,9 @@ def update_product(
                     description=description,
                     category=category,
                     replaces=replaces,
+                    visibility=visibility,
                 ),
+                actor=actor,
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
@@ -267,8 +281,10 @@ def delete_product(product_id: int) -> None:
 @app.command("list-products")
 def list_products() -> None:
     with session_scope() as session:
-        _require_cli_user(session)
-        _echo_yaml_entity(product_service.list_products(session))
+        # Mirrors GET /api/products: admins additionally see the products
+        # hidden from end users.
+        user = _require_cli_user(session)
+        _echo_yaml_entity(product_service.list_products(session, include_hidden=user.is_admin))
 
 
 @app.command("get-product")

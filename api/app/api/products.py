@@ -19,7 +19,7 @@ from starlette.datastructures import UploadFile
 from sqlmodel import SQLModel, Session
 
 from app.db import get_session
-from app.deps import get_current_user, require_admin
+from app.deps import get_current_user, get_optional_user, require_admin
 from app.models import (
     ProductRead,
     ProductCreate,
@@ -136,14 +136,17 @@ async def create_product(
     Accepts either of two content types:
 
     - **application/json** — the body is the product JSON (`ProductCreate`):
-      `name` (required), and optional `description`, `template_id`, and the
-      marketing-metadata fields `category` and `replaces`. No icon.
+      `name` (required), and optional `description`, `template_id`,
+      `visibility`, and the marketing-metadata fields `category` and
+      `replaces`. No icon.
     - **multipart/form-data** — a required `payload` part holding the same
       product JSON, plus an optional `icon` image file. When an icon is
       supplied, the returned product carries its `icon_url`.
 
     ## Behavior
     - Product names are unique; a duplicate name yields a 409 conflict.
+    - `visibility` defaults to `admin`, so a product being onboarded is not
+      offered to end users until it is explicitly published.
     - When an `icon` is supplied it is validated against the maximum size; the
       product's icon is then reachable through
       `GET /api/products/{product_id}/icon`.
@@ -170,21 +173,29 @@ async def create_product(
     "",
     response_model=list[ProductRead],
     summary="List products",
-    response_description="All products with their marketing metadata and icon URLs.",
+    response_description="All products the caller may see, with their marketing metadata and icon URLs.",
 )
 def list_products(
+    current_user: UserORM | None = Depends(get_optional_user),
     session: Session = Depends(get_session),
 ) -> list[ProductRead]:
-    """List all products.
+    """List the products visible to the caller.
 
     ## Authorization
     Public — no authentication required.
 
     ## Behavior
+    Anonymous visitors and regular users get the end-user listing: only
+    non-deleted products whose `visibility` is `public`. Administrators get the
+    administrative listing, which additionally includes products whose
+    `visibility` is `admin`. Soft-deleted products are excluded either way.
+
     Each product includes its marketing metadata (`category`, `replaces`) and
     an `icon_url` when an icon is set.
     """
-    return product_service.list_products(session)
+    return product_service.list_products(
+        session, include_hidden=bool(current_user and current_user.is_admin)
+    )
 
 
 @router.get(
@@ -245,7 +256,7 @@ async def update_product(
     - **application/json** — the body is the product JSON (`ProductUpdate`).
       Every field is optional; only the provided fields are changed, leaving
       the rest untouched (partial update). Fields: `name`, `description`,
-      `template_id`, `category`, `replaces`.
+      `template_id`, `category`, `replaces`, `visibility`.
     - **multipart/form-data** — a required `payload` part holding the same
       `ProductUpdate` JSON, plus an optional `icon` image file that replaces
       the product's existing icon.
@@ -259,6 +270,9 @@ async def update_product(
       preserved.
     - Setting `template_id` selects the product's current template version; the
       referenced template must belong to this product or a 404 is raised.
+    - Setting `visibility` to `public` offers the product in the end-user
+      product list; setting it to `admin` withdraws it, leaving existing
+      deployments untouched.
     - A supplied `icon` replaces the product's existing icon; the returned
       product carries the new `icon_url`.
 
@@ -274,7 +288,13 @@ async def update_product(
     """
     payload, icon_data = await parse_product_request(request, ProductUpdate)
     payload.id = product_id
-    return await run_in_threadpool(product_service.update_product, session, product=payload, icon_data=icon_data)
+    return await run_in_threadpool(
+        product_service.update_product,
+        session,
+        product=payload,
+        icon_data=icon_data,
+        actor=current_user,
+    )
 
 
 @router.delete(

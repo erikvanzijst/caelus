@@ -21,6 +21,7 @@ const product: Product = {
   description: 'A test application',
   template_id: 10,
   icon_url: null,
+  visibility: 'public',
   created_at: '2026-01-01T00:00:00Z',
 }
 

@@ -15,6 +15,7 @@ import type { Product } from '../api/types'
 import { formatDateTime } from '../utils/format'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 import { InlineEditField } from './InlineEditField'
+import { ProductVisibilityControl } from './ProductVisibilityControl'
 
 interface SelectedProductProps {
   product: Product
@@ -126,6 +127,9 @@ export function SelectedProduct({ product, onError }: SelectedProductProps) {
             emptyText="No 'replaces' set."
             onSave={(replaces) => updateProductMutation.mutate({ replaces })}
           />
+          <Stack direction="row" spacing={2} alignItems="flex-start" sx={{ pt: 1 }}>
+            <ProductVisibilityControl product={product} onError={onError} />
+          </Stack>
           <Stack direction="row" spacing={2} alignItems="center">
             <Typography variant="body2" color="text.secondary">
               Created {formatDateTime(product.created_at)}

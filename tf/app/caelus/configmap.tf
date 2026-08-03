@@ -20,5 +20,11 @@ resource "kubernetes_config_map" "api" {
 
     # CAELUS_LOG_LEVEL    = "info"
     PYTHONUNBUFFERED    = "1"
+
+    # Trust X-Forwarded-For/Proto from the in-cluster Traefik pod so uvicorn
+    # reports the real client IP instead of the proxy's pod IP. Value is the
+    # k3s pod CIDR; uvicorn walks the XFF chain in reverse and returns the
+    # first host outside this range.
+    FORWARDED_ALLOW_IPS = "10.42.0.0/16"
   }
 }

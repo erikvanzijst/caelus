@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from pydantic import ConfigDict, field_validator, model_validator
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import (
+    Boolean,
     Column,
     Enum as SAEnum,
     ForeignKey,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     String,
     Uuid,
     func,
+    text,
 )
 
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
@@ -127,10 +129,28 @@ class ProductORM(ProductBase, table=True):
             sqlite_where=Column("deleted_at").is_(None),
             postgresql_where=Column("deleted_at").is_(None),
         ),
+        Index(
+            "uq_product_slug_active",
+            "slug",
+            unique=True,
+            sqlite_where=Column("deleted_at").is_(None),
+            postgresql_where=Column("deleted_at").is_(None),
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field()
+    # The stable key joining this row to its `products/catalog/<slug>.yaml`
+    # file, deliberately independent of `name` so renaming a product does not
+    # orphan its catalog entry. Null for database-authored products.
+    slug: Optional[str] = Field(default=None, nullable=True)
+    # Whether the catalog owns this product. Written *only* by the
+    # CatalogReconciler, derived from catalog file presence, so the file and
+    # the flag cannot disagree.
+    curated: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+    )
     # The product's canonical template used for new deployments:
     template_id: Optional[int] = Field(
         default=None, foreign_key="product_template_version.id", index=True
@@ -162,10 +182,13 @@ class ProductORM(ProductBase, table=True):
 
 
 class ProductCreate(ProductBase):
-    pass
+    # `slug` and `curated` are reconciler-owned, so an attempt to set them out
+    # of band is rejected rather than silently ignored.
+    model_config = ConfigDict(extra="forbid")
 
 
 class ProductUpdate(SQLModel):
+    model_config = ConfigDict(extra="forbid")
     id: Optional[int] = None
     name: str | None = None
     template_id: Optional[int] = None
@@ -180,6 +203,10 @@ class ProductReadBase(ProductBase):
     id: int
     created_at: datetime
     icon_url: Optional[str] = None
+    # Read-only projections of the reconciler-owned columns; the admin UI
+    # branches on `curated` to render catalog-managed products read-only.
+    slug: Optional[str] = None
+    curated: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -230,6 +257,11 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     product_id: int = Field(
         sa_column=Column(Integer, ForeignKey("product.id"), nullable=False, index=True)
     )
+    # The git commit whose catalog produced this row, stamped once on insert by
+    # the reconciler. Audit metadata only: deliberately absent from the create
+    # and read schemas, never read by application logic, and never part of
+    # template matching (a null value simply means "not catalog-produced").
+    catalog_commit: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
     product: ProductORM = Relationship(
         back_populates="templates",
         sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id", "lazy": "joined"},

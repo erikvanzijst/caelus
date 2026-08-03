@@ -27,6 +27,10 @@ export interface Product {
   category?: string | null
   replaces?: string | null
   visibility: ProductVisibility
+  /** Catalog key joining this product to `products/catalog/<slug>.yaml`; null for database-authored products. */
+  slug?: string | null
+  /** Whether the catalog owns this product. Written only by the reconciler; everything but `visibility` is read-only when true. */
+  curated: boolean
   created_at: IsoDate
 }
 

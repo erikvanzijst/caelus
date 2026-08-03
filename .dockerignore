@@ -1,0 +1,43 @@
+# Build context rules for the API image, which builds from the repository root
+# (`docker build -f api/Dockerfile .`) because it has to copy both `api/` and
+# the top-level `products/catalog/`. Replaces the former `api/.dockerignore`,
+# which no longer applies now that the context is not `api/`.
+#
+# The UI and Keycloak images still build from their own directories and use
+# their own ignore files, so nothing here affects them.
+
+# Start from nothing and re-include only what the API image needs. An allowlist
+# rather than a denylist because the context otherwise pulls in `var/pg_data`,
+# which the build cannot read, and `.claude/worktrees`, which contains whole
+# copies of the repository.
+*
+!api
+!products/catalog
+
+# Within those, the junk the old api/.dockerignore excluded.
+**/.git
+**/.gitignore
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
+**/*.so
+**/.Python
+**/.eggs
+**/*.egg-info
+**/.venv
+**/venv
+**/ENV
+**/.pytest_cache
+**/.coverage
+**/htmlcov
+**/.idea
+**/.vscode
+**/*.swp
+**/*.swo
+**/dist
+**/build
+**/*.md
+**/docs
+**/.DS_Store
+**/*.log
+**/.env.*

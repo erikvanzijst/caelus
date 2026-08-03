@@ -12,9 +12,13 @@ RUN pip install uv
 
 RUN mkdir /app
 WORKDIR /app
-COPY . .
+
+COPY api/ .
 RUN uv sync --no-dev --frozen
 RUN uv pip install . --no-deps
+
+COPY products/catalog/ /app/products/catalog/
+ENV CAELUS_CATALOG_DIR=/app/products/catalog
 
 EXPOSE 8000
 

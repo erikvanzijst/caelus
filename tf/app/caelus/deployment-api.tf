@@ -58,6 +58,40 @@ resource "kubernetes_deployment" "api" {
           }
         }
 
+        # Applies the catalog baked into the image at /app/products/catalog.
+        # Init containers run in order, so this always follows `migrate` and can
+        # rely on the schema being current. A malformed catalog exits non-zero,
+        # which fails the init container: the new pod never becomes ready and
+        # the previous ReplicaSet keeps serving the prior catalog.
+        init_container {
+          name              = "catalog"
+          image             = var.api_image
+          image_pull_policy = "Always"
+          command           = ["caelus", "catalog", "apply"]
+
+          env_from {
+            config_map_ref {
+              name = "caelus-api-config"
+            }
+          }
+
+          env_from {
+            secret_ref {
+              name = "caelus-db"
+            }
+          }
+
+          # The reconciler materializes product icons into CAELUS_STATIC_PATH,
+          # so it needs the same persistent volume the API serves them from.
+          # Without this mount the icons would be written to the init
+          # container's ephemeral filesystem and vanish, leaving every curated
+          # product with a stored rel_icon_path pointing at a missing file.
+          volume_mount {
+            name       = "static-data"
+            mount_path = "/var/static"
+          }
+        }
+
         container {
           image             = var.api_image
           image_pull_policy = "Always"

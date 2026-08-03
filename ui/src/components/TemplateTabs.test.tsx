@@ -28,6 +28,7 @@ const product: Product = {
   template_id: 20,
   icon_url: null,
   visibility: 'public',
+  curated: false,
   created_at: '2026-01-01T00:00:00Z',
 }
 

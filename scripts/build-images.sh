@@ -98,7 +98,8 @@ if [[ "$TARGET" == "both" || "$TARGET" == "all" || "$TARGET" == "api" ]]; then
     --tag "${REGISTRY}/api:${TAG}" \
     --tag "${REGISTRY}/api:${BRANCH_TAG}" \
     --tag "${REGISTRY}/api:latest" \
-    ./api
+    --file ./api/Dockerfile \
+    .
 fi
 
 if [[ "$TARGET" == "keycloak" || "$TARGET" == "all" ]]; then

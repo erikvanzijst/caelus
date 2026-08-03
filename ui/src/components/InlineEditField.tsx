@@ -15,6 +15,11 @@ interface InlineEditFieldProps {
   multiline?: boolean
   /** Extra props/styling for the read-only display Typography. */
   typographyProps?: TypographyProps
+  /**
+   * Render the value as plain text with no click-to-edit affordance. Used for
+   * catalog-managed products, whose fields the API refuses to change.
+   */
+  readOnly?: boolean
 }
 
 /**
@@ -27,6 +32,7 @@ export function InlineEditField({
   onSave,
   multiline = false,
   typographyProps,
+  readOnly = false,
 }: InlineEditFieldProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -37,6 +43,14 @@ export function InlineEditField({
       onSave(trimmed || null)
     }
     setEditing(false)
+  }
+
+  if (readOnly) {
+    return (
+      <Typography color="text.secondary" {...typographyProps}>
+        {value || emptyText}
+      </Typography>
+    )
   }
 
   if (editing) {

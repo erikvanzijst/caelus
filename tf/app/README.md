@@ -51,6 +51,14 @@ tracks `:master`, dev tracks `:latest`. Override `api_image` / `ui_image` via
 terraform apply -var 'api_image=ghcr.io/erikvanzijst/caelus/api:<sha>'
 ```
 
+Note that the API image also carries the product catalog (`products/catalog/`),
+which two init containers apply in order before the API starts: `migrate`
+(`alembic upgrade head`) then `catalog` (`caelus catalog apply`). Pinning
+`api_image` therefore pins the catalog as well, and rolling back to an older SHA
+rolls the catalog back with it. A malformed catalog fails the `catalog` init
+container, so the pod never becomes ready and the previous ReplicaSet keeps
+serving.
+
 ### Secret variables
 
 Create `secrets.auto.tfvars` (gitignored):

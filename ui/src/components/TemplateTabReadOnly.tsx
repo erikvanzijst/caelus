@@ -129,14 +129,25 @@ export function TemplateTabReadOnly({
         </Box>
       </Box>
 
+      {/* For a curated product the canonical pointer is catalog state: the
+          reconciler repoints it to whichever template matches the file's spec,
+          so offering the button here would only produce drift. */}
       <Box>
-        <Button
-          variant="outlined"
-          disabled={isCanonical}
-          onClick={() => onMakeCanonical(template.id)}
-        >
-          {isCanonical ? 'Canonical' : 'Make canonical'}
-        </Button>
+        {product.curated ? (
+          <Typography variant="body2" color="text.secondary">
+            {isCanonical
+              ? 'Canonical — set by the catalog.'
+              : 'Superseded. The canonical template is set by the catalog.'}
+          </Typography>
+        ) : (
+          <Button
+            variant="outlined"
+            disabled={isCanonical}
+            onClick={() => onMakeCanonical(template.id)}
+          >
+            {isCanonical ? 'Canonical' : 'Make canonical'}
+          </Button>
+        )}
       </Box>
     </Stack>
   )

@@ -5,6 +5,7 @@ import StarIcon from '@mui/icons-material/Star'
 import AddIcon from '@mui/icons-material/Add'
 import { createTemplate, updateProductTemplate } from '../api/endpoints'
 import type { Product, ProductTemplate } from '../api/types'
+import { CatalogManagedNotice } from './CatalogManagedNotice'
 import { TemplateTabReadOnly } from './TemplateTabReadOnly'
 import { TemplateTabNew } from './TemplateTabNew'
 
@@ -24,6 +25,10 @@ export function TemplateTabs({ product, templates, onError }: TemplateTabsProps)
       ),
     [templates],
   )
+
+  // A curated product's templates come from its catalog file, so there is no
+  // authoring tab: the reconciler inserts rows and moves the canonical pointer.
+  const curated = product.curated
 
   const defaultTab = (tpls: typeof sorted): number | 'new' => {
     if (tpls.length === 0) return 'new'
@@ -90,22 +95,31 @@ export function TemplateTabs({ product, templates, onError }: TemplateTabsProps)
             sx={{ minHeight: 48 }}
           />
         ))}
-        <Tab
-          value="new"
-          icon={<AddIcon sx={{ fontSize: 16 }} />}
-          iconPosition="start"
-          label="New"
-          sx={{ minHeight: 48, ml: 'auto' }}
-        />
+        {!curated && (
+          <Tab
+            value="new"
+            icon={<AddIcon sx={{ fontSize: 16 }} />}
+            iconPosition="start"
+            label="New"
+            sx={{ minHeight: 48, ml: 'auto' }}
+          />
+        )}
       </Tabs>
       <Box sx={{ p: 2 }}>
         {activeTab === 'new' ? (
-          <TemplateTabNew
-            product={product}
-            templates={sorted}
-            onSave={(payload) => createTemplateMutation.mutate(payload)}
-            saving={createTemplateMutation.isPending}
-          />
+          curated ? (
+            <CatalogManagedNotice
+              product={product}
+              detail="new template versions are inserted by the reconciler when the catalog's spec changes"
+            />
+          ) : (
+            <TemplateTabNew
+              product={product}
+              templates={sorted}
+              onSave={(payload) => createTemplateMutation.mutate(payload)}
+              saving={createTemplateMutation.isPending}
+            />
+          )
         ) : activeTemplate ? (
           <TemplateTabReadOnly
             product={product}

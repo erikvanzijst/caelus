@@ -7,6 +7,7 @@ import sys
 from app.config import get_settings
 
 _DEFAULT_LOG_LEVEL = "INFO"
+_NOISY_LIBRARY_LOGGERS = ("PIL", "asyncio")
 _RESET = "\x1b[0m"
 _LEVEL_COLORS = {
     "DEBUG": "\x1b[36m",
@@ -52,10 +53,16 @@ def _resolve_level(level: str | int | None) -> int:
     return logging.INFO
 
 
+def _quiet_noisy_libraries() -> None:
+    for name in _NOISY_LIBRARY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.INFO)
+
+
 def configure_logging(*, level: str | int | None = None, force: bool = False) -> None:
     root = logging.getLogger()
     resolved_level = _resolve_level(level)
     root.setLevel(resolved_level)
+    _quiet_noisy_libraries()
 
     if root.handlers and not force:
         for handler in root.handlers:

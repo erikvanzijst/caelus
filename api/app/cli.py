@@ -52,9 +52,25 @@ from sqlmodel import Session, select
 
 from app.models import UserORM
 
-configure_logging(level=logging.DEBUG)
+# Honor CAELUS_LOG_LEVEL (INFO by default) rather than forcing DEBUG: the CLI is
+# an operator surface, and its command output should not be buried in library
+# tracing. Export CAELUS_LOG_LEVEL=DEBUG for a verbose run.
+configure_logging()
 logger = logging.getLogger(__name__)
 app = typer.Typer(help="Caelus CLI", pretty_exceptions_show_locals=False)
+
+# Mirrors the REST `?force=` query parameter, so the two surfaces stay in
+# lockstep on the break-glass path as well as on the guard itself.
+FORCE_HELP = (
+    "Break-glass override allowing this modification on a catalog-managed "
+    "(curated) product. The catalog is unchanged, so the next reconciliation "
+    "re-asserts it and the drift self-heals."
+)
+FORCE_DELETE_HELP = (
+    "Accepted for symmetry, but deletion of a curated product or its templates "
+    "is never overridable: the next reconciliation would recreate it. Remove "
+    "the product's catalog file instead."
+)
 
 # ── CLI authentication ────────────────────────────────────────────────
 
@@ -246,6 +262,11 @@ def update_product(
         "--visibility",
         help="Publish the product to end users ('public') or withdraw it ('admin').",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=FORCE_HELP,
+    ),
 ) -> None:
     with session_scope() as session:
         actor = _require_cli_user(session)
@@ -261,6 +282,7 @@ def update_product(
                     visibility=visibility,
                 ),
                 actor=actor,
+                force=force,
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
@@ -268,11 +290,16 @@ def update_product(
 
 
 @app.command("delete-product")
-def delete_product(product_id: int) -> None:
+def delete_product(
+    product_id: int,
+    force: bool = typer.Option(False, "--force", help=FORCE_DELETE_HELP),
+) -> None:
     with session_scope() as session:
-        _require_cli_user(session)
+        actor = _require_cli_user(session)
         try:
-            product = product_service.delete_product(session, product_id=product_id)
+            product = product_service.delete_product(
+                session, product_id=product_id, force=force, actor=actor
+            )
         except CaelusException as e:
             _exit_for_domain_error(e)
         _echo_yaml_entity(product)
@@ -330,6 +357,7 @@ def create_template(
         "--values-schema-file",
         help="Path to JSON file containing template values schema object.",
     ),
+    force: bool = typer.Option(False, "--force", help=FORCE_HELP),
 ) -> None:
     try:
         parsed_system_values = _parse_json_object_input(
@@ -350,7 +378,7 @@ def create_template(
         raise typer.Exit(code=1)
 
     with session_scope() as session:
-        _require_cli_user(session)
+        actor = _require_cli_user(session)
         try:
             template = template_service.create_template(
                 session,
@@ -362,6 +390,8 @@ def create_template(
                     system_values_json=parsed_system_values,
                     values_schema_json=parsed_values_schema,
                 ),
+                force=force,
+                actor=actor,
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
@@ -391,12 +421,20 @@ def get_template(product_id: int, template_id: int) -> None:
 
 
 @app.command("delete-template")
-def delete_template(product_id: int, template_id: int) -> None:
+def delete_template(
+    product_id: int,
+    template_id: int,
+    force: bool = typer.Option(False, "--force", help=FORCE_DELETE_HELP),
+) -> None:
     with session_scope() as session:
-        _require_cli_user(session)
+        actor = _require_cli_user(session)
         try:
             template = template_service.delete_template(
-                session, product_id=product_id, template_id=template_id
+                session,
+                product_id=product_id,
+                template_id=template_id,
+                force=force,
+                actor=actor,
             )
         except CaelusException as e:
             _exit_for_domain_error(e)
@@ -834,6 +872,133 @@ def create_plan_template(
         except CaelusException as e:
             _exit_for_domain_error(e)
         _echo_yaml_entity(tmpl)
+
+
+# ── Catalog commands ──────────────────────────────────────────────────
+#
+# Operator and build tooling rather than tenant-facing surface — `apply` is run
+# by an init container — so this group is intentionally CLI-only and exempt from
+# the REST parity convention. No parity gap is introduced: the protections these
+# commands rely on live in the service layer.
+
+catalog_app = typer.Typer(
+    help="Manage the git-authored product catalog (products/catalog/).",
+    no_args_is_help=True,
+)
+app.add_typer(catalog_app, name="catalog")
+
+
+def _catalog_dir(dir_option: Path | None) -> Path:
+    return dir_option if dir_option is not None else get_settings().catalog_dir
+
+
+@catalog_app.command("apply")
+def catalog_apply(
+    dir: Path | None = typer.Option(
+        None, "--dir", help="Catalog directory to apply (defaults to CAELUS_CATALOG_DIR)."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report the actions that would be taken and write nothing."
+    ),
+) -> None:
+    """Reconcile a catalog directory into the database.
+
+    Run by the `catalog` init container after `migrate`. A validation or
+    reconciliation failure exits non-zero with the database unchanged, which
+    fails the init container and leaves the previous pods serving.
+    """
+    from app.services.catalog import CatalogReconciler
+
+    catalog_dir = _catalog_dir(dir)
+    with session_scope() as session:
+        try:
+            report = CatalogReconciler(
+                session=session,
+                catalog_dir=catalog_dir,
+                commit_sha=os.environ.get("GIT_COMMIT"),
+            ).apply(dry_run=dry_run)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+
+    for action in report.actions:
+        typer.echo(action)
+    verb = "planned" if dry_run else "applied"
+    typer.echo(f"Catalog {verb} from {catalog_dir}: {len(report.actions)} action(s).")
+
+
+@catalog_app.command("curate")
+def catalog_curate(
+    slug: str = typer.Argument(
+        ..., help="Slug or name of the product to write into the catalog."
+    ),
+    dir: Path | None = typer.Option(
+        None, "--dir", help="Catalog directory to write into (defaults to CAELUS_CATALOG_DIR)."
+    ),
+) -> None:
+    """Write a product's catalog document and icon from current database state.
+
+    This is the graduation path for a hand-tuned product. It does **not** curate
+    the product: curation takes effect only when the reconciler applies the
+    committed catalog during a rollout, so `curated` and `slug` are left
+    untouched here.
+    """
+    from app.services import catalog as catalog_service
+
+    catalog_dir = _catalog_dir(dir)
+    with session_scope() as session:
+        _require_cli_user(session)
+        try:
+            written = catalog_service.curate_product(
+                session, identifier=slug, catalog_dir=catalog_dir
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+
+    for path in written:
+        typer.echo(f"wrote {path}")
+    typer.echo(
+        "The product is not curated yet: complete the 'upstream' block, then commit "
+        "and merge these files. Curation takes effect when the reconciler applies "
+        "the catalog during the next rollout."
+    )
+
+
+@catalog_app.command("lint")
+def catalog_lint(
+    dir: Path | None = typer.Option(
+        None, "--dir", help="Catalog directory to validate (defaults to CAELUS_CATALOG_DIR)."
+    ),
+    write_schema: bool = typer.Option(
+        False,
+        "--write-schema",
+        help="Regenerate catalog.schema.json from the document models instead of "
+        "checking it. Run this after changing the models.",
+    ),
+) -> None:
+    """Validate a catalog directory using only the files themselves.
+
+    Deliberately touches no database, so it can gate a pull request in CI where
+    neither a database nor the cluster is reachable. Also verifies that the
+    generated `catalog.schema.json` still matches the document models, so the
+    editor contract cannot drift from the enforced one.
+    """
+    from app.services.catalog import check_json_schema, load_catalog, write_json_schema
+
+    catalog_dir = _catalog_dir(dir)
+
+    if write_schema:
+        typer.echo(f"wrote {write_json_schema(catalog_dir)}")
+        return
+
+    try:
+        entries = load_catalog(catalog_dir)
+        check_json_schema(catalog_dir)
+    except CaelusException as e:
+        _exit_for_domain_error(e)
+
+    for entry in entries:
+        typer.echo(f"ok {entry.path}")
+    typer.echo(f"Validated {len(entries)} catalog document(s) in {catalog_dir}.")
 
 
 # ── Subscription commands ─────────────────────────────────────────────

@@ -25,6 +25,11 @@ class CaelusSettings(BaseSettings):
     static_path: Path = Path(__file__).parent.parent / "static"
     log_level: str = "INFO"
 
+    # Desired state for curated products, baked into the API image and applied
+    # by the `catalog` init container. The default points at the checkout so the
+    # CLI works from a dev tree without configuration.
+    catalog_dir: Path = Path(__file__).parent.parent.parent / "products" / "catalog"
+
     domain: str = ""
     wildcard_domains: list[str] = []
     reserved_hostnames: list[str] = []

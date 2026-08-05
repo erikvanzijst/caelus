@@ -272,6 +272,10 @@
         }
       },
       "additionalProperties": false
+    },
+    "caelus-sftp": {
+      "type": "object",
+      "description": "Values namespace reserved by the caelus-sftp library dependency (unused)."
     }
   },
   "required": [

@@ -4,7 +4,7 @@ description: >-
   Self-contained Freepod chart for Vaultwarden. Renders the deployment, service,
   data PVC, and per-app TLS ingress directly (no upstream dependency).
 type: application
-version: 3.2.1
+version: 3.3.0
 appVersion: "1.37.1"
 keywords:
   - vaultwarden
@@ -12,3 +12,10 @@ keywords:
   - passwords
 maintainers:
   - name: Caelus Team
+
+# Only dependency is Freepod's own SFTP library chart (renders no resources on
+# its own; provides the sidecar + Pipe/Service/Secret helpers).
+dependencies:
+  - name: caelus-sftp
+    version: "0.1.0"
+    repository: "file://../../_lib/caelus-sftp"

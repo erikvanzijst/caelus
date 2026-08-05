@@ -42,7 +42,7 @@
     },
     "caelus": {
       "type": "object",
-      "description": "Plan-injected values from Caelus reconciler",
+      "description": "Reconciler-injected values. Open by design (additionalProperties: true throughout): this namespace is written by the platform, never by a tenant, so new reconciler fields can land without a schema bump in every chart.",
       "properties": {
         "plan": {
           "type": "object",
@@ -50,7 +50,13 @@
             "storageBytes": { "type": "integer" },
             "storageSize": { "type": "string" }
           },
-          "additionalProperties": false
+          "additionalProperties": true
+        },
+        "owner": {
+          "type": "object",
+          "description": "Deployment owner, injected by the Caelus reconciler",
+          "properties": { "email": { "type": "string" } },
+          "additionalProperties": true
         },
         "ingress": {
           "type": "object",
@@ -65,13 +71,13 @@
                 "issuer": { "type": "string" },
                 "secretName": { "type": "string" }
               },
-              "additionalProperties": false
+              "additionalProperties": true
             }
           },
-          "additionalProperties": false
+          "additionalProperties": true
         }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     }
   },
   "additionalProperties": false

@@ -136,6 +136,7 @@ def test_reconcile_apply_happy_path_returns_ready_and_applied_template(db_sessio
                     "secretName": f"{deployment.name}-tls",
                 },
             },
+            "owner": {"email": "reconcile-user@example.com"},
         },
     }
 
@@ -315,3 +316,25 @@ def test_build_ingress_overrides_no_hostname_returns_none(monkeypatch) -> None:
     deployment = SimpleNamespace(hostname=None, name="naas-ab12cd")
 
     assert DeploymentReconciler._build_ingress_overrides(deployment) is None
+
+
+# --- _build_owner_overrides unit tests -----------------------------------------
+
+
+def test_build_owner_overrides_projects_email() -> None:
+    """The owning user's email is published under caelus.owner for charts to use."""
+    deployment = SimpleNamespace(user=SimpleNamespace(email="owner@example.com"))
+
+    assert DeploymentReconciler._build_owner_overrides(deployment) == {
+        "caelus": {"owner": {"email": "owner@example.com"}}
+    }
+
+
+def test_build_owner_overrides_without_user_returns_none() -> None:
+    """No owner, no block — charts that require it fail loudly rather than
+    rendering an empty invite address."""
+    assert DeploymentReconciler._build_owner_overrides(SimpleNamespace(user=None)) is None
+    assert (
+        DeploymentReconciler._build_owner_overrides(SimpleNamespace(user=SimpleNamespace(email=None)))
+        is None
+    )

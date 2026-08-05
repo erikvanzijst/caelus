@@ -1,0 +1,20 @@
+{{- /*
+Vaultwarden data PVC: the sqlite vault, attachments, and icon cache under /data.
+caelus.plan.storageSize overrides the default when the deployment has a plan,
+matching immich and nextcloud.
+*/}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-data
+  labels:
+    {{- include "vaultwarden.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.storage.data.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.caelus.plan.storageSize | default .Values.storage.data.size }}
+  {{- if .Values.storage.data.storageClassName }}
+  storageClassName: {{ .Values.storage.data.storageClassName }}
+  {{- end }}

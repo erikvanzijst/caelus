@@ -173,10 +173,23 @@ class DeploymentReconciler:
         is contributed (preserving prior behaviour for plan-less, hostname-less releases).
         """
         overrides: dict = {}
-        for part in (cls._build_plan_overrides(deployment), cls._build_ingress_overrides(deployment)):
+        for part in (
+            cls._build_plan_overrides(deployment),
+            cls._build_ingress_overrides(deployment),
+            cls._build_owner_overrides(deployment),
+        ):
             if part:
                 overrides = template_values.deep_merge(overrides, part)
         return overrides or None
+
+    @staticmethod
+    def _build_owner_overrides(deployment: DeploymentORM) -> dict | None:
+        """Project the owning user's email into the ``caelus.owner`` namespace."""
+        user = getattr(deployment, "user", None)
+        email = getattr(user, "email", None) if user is not None else None
+        if not email:
+            return None
+        return {"caelus": {"owner": {"email": email}}}
 
     @staticmethod
     def _build_ingress_overrides(deployment: DeploymentORM) -> dict | None:

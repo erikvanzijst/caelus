@@ -1,6 +1,6 @@
 dependencies:
-- name: vaultwarden
-  repository: https://gissilabs.github.io/charts/
-  version: 1.4.0
-digest: sha256:b14972d82f9d7d2008398ceaf0779d2ffb593eaf34f97606407e45399b826dbb
-generated: "2026-06-27T21:26:03.341817792Z"
+- name: caelus-sftp
+  repository: file://../../_lib/caelus-sftp
+  version: 0.1.0
+digest: sha256:df518d3d41962ad20c85aabb22603e5160f784a9c06ba800c998045bc540b50a
+generated: "2026-08-05T23:19:58.036355554Z"

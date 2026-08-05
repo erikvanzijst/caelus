@@ -1,9 +1,11 @@
 apiVersion: v2
-name: vaultwarden-wrapper
-description: Vaultwarden wrapper chart for Caelus — adds per-app TLS (caelus.ingress.tls) on top of the upstream gissilabs chart
+name: vaultwarden
+description: >-
+  Self-contained Freepod chart for Vaultwarden. Renders the deployment, service,
+  data PVC, and per-app TLS ingress directly (no upstream dependency).
 type: application
-version: 1.0.2
-appVersion: "1.35.4"
+version: 3.3.0
+appVersion: "1.37.1"
 keywords:
   - vaultwarden
   - bitwarden
@@ -11,7 +13,9 @@ keywords:
 maintainers:
   - name: Caelus Team
 
+# Only dependency is Freepod's own SFTP library chart (renders no resources on
+# its own; provides the sidecar + Pipe/Service/Secret helpers).
 dependencies:
-  - name: vaultwarden
-    version: "1.4.0"
-    repository: "https://gissilabs.github.io/charts/"
+  - name: caelus-sftp
+    version: "0.1.0"
+    repository: "file://../../_lib/caelus-sftp"

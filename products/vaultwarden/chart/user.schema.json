@@ -6,46 +6,28 @@
     "host": {
       "type": "string",
       "title": "Hostname",
-      "description": "The fully qualified domain name used to access Vaultwarden (e.g. vw.example.com)"
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "The fully qualified domain name used to access Vaultwarden (e.g. password.freepod.eu)"
     },
-    "vaultwarden": {
+    "signups": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "vaultwarden": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "allowSignups": {
-              "type": "boolean",
-              "title": "Allow open registration",
-              "description": "Allow anyone to create an account. When disabled, only users who receive an invitation can sign up."
-            },
-            "allowInvitation": {
-              "type": "boolean",
-              "title": "Allow invited users to register",
-              "description": "Allow users who have been invited by an admin to create an account, even when open registration is disabled.",
-              "default": true
-            },
-            "admin": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "title": "Enable admin portal",
-                  "description": "Activate the /admin web interface for server management, user invitations, and configuration."
-                },
-                "token": {
-                  "type": "string",
-                  "title": "Admin token",
-                  "description": "Password required to access the admin portal. Auto-generated if left empty."
-                }
-              }
-            }
-          }
+        "allowed": {
+          "type": "boolean",
+          "title": "Allow open registration",
+          "description": "Allow anyone who knows the address to create an account. Leave off unless you need it: your own account is created for you, and you can invite others from the web vault.",
+          "default": false
+        },
+        "verify": {
+          "type": "boolean",
+          "title": "Require email verification on signups",
+          "description": "New users must confirm their email address before they can log in.",
+          "default": true
         }
       }
     }
-  }
+  },
+  "required": ["host"]
 }

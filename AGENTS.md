@@ -14,6 +14,11 @@ This repository is a monorepo with:
 - API and CLI are thin facades over services in `api/app/services/`.
 - Provisioning is stubbed in `api/app/provisioner.py` and should be replaced with a K8s implementation.
 - Product Templates are scoped to products; deployments are scoped to users.
+- Products are either **curated** (declared in `products/catalog/<slug>.yaml`,
+  reconciled into the database on rollout, and read-only through the API, CLI,
+  and admin UI apart from `visibility`) or **non-curated** (database-authored).
+  Only `CatalogReconciler` writes `product.curated` and `product.slug`.
+  See `api/README.md` § Product Catalog.
 - Authentication: All API endpoints require `X-Auth-Request-Email` header
   (injected by oauth2-proxy in production, set by frontend in local dev).
   `GET /api/me` is the session initialization endpoint. CLI uses
@@ -51,7 +56,13 @@ Both deploy to the same k3s cluster. Deploy `tf/deps/` first, then
 For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
 
 ## Conventions
-- Keep CLI and REST functionality in lockstep.
+- Keep CLI and REST functionality in lockstep. **Exception**: the `caelus
+  catalog` command group (`apply`, `curate`, `lint`) is intentionally CLI-only
+  and requires no REST equivalent. These are operator and build tooling rather
+  than tenant-facing surface — `apply` is invoked by an init container during
+  rollout, and `lint` runs in CI with no database. The write guards they depend
+  on live in `api/app/services/`, so REST, CLI, and the admin UI still enforce
+  identical rules and no parity gap is introduced.
 - Put all DB/ORM logic in `api/app/services/` and call from API + CLI (DRY).
 - Use `api/app/db.py:init_db()` to create tables for dev/test.
 - Prefer nested routes:

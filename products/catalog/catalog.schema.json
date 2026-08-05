@@ -1,0 +1,256 @@
+{
+  "$defs": {
+    "DockerTagSource": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "docker-tag",
+          "title": "Type",
+          "type": "string"
+        },
+        "image": {
+          "title": "Image",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "image"
+      ],
+      "title": "DockerTagSource",
+      "type": "object"
+    },
+    "GithubReleaseSource": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "github-release",
+          "title": "Type",
+          "type": "string"
+        },
+        "repo": {
+          "title": "Repo",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "repo"
+      ],
+      "title": "GithubReleaseSource",
+      "type": "object"
+    },
+    "HelmChartSource": {
+      "additionalProperties": false,
+      "description": "A chart repository, for products whose version rides on the chart.\n\nSeveral products deploy a wrapper chart that pins the application image\nitself, so there is no image tag in `system_values` to bump: the artifact\nthat actually moves is `template.chart_version`.",
+      "properties": {
+        "type": {
+          "const": "helm-chart",
+          "title": "Type",
+          "type": "string"
+        },
+        "repo": {
+          "title": "Repo",
+          "type": "string"
+        },
+        "chart": {
+          "title": "Chart",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "repo",
+        "chart"
+      ],
+      "title": "HelmChartSource",
+      "type": "object"
+    },
+    "ProductBlock": {
+      "additionalProperties": false,
+      "description": "The catalog-managed fields of a `product` row.",
+      "properties": {
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Category"
+        },
+        "replaces": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Replaces"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icon"
+        }
+      },
+      "required": [
+        "slug",
+        "name"
+      ],
+      "title": "ProductBlock",
+      "type": "object"
+    },
+    "TemplateBlock": {
+      "additionalProperties": false,
+      "description": "Exactly the fields that constitute a template version.\n\n`system_values` and `values_schema` are written to the row verbatim, with no\ntemplating or substitution, so the file content is what gets applied and\nreview is WYSIWYG. The pinned application image tag lives inside\n`system_values`.",
+      "properties": {
+        "chart_ref": {
+          "title": "Chart Ref",
+          "type": "string"
+        },
+        "chart_version": {
+          "title": "Chart Version",
+          "type": "string"
+        },
+        "chart_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chart Digest"
+        },
+        "system_values": {
+          "additionalProperties": true,
+          "title": "System Values",
+          "type": "object"
+        },
+        "values_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Values Schema"
+        }
+      },
+      "required": [
+        "chart_ref",
+        "chart_version"
+      ],
+      "title": "TemplateBlock",
+      "type": "object"
+    },
+    "UpstreamBlock": {
+      "additionalProperties": false,
+      "description": "Release-detection metadata.\n\nConsumed only by release-detection tooling: it is never applied to the\ncluster and never persisted on a template row.",
+      "properties": {
+        "source": {
+          "discriminator": {
+            "mapping": {
+              "docker-tag": "#/$defs/DockerTagSource",
+              "github-release": "#/$defs/GithubReleaseSource",
+              "helm-chart": "#/$defs/HelmChartSource"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/GithubReleaseSource"
+            },
+            {
+              "$ref": "#/$defs/DockerTagSource"
+            },
+            {
+              "$ref": "#/$defs/HelmChartSource"
+            }
+          ],
+          "title": "Source"
+        },
+        "match": {
+          "title": "Match",
+          "type": "string"
+        },
+        "version_path": {
+          "title": "Version Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "match",
+        "version_path"
+      ],
+      "title": "UpstreamBlock",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One `products/catalog/<slug>.yaml` file.",
+  "properties": {
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "product": {
+      "$ref": "#/$defs/ProductBlock"
+    },
+    "upstream": {
+      "$ref": "#/$defs/UpstreamBlock"
+    },
+    "template": {
+      "$ref": "#/$defs/TemplateBlock"
+    }
+  },
+  "required": [
+    "schema_version",
+    "product",
+    "upstream",
+    "template"
+  ],
+  "title": "CatalogDocument",
+  "type": "object"
+}

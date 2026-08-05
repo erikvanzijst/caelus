@@ -1,10 +1,24 @@
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Optional, Any
 from uuid import UUID, uuid4
 
 from pydantic import ConfigDict, field_validator, model_validator
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import Column, ForeignKey, Integer, Index, JSON, Text, String, Uuid, func
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Enum as SAEnum,
+    ForeignKey,
+    Integer,
+    Index,
+    JSON,
+    Text,
+    String,
+    Uuid,
+    func,
+    text,
+)
 
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
 
@@ -84,12 +98,25 @@ class TosAcceptanceRead(SQLModel):
     accepted_at: Optional[datetime] = None
 
 
+class ProductVisibility(StrEnum):
+    """Whether a product is offered to end users.
+
+    Runtime state, deliberately independent of curation: a catalog-managed
+    product may be hidden, and a database-authored one may be public. New
+    products start ADMIN so onboarding is never visible before it is ready.
+    """
+
+    PUBLIC = "public"
+    ADMIN = "admin"
+
+
 class ProductBase(SQLModel):
     name: str
     description: str | None = None
     template_id: Optional[int] = None
     category: str | None = None
     replaces: str | None = None
+    visibility: ProductVisibility = ProductVisibility.ADMIN
 
 
 class ProductORM(ProductBase, table=True):
@@ -102,16 +129,42 @@ class ProductORM(ProductBase, table=True):
             sqlite_where=Column("deleted_at").is_(None),
             postgresql_where=Column("deleted_at").is_(None),
         ),
+        Index(
+            "uq_product_slug_active",
+            "slug",
+            unique=True,
+            sqlite_where=Column("deleted_at").is_(None),
+            postgresql_where=Column("deleted_at").is_(None),
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field()
+    # The stable key joining this row to its `products/catalog/<slug>.yaml`
+    # file, deliberately independent of `name` so renaming a product does not
+    # orphan its catalog entry. Null for database-authored products.
+    slug: Optional[str] = Field(default=None, nullable=True)
+    # Whether the catalog owns this product. Written *only* by the
+    # CatalogReconciler, derived from catalog file presence, so the file and
+    # the flag cannot disagree.
+    curated: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+    )
     # The product's canonical template used for new deployments:
     template_id: Optional[int] = Field(
         default=None, foreign_key="product_template_version.id", index=True
     )
     # Relative path to product icon under STATIC_PATH (e.g., "icons/<sha1>.png")
     rel_icon_path: Optional[str] = Field(default=None, nullable=True)
+    visibility: ProductVisibility = Field(
+        default=ProductVisibility.ADMIN,
+        sa_column=Column(
+            SAEnum(ProductVisibility, values_callable=lambda e: [m.value for m in e]),
+            nullable=False,
+            server_default=ProductVisibility.ADMIN.value,
+        ),
+    )
     template: "ProductTemplateVersionORM" = Relationship(
         back_populates="products",
         sa_relationship_kwargs={"foreign_keys": "ProductORM.template_id", "lazy": "joined"},
@@ -129,16 +182,20 @@ class ProductORM(ProductBase, table=True):
 
 
 class ProductCreate(ProductBase):
-    pass
+    # `slug` and `curated` are reconciler-owned, so an attempt to set them out
+    # of band is rejected rather than silently ignored.
+    model_config = ConfigDict(extra="forbid")
 
 
 class ProductUpdate(SQLModel):
+    model_config = ConfigDict(extra="forbid")
     id: Optional[int] = None
     name: str | None = None
     template_id: Optional[int] = None
     description: str | None = None
     category: str | None = None
     replaces: str | None = None
+    visibility: ProductVisibility | None = None
 
 
 class ProductReadBase(ProductBase):
@@ -146,6 +203,10 @@ class ProductReadBase(ProductBase):
     id: int
     created_at: datetime
     icon_url: Optional[str] = None
+    # Read-only projections of the reconciler-owned columns; the admin UI
+    # branches on `curated` to render catalog-managed products read-only.
+    slug: Optional[str] = None
+    curated: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -196,6 +257,11 @@ class ProductTemplateVersionORM(ProductTemplateVersionBase, table=True):
     product_id: int = Field(
         sa_column=Column(Integer, ForeignKey("product.id"), nullable=False, index=True)
     )
+    # The git commit whose catalog produced this row, stamped once on insert by
+    # the reconciler. Audit metadata only: deliberately absent from the create
+    # and read schemas, never read by application logic, and never part of
+    # template matching (a null value simply means "not catalog-produced").
+    catalog_commit: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
     product: ProductORM = Relationship(
         back_populates="templates",
         sa_relationship_kwargs={"foreign_keys": "ProductTemplateVersionORM.product_id", "lazy": "joined"},

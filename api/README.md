@@ -181,6 +181,8 @@ CLI equivalents (`caelus ...`):
 - `create-deployment`, `list-deployments`, `get-deployment`,
   `update-deployment`, `delete-deployment`
 - `reconcile` (CLI-only operational command to run one reconcile pass)
+- `catalog apply|curate|lint` (CLI-only; intentionally exempt from parity — see
+  [Product Catalog](#product-catalog-curated-products))
 
 Example:
 
@@ -211,6 +213,176 @@ status: deleting
 ```
 
 This works for any `caelus` command that returns a YAML list or object.
+
+## Product Catalog (Curated Products)
+
+Products come in two kinds, and the difference is a single column, `curated`.
+
+| | Non-curated (`curated = false`) | Curated (`curated = true`) |
+|---|---|---|
+| Authored in | The database, via admin UI or CLI | Git, in `products/catalog/<slug>.yaml` |
+| Changed by | Editing directly | A pull request, applied on rollout |
+| Editable via API/CLI/UI | Yes, as always | No — except `visibility` |
+| Intended for | Products under development | Published products |
+
+Non-curated is the staging stage: admin-only, tight iteration, exactly today's
+behavior. Curated is the published stage: reviewed, with a real diff to approve,
+and upgradable by an autonomous release-detection agent. Nothing changes for a
+product until its catalog file exists and has been rolled out.
+
+### The catalog file
+
+One YAML file per published product, named `<slug>.yaml`, where the stem must
+equal `product.slug`. Icons are committed as image files beside it so that an
+icon change reviews as an image diff rather than as encoded text:
+
+```yaml
+# yaml-language-server: $schema=./catalog.schema.json
+schema_version: 1
+product:
+  slug: immich
+  name: Immich
+  description: Your own photo hosting
+  category: Photos
+  replaces: Google Photos · iCloud Photos
+  icon: icons/immich.png          # relative to the catalog directory
+upstream:                          # release detection only; never applied
+  source:
+    type: github-release           # or docker-tag, helm-chart
+    repo: immich-app/immich
+  match: ^v(?P<version>\d+\.\d+\.\d+)$
+  version_path: template.system_values.immich.controllers.main.containers.main.image.tag
+template:
+  chart_ref: oci://registry.home:80/helm/immich
+  chart_version: 2.5.5
+  system_values: { ... }           # applied verbatim; pins the app image tag
+  values_schema: { ... }           # JSON Schema for the user values form
+```
+
+Notes:
+- **`visibility` is not a catalog field and is rejected if present.** The
+  catalog owns what a product *is*; the database owns whether it is *currently
+  offered*. Withdrawing a product is often incident response and must not wait
+  for a merge, build, and rollout.
+- `system_values` and `values_schema` are written to the template row verbatim.
+  There is no templating engine, so review is WYSIWYG.
+- `upstream.match` must compile and define a `version` capture group. It is
+  consumed only by release-detection tooling and never reaches the cluster.
+- `catalog.schema.json` is **generated** from the Pydantic models in
+  `app/services/catalog.py` and exists only for editor completion.
+  `catalog lint` fails if it has drifted; regenerate with
+  `caelus catalog lint --write-schema`.
+
+### Commands
+
+```bash
+caelus catalog lint                 # validate files only; no database needed (CI)
+caelus catalog apply [--dry-run]    # reconcile the catalog into the database
+caelus catalog curate <slug|name>   # generate a catalog file from database state
+```
+
+These are operator and build tooling, not tenant-facing surface, so they are
+CLI-only and exempt from the REST parity convention (`apply` is run by an init
+container). The protections they rely on live in the service layer, so no parity
+gap is introduced.
+
+### Graduating a product (`catalog curate`)
+
+The path from hand-tuned to published:
+
+1. Build the product the usual way — create it, iterate on system values and the
+   chart until it works. It stays non-curated and fully editable throughout.
+2. `caelus catalog curate immich --dir products/catalog` writes the YAML and the
+   icon from current database state. **This does not curate the product**: it
+   only writes files. `curated` and `slug` are untouched.
+3. Complete the emitted `upstream` block — release-detection metadata is not
+   derivable from the database, so curate emits a placeholder.
+4. Commit, review, merge.
+5. The rollout's `catalog` init container applies it. The reconciler matches the
+   existing template by spec equality, inserts nothing, and flips the product to
+   `curated = true`.
+
+Step 5 being a verified no-op is the point: `catalog curate` round-trips
+exactly, so a product's first pull request changes no template rows. Confirm
+with `caelus catalog apply --dry-run`, which reports the plan and writes
+nothing — expect `product-adopted` and no `template-inserted`.
+
+Releasing a product is the mirror image: **delete its catalog file**. There is
+no `uncurate` command, because file presence is the sole carrier of curation and
+two writers would deadlock. Uncuration is shallow — templates, canonical
+`template_id`, `visibility`, and deployments are all left untouched — so
+restoring a dropped file simply re-adopts the product by name.
+
+### How reconciliation behaves
+
+`CatalogReconciler` has exactly two verbs, **insert** and **repoint**:
+
+- It matches a catalog file's template against existing rows by a hash over
+  `chart_ref`, `chart_version`, `chart_digest`, `system_values_json`, and
+  `values_schema_json`, computed at read time with sorted keys. Key order in the
+  YAML is irrelevant, and matching ignores how a row was created — that is what
+  lets it recognize the hand-made template a file was generated from.
+- On no match it inserts a new row (stamped with `GIT_COMMIT`) and repoints
+  `product.template_id`. It **never** updates a template's spec fields and
+  **never** soft-deletes one, so the table is an append-only ledger and running
+  deployments keep resolving their `applied_template_id`.
+- It resolves a product by `slug`, else adopts a non-curated product whose name
+  matches case-insensitively, else creates one. Created products start
+  `visibility = admin`, so merging a catalog change can never by itself put a
+  product in front of end users. Visibility is never written again.
+- Every product-selecting query filters `curated = true`. Non-curated products
+  are provably untouched by a run.
+- A catalog directory that does not exist or cannot be read is an **error**, not
+  an empty desired state — otherwise a mistyped path would uncurate everything
+  at once. An *empty* directory is valid and simply means nothing is
+  catalog-managed.
+- The whole run is one transaction under a Postgres advisory lock, so concurrent
+  init containers cannot double-insert.
+
+### Break-glass: `--force`
+
+Curated products reject writes through the REST API, the CLI, and the admin UI
+alike, because the guard lives in `app/services/products.py` and `templates.py`
+rather than in the UI. The error names the catalog file to edit instead.
+
+For urgent intervention, modifications accept an override — `?force=true` on the
+REST endpoints (a query parameter, never a body field, since the delete
+endpoints carry no body and product update is multipart) and `--force` on
+`update-product`, `create-template`:
+
+```bash
+caelus update-product 2 --description "hotfix" --force
+```
+
+Every forced write is logged at WARNING with the acting user and product slug.
+A template created this way leaves `catalog_commit` **null**, which is what makes
+the drift visible: hand-made rows stay distinguishable from catalog-produced
+history. The drift is also **self-healing** — the next rollout re-applies the
+catalog and repoints `product.template_id` back to the template matching the
+file, with no manual cleanup.
+
+**Deletion is never forceable.** Deleting a curated product or one of its
+templates is refused even with `--force`, because the override cannot achieve
+what the operator intends: the reconciler resolves products by slug among
+non-deleted rows, so a force-deleted product is not found, is not adopted, and
+is recreated under a new id on the next rollout — while existing deployments go
+on referencing templates belonging to the old row. A force-deleted template is
+likewise reinserted whenever its spec still matches. The supported path is to
+remove the catalog file, let the rollout release the product, then delete it
+normally.
+
+### Rollout
+
+`products/catalog/` is baked into the API image (the image builds from the
+repository root for exactly this reason) and applied by a `catalog` init
+container that runs after `migrate`. This means no cluster credentials in CI and
+no runtime git access, and it makes catalog-versus-code skew structurally
+impossible. A malformed catalog exits non-zero, the pod never becomes ready, and
+the previous ReplicaSet keeps serving — rollback for free.
+
+> The master image build must never gain `paths:` filters. A commit touching
+> only `products/catalog/` still needs an image build, or the merged change
+> would never roll out.
 
 ## Product Icon and Static File Serving
 
@@ -250,6 +422,12 @@ This works for any `caelus` command that returns a YAML list or object.
 
 - Represents an application family (e.g. Nextcloud).
 - Fields: `name` (active-unique), `description`, optional canonical `template_id`, optional `icon_url`.
+- `visibility` (`public` | `admin`) controls whether the product appears in the
+  end-user product list. Admins always see every non-deleted product. New
+  products default to `admin`, so onboarding is never visible before it is ready.
+- `slug` (active-unique, nullable) and `curated` join the row to its catalog
+  file. Both are written **only** by the reconciler — see
+  [Product Catalog](#product-catalog-curated-products).
 - Owns many template versions.
 - Icon support: Products can have an icon uploaded. The icon is stored as an immutable file in `STATIC_PATH/icons/` with a content-hash filename. The API exposes `icon_url` (absolute path like `/api/static/icons/<sha1>.png`) in read responses but does not expose the internal `rel_icon_path` field.
 
@@ -259,6 +437,9 @@ This works for any `caelus` command that returns a YAML list or object.
 - Chart identity: `chart_ref`, `chart_version`, optional immutable `chart_digest`.
 - Values contract includes `system_values_json`.
 - Values contract includes `values_schema_json`.
+- `catalog_commit` records the git commit whose catalog inserted the row. Audit
+  metadata only: never read by application logic, never part of template
+  matching, and null for hand-authored rows.
 - Soft deletion via `deleted_at`.
 
 ### Deployment
@@ -284,6 +465,12 @@ This works for any `caelus` command that returns a YAML list or object.
 
 - Active user emails are unique (`deleted_at IS NULL` scoped uniqueness).
 - Active product names are unique (`deleted_at IS NULL` scoped uniqueness).
+- Active product slugs are unique (`deleted_at IS NULL` scoped uniqueness).
+- `product.slug` and `product.curated` are written only by `CatalogReconciler`;
+  no REST endpoint, CLI command, or UI action sets them, including under
+  `--force`. Catalog file presence is the single source of truth for curation.
+- `product_template_version` is append-only with respect to the reconciler: it
+  inserts and repoints, never updates spec fields and never soft-deletes.
 - Active template `(chart_ref, chart_version, product_id)` combinations are
   unique.
 - Only one open reconcile job (`queued` or `running`) may exist per deployment.

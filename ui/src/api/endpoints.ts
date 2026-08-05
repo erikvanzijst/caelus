@@ -1,5 +1,5 @@
 import { requestJson, requestMultipart } from './client'
-import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplateVersion, Product, ProductTemplate, SftpCredentials, TosAcceptance, User } from './types'
+import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplateVersion, Product, ProductTemplate, ProductVisibility, SftpCredentials, TosAcceptance, User } from './types'
 
 export function getMe() {
   return requestJson<User>('/me')
@@ -20,6 +20,10 @@ export function listUsers() {
   return requestJson<User[]>('/users')
 }
 
+/**
+ * List the products the caller may see: public products for anonymous
+ * visitors and regular users, every non-deleted product for admins.
+ */
 export function listProducts() {
   return requestJson<Product[]>('/products')
 }
@@ -30,6 +34,7 @@ export function createProduct(
     description?: string | null
     category?: string | null
     replaces?: string | null
+    visibility?: ProductVisibility
   },
   iconFile?: File,
 ) {
@@ -54,6 +59,7 @@ export function updateProduct(
     template_id?: number
     category?: string | null
     replaces?: string | null
+    visibility?: ProductVisibility
   },
   iconFile?: File,
 ) {

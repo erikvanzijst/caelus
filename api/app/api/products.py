@@ -9,17 +9,19 @@ from fastapi import (
     File,
     HTTPException,
     Path,
+    Query,
     UploadFile as FastAPIUploadFile,
     status,
 )
 from fastapi.requests import Request
 from fastapi.responses import RedirectResponse
+from pydantic import ValidationError as PydanticValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from sqlmodel import SQLModel, Session
 
 from app.db import get_session
-from app.deps import get_current_user, require_admin
+from app.deps import get_current_user, get_optional_user, require_admin
 from app.models import (
     ProductRead,
     ProductCreate,
@@ -33,6 +35,28 @@ from app.services import templates as template_service, products as product_serv
 T = TypeVar("T", bound=SQLModel)
 
 router = APIRouter(prefix="/products", tags=["products"])
+
+# The break-glass override for curated products. It is a *query* parameter
+# rather than a body field because the delete endpoints are 204-with-no-body and
+# product update is multipart: force is a property of the request, not of the
+# product, and must not appear on the create/update/read schemas.
+FORCE_DESCRIPTION = (
+    "Break-glass override allowing this modification on a catalog-managed "
+    "(curated) product. The catalog is left unchanged, so the next "
+    "reconciliation re-asserts it and the drift self-heals."
+)
+FORCE_DELETE_DESCRIPTION = (
+    "Accepted for symmetry with the modifying endpoints, but deletion of a "
+    "curated product or its templates is never overridable: the next "
+    "reconciliation would simply recreate it. Remove the product's catalog "
+    "file instead."
+)
+CURATED_400 = {
+    "description": (
+        "The product is managed by the catalog. The error names the catalog "
+        "file to edit instead."
+    )
+}
 
 
 async def parse_product_request(request: Request, model_cls: type[T] = ProductCreate) -> tuple[T, bytes | None]:
@@ -76,7 +100,15 @@ async def parse_product_request(request: Request, model_cls: type[T] = ProductCr
                 detail=f"Invalid product JSON: {e}",
             ) from e
 
-        payload = model_cls(**payload_dict)
+        try:
+            payload = model_cls(**payload_dict)
+        except PydanticValidationError as e:
+            # Includes an attempt to set a reconciler-owned field such as
+            # `slug` or `curated`, which the product schemas forbid.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Invalid product payload: {e}",
+            ) from e
 
         icon_data: bytes | None = None
         icon_file = form.get("icon")
@@ -136,14 +168,17 @@ async def create_product(
     Accepts either of two content types:
 
     - **application/json** — the body is the product JSON (`ProductCreate`):
-      `name` (required), and optional `description`, `template_id`, and the
-      marketing-metadata fields `category` and `replaces`. No icon.
+      `name` (required), and optional `description`, `template_id`,
+      `visibility`, and the marketing-metadata fields `category` and
+      `replaces`. No icon.
     - **multipart/form-data** — a required `payload` part holding the same
       product JSON, plus an optional `icon` image file. When an icon is
       supplied, the returned product carries its `icon_url`.
 
     ## Behavior
     - Product names are unique; a duplicate name yields a 409 conflict.
+    - `visibility` defaults to `admin`, so a product being onboarded is not
+      offered to end users until it is explicitly published.
     - When an `icon` is supplied it is validated against the maximum size; the
       product's icon is then reachable through
       `GET /api/products/{product_id}/icon`.
@@ -170,21 +205,29 @@ async def create_product(
     "",
     response_model=list[ProductRead],
     summary="List products",
-    response_description="All products with their marketing metadata and icon URLs.",
+    response_description="All products the caller may see, with their marketing metadata and icon URLs.",
 )
 def list_products(
+    current_user: UserORM | None = Depends(get_optional_user),
     session: Session = Depends(get_session),
 ) -> list[ProductRead]:
-    """List all products.
+    """List the products visible to the caller.
 
     ## Authorization
     Public — no authentication required.
 
     ## Behavior
+    Anonymous visitors and regular users get the end-user listing: only
+    non-deleted products whose `visibility` is `public`. Administrators get the
+    administrative listing, which additionally includes products whose
+    `visibility` is `admin`. Soft-deleted products are excluded either way.
+
     Each product includes its marketing metadata (`category`, `replaces`) and
     an `icon_url` when an icon is set.
     """
-    return product_service.list_products(session)
+    return product_service.list_products(
+        session, include_hidden=bool(current_user and current_user.is_admin)
+    )
 
 
 @router.get(
@@ -222,14 +265,21 @@ def get_product(
     summary="Update a product",
     response_description="The updated product with its current marketing metadata and icon URL.",
     responses={
-        400: {"description": "The uploaded icon could not be read, is too large, or failed image processing."},
+        400: {
+            "description": (
+                "The uploaded icon could not be read, is too large, or failed image "
+                "processing; or the product is managed by the catalog and `force` was "
+                "not supplied. A catalog refusal names the catalog file to edit instead."
+            )
+        },
         403: {"description": "The caller lacks administrator privileges."},
         404: {"description": "No product exists with this id, or the referenced template does not belong to this product."},
-        422: {"description": "Malformed request body: missing/invalid `payload` JSON, or the `icon` part is not a file upload."},
+        422: {"description": "Malformed request body: missing/invalid `payload` JSON, an unknown field such as `slug` or `curated`, or the `icon` part is not a file upload."},
     },
 )
 async def update_product(
     product_id: int = Path(..., description="ID of the product to update. Overrides any `id` in the payload."),
+    force: bool = Query(False, description=FORCE_DESCRIPTION),
     request: Request = None,
     current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
@@ -245,7 +295,7 @@ async def update_product(
     - **application/json** — the body is the product JSON (`ProductUpdate`).
       Every field is optional; only the provided fields are changed, leaving
       the rest untouched (partial update). Fields: `name`, `description`,
-      `template_id`, `category`, `replaces`.
+      `template_id`, `category`, `replaces`, `visibility`.
     - **multipart/form-data** — a required `payload` part holding the same
       `ProductUpdate` JSON, plus an optional `icon` image file that replaces
       the product's existing icon.
@@ -259,22 +309,38 @@ async def update_product(
       preserved.
     - Setting `template_id` selects the product's current template version; the
       referenced template must belong to this product or a 404 is raised.
+    - Setting `visibility` to `public` offers the product in the end-user
+      product list; setting it to `admin` withdraws it, leaving existing
+      deployments untouched.
     - A supplied `icon` replaces the product's existing icon; the returned
       product carries the new `icon_url`.
+    - For a **curated** (catalog-managed) product every field except
+      `visibility` is owned by `products/catalog/<slug>.yaml` and is refused
+      with a 400 unless `?force=true` is supplied. `visibility` is runtime
+      state and stays editable without `force`. `slug` and `curated`
+      themselves are written only by the reconciler and are not accepted here.
 
     ## Errors
     - **404 Not Found** — the product does not exist, or the referenced
       `template_id` does not belong to this product.
     - **403 Forbidden** — the caller is not an administrator.
     - **400 Bad Request** — the multipart `icon` file could not be read, is too
-      large, or fails image processing.
+      large, or fails image processing; or the product is catalog-managed and
+      `force` was not supplied.
     - **422 Unprocessable Content** — the multipart `payload` is missing or is
-      invalid JSON, the `icon` part is not a file upload, or a non-multipart
-      body is not valid JSON.
+      invalid JSON, carries an unknown field, the `icon` part is not a file
+      upload, or a non-multipart body is not valid JSON.
     """
     payload, icon_data = await parse_product_request(request, ProductUpdate)
     payload.id = product_id
-    return await run_in_threadpool(product_service.update_product, session, product=payload, icon_data=icon_data)
+    return await run_in_threadpool(
+        product_service.update_product,
+        session,
+        product=payload,
+        icon_data=icon_data,
+        actor=current_user,
+        force=force,
+    )
 
 
 @router.delete(
@@ -284,12 +350,14 @@ async def update_product(
     response_description="The product was deleted; no content is returned.",
     responses={
         204: {"description": "The product was deleted."},
+        400: CURATED_400,
         403: {"description": "The caller lacks administrator privileges."},
         404: {"description": "No product exists with this id."},
     },
 )
 def delete_product_endpoint(
     product_id: int = Path(..., description="ID of the product to delete."),
+    force: bool = Query(False, description=FORCE_DELETE_DESCRIPTION),
     current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> None:
@@ -305,11 +373,19 @@ def delete_product_endpoint(
     Once deleted, the product is treated as absent by subsequent reads, and its
     name is freed for reuse.
 
+    A **curated** product cannot be deleted, with or without `force`: the next
+    reconciliation would recreate it under a new id while existing deployments
+    kept referencing the old row. Remove its `products/catalog/<slug>.yaml`
+    file, let the rollout release the product, then delete it normally.
+
     ## Errors
     - **404 Not Found** — no product exists with this id.
     - **403 Forbidden** — the caller is not an administrator.
+    - **400 Bad Request** — the product is managed by the catalog.
     """
-    product_service.delete_product(session, product_id=product_id)
+    product_service.delete_product(
+        session, product_id=product_id, force=force, actor=current_user
+    )
 
 
 @router.post(
@@ -319,6 +395,12 @@ def delete_product_endpoint(
     summary="Create a template version",
     response_description="The newly created template version for the product.",
     responses={
+        400: {
+            "description": (
+                "`values_schema_json` is not a valid JSON Schema, or the product is "
+                "managed by the catalog and `force` was not supplied."
+            )
+        },
         403: {"description": "The caller lacks administrator privileges."},
         404: {"description": "The parent product does not exist."},
         409: {"description": "A template for this product version already exists."},
@@ -327,6 +409,7 @@ def delete_product_endpoint(
 def create_template(
     product_id: int = Path(..., description="ID of the product to attach the template to. Overrides any `product_id` in the payload."),
     payload: ProductTemplateVersionCreate = ...,
+    force: bool = Query(False, description=FORCE_DESCRIPTION),
     current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ):
@@ -354,14 +437,22 @@ def create_template(
     does not by itself make it the product's current template version; that is
     set via the product's `template_id`.
 
+    A **curated** product's templates come from its catalog file, so creation is
+    refused with a 400 unless `?force=true` is supplied. A forced row leaves
+    `catalog_commit` null, so hand-made drift stays distinguishable from
+    catalog-produced history and is re-asserted on the next rollout.
+
     ## Errors
-    - **400 Bad Request** — `values_schema_json` is not a valid JSON Schema.
+    - **400 Bad Request** — `values_schema_json` is not a valid JSON Schema, or
+      the product is managed by the catalog and `force` was not supplied.
     - **404 Not Found** — the parent product does not exist.
     - **403 Forbidden** — the caller is not an administrator.
     - **409 Conflict** — a template for this product version already exists.
     """
     payload.product_id = product_id
-    return template_service.create_template(session, payload)
+    return template_service.create_template(
+        session, payload, force=force, actor=current_user
+    )
 
 
 @router.get(
@@ -428,6 +519,7 @@ def get_template(
     response_description="The template version was deleted; no content is returned.",
     responses={
         204: {"description": "The template version was deleted."},
+        400: CURATED_400,
         403: {"description": "The caller lacks administrator privileges."},
         404: {"description": "No matching template exists for this product."},
     },
@@ -435,6 +527,7 @@ def get_template(
 def delete_template_endpoint(
     product_id: int = Path(..., description="ID of the product the template belongs to."),
     template_id: int = Path(..., description="ID of the template version to delete."),
+    force: bool = Query(False, description=FORCE_DELETE_DESCRIPTION),
     current_user: UserORM = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> None:
@@ -451,11 +544,22 @@ def delete_template_endpoint(
     The template must belong to the given product. Once deleted, it is treated
     as absent by subsequent reads.
 
+    Templates of a **curated** product cannot be deleted, with or without
+    `force`: the reconciler reinserts any template whose spec the catalog still
+    declares. Remove the product's catalog file first.
+
     ## Errors
     - **404 Not Found** — no template with this id belongs to this product.
     - **403 Forbidden** — the caller is not an administrator.
+    - **400 Bad Request** — the product is managed by the catalog.
     """
-    template_service.delete_template(session, product_id=product_id, template_id=template_id)
+    template_service.delete_template(
+        session,
+        product_id=product_id,
+        template_id=template_id,
+        force=force,
+        actor=current_user,
+    )
 
 
 @router.put(

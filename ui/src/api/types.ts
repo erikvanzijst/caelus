@@ -15,6 +15,9 @@ export interface TosAcceptance {
   accepted_at: IsoDate | null
 }
 
+/** Whether a product is offered to end users ('public') or hidden ('admin'). */
+export type ProductVisibility = 'public' | 'admin'
+
 export interface Product {
   id: number
   name: string
@@ -23,6 +26,11 @@ export interface Product {
   icon_url?: string | null
   category?: string | null
   replaces?: string | null
+  visibility: ProductVisibility
+  /** Catalog key joining this product to `products/catalog/<slug>.yaml`; null for database-authored products. */
+  slug?: string | null
+  /** Whether the catalog owns this product. Written only by the reconciler; everything but `visibility` is read-only when true. */
+  curated: boolean
   created_at: IsoDate
 }
 

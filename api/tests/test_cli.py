@@ -135,6 +135,25 @@ def _finish_reconcile(deployment_id: int) -> None:
         session.commit()
 
 
+def _make_cli_user_admin(runner, app) -> None:
+    """Promote the acting CLI user to admin.
+
+    ``list-products`` mirrors the REST listing: only an admin sees products
+    hidden from end users, which is every newly created product.
+    """
+    from app.models import UserORM
+
+    # Any command auto-creates the CLI user.
+    runner.invoke(app, ["list-users"])
+    with session_scope() as session:
+        user = session.exec(
+            select(UserORM).where(UserORM.email == "cli-test@example.com")
+        ).one()
+        user.is_admin = True
+        session.add(user)
+        session.commit()
+
+
 def _mark_first_open_job_failed(deployment_id: int, error: str = "boom") -> None:
     with session_scope() as session:
         job = session.exec(
@@ -169,6 +188,7 @@ def test_cli_user_flow(cli_runner):
 def test_cli_product_flow(cli_runner):
     """Test creating, listing, and deleting a product via CLI."""
     runner, app = cli_runner
+    _make_cli_user_admin(runner, app)
 
     # Create a product
     create_res = runner.invoke(app, ["create-product", "testprod", "A test product"])
@@ -207,6 +227,7 @@ def test_cli_product_flow(cli_runner):
 
 def test_cli_update_product_supports_template_and_description(cli_runner):
     runner, app = cli_runner
+    _make_cli_user_admin(runner, app)
 
     create_res = runner.invoke(app, ["create-product", "updatable", "old description"])
     assert create_res.exit_code == 0
@@ -413,6 +434,7 @@ def test_cli_update_product_not_found_returns_stable_error(cli_runner):
 
 def test_cli_update_product_template_validation_returns_stable_error(cli_runner):
     runner, app = cli_runner
+    _make_cli_user_admin(runner, app)
 
     create_res_1 = runner.invoke(app, ["create-product", "prod-a", "desc a"])
     assert create_res_1.exit_code == 0

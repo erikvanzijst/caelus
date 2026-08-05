@@ -1,39 +1,123 @@
 # Hostname is supplied by the user (title: hostname); the reconciler derives
-# deployment.hostname from it and injects caelus.ingress.host. The wrapper Ingress
-# uses caelus.ingress.host, so this is just a render-time default.
+# deployment.hostname from it and injects caelus.ingress.host. Both the Ingress and
+# the DOMAIN env prefer the injected value; this is the standalone-render fallback.
 host: ""
 
-# Values passed to the upstream gissilabs vaultwarden dependency chart.
-vaultwarden:
-  # The wrapper provides its own Ingress (templates/ingress.yaml) so it can carry
-  # per-deployment TLS from caelus.ingress.tls (issuer/secret/host) — static subchart
-  # values cannot. Disable the upstream ingress. Mirrors immich/nextcloud.
-  ingress:
-    enabled: false
+image:
+  repository: vaultwarden/server
+  # Pinned rather than defaulted to appVersion, so the app version is owned by
+  # Caelus and can be rolled forward through system values alone.
+  tag: "1.37.1"
+  pullPolicy: IfNotPresent
 
-  service:
-    httpPort: 80
+service:
+  httpPort: 80
 
-  persistence:
-    enabled: true
-    accessMode: ReadWriteOnce
+# Admin console at /admin. Platform-operated, not a tenant feature: it is always
+# enabled because the bootstrap Job needs it, and the token is never shown to the
+# user. Leaving it in their hands would let them edit config into
+# /data/config.json, which overrides the environment and detaches the instance
+# from this chart.
+admin:
+  # Blank generates a strong token on first install and reuses it thereafter.
+  # Set a literal value only to pin one for operator access.
+  token: ""
+  # Serve 403 for /admin at the Ingress (templates/admin-block.yaml), so the
+  # console is not reachable from the internet at all and the token is not the
+  # only thing guarding it. The bootstrap Job is unaffected — it reaches
+  # vaultwarden through the ClusterIP Service, which does not pass the Ingress.
+  # Turn off only to debug an instance through the public URL.
+  blockAtIngress: true
+
+# First-user bootstrap (templates/bootstrap-job.yaml).
+bootstrap:
+  image:
+    repository: docker.io/curlimages/curl
+    tag: "8.11.1"
+  # Must stay well inside the reconciler's 300s helm timeout, which also covers
+  # image pull and PVC binding for the app itself.
+  readyTimeoutSeconds: 120
+
+# Registration policy.
+signups:
+  # These vaults are internet-facing, so open registration is off by default —
+  # otherwise any passer-by can create an account.
+  allowed: false
+  # Require users to confirm their email address before they can log in
+  # (SIGNUPS_VERIFY, the "Require email verification on signups" toggle in the
+  # admin console). Requires smtp.enabled — without a mailer the confirmation
+  # email is never sent and nobody can complete a signup.
+  verify: true
+  # Restrict registration to these email domains. Setting this makes
+  # SIGNUPS_ALLOWED ignored entirely, so a whitelist opens registration for the
+  # listed domains even while `allowed` is false — it is not an extra filter on
+  # top of `allowed`, it replaces it.
+  domainsWhitelist: []
+
+# Reverse-proxy coupling.
+proxy:
+  # IP_HEADER — which header vaultwarden reads the client IP from, used for login
+  # rate limiting and shown in the admin console.
+  #
+  # X-Real-IP is both vaultwarden's default and what Traefik sends, so this is a
+  # no-op today; it is set explicitly because the correct value depends on the
+  # edge chain rather than on this chart. Blank omits the env entirely.
+  #
+  # The IP is only genuine because the HAProxy edge forwards the client address by
+  # PROXY protocol and Traefik runs with externalTrafficPolicy: Local
+  # (tf/deps/system/helm/traefik/values.yaml.tftpl). If that trust chain breaks,
+  # this header carries the CNI gateway address for every request and per-IP rate
+  # limiting silently stops discriminating.
+  ipHeader: "X-Real-IP"
+
+# Feature toggles. These are vaultwarden's own defaults, surfaced so they can be
+# tightened deliberately rather than by accident.
+features:
+  webVault: true
+  sends: true
+  emergencyAccess: true
+  passwordHints: true
+  showPasswordHint: false
+  # "all" | "none" | comma-separated user emails
+  orgCreationUsers: "all"
+  emailChangeAllowed: true
+
+log:
+  # Empty = the app default. Setting any level also enables extended logging.
+  level: ""
+
+# In-cluster mailer; needed for invitations and emergency access.
+smtp:
+  enabled: true
+  host: "smtp.mailer.svc.cluster.local"
+  port: 25
+  from: "vaultwarden@freepod.eu"
+  fromName: ""
+  # off | starttls | force_tls
+  security: "off"
+
+storage:
+  data:
     size: 1Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
 
-  vaultwarden:
-    # NOTE: DOMAIN (vaultwarden.vaultwarden.domain) is intentionally left unset —
-    # it must be the full https URL and varies per deployment, which static subchart
-    # values can't express. This matches the previous (wrapper-less) behaviour. Admin
-    # portal / email invites / WebAuthn need DOMAIN; wiring it is a follow-up.
-    smtp:
-      enabled: true
-      host: "smtp.mailer.svc.cluster.local"
-      port: "25"
-      from: "vaultwarden@freepod.eu"
-      security: "off"
+# Empty by default: vaultwarden is small, and a wrong limit OOM-kills a password
+# vault. Set requests/limits per plan once real usage is measured.
+resources: {}
 
-# TLS is injected per-deployment by the Caelus reconciler (caelus.ingress.tls). This default
-# lets the chart render standalone with the wrapper Ingress disabled.
+# Escape hatch for vaultwarden settings this chart does not model yet. Plain
+# string values only; anything needing a secret deserves a real value.
+extraEnv: {}
+
+# Injected per deployment by the Caelus reconciler. The defaults let the chart
+# render standalone.
 caelus:
+  plan: {}
   ingress:
     enabled: false
     tls: {}
+  # Owner's email; the bootstrap Job invites this address. Always injected by the
+  # reconciler in a real deployment — the empty default only lets `helm template`
+  # get far enough to report the missing value.
+  owner: {}

@@ -1,15 +1,17 @@
+{{- /*
+Per-app ingress. For custom domains it adds the cert-manager annotation and a
+tls: block; hosts under a wildcard domain are served by Traefik's default
+certificate store, so they need neither (HTTPS-only routing is the Traefik
+default, no per-app annotation).
+*/}}
 {{- if .Values.caelus.ingress.enabled }}
-{{- $tlsCustom := and .Values.caelus.ingress.enabled (not .Values.caelus.ingress.tls.wildcard) }}
-{{- /* Upstream service name = vaultwarden.fullname: .Release.Name when it already
-       contains "vaultwarden" (the Caelus case), else "<release>-vaultwarden". */ -}}
-{{- $svc := .Release.Name }}
-{{- if not (contains "vaultwarden" .Release.Name) }}{{- $svc = printf "%s-vaultwarden" .Release.Name }}{{- end }}
+{{- $tlsCustom := not .Values.caelus.ingress.tls.wildcard }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "vaultwarden-wrapper.fullname" . }}-ingress
+  name: {{ .Release.Name }}-ingress
   labels:
-    {{- include "vaultwarden-wrapper.labels" . | nindent 4 }}
+    {{- include "vaultwarden.labels" . | nindent 4 }}
   {{- if $tlsCustom }}
   annotations:
     cert-manager.io/cluster-issuer: {{ .Values.caelus.ingress.tls.issuer | quote }}
@@ -30,7 +32,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ $svc }}
+                name: {{ .Release.Name }}-vaultwarden
                 port:
-                  number: {{ .Values.vaultwarden.service.httpPort | default 80 }}
+                  number: {{ .Values.service.httpPort }}
 {{- end }}

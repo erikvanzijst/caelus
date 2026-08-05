@@ -1,0 +1,63 @@
+{{- /*
+Takes /admin off the public internet.
+
+Costs the bootstrap Job nothing: it reaches vaultwarden through the ClusterIP
+Service, and only the Ingress is public.
+
+Mechanism: a second, more specific Ingress rule for /admin carrying an
+ipAllowList Middleware scoped to loopback, which no real client can match, so
+Traefik answers 403. Traefik prioritises routers by rule length, so
+`PathPrefix(/admin)` wins over the `/` rule in ingress.yaml without needing an
+explicit priority.
+*/}}
+{{- if and .Values.caelus.ingress.enabled .Values.admin.blockAtIngress }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ .Release.Name }}-deny-admin
+  labels:
+    {{- include "vaultwarden.labels" . | nindent 4 }}
+spec:
+  ipAllowList:
+    # Loopback only: nothing arriving through the edge can match, so every
+    # public request to /admin gets a 403.
+    sourceRange:
+      - 127.0.0.1/32
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-admin-block
+  labels:
+    {{- include "vaultwarden.labels" . | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-{{ .Release.Name }}-deny-admin@kubernetescrd
+spec:
+  ingressClassName: traefik
+  {{- if not .Values.caelus.ingress.tls.wildcard }}
+  {{- /* Same host and secret as ingress.yaml, so this router terminates TLS with
+         the cert that already exists. Deliberately no cert-manager annotation:
+         ingress-shim names the Certificate after the secret, so a second
+         annotated Ingress would contend for the same Certificate resource.
+         ingress.yaml owns issuance; this only consumes the result. */}}
+  tls:
+    - hosts:
+        - {{ .Values.caelus.ingress.host | quote }}
+      secretName: {{ .Values.caelus.ingress.tls.secretName | quote }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.caelus.ingress.host | quote }}
+      http:
+        paths:
+          # Prefix, so /admin and everything under it (/admin/invite,
+          # /admin/users, /admin/config, ...) is covered by the one rule.
+          - path: /admin
+            pathType: Prefix
+            backend:
+              # Still names the real Service: the middleware rejects the request
+              # before it is proxied, and an Ingress rule needs a valid backend.
+              service:
+                name: {{ .Release.Name }}-vaultwarden
+                port:
+                  number: {{ .Values.service.httpPort }}
+{{- end }}

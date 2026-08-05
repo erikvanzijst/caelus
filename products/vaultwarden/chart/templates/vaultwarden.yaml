@@ -1,0 +1,170 @@
+{{- /*
+Vaultwarden app: Service + Deployment. Single container, sqlite on the data PVC.
+
+Every setting lands as an inline env var rather than an envFrom ConfigMap, so any
+change (DOMAIN included) alters the pod template and Helm rolls the pod on its
+own — no checksum annotation needed except for the Secret, whose contents are
+pulled in by reference.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-vaultwarden
+  labels:
+    {{- include "vaultwarden.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "vaultwarden.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-vaultwarden
+  labels:
+    {{- include "vaultwarden.labels" . | nindent 4 }}
+    {{- include "vaultwarden.selectorLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # Single RWO data volume: never two app pods at once.
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "vaultwarden.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # ADMIN_TOKEN arrives by secretKeyRef, which does not alter the pod
+        # template; without this the pod would keep a stale token after a change.
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "vaultwarden.selectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # Vaultwarden needs no root and writes only to /data, so it runs as an
+        # ordinary non-root uid. fsGroup owns the PVC files; a future SFTP
+        # sidecar must use this same uid or its logins cannot read them.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vaultwarden
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: ROCKET_PORT
+              value: "8080"
+            - name: DOMAIN
+              value: {{ include "vaultwarden.domain" . | quote }}
+            # sqlite write-ahead logging; the app owns /data exclusively.
+            - name: ENABLE_DB_WAL
+              value: "true"
+            - name: SIGNUPS_ALLOWED
+              value: {{ .Values.signups.allowed | quote }}
+            {{- if and .Values.signups.verify (not .Values.smtp.enabled) }}
+            {{- fail "signups.verify requires smtp.enabled: without a mailer the confirmation email is never sent and no one can complete a signup" }}
+            {{- end }}
+            - name: SIGNUPS_VERIFY
+              value: {{ .Values.signups.verify | quote }}
+            # Hardwired on, not a knob: the bootstrap Job invites the owner, and
+            # an invited user can only complete registration while this is true.
+            # It is also how an owner adds family members from the web vault
+            # (Organization -> Members -> Invite) now that /admin is off limits.
+            - name: INVITATIONS_ALLOWED
+              value: "true"
+            {{- with .Values.signups.domainsWhitelist }}
+            - name: SIGNUPS_DOMAINS_WHITELIST
+              value: {{ join "," . | quote }}
+            {{- end }}
+            - name: WEB_VAULT_ENABLED
+              value: {{ .Values.features.webVault | quote }}
+            - name: SENDS_ALLOWED
+              value: {{ .Values.features.sends | quote }}
+            - name: EMERGENCY_ACCESS_ALLOWED
+              value: {{ .Values.features.emergencyAccess | quote }}
+            - name: PASSWORD_HINTS_ALLOWED
+              value: {{ .Values.features.passwordHints | quote }}
+            - name: SHOW_PASSWORD_HINT
+              value: {{ .Values.features.showPasswordHint | quote }}
+            - name: ORG_CREATION_USERS
+              value: {{ .Values.features.orgCreationUsers | quote }}
+            - name: EMAIL_CHANGE_ALLOWED
+              value: {{ .Values.features.emailChangeAllowed | quote }}
+            {{- with .Values.proxy.ipHeader }}
+            - name: IP_HEADER
+              value: {{ . | quote }}
+            {{- end }}
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef: { name: {{ .Release.Name }}-admin, key: admin-token }
+            {{- if .Values.smtp.enabled }}
+            - name: SMTP_HOST
+              value: {{ required "smtp.host is required when smtp.enabled" .Values.smtp.host | quote }}
+            - name: SMTP_FROM
+              value: {{ required "smtp.from is required when smtp.enabled" .Values.smtp.from | quote }}
+            - name: SMTP_PORT
+              value: {{ .Values.smtp.port | quote }}
+            - name: SMTP_SECURITY
+              value: {{ .Values.smtp.security | quote }}
+            {{- with .Values.smtp.fromName }}
+            - name: SMTP_FROM_NAME
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.log.level }}
+            - name: EXTENDED_LOGGING
+              value: "true"
+            - name: LOG_LEVEL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- range $key, $val := .Values.extraEnv }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+          # Vaultwarden also serves a lighter /alive; switching is a candidate
+          # once it has been confirmed against a running instance.
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-data

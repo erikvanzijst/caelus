@@ -11,11 +11,7 @@ from app.services import (
     reconcile as reconcile_service,
     jobs as jobs_service,
 )
-from app.services.reconcile_constants import (
-    DEPLOYMENT_STATUS_ERROR,
-    JOB_STATUS_DONE,
-    JOB_STATUS_FAILED,
-)
+from app.services.reconcile_constants import DEPLOYMENT_STATUS_ERROR
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +40,20 @@ def process_one_job(base_worker_id: str) -> dict | None:
         reconciler = reconcile_service.DeploymentReconciler(session=session)
         result = reconciler.reconcile(deployment_id)
 
-        status: str
+        # Report the result under our own worker id: if this process was wedged
+        # long enough for its lease to be reclaimed, the job now belongs to
+        # another worker and these calls must not clobber its outcome. The
+        # returned row carries whatever status actually stuck.
         last_error: str | None = result.last_error
         if result.status == DEPLOYMENT_STATUS_ERROR:
-            jobs.mark_job_failed(job_id=job_id, error=result.last_error or "unknown error")
-            status = JOB_STATUS_FAILED
+            completed = jobs.mark_job_failed(
+                job_id=job_id,
+                error=result.last_error or "unknown error",
+                worker_id=effective_worker_id,
+            )
         else:
-            jobs.mark_job_done(job_id=job_id)
-            status = JOB_STATUS_DONE
+            completed = jobs.mark_job_done(job_id=job_id, worker_id=effective_worker_id)
+        status = completed.status
 
         return {
             "id": job_id,

@@ -460,6 +460,8 @@ the previous ReplicaSet keeps serving — rollback for free.
 - Reasons: `create|update|delete`.
 - Unique partial index prevents multiple open jobs (`queued` or `running`) per
   deployment.
+- `locked_by`/`locked_at` are the worker lease; `attempt` counts how often the
+  job was reclaimed after that lease expired (see Reconcile Queue Semantics).
 
 ## Critical Invariants
 
@@ -527,6 +529,28 @@ the previous ReplicaSet keeps serving — rollback for free.
 - Guarantees no double claim for same job under parallel workers (covered by
   tests, including Postgres integration test when `POSTGRES_TEST_DATABASE_URL`
   is set).
+- A job is claimable when it is `queued` and due (`run_after <= now`), **or**
+  when it is still `running` but its lease has expired.
+
+### Lease expiry
+
+A worker that dies mid-reconcile (pod restart, OOM kill, node eviction) leaves
+its job at `running` with `locked_by` naming a process that never returns.
+Without a lease that job is never retried and its deployment stays in
+`provisioning`/`deleting` forever, holding its hostname against re-creation.
+
+- Lease length: `CAELUS_RECONCILE_JOB_LEASE_SECONDS`, default `600` (10 min).
+  Never set this below `HELM_TIMEOUT_SEC` (300s): a healthy worker may
+  legitimately spend the whole Helm budget inside one reconcile, and a shorter
+  lease would let a second worker steal a live job.
+- Reclaims bump `attempt` and log at WARNING with the previous `locked_by` /
+  `locked_at`; grep worker logs for `Reclaimed expired reconcile job lease`.
+- Reclaims are not capped: only a completed reconcile can move a deployment out
+  of `provisioning`/`deleting`, so retries continue (once per lease interval)
+  until the job reaches `done` or `failed`.
+- `mark_job_done` / `mark_job_failed` take an optional `worker_id`; when given,
+  the write is conditional on the job still being leased to that worker, so a
+  wedged worker that wakes up late cannot overwrite the new owner's result.
 
 ## Provisioning Boundary
 

@@ -445,7 +445,9 @@ class DeploymentReconcileJobBase(SQLModel):
     reason: str
     status: str = Field(default="queued")
     run_after: datetime = Field(default_factory=_utcnow, nullable=False)
-    # TODO: remove this field. Jobs are not being retried:
+    # Number of times this job has been re-claimed after its lease expired,
+    # i.e. how often a worker died mid-reconcile while holding it. Bumped by
+    # JobService._claim_next_job_* on reclaim only, never on a first claim.
     attempt: int = Field(default=0, nullable=False)
     locked_by: Optional[str] = None
     locked_at: Optional[datetime] = None

@@ -73,6 +73,21 @@ class CaelusSettings(BaseSettings):
     sftp_host: str = "freepod.eu"
     sftp_port: int = 22
 
+    # ── Reconcile job lease ───────────────────────────────────────────────
+    # How long a worker may hold a claimed reconcile job before another worker
+    # is allowed to steal it. A worker that dies mid-reconcile (pod restart,
+    # OOM kill, node eviction) leaves its job stranded at status='running' with
+    # locked_by pointing at a process that will never come back; without a
+    # lease the job is never retried and its deployment sits in
+    # provisioning/deleting forever.
+    #
+    # Do NOT tune this below HELM_TIMEOUT_SEC (300s, see
+    # app/services/reconcile.py): a single reconcile may legitimately spend the
+    # full Helm wall-clock budget on `helm upgrade --install --wait`, and a
+    # lease shorter than that would let a second worker steal the job out from
+    # under a live, healthy one. 600s leaves ~2x margin.
+    reconcile_job_lease_seconds: int = 600
+
     mollie_api_key: str | None = None
     mollie_redirect_url: str | None = None
     mollie_webhook_base_url: str | None = None

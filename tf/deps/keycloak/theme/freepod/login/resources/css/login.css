@@ -218,6 +218,25 @@ div.kc-logo-text::after {
   font-weight: 500;
 }
 
+/* ── Checkboxes ─────────────────────────────────────────────────────────
+   PatternFly gives checkbox labels their own class (.pf-v5-c-check__label)
+   rather than reusing .pf-v5-c-form__label above, so the label rule does NOT
+   cover them and they fall back to PatternFly's default near-black text —
+   invisible on our dark card. The only stock template using this markup is
+   password-commons.ftl's logoutOtherSessions macro ("Sign out from other
+   devices"), which appears on the update-password and reset-credentials
+   pages. */
+.pf-v5-c-check__label {
+  font-family: var(--sans) !important;
+  color: var(--fg-muted) !important;
+  font-size: 14px;
+  cursor: pointer;
+}
+.pf-v5-c-check__input {
+  accent-color: var(--accent-blue);
+  cursor: pointer;
+}
+
 /* ── Inputs (the visible box is the .pf-v5-c-form-control span wrapper) ─── */
 .pf-v5-c-form-control {
   background: rgba(255, 255, 255, 0.04) !important;

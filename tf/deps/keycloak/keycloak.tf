@@ -53,6 +53,8 @@ resource "kubernetes_deployment" "keycloak" {
           name  = "keycloak"
           image = var.keycloak_image
 
+          image_pull_policy = "Always"
+
           args = ["start", "--hostname-debug=true"]
 
           port {

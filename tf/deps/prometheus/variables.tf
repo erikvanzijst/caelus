@@ -20,6 +20,18 @@ variable "alert_email_to" {
   type        = string
 }
 
+variable "keycloak_url" {
+  description = "Base URL of the Keycloak instance."
+  type        = string
+  default     = "https://keycloak.freepod.eu"
+}
+
+variable "keycloak_realm" {
+  description = "Keycloak realm holding the grafana client and the freepod-observability group. Not `master` — end-user identity lives in the freepod realm."
+  type        = string
+  default     = "freepod"
+}
+
 variable "grafana_oidc_client_id" {
   description = "Keycloak OIDC client ID for Grafana."
   type        = string

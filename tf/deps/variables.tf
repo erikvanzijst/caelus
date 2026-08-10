@@ -9,6 +9,13 @@ variable "keycloak_image" {
   type        = string
   default     = "ghcr.io/erikvanzijst/caelus/keycloak:latest"
 }
+
+variable "keycloak_url" {
+  description = "Base URL of the Keycloak instance the keycloak provider administers, and the issuer prefix for the freepod realm. Single source of truth — do not hardcode the admin endpoint in resources."
+  type        = string
+  default     = "https://keycloak.freepod.eu"
+}
+
 variable "smtp_host" {
   description = "SMTP server (e.g. smtp.example.com)"
   type        = string
@@ -69,14 +76,3 @@ variable "alert_email_to" {
   default     = "erik.van.zijst@gmail.com"
 }
 
-variable "grafana_oidc_client_id" {
-  description = "Keycloak OIDC client ID for Grafana (the `grafana` client in the master realm)."
-  type        = string
-  default     = "grafana"
-}
-
-variable "grafana_oidc_client_secret" {
-  description = "Keycloak OIDC client secret for the Grafana client. Use secrets.auto.tfvars."
-  type        = string
-  sensitive   = true
-}

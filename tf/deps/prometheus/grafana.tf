@@ -42,15 +42,23 @@ resource "helm_release" "grafana" {
         # Native Keycloak OIDC. Access is restricted to members of the
         # `freepod-observability` Keycloak group: allowed_groups gates login and
         # role_attribute_strict denies anyone the JMESPath maps to no role.
+        #
+        # NOTE: no `use_pkce` here, and correspondingly no
+        # pkce_code_challenge_method on the `grafana` client in
+        # ../keycloak-config/clients.tf. Grafana only sends a code challenge
+        # when use_pkce = true; setting the client attribute alone makes PKCE
+        # mandatory at Keycloak and fails every Grafana login. The two are a
+        # matched pair — enable both together or neither. (The oauth2-proxy
+        # clients DO require PKCE, and set --code-challenge-method to match.)
         "auth.generic_oauth" = {
           enabled              = true
           name                 = "Keycloak"
           client_id            = var.grafana_oidc_client_id
           client_secret        = "$__env{GRAFANA_OAUTH_CLIENT_SECRET}"
           scopes               = "openid email profile groups"
-          auth_url             = "https://keycloak.freepod.eu/realms/master/protocol/openid-connect/auth"
-          token_url            = "https://keycloak.freepod.eu/realms/master/protocol/openid-connect/token"
-          api_url              = "https://keycloak.freepod.eu/realms/master/protocol/openid-connect/userinfo"
+          auth_url             = "${var.keycloak_url}/realms/${var.keycloak_realm}/protocol/openid-connect/auth"
+          token_url            = "${var.keycloak_url}/realms/${var.keycloak_realm}/protocol/openid-connect/token"
+          api_url              = "${var.keycloak_url}/realms/${var.keycloak_realm}/protocol/openid-connect/userinfo"
           login_attribute_path = "preferred_username"
           email_attribute_path = "email"
           # REQUIRED for allowed_groups to work: Grafana's extractGroups() returns

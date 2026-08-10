@@ -30,6 +30,20 @@ module "keycloak" {
   domain                  = "freepod.eu"
 }
 
+# Realm, client, client-scope and group configuration for the Keycloak instance
+# deployed by module.keycloak above. Kept as a separate module because it talks
+# to Keycloak's admin API rather than to Kubernetes, and because it must not be
+# applied until Keycloak is actually serving.
+#
+# Realm email is deliberately NOT wired from var.smtp_* here. Those are the
+# mailer relay's own upstream purelymail credentials (see module.mailer below);
+# the realm sends through the relay instead and defaults to it.
+module "keycloak_config" {
+  source = "./keycloak-config"
+
+  depends_on = [module.keycloak, module.mailer]
+}
+
 module "certmanager" {
   source               = "./certmanager"
   cloudflare_api_token = var.cloudflare_api_token
@@ -65,12 +79,16 @@ module "loki" {
 }
 
 module "prometheus" {
-  source                     = "./prometheus"
-  namespace                  = kubernetes_namespace.monitoring.metadata[0].name
-  grafana_admin_password     = var.grafana_admin_password
-  alert_email_to             = var.alert_email_to
-  grafana_oidc_client_id     = var.grafana_oidc_client_id
-  grafana_oidc_client_secret = var.grafana_oidc_client_secret
+  source                 = "./prometheus"
+  namespace              = kubernetes_namespace.monitoring.metadata[0].name
+  grafana_admin_password = var.grafana_admin_password
+  alert_email_to         = var.alert_email_to
+  # Sourced from the Terraform-managed `grafana` client in the freepod realm,
+  # not from a hand-maintained tfvar: the client is declared in
+  # ./keycloak-config, so its ID and generated secret are already known here.
+  # This removes the last manual Keycloak secret from tf/deps.
+  grafana_oidc_client_id     = module.keycloak_config.grafana_client_id
+  grafana_oidc_client_secret = module.keycloak_config.grafana_client_secret
 
   # Alertmanager delivers via the in-cluster mailer relay.
   depends_on = [module.mailer]

@@ -9,6 +9,9 @@ independent state and does not use Terraform workspaces.
 - `keycloak` namespace, deployment, Postgres database, PVC, service, ingress.
   Keycloak runs a **custom image** (`var.keycloak_image`) with the Freepod
   login/account/email theme baked in — see [Keycloak theming](#keycloak-theming).
+- The **`freepod` Keycloak realm** and its clients, client scopes and groups,
+  declared as Terraform in `keycloak-config/` — see
+  [Keycloak configuration](#keycloak-configuration).
 - `echo` namespace, deployment, service, ingress
 - `monitoring` namespace with the cluster-wide observability stack (Loki +
   Promtail, Prometheus + node-exporter + kube-state-metrics + Alertmanager,
@@ -27,12 +30,13 @@ Create `secrets.auto.tfvars` (gitignored):
 keycloak_admin_password = "replace-with-actual-password"
 
 # Monitoring stack
-grafana_admin_password     = "replace-with-actual-password" # break-glass local admin
-alert_email_to             = "ops@example.com"              # Alertmanager recipient
-grafana_oidc_client_secret = "replace-with-keycloak-secret" # Grafana OIDC client secret
-# grafana_oidc_client_id defaults to "grafana"; override only if the Keycloak
-# client is named differently.
+grafana_admin_password = "replace-with-actual-password" # break-glass local admin
+alert_email_to         = "ops@example.com"              # Alertmanager recipient
 ```
+
+Grafana's OIDC client ID and secret are **not** configured here. The `grafana`
+client is Terraform-managed (see [Keycloak configuration](#keycloak-configuration)),
+so `module.prometheus` reads them straight from `module.keycloak_config`.
 
 The monitoring stack needs no external SMTP credentials: Alertmanager relays
 email through the in-cluster `mailer` service.
@@ -80,82 +84,85 @@ kubectl -n monitoring port-forward svc/prometheus-server 9090:80        # Promet
 kubectl -n monitoring port-forward svc/prometheus-alertmanager 9093:9093 # Alertmanager  → http://localhost:9093
 ```
 
-### Grafana OIDC bootstrap (one-time, manual)
+### Grafana OIDC (Terraform-managed)
 
-There is no Keycloak Terraform provider here (same as the theme/realm setup
-below), so create the Grafana OIDC client, the whitelist group, and a
-group-membership mapper once — either through the **admin console UI** or via
-**`kcadm`** (both produce the same result). The whitelist is then pure group
-membership — no Terraform apply to add/remove a user.
+Nothing to bootstrap by hand. The `grafana` client, the
+`freepod-observability` group and the `groups` client scope with its
+group-membership mapper are all declared in `keycloak-config/` — see
+[Keycloak configuration](#keycloak-configuration). `module.prometheus` reads
+the client ID and generated secret directly from `module.keycloak_config`, so
+no Grafana OIDC secret is maintained by hand.
 
-The three things to create, whichever path you use: a confidential `grafana`
-client, a `freepod-observability` group, and a group-membership mapper that puts
-a `groups` claim in the token (so Grafana's `allowed_groups` /
-`role_attribute_path` can read it).
+Granting Grafana access is pure group membership: add the user to
+`freepod-observability` in the Keycloak admin console. No Terraform apply.
 
-#### Via the admin console (UI)
+Two settings that look optional but are not, both in
+`prometheus/grafana.tf`:
 
-1. **Clients → Create client** (realm `master`), type **OpenID Connect**,
-   Client ID `grafana`.
-   - *Capability config:* **Client authentication ON** (confidential — this is
-     what generates the secret), **Authorization OFF** (Grafana does its own
-     role mapping; leave Keycloak's authorization services off), and check
-     **Standard flow** only (leave Direct access grants / Implicit / Service
-     account roles off).
-   - *Login settings:* **Root URL** and **Home URL** `https://grafana.freepod.eu`;
-     **Valid redirect URIs** `https://grafana.freepod.eu/login/generic_oauth`;
-     **Web origins** `https://grafana.freepod.eu`; **Valid post logout redirect
-     URIs** `+` (reuses the redirect URIs).
-2. **Client → Credentials tab** → copy the **Client secret** into
-   `secrets.auto.tfvars` as `grafana_oidc_client_secret`.
-3. **Client scopes → Create client scope** `groups` (type **Default**,
-   OpenID Connect). Open it → **Mappers → Add mapper → By configuration →
-   Group Membership**: Name `groups`, Token Claim Name `groups`, **Full group
-   path OFF**, add to ID token / Access token / Userinfo all **ON**. Then on the
-   **grafana** client → **Client scopes** tab → **Add client scope** → `groups`
-   as **Default**.
-4. **Groups → Create group** `freepod-observability`, then its **Members** tab →
-   **Add member** → add each user who should have Grafana access.
-5. *(Verify)* grafana client → **Client scopes → Evaluate** → pick your user →
-   **Generated ID token** should contain `"groups": ["freepod-observability"]`
-   (no leading slash — if you see `/freepod-observability`, turn **Full group
-   path OFF**).
+- `groups_attribute_path = "groups"` — Grafana's `extractGroups()` returns an
+  empty list without it, so the `groups` claim is never read and every login
+  is rejected as "not a member of one of the required groups".
+- **No `use_pkce`**, matched by no `pkce_code_challenge_method` on the
+  `grafana` client. Grafana only sends a code challenge when `use_pkce` is
+  true; setting the client attribute alone makes PKCE mandatory at Keycloak
+  and fails every Grafana login. Enable both together or neither. (The
+  oauth2-proxy clients *do* require PKCE and set the matching flag.)
 
-#### Via `kcadm`
+## Keycloak configuration
+
+The `freepod` realm — the realm Freepod end users authenticate against — is
+declared as Terraform in `keycloak-config/`, using the `keycloak/keycloak`
+provider. This is separate from the `keycloak/` module, which deploys the
+Keycloak *server*; `keycloak-config/` configures what runs inside it.
+
+What it manages:
+
+- The `freepod` realm: registration open, email verification required,
+  self-service password reset, the `freepod` login/email/account themes, and
+  SMTP pointed at the in-cluster mailer relay.
+- Clients `freepod-prod`, `freepod-dev` (per-environment, PKCE `S256`, direct
+  access grants off) and `grafana`.
+- The `groups` client scope and its group-membership mapper.
+- Groups `freepod-dev` and `freepod-observability`.
+
+**Admin-console edits to any managed attribute are reverted on the next
+`terraform apply`.** Change these in code.
+
+Deliberately *not* managed, and safe to change by hand:
+
+- **End-user accounts.** There is no `keycloak_user` resource. Users live in
+  Keycloak's own Postgres, and self-registration causes no drift.
+- **Group membership.** Terraform owns the groups, not who is in them.
+
+### Things that will bite you
+
+- **`groups` is not a Keycloak built-in client scope.** Keycloak 24.0.5 ships
+  ten default scopes and `groups` is not among them, so the scope and its
+  mapper are declared here rather than merely attached. The mapper sets
+  `full_path = false`, so the claim carries bare names (`freepod-dev`), which
+  is what `allowed_groups` compares against.
+- **The provider is pinned `~> 5.7.0`.** From 5.8.0 it unconditionally sends
+  `bruteForceStrategy`, a field added in Keycloak 26; Keycloak 24.0.5 rejects
+  the whole request with `400 unable to read contents from stream` and realm
+  creation fails. Raise the cap only together with a Keycloak upgrade.
+- **The realm carries two destroy guards.** `prevent_destroy` guards the plan
+  but only while the resource block exists in the configuration;
+  `terraform_deletion_protection` is enforced by the provider at the delete
+  call and survives the block being removed. Deleting the realm on purpose
+  means clearing both.
+
+### Reading client secrets
+
+Secrets are generated by Keycloak and surfaced as outputs:
 
 ```bash
-# Run kcadm inside the Keycloak pod (adjust the pod selector as needed).
-K="kubectl -n keycloak exec -i deploy/keycloak -- /opt/keycloak/bin/kcadm.sh"
-$K config credentials --server http://localhost:8080 --realm master \
-    --user admin --password "$KEYCLOAK_ADMIN_PASSWORD"
-
-# 1) Confidential client for Grafana (standard flow). Note the generated secret
-#    and put it in secrets.auto.tfvars as grafana_oidc_client_secret.
-$K create clients -r master \
-    -s clientId=grafana -s enabled=true -s publicClient=false \
-    -s standardFlowEnabled=true \
-    -s 'redirectUris=["https://grafana.freepod.eu/login/generic_oauth"]' \
-    -s 'webOrigins=["https://grafana.freepod.eu"]'
-CID=$($K get clients -r master -q clientId=grafana --fields id --format csv --noquotes | head -1)
-$K get clients/$CID/client-secret -r master   # copy the "value"
-
-# 2) Whitelist group. Add the users who should have Grafana access to it.
-$K create groups -r master -s name=freepod-observability
-
-# 3) Map group membership into a `groups` claim so Grafana's allowed_groups /
-#    role_attribute_path can read it. Include the full path off (top-level names).
-$K create clients/$CID/protocol-mappers/models -r master \
-    -s name=groups -s protocol=openid-connect \
-    -s protocolMapper=oidc-group-membership-mapper \
-    -s 'config={"claim.name":"groups","full.path":"false","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}'
+terraform output -raw freepod_dev_client_secret   # -> tf/app "default" key
+terraform output -raw freepod_prod_client_secret  # -> tf/app "prod" key
 ```
 
-(The `kcadm` path attaches the mapper to the client's **dedicated** scope, which
-is always included in tokens; the UI path above uses a standalone `groups`
-client scope. Both emit the same `groups` claim — use whichever you prefer.)
+The two root modules are deliberately not coupled with
+`terraform_remote_state`; paste these into `tf/app/secrets.auto.tfvars`.
 
-Grafana login stays (safely) denied until the client, group, and mapper exist
-and the user is a group member.
 
 ## Keycloak theming
 
@@ -195,11 +202,19 @@ The deployment references `var.keycloak_image`
 
 ### Assigning the theme to the realm
 
-Baking the theme into the image only makes it *available*; the realm must select
-it. This is realm config (not managed in Terraform — there's no Keycloak
-provider here), so set it once per realm via the admin console
-(Realm settings → Themes → Login/Account/Email theme = `freepod`) or via
-`kcadm`:
+Baking the theme into the image only makes it *available*; the realm must
+select it. For the `freepod` realm this is **Terraform-managed** — see
+`keycloak-config/realm.tf`:
+
+```hcl
+login_theme   = "freepod"
+email_theme   = "freepod"
+account_theme = "freepod"
+```
+
+Setting it by hand in the admin console (Realm settings → Themes) works, but
+is reverted on the next `terraform apply`. For an unmanaged realm such as
+`master`, set it manually:
 
 ```bash
 kcadm.sh update realms/master -s loginTheme=freepod -s accountTheme=freepod -s emailTheme=freepod

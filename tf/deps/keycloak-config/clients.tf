@@ -1,11 +1,5 @@
 # One client per environment.
 #
-# `caelus-dev` in `master` answers for both freepod.eu and dev.freepod.eu, so a
-# session minted for dev is indistinguishable from one minted for prod. Splitting
-# it gives each host its own redirect URIs and its own secret, and is the
-# prerequisite for audience-based token validation in the follow-up bearer-token
-# change.
-#
 # Both are declared as plain resources rather than one resource parameterized by
 # terraform.workspace: tf/deps is the singleton root module and has no
 # workspaces. tf/app *selects* which of these to use for its workspace.

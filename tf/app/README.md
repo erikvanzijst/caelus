@@ -64,11 +64,42 @@ serving.
 Create `secrets.auto.tfvars` (gitignored):
 
 ```hcl
-db_password                = "replace-with-a-strong-password"
-smtp_password              = "replace-with-smtp-password"
-oauth2_proxy_client_secret = "replace-with-oauth2-client-secret"
+db_password   = "replace-with-a-strong-password"
+smtp_password = "replace-with-smtp-password"
+
+oauth2_proxy_client_ids = {
+  default = "freepod-dev"
+  prod    = "freepod-prod"
+}
+
+# Read these from tf/deps, which owns the clients:
+#   terraform -chdir=../deps output -raw freepod_dev_client_secret
+#   terraform -chdir=../deps output -raw freepod_prod_client_secret
+oauth2_proxy_client_secrets = {
+  default = "replace-with-freepod-dev-client-secret"
+  prod    = "replace-with-freepod-prod-client-secret"
+}
+
 oauth2_proxy_cookie_secret = "replace-with-oauth2-cookie-secret"
 ```
+
+### Authentication
+
+oauth2-proxy authenticates against the **`freepod` realm** (not `master`),
+using the per-environment client selected above. The clients themselves are
+declared in `tf/deps/keycloak-config/`; this root module only *selects* which
+one the current workspace uses. It declares no Keycloak resources.
+
+The non-prod workspace additionally sets `allowed_groups = ["freepod-dev"]`
+on oauth2-proxy, so `dev.freepod.eu` is restricted to members of that Keycloak
+group. Prod sets no group restriction. Membership is administered in Keycloak
+and needs no apply here.
+
+Both clients require PKCE `S256`, so oauth2-proxy runs with
+`--code-challenge-method=S256`. **These are a matched pair.** Remove one and
+every login fails with `invalid_request: Missing parameter:
+code_challenge_method` — and oauth2-proxy will still start and pass its
+readiness probe, so the pod looks healthy while authentication is broken.
 
 ## Deploy
 

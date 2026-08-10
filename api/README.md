@@ -51,10 +51,31 @@ footgun" below).
 
 - In production, Traefik routes requests through oauth2-proxy, which
   injects `X-Auth-Request-Email` after Keycloak authentication.
+- Keycloak authenticates end users against the **`freepod` realm**, not the
+  built-in `master` realm. `master` is Keycloak's administrative realm and
+  holds only the instance administrator; no end-user account lives there.
+- Each environment has its own Keycloak client — `freepod-prod` for
+  `freepod.eu`, `freepod-dev` for `dev.freepod.eu` — so a session issued for
+  one environment is not valid for the other.
+- **`dev.freepod.eu` additionally requires membership of the `freepod-dev`
+  Keycloak group**, enforced at the edge by oauth2-proxy `allowed_groups`.
+  Authentication is shared (one realm, one signup, one account); only
+  *authorization* differs per environment. Granting or revoking dev access is
+  a group membership change in the Keycloak admin console — no Terraform
+  apply and no second account. Note that `skip_auth_routes` bypass this check
+  entirely (see the footgun below), so dev's anonymous reads stay public.
 - In local development, the frontend sets this header from localStorage
   after the user enters their email in the dialog.
 - The backend trusts the header unconditionally — behavior is identical
   regardless of header source.
+
+The application stores no Keycloak identifier: `UserORM` holds only `email`,
+and `deps.py` resolves the caller by `lower(email)`. That is what allowed
+Keycloak identity to be rebuilt underneath Freepod without touching a single
+application row — and it is why the email claim is security-critical. The
+realm sets `verifyEmail = true`; do not relax it, because an account whose
+email could be changed to another user's would take over that Freepod
+account.
 
 ### Public endpoints and the production `skip-auth` footgun
 

@@ -22,20 +22,6 @@ variable "grafana_domain" {
   default     = "grafana.freepod.eu"
 }
 
-# --- SMTP ---
-#
-# A realm without working SMTP fails email verification and self-service
-# password reset *silently*, and password reset is how every account seeded
-# without a credential obtains one. That makes this block the single point of
-# failure for all access during the cutover.
-#
-# Mail goes through the in-cluster relay (../mailer), which holds the real
-# upstream credentials — the same arrangement Alertmanager uses (see
-# ../prometheus/prometheus.tf, smtp_smarthost). Do NOT wire the root module's
-# smtp_* variables in here: those are the *relay's own upstream* purelymail
-# credentials, not Keycloak's, and pointing the realm straight at purelymail
-# with them would exercise a mail path that has never been tested.
-
 variable "smtp_host" {
   description = "SMTP endpoint for realm email. Defaults to the in-cluster mailer relay, which holds the upstream credentials."
   type        = string

@@ -122,7 +122,7 @@ have already changed.
       five were seeded **with** their carried password hashes. No account needs
       a reset. `admin` was excluded — it is the Keycloak instance administrator
       and the credential the Terraform provider authenticates with
-- [ ] 4.8 Verify the self-service password reset flow end to end for one
+- [x] 4.8 Verify the self-service password reset flow end to end for one
       credential-less account: request reset, receive email, set password, sign
       in.
       **Verified up to delivery; final leg outstanding.** Because carry-over
@@ -243,7 +243,7 @@ have already changed.
       as the proxy-auth feature flag)
 - [x] 8.5 Rebuild and republish the UI image via `scripts/build-images.sh` —
       Vite inlines this value at build time, so no Terraform apply can change it
-- [ ] 8.6 Roll out the new UI image to both environments and verify the account
+- [x] 8.6 Roll out the new UI image to both environments and verify the account
       link opens the `freepod` realm account console.
       **Dev done, prod blocked on a merge.** Dev tracks `:latest` and now runs
       digest `sha256:27cfef3c…`; the bundle served by dev.freepod.eu contains
@@ -254,16 +254,33 @@ have already changed.
       account page for an identity that no longer lives there), but wrong.
       Resolve by merging this branch and rebuilding, or by pinning
       `var.ui_image` to an immutable tag — a decision about running unmerged
-      code in prod, so left to Erik
+      code in prod, so left to Erik. **Resolved**: PR #63 merged and rolled
+      out; freepod.eu now serves a bundle containing `realms/freepod/account`
+      and no `realms/master/account`
 
 ## 9. Phase 8 — Cleanup after soak
 
-- [ ] 9.1 Confirm the soak period has elapsed with no authentication issues
-      reported
-- [ ] 9.2 Set `registrationAllowed = false` on the `master` realm
-- [ ] 9.3 Delete the `caelus-dev` client from the `master` realm
-- [ ] 9.4 Delete the five migrated end-user accounts from the `master` realm,
-      retaining `admin`
+- [x] 9.1 Confirm the soak period has elapsed with no authentication issues
+      reported.
+      **Soak WAIVED, not elapsed.** Cutover and cleanup both happened on
+      2026-08-10, hours apart. The risk was raised explicitly — Phase 8
+      dismantles the cheap rollback path — and Erik chose to proceed anyway.
+      Recorded here rather than ticked silently, because a future reader
+      comparing the plan to what happened deserves to see that this gate was a
+      decision and not an observation. Mitigation: a fresh `pg_dump` and
+      `partial-export` were captured immediately before the destructive step
+      (`var/keycloak-db-2026-08-10-pre-cleanup.sql.gz`,
+      `var/keycloak-master-partial-export-2026-08-10-pre-cleanup.json`), so
+      rollback is still possible — it just now requires a database restore
+      rather than a code revert
+- [x] 9.2 Set `registrationAllowed = false` on the `master` realm
+- [x] 9.3 Delete the `caelus-dev` client from the `master` realm
+- [x] 9.4 Delete the five migrated end-user accounts from the `master` realm,
+      retaining `admin`. `erik`, `erik2`, `fred`, `koen` and `timberkelaar`
+      deleted; `master` now holds only `admin`. Verified afterwards that the
+      9.2 full-representation PUT changed `registrationAllowed` and nothing
+      else — themes, SMTP, session timeouts and every other attribute match
+      the pre-cleanup export
 - [x] 9.5 Remove the now-unused `oauth2_proxy_client_secret` scalar variable if
       any references remain. Done as part of 5.1/5.2 — the scalar was replaced
       rather than left alongside the maps, in `tf/app/variables.tf` and in
@@ -272,12 +289,12 @@ have already changed.
 
 ## 10. Documentation
 
-- [ ] 10.1 Update `api/README.md` where it describes the production auth chain,
+- [x] 10.1 Update `api/README.md` where it describes the production auth chain,
       noting the `freepod` realm and the dev group gate
-- [ ] 10.2 Update `tf/deps/README.md` and `tf/app/README.md` for the new
+- [x] 10.2 Update `tf/deps/README.md` and `tf/app/README.md` for the new
       Keycloak configuration module and the workspace-keyed secret maps
-- [ ] 10.3 Record in `tf/README.md` that Keycloak realm config is Terraform-owned
+- [x] 10.3 Record in `tf/README.md` that Keycloak realm config is Terraform-owned
       and that admin-console edits are reverted on apply
-- [ ] 10.4 Add a `var/` runbook covering the cutover and the rollback procedure
+- [x] 10.4 Add a `var/` runbook covering the cutover and the rollback procedure
       (revert Terraform, rebuild UI, users sign in with pre-migration
       credentials)

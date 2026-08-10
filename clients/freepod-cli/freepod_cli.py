@@ -406,16 +406,26 @@ def device_flow(client_id: str, verbose: bool) -> dict:
     user_code = authorization["user_code"]
     interval = int(authorization.get("interval", 5))
     expires_in = int(authorization.get("expires_in", 600))
+    verification_uri = authorization["verification_uri"]
     complete_uri = authorization.get("verification_uri_complete")
 
+    # RFC 8628 section 3.3.1 requires the client to display the user_code even
+    # when it offers verification_uri_complete. Keycloak does not echo the code
+    # back on the complete-URI path, though — it consumes it from the query
+    # string and goes straight to sign-in — so the code is presented here as a
+    # manual fallback, not as something to confirm on screen.
     print("\nTo sign in, open this URL in any browser — on this machine or another:\n",
           file=sys.stderr)
     if complete_uri:
         print(f"    {complete_uri}\n", file=sys.stderr)
-        print(f"  and confirm the code:  {user_code}\n", file=sys.stderr)
+        print(f"  That link already carries the code {user_code}, so Keycloak will",
+              file=sys.stderr)
+        print(f"  not ask you for it. To type it in by hand instead, open",
+              file=sys.stderr)
+        print(f"  {verification_uri} and enter {user_code}\n", file=sys.stderr)
     else:
-        print(f"    {authorization['verification_uri']}\n", file=sys.stderr)
-        print(f"  and enter the code:    {user_code}\n", file=sys.stderr)
+        print(f"    {verification_uri}\n", file=sys.stderr)
+        print(f"  and enter the code:  {user_code}\n", file=sys.stderr)
     log(f"Waiting up to {expires_in}s for approval (polling every {interval}s)...")
 
     deadline = time.monotonic() + expires_in

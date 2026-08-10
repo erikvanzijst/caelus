@@ -110,6 +110,24 @@ the terminal.
 Polling handles `authorization_pending`, `slow_down` (backs the interval off by
 5s), `expired_token`, and `access_denied`. The device code lives 600 seconds.
 
+**Why the code is printed even though Keycloak never asks for it.** RFC 8628
+§3.3.1 says clients *MUST* display the `user_code` even when offering
+`verification_uri_complete`, because the server is expected to echo it back and
+ask the user to confirm it matches — an anti-phishing check that the device is
+really in the user's hands (§5.4). **Keycloak 24 does not do that half.** It
+consumes the code from the query string and goes straight to sign-in and
+consent, so the code appears nowhere on screen.
+
+Here the code is therefore a *fallback*, and the client says so rather than
+telling you to confirm something you will never see. If the long URL is mangled
+by terminal wrapping, or you would rather type a short one on a phone, open
+`https://keycloak.freepod.eu/realms/freepod/device` — that page has a code-entry
+field — and enter the code there.
+
+Keycloak does implement the other §5.4 mitigation: the consent screen names the
+client ("Grant Access to Freepod CLI (production)"), so an unexpected
+authorization prompt is still recognizable as one you did not start.
+
 `urn:ietf:wg:oauth:2.0:oob` (print-and-paste) is **not** an option — Keycloak
 removed it before 24.0 and it is not registered on these clients.
 
@@ -188,7 +206,9 @@ To sign in, open this URL in any browser — on this machine or another:
 
     https://keycloak.freepod.eu/realms/freepod/device?user_code=WMJW-QHHV
 
-  and confirm the code:  WMJW-QHHV
+  That link already carries the code WMJW-QHHV, so Keycloak will
+  not ask you for it. To type it in by hand instead, open
+  https://keycloak.freepod.eu/realms/freepod/device and enter WMJW-QHHV
 
 Waiting up to 600s for approval (polling every 5s)...
 Approved.

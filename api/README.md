@@ -126,6 +126,12 @@ matching requests, which has two dangerous consequences:
   client-supplied one. Never read `X-Auth-Request-Email` for
   authorization on any endpoint matched by a skip rule — a caller could
   spoof it.
+- **Bearer tokens are ignored, not rejected.** The same bypass applies to
+  `Authorization: Bearer`: a skipped route neither verifies the token nor
+  derives an identity from it, so the request is anonymous no matter how
+  valid the token is. A skipped route therefore cannot be made to behave
+  differently for an authenticated client, and group gating on
+  `dev.freepod.eu` does not apply to it either.
 - **Two lists that must stay in sync.** Whether an endpoint is public is
   decided in *two* places — the FastAPI dependency (app layer) and the
   `skip_auth_routes` regexes (edge layer, in Terraform) — and they can
@@ -172,6 +178,143 @@ caelus --as-user bob@example.com list-users
 
 Commands that require user context exit with code 1 and a clear error
 when neither is configured.
+
+Note this is an **operator** mechanism, not authentication: the CLI talks to
+the database directly and simply asserts who it is acting as. It must run
+next to the database and grants whatever the asserted email can do. External,
+remote clients use OAuth2 tokens instead — see below.
+
+### External API clients (OAuth2 tokens)
+
+Non-browser clients authenticate with a Keycloak access token presented as
+`Authorization: Bearer <token>`. oauth2-proxy verifies the token at the edge
+and injects `X-Auth-Request-Email` from its `email` claim, so the API is
+unchanged and cannot tell a token-authenticated request from a browser one.
+
+**Clients authenticate directly against Keycloak — not through
+`/oauth2/start`.** That endpoint exists to mint a browser *cookie session* and
+gives a client no tokens. A client is a first-class OAuth2 client and talks to
+the realm's own endpoints.
+
+Two public clients, one per environment. They hold no client secret (a
+distributed client cannot keep one); PKCE proves client identity instead and
+is **mandatory**:
+
+| Environment | Client ID | Base URL |
+| --- | --- | --- |
+| Production | `freepod-cli-prod` | `https://freepod.eu` |
+| Development | `freepod-cli-dev` | `https://dev.freepod.eu` |
+
+Realm endpoints (issuer `https://keycloak.freepod.eu/realms/freepod`):
+
+```
+authorization : /protocol/openid-connect/auth
+device        : /protocol/openid-connect/auth/device
+token         : /protocol/openid-connect/token
+revocation    : /protocol/openid-connect/revoke
+```
+
+A token is bound to one environment by its `aud` claim. A `freepod-cli-dev`
+token presented to `freepod.eu` is rejected, and vice versa — the two clients
+register identical loopback redirect URIs, so the audience is the *only* thing
+separating them.
+
+#### Interactive: authorization code + PKCE over loopback
+
+1. Bind an HTTP listener on `127.0.0.1:0` (any ephemeral port).
+2. Generate a `code_verifier` and its S256 `code_challenge`.
+3. Open the browser to the authorization endpoint with
+   `redirect_uri=http://127.0.0.1:<port>/callback`,
+   `scope=openid email offline_access`, and the challenge.
+4. Receive `?code=...` on the listener, then POST it to the token endpoint
+   with the `code_verifier`.
+
+The callback path is **`/callback`** and the registered redirect URIs are
+port-less (`http://127.0.0.1/callback`, `http://localhost/callback`).
+Keycloak relaxes port matching for loopback hosts per RFC 8252 §7.3, so any
+port matches — but the **path must match exactly**, and `127.0.0.1` and
+`localhost` are matched as distinct host strings.
+
+#### Headless: device authorization grant
+
+For SSH sessions, containers and CI, where no local browser exists. Nothing
+secret passes through the terminal.
+
+**Keycloak requires PKCE on the device endpoint too.** RFC 8628 has no
+redirect and therefore no PKCE, but the client's mandatory-PKCE setting is
+enforced here as well — omitting the challenge fails with
+`Missing parameter: code_challenge_method`. This surprises most
+implementations.
+
+```bash
+ISS=https://keycloak.freepod.eu/realms/freepod
+VERIFIER=$(head -c30 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=')
+CHALLENGE=$(printf %s "$VERIFIER" | openssl dgst -binary -sha256 \
+            | base64 | tr '+/' '-_' | tr -d '=')
+
+# 1. Request a device code
+curl -s -X POST "$ISS/protocol/openid-connect/auth/device" \
+  -d client_id=freepod-cli-dev \
+  -d "scope=openid email profile offline_access" \
+  -d "code_challenge=$CHALLENGE" -d code_challenge_method=S256
+# → {"device_code":"...","user_code":"WMJW-QHHV",
+#    "verification_uri_complete":"https://keycloak.freepod.eu/realms/freepod/device?user_code=WMJW-QHHV",
+#    "expires_in":600,"interval":5}
+
+# 2. Show verification_uri_complete to the user, then poll every `interval`
+#    seconds until it stops returning authorization_pending:
+curl -s -X POST "$ISS/protocol/openid-connect/token" \
+  -d grant_type=urn:ietf:params:oauth:grant-type:device_code \
+  -d client_id=freepod-cli-dev \
+  -d "device_code=$DEVICE_CODE" -d "code_verifier=$VERIFIER"
+
+# 3. Call the API
+curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+  https://dev.freepod.eu/api/me
+```
+
+#### Tokens and refresh
+
+Access tokens live **300 seconds**. Request the `offline_access` scope to get
+an offline refresh token (`typ: Offline`) with no absolute expiry — it stays
+valid as long as it is used at least every 30 days, which is what makes a
+stored credential practical. Refresh with `grant_type=refresh_token`.
+
+#### Status codes
+
+| Condition | Status |
+| --- | --- |
+| Valid token, authorized | `200` |
+| No credential at all | `401` |
+| Valid token, user not in `freepod-dev` (**dev only**) | `401` |
+| Expired, malformed or unverifiable token | `403` |
+
+Note the inversion: **an authorization failure returns `401`, not `403`.**
+The group check rejects a session the edge already built, so it never reaches
+the token-verification failure path. On `dev.freepod.eu` this means "you are
+not in the `freepod-dev` group" is indistinguishable by status code from "you
+sent no credential" — and re-authenticating, the natural response to a `401`,
+will succeed and change nothing. Check group membership before assuming a
+token problem.
+
+`403` is the signal to re-authenticate or refresh; `401` is not.
+
+#### Scope of access, and revocation
+
+**A token grants exactly what a browser session grants** for the same user —
+full account authority. The API authorizes on user identity alone and has no
+notion of OAuth scopes, so a token cannot be narrowed to read-only or to a
+single deployment. Treat one as equivalent to the user's password, and think
+carefully before pasting one into CI.
+
+There is no token management UI in Freepod. **Revocation is through Keycloak's
+account console** (Applications → offline sessions), which lists sessions
+issued to `freepod-cli-*` and can revoke them. Revoking there stops further
+refresh; an already-issued access token remains valid for up to its 300-second
+lifetime.
+
+Requests matched by `skip_auth_routes` ignore bearer tokens entirely — see the
+footgun section above.
 
 ## Request Flow (How Work Actually Moves)
 

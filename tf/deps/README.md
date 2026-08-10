@@ -122,8 +122,17 @@ What it manages:
   SMTP pointed at the in-cluster mailer relay.
 - Clients `freepod-prod`, `freepod-dev` (per-environment, PKCE `S256`, direct
   access grants off) and `grafana`.
+- Public clients `freepod-cli-prod` and `freepod-cli-dev` for external API
+  clients: no secret, PKCE `S256` required, device authorization grant on,
+  loopback redirect URIs.
 - The `groups` client scope and its group-membership mapper.
+- The `freepod-api-prod` / `freepod-api-dev` audience scopes, which put the
+  environment's oauth2-proxy client ID into the access token's `aud` claim.
 - Groups `freepod-dev` and `freepod-observability`.
+
+**Apply `tf/deps` before `tf/app`.** oauth2-proxy fails its readiness probe if
+OIDC discovery does not resolve, so the realm, clients and scopes must exist
+before the edge is configured to use them.
 
 **Admin-console edits to any managed attribute are reverted on the next
 `terraform apply`.** Change these in code.
@@ -150,6 +159,21 @@ Deliberately *not* managed, and safe to change by hand:
   `terraform_deletion_protection` is enforced by the provider at the delete
   call and survives the block being removed. Deleting the realm on purpose
   means clearing both.
+- **The `freepod-api-*` audience scopes are load-bearing for authentication.**
+  A Keycloak access token otherwise carries `aud: ["account"]` and names the
+  requesting client only in `azp`, which oauth2-proxy's audience check rejects.
+  They are also what stops a dev token working on prod: both CLI clients
+  register identical loopback redirect URIs, so `aud` is the only thing
+  separating the environments. Never assign one environment's audience scope to
+  the other's client, and never add them to `local.default_client_scopes` —
+  that local is applied to every client, which would hand each one both
+  audiences.
+- **A `kubectl rollout restart` on the Keycloak deployment shows up as drift.**
+  Terraform removes the `kubectl.kubernetes.io/restartedAt` annotation on the
+  next apply, which restarts the pod. That is a brief authentication outage for
+  prod, dev and Grafana at once — and if the same apply also creates Keycloak
+  provider resources, they race the restart and fail with `502 Bad Gateway`.
+  Reconcile that drift on its own, or re-run the apply once the pod is Ready.
 
 ### Reading client secrets
 

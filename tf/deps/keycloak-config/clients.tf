@@ -64,6 +64,91 @@ resource "keycloak_openid_client" "freepod_dev" {
   # dev workspace is named `default`, not `dev`.
 }
 
+# Public clients for non-browser API clients (CLIs, scripts, integrations).
+#
+# PUBLIC, not confidential: software distributed to end users cannot keep a
+# client secret, so pretending otherwise would only move the secret somewhere
+# it leaks from. PKCE is what proves the client identity instead, which is why
+# it is mandatory below rather than optional.
+#
+# One per environment, mirroring freepod-prod/freepod-dev. A single realm-wide
+# CLI client cannot work: its audience scope would have to name both
+# environments, and a dev token would then be accepted by prod. See openspec
+# design.md D2.
+resource "keycloak_openid_client" "freepod_cli_prod" {
+  realm_id    = keycloak_realm.freepod.id
+  client_id   = "freepod-cli-prod"
+  name        = "Freepod CLI (production)"
+  description = "Public client for external API clients targeting ${var.prod_domain}. Authorization code + PKCE over a loopback redirect, or the device authorization grant when headless."
+  enabled     = true
+
+  access_type           = "PUBLIC"
+  standard_flow_enabled = true
+  implicit_flow_enabled = false
+
+  # No password grant, no service accounts. A CLI authenticates a human through
+  # the browser or the device flow; it never handles their credentials, and it
+  # is not a machine identity.
+  direct_access_grants_enabled = false
+  service_accounts_enabled     = false
+
+  # Mandatory for a public client — without PKCE an intercepted authorization
+  # code on the loopback interface is redeemable by anything on the machine.
+  pkce_code_challenge_method = "S256"
+
+  # The headless flow. Already supported by the realm; this switches it on for
+  # this client. Chosen over the urn:ietf:wg:oauth:2.0:oob paste-the-code
+  # pattern, which Keycloak removed before 24.0 and which puts a live
+  # authorization code through the terminal and clipboard.
+  oauth2_device_authorization_grant_enabled = true
+
+  # PORT-LESS ON PURPOSE. A native client must bind an ephemeral port
+  # (RFC 8252 section 7.3), which cannot be known at registration time.
+  # Keycloak 24's RedirectUtils retries a failed match after rewriting the
+  # request to port 80 when the host is localhost / 127.0.0.1 / [::1], so the
+  # port-less form here matches http://127.0.0.1:54321/callback. Adding a port
+  # would break every client that does not happen to use it.
+  #
+  # Both spellings are registered because the relaxation is per-host-string, not
+  # a normalization: a client using `localhost` does not match a `127.0.0.1`
+  # registration. The PATH still matches exactly, so /callback is fixed and
+  # changing it later breaks every installed client.
+  valid_redirect_uris = [
+    "http://127.0.0.1/callback",
+    "http://localhost/callback",
+  ]
+
+  # No web_origins: a CLI issues no browser XHR against the API, so it needs no
+  # CORS grant. No post-logout redirect: logout is local token disposal plus
+  # revocation through the Keycloak account console.
+}
+
+resource "keycloak_openid_client" "freepod_cli_dev" {
+  realm_id    = keycloak_realm.freepod.id
+  client_id   = "freepod-cli-dev"
+  name        = "Freepod CLI (development)"
+  description = "Public client for external API clients targeting ${var.dev_domain}. Access additionally requires membership of the freepod-dev group, enforced at the edge by oauth2-proxy allowed_groups."
+  enabled     = true
+
+  access_type           = "PUBLIC"
+  standard_flow_enabled = true
+  implicit_flow_enabled = false
+
+  direct_access_grants_enabled = false
+  service_accounts_enabled     = false
+
+  pkce_code_challenge_method = "S256"
+
+  oauth2_device_authorization_grant_enabled = true
+
+  # Identical to the prod client's — see the note there. This is exactly why the
+  # audience scope, not the redirect URI, is what separates the environments.
+  valid_redirect_uris = [
+    "http://127.0.0.1/callback",
+    "http://localhost/callback",
+  ]
+}
+
 resource "keycloak_openid_client" "grafana" {
   realm_id    = keycloak_realm.freepod.id
   client_id   = "grafana"

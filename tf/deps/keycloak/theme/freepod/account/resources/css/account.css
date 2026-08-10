@@ -172,6 +172,24 @@ body::before {
 .pf-c-data-list {
   --pf-c-data-list--BorderColor: var(--line-soft);
   background: transparent !important;
+
+  /* Treat the cause, not the symptom. PatternFly's own rule is:
+       .pf-c-data-list { --pf-global--Color--100: var(--pf-global--Color--dark-100);
+                         color: var(--pf-global--Color--100); }
+     i.e. it re-scopes the token to DARK text for its assumed-light background,
+     and that re-scope cascades to the entire subtree. Anything inside that
+     merely *inherits* colour — the expandable row content and the whole
+     DescriptionList in it — therefore renders dark-on-dark and is unreadable.
+     Re-pointing the token here fixes every descendant at once, including
+     components we have not enumerated below. */
+  --pf-global--Color--100: var(--fg-primary);
+  --pf-global--Color--200: var(--fg-muted);
+  --pf-global--Color--dark-100: var(--fg-primary);
+  --pf-global--Color--dark-200: var(--fg-muted);
+  --pf-global--link--Color: var(--accent-blue);
+  --pf-global--link--Color--hover: var(--accent-pink);
+  --pf-global--link--Color--dark: var(--accent-blue);
+  --pf-global--link--Color--dark--hover: var(--accent-pink);
 }
 .pf-c-data-list__item { border-color: var(--line-soft) !important; }
 /* The cell sets its own `color: var(--pf-global--Color--100)`, and PatternFly
@@ -182,6 +200,36 @@ body::before {
 .pf-c-data-list strong { color: var(--fg-primary) !important; }
 .pf-c-data-list__cell .pf-u-color-200,
 .pf-c-data-list__cell small { color: var(--fg-muted) !important; }
+
+/* ── Expanded row detail (Applications → row expander) ─────────────────────
+   The account console renders this with DataListContent > DescriptionList
+   (Keycloak 24 account-ui, Applications.tsx). DataListContent sits OUTSIDE
+   .pf-c-data-list__cell, so the cell rules above never reached it — that is
+   why "Client / Description / Has access to / Access granted on" rendered
+   dark-on-dark. The token fix above already covers this; these rules restore
+   the intended hierarchy rather than flattening everything to one colour. */
+.pf-c-data-list__expandable-content {
+  color: var(--fg-primary);
+  border-top-color: var(--line-soft) !important;
+}
+.pf-c-description-list__term,
+.pf-c-description-list__term .pf-c-description-list__text {
+  color: var(--fg-primary) !important;
+}
+.pf-c-description-list__description,
+.pf-c-description-list__description .pf-c-description-list__text {
+  color: var(--fg-muted) !important;
+}
+.pf-c-description-list__term-icon { color: var(--accent-blue) !important; }
+
+/* The advisory line under "Remove access" (a Grid/GridItem with InfoAltIcon,
+   not a DescriptionList) inherits the same dark token and is likewise
+   invisible until this point. */
+.pf-c-data-list__expandable-content .pf-c-grid,
+.pf-c-data-list__expandable-content .pf-c-grid__item,
+.pf-c-data-list__expandable-content .pf-l-grid,
+.pf-c-data-list__expandable-content .pf-l-grid__item { color: var(--fg-muted); }
+.pf-c-data-list__expandable-content svg { fill: currentColor; }
 
 /* Same defensive re-scoping for floating surfaces. */
 .pf-c-dropdown__menu,

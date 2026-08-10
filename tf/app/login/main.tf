@@ -12,11 +12,12 @@ resource "helm_release" "oauth2_proxy" {
     yamlencode({
       replicaCount = 1
       config = {
-        clientID     = "caelus-dev"
+        clientID     = var.oauth2_proxy_client_id
         clientSecret = var.oauth2_proxy_client_secret
         cookieSecret = var.oauth2_proxy_cookie_secret
         configFile   = <<-EOT
           email_domains = ["*"]
+          ${length(var.allowed_groups) > 0 ? "allowed_groups = ${jsonencode(var.allowed_groups)}" : "# allowed_groups: unset — no group restriction in this environment"}
           upstreams = ["file:///dev/null"]
           cookie_secure = false
           # No cookie_domains: the cookie is issued host-only by the apex
@@ -69,8 +70,23 @@ resource "helm_release" "oauth2_proxy" {
       }
       extraArgs = {
         provider        = "keycloak-oidc"
-        oidc-issuer-url = "https://keycloak.freepod.eu/realms/master"
+        oidc-issuer-url = "${var.keycloak_url}/realms/${var.keycloak_realm}"
         redirect-url    = "https://${var.domain}/oauth2/callback"
+
+        # REQUIRED, not an optimization. The freepod-prod/freepod-dev clients
+        # set pkce_code_challenge_method = "S256" in tf/deps, which makes PKCE
+        # *mandatory* at Keycloak. oauth2-proxy only sends a code challenge
+        # when this flag is set; without it every authorization request is
+        # rejected with
+        #   error=invalid_request
+        #   error_description=Missing parameter: code_challenge_method
+        # and login fails for everyone. oauth2-proxy warns about this at
+        # startup but still starts, so the pod goes Ready and the breakage
+        # only shows up on the first real login.
+        #
+        # This flag and the client attribute are a matched pair: change one and
+        # you must change the other.
+        code-challenge-method = "S256"
         # cookie-domain     = ".dev.freepod.eu"
         # whitelist-domain  = ".dev.freepod.eu"
         pass-user-headers    = true
@@ -81,7 +97,7 @@ resource "helm_release" "oauth2_proxy" {
         upstream             = "static://202"
         # skip_auth_routes now lives in configFile above (it needs multiple
         # entries; an extraArgs map can only express a single value).
-        backend-logout-url   = "https://keycloak.freepod.eu/realms/master/protocol/openid-connect/logout?id_token_hint={id_token}"
+        backend-logout-url = "${var.keycloak_url}/realms/${var.keycloak_realm}/protocol/openid-connect/logout?id_token_hint={id_token}"
       }
       service = {
         enabled    = true

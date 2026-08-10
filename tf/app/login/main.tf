@@ -34,6 +34,12 @@ resource "helm_release" "oauth2_proxy" {
           # narrow, and keep this list in sync with the public (no
           # get_current_user) endpoints in the API. See api/README.md →
           # "Public endpoints and the production skip-auth footgun".
+          #
+          # The bypass covers bearer tokens too: a skipped route neither
+          # verifies an Authorization header nor derives an identity from it,
+          # so the request is anonymous however valid the token is — and the
+          # allowed_groups gate does not run either. A route listed here cannot
+          # be made to behave differently for an authenticated API client.
           # Each entry mirrors a GET endpoint that has no get_current_user
           # dependency in the API (see api/app/api/*.py). The optional `/?`
           # tolerates a trailing slash (FastAPI treats /x and /x/ as the same
@@ -95,6 +101,37 @@ resource "helm_release" "oauth2_proxy" {
         reverse-proxy        = true
         skip-provider-button = true
         upstream             = "static://202"
+
+        # Accept a verified JWT bearer token as an alternative to the session
+        # cookie, so non-browser clients (the freepod-cli-* Keycloak clients)
+        # can authenticate. oauth2-proxy verifies the token against the issuer
+        # above and builds a session from its claims, after which
+        # set-xauthrequest emits X-Auth-Request-Email exactly as it does for a
+        # cookie session — which is why the API needs no changes at all.
+        skip-jwt-bearer-tokens = true
+
+        # Refuse an unverifiable token with 403 instead of falling back to the
+        # interactive login flow. This is what makes "no credential" (401) and
+        # "bad credential" (403) distinguishable, so a CLI knows whether to
+        # refresh its token or re-authenticate the user.
+        #
+        # Side effect worth knowing about: the JWT loader runs BEFORE the cookie
+        # loader, so a request carrying a session cookie AND an Authorization
+        # header that is not a valid JWT is refused 403 without the cookie ever
+        # being consulted. Browsers do not send Authorization spontaneously, so
+        # ordinary traffic is unaffected. See openspec design.md D6.
+        bearer-token-login-fallback = false
+
+        # Deliberately NO oidc-extra-audience. oauth2-proxy always accepts its
+        # own client ID as a token audience, and the freepod-api-* client scopes
+        # in tf/deps inject exactly that ID into the token's `aud`, so the
+        # default check already passes.
+        #
+        # If a token ever fails audience verification, fix the mapper in
+        # tf/deps/keycloak-config/scopes.tf. Do NOT add
+        # oidc-extra-audience = "account": every token in the realm carries the
+        # `account` audience, so accepting it would turn any realm token —
+        # Grafana's included — into a valid Freepod credential for any user.
         # skip_auth_routes now lives in configFile above (it needs multiple
         # entries; an extraArgs map can only express a single value).
         backend-logout-url = "${var.keycloak_url}/realms/${var.keycloak_realm}/protocol/openid-connect/logout?id_token_hint={id_token}"
@@ -126,14 +163,37 @@ resource "kubernetes_manifest" "oauth2_proxy_middleware" {
     spec = {
       forwardAuth = {
         address = "http://oauth2-proxy.${var.namespace}.svc.cluster.local:8080/oauth2/auth"
+        # Headers copied FROM the auth response onto the request that continues
+        # upstream. Traefik overwrites each listed header with the auth
+        # response's value, and removes it when the auth response does not set
+        # one — which makes this list a sanitizer, not just a pass-through.
+        #
+        # That is what keeps the client's raw bearer token off the upstream.
+        # oauth2-proxy does not set pass_authorization_header, so it returns no
+        # Authorization, so Traefik strips whatever the client sent. Verified
+        # against dev by sending `Authorization: Bearer <token>` and dumping the
+        # headers the upstream actually received: no authorization header
+        # present, x-auth-request-email set from the token's email claim.
+        #
+        # Removing "Authorization" from this list would let a client-supplied
+        # header through to the API untouched.
         authResponseHeaders = [
           "X-Auth-Request-User",
           "X-Auth-Request-Email",
           "Authorization"
         ]
         trustForwardHeader = true
+        # Headers copied from the client's request onto the auth sub-request.
+        # This list is exhaustive — anything absent is invisible to
+        # oauth2-proxy.
+        #
+        # Authorization is REQUIRED for bearer-token authentication. Without it
+        # Traefik drops the token here, oauth2-proxy never sees a credential to
+        # verify, and skip-jwt-bearer-tokens above is inert — every CLI request
+        # looks anonymous no matter how the clients and scopes are configured.
         authRequestHeaders = [
-          "Cookie"
+          "Cookie",
+          "Authorization"
         ]
       }
     }

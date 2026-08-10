@@ -101,6 +101,39 @@ every login fails with `invalid_request: Missing parameter:
 code_challenge_method` — and oauth2-proxy will still start and pass its
 readiness probe, so the pod looks healthy while authentication is broken.
 
+**Apply `tf/deps` first.** oauth2-proxy resolves OIDC discovery at startup and
+fails its readiness probe if the realm or clients are missing, so this module
+must never be applied against a realm that does not yet exist.
+
+### Bearer tokens for external API clients
+
+oauth2-proxy also accepts a verified JWT bearer token in place of its session
+cookie (`--skip-jwt-bearer-tokens`), so non-browser clients can authenticate
+with a Keycloak access token. Three settings make this work, and they are
+interdependent:
+
+1. `--skip-jwt-bearer-tokens=true` — verify the token and build a session from
+   its claims, after which `--set-xauthrequest` emits `X-Auth-Request-Email`
+   exactly as for a cookie session. The API needs no changes.
+2. `--bearer-token-login-fallback=false` — refuse an unverifiable token with
+   `403` instead of a login redirect, so `401` (no credential) and `403` (bad
+   credential) are distinguishable by a non-browser client.
+3. `authRequestHeaders` on the `forward-auth` middleware must include
+   `Authorization`. **Without it Traefik drops the token before oauth2-proxy
+   sees it and the other two settings do nothing** — every API request looks
+   anonymous no matter how the Keycloak clients are configured.
+
+There is deliberately **no `--oidc-extra-audience`**. oauth2-proxy always
+accepts its own client ID as an audience, and the `freepod-api-*` scopes in
+`tf/deps` inject exactly that. If a token ever fails audience verification, fix
+the mapper — do not widen the allowance to `account`, which every token in the
+realm carries and which would make any realm token a valid Freepod credential.
+
+`authResponseHeaders` lists `Authorization` and acts as a **sanitizer**: Traefik
+overwrites each listed header with the auth response's value and removes it when
+the auth response sets none, so the client's raw bearer token never reaches the
+API. Removing it from that list would forward the client's header untouched.
+
 ## Deploy
 
 ### Dev (default)

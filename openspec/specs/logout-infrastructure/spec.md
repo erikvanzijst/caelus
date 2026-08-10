@@ -1,9 +1,15 @@
-## ADDED Requirements
+# logout-infrastructure Specification
 
+## Purpose
+Terminate the Keycloak SSO session as well as the local oauth2-proxy
+session when a user signs out, and route the browser-facing
+`/oauth2/sign_out` endpoint so it is reachable without authentication.
+## Requirements
 ### Requirement: oauth2-proxy backend logout URL configuration
 The oauth2-proxy Helm deployment SHALL include a `--backend-logout-url` flag
-set to Keycloak's OIDC `end_session_endpoint` with the `{id_token}` placeholder:
-`https://keycloak.app.deprutser.be/realms/master/protocol/openid-connect/logout?id_token_hint={id_token}`.
+set to the `freepod` realm's OIDC `end_session_endpoint` with the `{id_token}`
+placeholder:
+`https://keycloak.freepod.eu/realms/freepod/protocol/openid-connect/logout?id_token_hint={id_token}`.
 
 #### Scenario: User hits sign_out endpoint
 - **WHEN** an authenticated user's browser navigates to `/oauth2/sign_out`
@@ -19,6 +25,11 @@ set to Keycloak's OIDC `end_session_endpoint` with the `{id_token}` placeholder:
   containing an id_token
 - **THEN** the `{id_token}` placeholder in `backend-logout-url` is replaced
   with the actual token value before the server-side call
+
+#### Scenario: Logout targets the realm that issued the session
+- **WHEN** the backend logout URL is inspected
+- **THEN** its realm path matches the `oidc-issuer-url` realm
+- **AND** neither references the `master` realm
 
 ### Requirement: Traefik IngressRoute for /oauth2/sign_out on app domain
 A Traefik `IngressRoute` CRD SHALL be created in the login namespace that
@@ -40,9 +51,9 @@ apply the `forward-auth` or `oauth-errors` middleware.
   request reaches oauth2-proxy, not the UI service
 
 #### Scenario: Session cookie is sent on app domain
-- **WHEN** the `_oauth2_proxy` cookie is set with domain `.app.deprutser.be`
-  (or `.dev.deprutser.be`)
-- **AND** the browser navigates to `https://app.deprutser.be/oauth2/sign_out`
+- **WHEN** the `_oauth2_proxy` cookie has been issued host-only by the apex
+  callback on `<app-domain>`
+- **AND** the browser navigates to `https://<app-domain>/oauth2/sign_out`
 - **THEN** the cookie is included in the request, allowing oauth2-proxy to read
   the session and extract the id_token
 
@@ -59,3 +70,4 @@ redirect the user to Keycloak's login page.
 - **AND** the oauth-errors middleware rewrites the 401 to a 302 redirect to
   `/oauth2/start?rd=https://<app-domain>`
 - **AND** oauth2-proxy redirects the browser to the Keycloak login page
+

@@ -1,3 +1,17 @@
+## RENAMED Requirements
+
+### Requirement: Keycloak has a Caelus realm
+- **FROM:** Keycloak has a Caelus realm
+- **TO:** Keycloak has a Freepod realm
+
+### Requirement: OAuth2 proxy client is configured
+- **FROM:** OAuth2 proxy client is configured
+- **TO:** Per-environment OAuth2 proxy clients are configured
+
+### Requirement: Client scopes map email claim
+- **FROM:** Client scopes map email claim
+- **TO:** Client scopes map email and groups claims
+
 ## MODIFIED Requirements
 
 ### Requirement: Keycloak has a Freepod realm

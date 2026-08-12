@@ -37,5 +37,14 @@ module "caelus" {
   sftp_host          = local.sftp_host
   sftp_port          = local.sftp_port
 
+  # Select this workspace's Garage bucket and key. Like the Keycloak clients
+  # above, the buckets and keys themselves are created in tf/deps (the singleton
+  # root module); tf/app only chooses which pair this environment gets.
+  s3_endpoint_url      = var.s3_endpoint_url
+  s3_region            = var.s3_region
+  s3_bucket            = var.s3_buckets[terraform.workspace]
+  s3_access_key_id     = var.s3_access_key_ids[terraform.workspace]
+  s3_secret_access_key = var.s3_secret_access_keys[terraform.workspace]
+
   depends_on = [kubernetes_namespace.caelus]
 }

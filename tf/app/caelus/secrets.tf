@@ -12,3 +12,31 @@ resource "kubernetes_secret" "db" {
     database = var.db_name
   }
 }
+
+# Garage S3 credentials for this environment, consumed by the API through
+# `env_from` exactly like caelus-db above.
+#
+# Only this environment's bucket and key are here. The key carries read+write on
+# that one bucket and nothing else, so a leaked or misconfigured dev credential
+# cannot reach prod objects — verified at the Garage end, not merely by
+# convention.
+#
+# The endpoint and region are not secret, but they ride along in the same Secret
+# so the API gets its whole S3 configuration from one `env_from` and there is no
+# way to update the credentials while leaving a stale endpoint behind.
+resource "kubernetes_secret" "s3" {
+  metadata {
+    name      = "caelus-s3"
+    namespace = var.namespace
+  }
+
+  type = "Opaque"
+
+  data = {
+    CAELUS_S3_ENDPOINT_URL      = var.s3_endpoint_url
+    CAELUS_S3_REGION            = var.s3_region
+    CAELUS_S3_BUCKET            = var.s3_bucket
+    CAELUS_S3_ACCESS_KEY_ID     = var.s3_access_key_id
+    CAELUS_S3_SECRET_ACCESS_KEY = var.s3_secret_access_key
+  }
+}

@@ -47,7 +47,8 @@ The Terraform infrastructure is split into two independent root modules:
 - `tf/app/`: Caelus application resources (API, UI, worker, OAuth2-proxy,
   Postgres). Uses Terraform workspaces for dev (`default`) and prod (`prod`)
   environment separation.
-- `tf/deps/`: Shared singleton dependencies (Keycloak, Echo). No workspaces;
+- `tf/deps/`: Shared singleton dependencies (Keycloak, Echo, monitoring, and
+  Garage — the S3 object store at `blob.freepod.eu`). No workspaces;
   single instance shared across all environments.
 
 Both deploy to the same k3s cluster. Deploy `tf/deps/` first, then

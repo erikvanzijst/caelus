@@ -1,16 +1,16 @@
 variable "namespace" {
   description = "Namespace to deploy into"
-  type = string
+  type        = string
 }
 
 variable "ns_login" {
   description = "The namespace oauth2-login is deployed into"
-  type = string
+  type        = string
 }
 
 variable "domain" {
   description = "The base domain name (e.g. freepod.eu)"
-  type = string
+  type        = string
 }
 
 variable "api_image" {
@@ -76,4 +76,32 @@ variable "sftp_host" {
 variable "sftp_port" {
   description = "User-facing SFTP port advertised by the API/UI (22 prod, 23 dev)"
   type        = number
+}
+
+# --- Garage S3 object store (this environment's slice) ---------------------
+
+variable "s3_endpoint_url" {
+  description = "Garage S3 endpoint URL"
+  type        = string
+}
+
+variable "s3_region" {
+  description = "SigV4 signing region for the Garage S3 API"
+  type        = string
+}
+
+variable "s3_bucket" {
+  description = "This environment's Garage bucket"
+  type        = string
+}
+
+variable "s3_access_key_id" {
+  description = "Access key ID scoped to this environment's bucket only"
+  type        = string
+}
+
+variable "s3_secret_access_key" {
+  description = "Secret access key for s3_access_key_id"
+  type        = string
+  sensitive   = true
 }

@@ -115,6 +115,18 @@ resource "kubernetes_deployment" "api" {
             }
           }
 
+          # Garage S3 endpoint, bucket and access key for this environment.
+          # Only the API gets these: it is the sole holder of the credentials
+          # and the only thing that mints presigned URLs. Deliberately NOT on
+          # the worker (worker.tf) — nothing there reads objects yet, and an
+          # unused credential in a second pod is only extra exposure. Add it
+          # there when, and only when, a worker task actually needs it.
+          env_from {
+            secret_ref {
+              name = kubernetes_secret.s3.metadata[0].name
+            }
+          }
+
           volume_mount {
             name       = "sqlite-data"
             mount_path = "/app/db"

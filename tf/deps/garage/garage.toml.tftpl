@@ -1,0 +1,36 @@
+# Garage configuration, rendered by templatefile() from tf/deps/garage/garage.tf.
+#
+# This file carries NO secrets: `rpc_secret` and `admin_token` are injected as
+# GARAGE_RPC_SECRET / GARAGE_ADMIN_TOKEN environment variables from the
+# `garage-secrets` Kubernetes Secret. A ConfigMap mount is world-readable, and
+# Garage refuses to start on world-readable secrets anyway.
+
+metadata_dir = "${metadata_dir}"
+data_dir = "${data_dir}"
+
+# LMDB is the Garage default and what upstream tunes for. Metadata lives on its
+# own PVC so it can move to faster storage if this cluster ever offers a choice.
+db_engine = "lmdb"
+
+# One k3s node, one replica. A replication factor above 1 on a single node
+# leaves Garage unable to satisfy its own quorum, and it refuses writes.
+replication_factor = ${replication_factor}
+
+rpc_bind_addr = "[::]:3901"
+# Single-node cluster: the node only ever talks to itself, so it advertises
+# loopback. This is deliberately not the pod IP, which changes on every restart.
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+api_bind_addr = "[::]:3900"
+s3_region = "${s3_region}"
+
+# `root_domain` is deliberately UNSET. Setting it enables vhost-style addressing
+# (bucket.blob.freepod.eu), which is two labels deep and therefore outside the
+# *.freepod.eu wildcard Traefik serves from its default certificate store — every
+# bucket would need its own certificate and DNS record. Path-style addressing is
+# always enabled regardless, so this costs nothing; it only means the Caelus API's
+# S3 client must be configured for path-style (see api/app/config.py). Design D3.
+
+[admin]
+api_bind_addr = "[::]:3903"

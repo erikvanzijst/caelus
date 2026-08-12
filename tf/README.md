@@ -5,7 +5,8 @@ two independent root modules:
 
 - **`app/`** -- The Caelus application (API, UI, worker, OAuth2-proxy).
   Uses Terraform workspaces for dev/prod separation.
-- **`deps/`** -- Shared singleton dependencies (Keycloak, Echo).
+- **`deps/`** -- Shared singleton dependencies (Keycloak, Echo, the monitoring
+  stack, and **Garage**, the S3-compatible object store at `blob.freepod.eu`).
   No workspaces; single instance shared across all environments.
 
 Both projects deploy to the same Kubernetes cluster using the kubeconfig at
@@ -44,13 +45,15 @@ Each project has its own `secrets.auto.tfvars` (gitignored):
 
 - `tf/app/secrets.auto.tfvars`: `db_password`, `smtp_password`,
   `oauth2_proxy_client_ids`, `oauth2_proxy_client_secrets`,
-  `oauth2_proxy_cookie_secret`
+  `oauth2_proxy_cookie_secret`, `s3_access_key_ids`, `s3_secret_access_keys`
 - `tf/deps/secrets.auto.tfvars`: `keycloak_admin_password`, `smtp_*`,
-  `cloudflare_*`, `grafana_admin_password`
+  `cloudflare_*`, `grafana_admin_password`, `garage_admin_token`,
+  `garage_rpc_secret`
 
-`oauth2_proxy_client_ids` and `oauth2_proxy_client_secrets` are **maps keyed
-by workspace name**, not scalars — Terraform auto-loads `*.auto.tfvars` for
-every workspace, so a scalar cannot express two per-environment values:
+`oauth2_proxy_client_ids`, `oauth2_proxy_client_secrets`, `s3_access_key_ids`
+and `s3_secret_access_keys` are **maps keyed by workspace name**, not scalars —
+Terraform auto-loads `*.auto.tfvars` for every workspace, so a scalar cannot
+express two per-environment values:
 
 ```hcl
 oauth2_proxy_client_ids = {
@@ -62,6 +65,22 @@ oauth2_proxy_client_ids = {
 Read the secrets with `terraform output -raw freepod_dev_client_secret` (and
 `…_prod_…`) in `tf/deps`. Grafana's OIDC client ID and secret need no tfvar at
 all: `tf/deps` wires them straight from the Terraform-managed client.
+
+The Garage S3 credentials cross the same boundary the same way — Garage
+generates the key material, so it exists only after an apply:
+
+```bash
+cd tf/deps
+terraform output -raw garage_access_key_id_dev       # -> s3_access_key_ids.default
+terraform output -raw garage_secret_access_key_dev   # -> s3_secret_access_keys.default
+terraform output -raw garage_access_key_id_prod      # -> …prod
+terraform output -raw garage_secret_access_key_prod
+```
+
+One Garage instance serves both environments, separated by bucket and access
+key (`dev` / `prod`), so mixing these up does not fail loudly — it points one
+environment at the other's objects. See `tf/deps/README.md` § Garage object
+store.
 
 ## Keycloak configuration is Terraform-owned
 

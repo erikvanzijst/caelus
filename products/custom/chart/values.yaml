@@ -1,0 +1,73 @@
+# --- User-supplied values -----------------------------------------------------
+# The only two values a tenant may set. They are the whole of the product
+# template's values_schema_json (see README § User values schema); everything
+# below is system- or reconciler-owned.
+
+# Hostname the application is served on. The API finds this field by its
+# `"title": "hostname"` in the values schema, claims it, and the reconciler
+# injects it back as caelus.ingress.host — which is what the Ingress actually
+# routes. This blank default only exists so the chart renders standalone.
+hostname: ""
+
+# The image to run, as "{user_id}@{digest}" — e.g.
+# "5@sha256:4777d0…" with a 64 hex-char digest. This is a real image reference
+# with the registry host stripped off: the repository is the owner's user id, so
+# the pull reference is just this value prefixed with `registry` (below).
+#
+# Both omissions are deliberate. Withholding the registry host stops a tenant
+# pointing at an arbitrary one, and the "{user_id}" repository is a claim that is
+# asserted against caelus.owner.id at render time (templates/_helpers.tpl) rather
+# than trusted — that assertion is what stops one tenant deploying another
+# tenant's image.
+#
+# Empty is the normal state for a fresh deployment: `freepod init` creates it and
+# claims the hostname before any build exists. The chart then runs
+# placeholderImage, so the domain serves a real page instead of a Traefik 503.
+image: ""
+
+# --- System values ------------------------------------------------------------
+
+# Registry holding user images. Prefixed onto `image` to form the pull
+# reference: "{registry}/{user_id}@{digest}".
+registry: registry.home
+
+# Served whenever `image` is empty. Deliberately a system value with a default: a
+# second user-settable image reference would bypass the ownership assertion
+# entirely and hand tenants an arbitrary-image escape hatch. Built and published
+# from products/custom/placeholder (see README).
+placeholderImage: registry.home/caelus/custom-placeholder:0.1.0
+
+# Digests are immutable, so there is nothing to re-pull; the placeholder is tag
+# addressed but changes only when the platform republishes it.
+pullPolicy: IfNotPresent
+
+# Port the application is served on. Injected into the container as the `PORT`
+# env var and targeted by the Service, so the contract with tenant images is
+# "bind 0.0.0.0:$PORT" rather than a fixed number — that is Railway's convention,
+# which the Railpack builder assumes, and it keeps this value a platform-side
+# detail we can change without breaking existing builds.
+#
+# The placeholder image is the exception: it is ours, nginx will not read $PORT
+# without templating, so it is pinned to this default and must be rebuilt if the
+# default ever changes.
+containerPort: 8080
+
+service:
+  port: 80
+
+replicas: 1
+
+# Empty by default; per-plan requests/limits belong here once real usage of
+# tenant-built images is measured.
+resources: {}
+
+# Injected per deployment by the Caelus reconciler. These defaults let the chart
+# render standalone (helm lint / helm template with no --set).
+caelus:
+  # owner.id is required whenever `image` is set. With the default empty image the
+  # chart renders the placeholder and never reads it, which is what keeps a
+  # standalone render working.
+  owner: {}
+  ingress:
+    enabled: false
+    tls: {}

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: custom
+description: >-
+  Generic Freepod chart for a user-supplied application. Unlike every other
+  product, the container image is chosen by the end user at deploy time rather
+  than pinned by the platform; until a build exists the release serves a
+  placeholder page.
+type: application
+version: 0.1.0
+# There is no meaningful upstream app version: the running application is
+# whatever the user built. Tracks the chart version so the field is not
+# misleading.
+appVersion: "0.1.0"
+keywords:
+  - custom
+  - byoi
+maintainers:
+  - name: Caelus Team

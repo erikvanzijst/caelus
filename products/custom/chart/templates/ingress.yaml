@@ -1,0 +1,42 @@
+{{- /*
+Per-app ingress, driven entirely by the reconciler-injected caelus.ingress block
+(the chart has no ingress config of its own). For custom domains it adds the
+cert-manager annotation and a tls: block; hosts under a wildcard domain are
+served by Traefik's default certificate store, so they need neither.
+
+This renders from the moment the deployment exists, before any build — which is
+the whole reason the chart falls back to a placeholder image rather than scaling
+to zero: the hostname is claimed and routed, so it must serve something.
+*/}}
+{{- if .Values.caelus.ingress.enabled }}
+{{- $tlsCustom := not .Values.caelus.ingress.tls.wildcard }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  labels:
+    {{- include "custom.labels" . | nindent 4 }}
+  {{- if $tlsCustom }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.caelus.ingress.tls.issuer | quote }}
+  {{- end }}
+spec:
+  ingressClassName: traefik
+  {{- if $tlsCustom }}
+  tls:
+    - hosts:
+        - {{ .Values.caelus.ingress.host | quote }}
+      secretName: {{ .Values.caelus.ingress.tls.secretName | quote }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.caelus.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-app
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

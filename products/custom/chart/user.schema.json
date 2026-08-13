@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "hostname": {
+      "type": "string",
+      "title": "hostname",
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "The fully qualified hostname for the app."
+    },
+    "image": {
+      "type": "string",
+      "description": "User-built image as \"{user_id}@{digest}\" (a digest reference with the registry host stripped), or empty to serve placeholderImage.",
+      "pattern": "^$|^[0-9]+@sha256:[a-f0-9]{64}$"
+    }
+  },
+  "required": [
+    "hostname"
+  ],
+  "additionalProperties": false
+}

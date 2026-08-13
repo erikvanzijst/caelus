@@ -184,12 +184,22 @@ class DeploymentReconciler:
 
     @staticmethod
     def _build_owner_overrides(deployment: DeploymentORM) -> dict | None:
-        """Project the owning user's email into the ``caelus.owner`` namespace."""
+        """Project the owning user's identity into the ``caelus.owner`` namespace.
+
+        Fields are only included when present, and no block is emitted when neither
+        is, so charts that require one fail loudly rather than rendering a blank.
+        """
         user = getattr(deployment, "user", None)
-        email = getattr(user, "email", None) if user is not None else None
-        if not email:
+        if user is None:
             return None
-        return {"caelus": {"owner": {"email": email}}}
+        owner: dict = {}
+        email = getattr(user, "email", None)
+        if email:
+            owner["email"] = email
+        user_id = getattr(user, "id", None)
+        if user_id is not None:
+            owner["id"] = user_id
+        return {"caelus": {"owner": owner}} if owner else None
 
     @staticmethod
     def _build_ingress_overrides(deployment: DeploymentORM) -> dict | None:

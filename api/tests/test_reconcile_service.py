@@ -8,7 +8,7 @@ import pytest
 from app.config import CaelusSettings
 from app.models import DeploymentCreate, DeploymentORM, ProductORM, PlanORM, PlanTemplateVersionORM, BillingInterval
 from app.models.core import _utcnow
-from app.services import deployments, products, templates, users
+from app.services import deployments, products, template_values, templates, users
 from tests.conftest import make_accepted_user
 from app.services.reconcile import DeploymentReconciler
 from tests.provisioner_utils import FakeProvisioner
@@ -136,7 +136,7 @@ def test_reconcile_apply_happy_path_returns_ready_and_applied_template(db_sessio
                     "secretName": f"{deployment.name}-tls",
                 },
             },
-            "owner": {"email": "reconcile-user@example.com"},
+            "owner": {"email": "reconcile-user@example.com", "id": deployment.user_id},
         },
     }
 
@@ -321,13 +321,37 @@ def test_build_ingress_overrides_no_hostname_returns_none(monkeypatch) -> None:
 # --- _build_owner_overrides unit tests -----------------------------------------
 
 
-def test_build_owner_overrides_projects_email() -> None:
-    """The owning user's email is published under caelus.owner for charts to use."""
-    deployment = SimpleNamespace(user=SimpleNamespace(email="owner@example.com"))
+def test_build_owner_overrides_projects_email_and_id() -> None:
+    """The owning user's email and id are published under caelus.owner for charts
+    to use. The id is what the `custom` product's chart asserts a user-supplied image
+    reference against, so it must be projected alongside the email."""
+    deployment = SimpleNamespace(user=SimpleNamespace(email="owner@example.com", id=42))
 
     assert DeploymentReconciler._build_owner_overrides(deployment) == {
-        "caelus": {"owner": {"email": "owner@example.com"}}
+        "caelus": {"owner": {"email": "owner@example.com", "id": 42}}
     }
+
+
+def test_build_owner_overrides_projects_id_as_int() -> None:
+    """The id stays an int: charts compare it against the string prefix of an image
+    reference themselves, so any stringification belongs in the template, not here."""
+    deployment = SimpleNamespace(user=SimpleNamespace(email="owner@example.com", id=7))
+
+    owner = DeploymentReconciler._build_owner_overrides(deployment)["caelus"]["owner"]
+
+    assert owner["id"] == 7
+    assert isinstance(owner["id"], int)
+
+
+def test_build_owner_overrides_includes_only_present_fields() -> None:
+    """A partially populated user contributes only what it has, so a chart that needs
+    the missing field hits `required`/`fail` instead of an empty string."""
+    assert DeploymentReconciler._build_owner_overrides(
+        SimpleNamespace(user=SimpleNamespace(email=None, id=5))
+    ) == {"caelus": {"owner": {"id": 5}}}
+    assert DeploymentReconciler._build_owner_overrides(
+        SimpleNamespace(user=SimpleNamespace(email="owner@example.com", id=None))
+    ) == {"caelus": {"owner": {"email": "owner@example.com"}}}
 
 
 def test_build_owner_overrides_without_user_returns_none() -> None:
@@ -335,6 +359,25 @@ def test_build_owner_overrides_without_user_returns_none() -> None:
     rendering an empty invite address."""
     assert DeploymentReconciler._build_owner_overrides(SimpleNamespace(user=None)) is None
     assert (
-        DeploymentReconciler._build_owner_overrides(SimpleNamespace(user=SimpleNamespace(email=None)))
+        DeploymentReconciler._build_owner_overrides(
+            SimpleNamespace(user=SimpleNamespace(email=None, id=None))
+        )
         is None
     )
+
+
+def test_build_owner_overrides_id_is_not_shadowable_by_user_values() -> None:
+    """The assertion in the `custom` chart is only sound because system overrides are
+    merged last: a tenant cannot pass caelus.owner.id in their own values to claim
+    someone else's image."""
+    system_overrides = DeploymentReconciler._build_owner_overrides(
+        SimpleNamespace(user=SimpleNamespace(email="owner@example.com", id=5))
+    )
+
+    merged = template_values.merge_values_scoped(
+        {},
+        {"caelus": {"owner": {"id": 7, "email": "attacker@example.com"}}},
+        system_overrides,
+    )
+
+    assert merged["caelus"]["owner"] == {"id": 5, "email": "owner@example.com"}

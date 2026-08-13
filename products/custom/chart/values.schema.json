@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "custom values",
+  "description": "Validates the fully merged values Helm-side (template defaults + user values + reconciler overrides). This is NOT the tenant-facing schema: the much smaller values_schema_json that drives the deployment form and hostname claiming lives on the DB product template — see products/custom/README.md.",
+  "type": "object",
+  "properties": {
+    "hostname": {
+      "type": "string",
+      "title": "hostname",
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "User-supplied hostname. Hostname claiming reads the product template's values_schema_json, not this file; the title is mirrored here so the two schemas do not drift."
+    },
+    "image": {
+      "type": "string",
+      "description": "User-supplied image as \"{user_id}@{digest}\" (a digest reference with the registry host stripped), or empty to serve placeholderImage.",
+      "pattern": "^$|^[0-9]+@sha256:[a-f0-9]{64}$"
+    },
+    "registry": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Registry host that user images are pulled from"
+    },
+    "placeholderImage": {
+      "type": "string",
+      "minLength": 1,
+      "description": "System-owned image served while `image` is empty. Never user-supplied: it is the one image reference that bypasses the ownership assertion."
+    },
+    "pullPolicy": {
+      "type": "string",
+      "enum": ["Always", "IfNotPresent", "Never"]
+    },
+    "containerPort": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "Port the application is served on. Injected into the container as the PORT env var and targeted by the Service; tenant images bind $PORT rather than a fixed number. The placeholder image is pinned to the default."
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      },
+      "additionalProperties": false
+    },
+    "replicas": { "type": "integer", "minimum": 0 },
+    "resources": { "type": "object" },
+    "caelus": {
+      "type": "object",
+      "description": "Reconciler-injected values. Open by design (additionalProperties: true throughout): this namespace is written by the platform, never by a tenant, so new reconciler fields can land without a schema bump in every chart.",
+      "properties": {
+        "plan": {
+          "type": "object",
+          "properties": {
+            "storageBytes": { "type": "integer" },
+            "storageSize": { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "owner": {
+          "type": "object",
+          "description": "Deployment owner, injected by the Caelus reconciler",
+          "properties": {
+            "email": { "type": "string" },
+            "id": {
+              "type": "integer",
+              "description": "Owning user id. The image ownership assertion compares this against the repository half of `image`."
+            }
+          },
+          "additionalProperties": true
+        },
+        "ingress": {
+          "type": "object",
+          "description": "Ingress and per-app TLS settings injected by the Caelus reconciler",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "host": { "type": "string" },
+            "tls": {
+              "type": "object",
+              "properties": {
+                "wildcard": { "type": "boolean" },
+                "issuer": { "type": "string" },
+                "secretName": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

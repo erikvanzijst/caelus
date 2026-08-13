@@ -1,0 +1,41 @@
+{{- /*
+The application pod. Runs the tenant's own image, or the platform placeholder
+while no build exists yet — see "custom.imageRef" in _helpers.tpl, which also
+enforces that the image belongs to this deployment's owner.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-app
+  labels:
+    {{- include "custom.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "custom.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "custom.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: app
+          image: {{ include "custom.imageRef" . | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+          env:
+            # The platform tells the app which port to bind, rather than the app
+            # being required to know. This is Railway's convention, which the
+            # Railpack builder assumes, and it is what makes zero-config builds
+            # work: apps idiomatically do `process.env.PORT || 3000`. Deriving it
+            # from the same value the Service targets keeps the number a
+            # platform-side detail we can change unilaterally.
+            - name: PORT
+              value: {{ .Values.containerPort | quote }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

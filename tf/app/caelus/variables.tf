@@ -105,3 +105,40 @@ variable "s3_secret_access_key" {
   type        = string
   sensitive   = true
 }
+
+# --- Builds -----------------------------------------------------------------
+
+variable "builds_namespace" {
+  description = "Namespace per-build Kubernetes Jobs run in (per environment: caelus-builds / caelus-builds-dev)"
+  type        = string
+}
+
+variable "build_registry_cidr" {
+  description = <<-EOT
+    Address of the internal container registry, as a CIDR, for the builds
+    NetworkPolicy. It is a LAN address and therefore inside the policy's
+    `except` list, so without this rule a build could not push.
+
+    Names the same machine as `build_registry_host` in api/app/config.py.
+    Moving the registry means changing both; changing only one fails at push
+    time with a connection timeout.
+  EOT
+  type        = string
+  default     = "192.168.0.12/32"
+}
+
+variable "dns_cluster_ip" {
+  description = "CoreDNS ClusterIP, allowed explicitly by the builds NetworkPolicy (k3s default)"
+  type        = string
+  default     = "10.43.0.10"
+}
+
+variable "build_max_in_flight" {
+  description = <<-EOT
+    How many builds may run at once. An ops knob rather than a code constant:
+    the right value depends on observed build durations and node headroom, and
+    a single k3s node shared with tenant traffic starts at 1.
+  EOT
+  type        = number
+  default     = 1
+}

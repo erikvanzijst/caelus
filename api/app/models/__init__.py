@@ -2,13 +2,15 @@
 Models package — re-exports all models so ``from app.models import X`` keeps
 working everywhere.
 
-The models are split across two modules:
+The models are split across three modules:
   - core.py:    User, Product, ProductTemplateVersion, Deployment,
                 DeploymentReconcileJob (and their Base/Create/Update/Read
                 variants).
   - billing.py: Plan, PlanTemplateVersion, Subscription (and their
                 Base/Create/Update/Read variants), plus the BillingInterval,
                 SubscriptionStatus, and PaymentStatus enums.
+  - build.py:   Build (and its Base/Create/Read variants). Standalone: a build
+                references a user and an artifact, never a deployment.
 """
 
 from app.models.core import (  # noqa: F401
@@ -40,6 +42,13 @@ from app.models.core import (  # noqa: F401
     UserCreate,
     UserORM,
     UserRead,
+)
+
+from app.models.build import (  # noqa: F401
+    BuildBase,
+    BuildCreate,
+    BuildORM,
+    BuildRead,
 )
 
 from app.models.billing import (  # noqa: F401

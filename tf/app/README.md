@@ -7,10 +7,13 @@ Shared dependencies (Keycloak, Echo) are managed separately in `../deps/`.
 
 ## What It Creates
 
-- Namespaces: `caelus` / `caelus-dev`, `login` / `login-dev`
+- Namespaces: `caelus` / `caelus-dev`, `login` / `login-dev`,
+  `caelus-builds` / `caelus-builds-dev`
 - API deployment + service
 - UI deployment + service
 - Worker deployment (`caelus worker --follow`)
+- Build worker deployment (`caelus build-worker`)
+- Builder ServiceAccount + NetworkPolicy in the builds namespace
 - Postgres deployment + service
 - PVCs for Postgres and SQLite data
 - ConfigMap + Secret for API/DB configuration
@@ -29,6 +32,7 @@ Namespace and domain are fixed per workspace in [`locals.tf`](./locals.tf):
 
 - Dev namespace/domain: `caelus-dev` + `dev.freepod.eu`
 - Prod namespace/domain: `caelus` + `freepod.eu`
+- Dev/prod builds namespace: `caelus-builds-dev` / `caelus-builds`
 
 The namespace's `environment` label defaults to `dev`/`prod` but can be
 overridden with `-var environment=...`.
@@ -169,6 +173,67 @@ Destroy only the currently selected workspace environment:
 ```bash
 terraform destroy
 ```
+
+## Build namespace (`caelus-builds` / `caelus-builds-dev`)
+
+Where per-build Kubernetes Jobs run. This is the only namespace in the platform
+that executes **untrusted tenant code** — a project's dependency install hooks
+and build commands — so it is shaped entirely around containing that.
+
+**Per environment, not shared.** A shared namespace would have no Terraform
+owner (each workspace has its own state, so the second `apply` collides and a
+dev `destroy` would take prod's with it), and would let the dev build worker
+delete prod's build Jobs, since the worker's Role is namespaced and it deletes
+Jobs as its deadline backstop.
+
+**Pod Security is `privileged`, and that is required rather than lax.** Rootless
+BuildKit must create a user namespace and mount inside it, which the container's
+own seccomp and AppArmor profiles block; lifting them means `Unconfined` on
+both, and Pod Security `baseline` explicitly forbids exactly that. The label is
+a statement about *admission*, not about the pod: build pods run as uid 1000,
+are not `privileged: true`, mount no host paths, and use no host networking.
+
+What actually contains a build, none of which depends on Pod Security:
+
+- rootless BuildKit, so nothing runs as real root on the node;
+- a per-build pod lifetime, so `--oci-worker-no-process-sandbox` only ever
+  exposes that same tenant's own build processes;
+- `caelus-builder`, a ServiceAccount with no Role anywhere and
+  `automountServiceAccountToken: false`, so there is no Kubernetes credential
+  in the pod at all;
+- the NetworkPolicy below;
+- CPU/memory/ephemeral-storage limits, bounded emptyDirs, and an
+  `activeDeadlineSeconds` Kubernetes enforces itself.
+
+### NetworkPolicy (`caelus-build-baseline`)
+
+Default-deny both directions, then egress to DNS, the internal registry, and
+`0.0.0.0/0` minus every internal range. That `except` list is what blocks
+Postgres, the Kubernetes API server, both `caelus` namespaces, and every tenant
+workload — without naming any of them.
+
+Two differences from the tenant baseline policy are **load-bearing**, because
+concurrent builds belonging to different tenants share this namespace:
+
+- **no ingress rules at all** — nothing should ever connect to a build pod;
+- **no intra-namespace egress rule.** The tenant policy allows pod-to-pod
+  traffic; copying that here would let one tenant's build reach another's. Do
+  not "restore" it for symmetry.
+
+Verified by probe: a build pod cannot reach another build pod, the API server,
+Postgres, or the Caelus API, while the registry stays reachable.
+
+Garage needs no rule of its own: `blob.freepod.eu` resolves to the homelab's
+*public* address even from inside the cluster, so it is reached by hairpin and
+covered by the public-internet rule. **If Garage is ever given an internally
+resolving name, this policy needs an explicit allow or every build will fail to
+fetch its artifact.**
+
+### Node prerequisites
+
+Builds also need two node-level settings that Terraform does not manage — see
+[`../../api/README.md`](../../api/README.md) § Builds, and
+[`../../products/custom/builder/README.md`](../../products/custom/builder/README.md).
 
 ## Notes
 

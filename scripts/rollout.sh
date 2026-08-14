@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-DEPLOYMENTS=("caelus-api" "caelus-ui" "caelus-worker")
+DEPLOYMENTS=("caelus-api" "caelus-ui" "caelus-worker" "caelus-build-worker")
 
 usage() {
   cat <<'EOF'

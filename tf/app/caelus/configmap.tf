@@ -18,6 +18,13 @@ resource "kubernetes_config_map" "api" {
     CAELUS_SFTP_HOST = var.sftp_host
     CAELUS_SFTP_PORT = tostring(var.sftp_port)
 
+    # Builds. The namespace is per environment, so it must come from here
+    # rather than the code default (which is the prod name). The in-flight
+    # limit is here because it is an operational knob — tuning it should not
+    # need an API image rebuild.
+    CAELUS_BUILDS_NAMESPACE    = var.builds_namespace
+    CAELUS_BUILD_MAX_IN_FLIGHT = tostring(var.build_max_in_flight)
+
     # CAELUS_LOG_LEVEL    = "info"
     PYTHONUNBUFFERED    = "1"
 

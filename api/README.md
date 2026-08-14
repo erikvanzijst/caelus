@@ -34,6 +34,10 @@ deployment lifecycle operations. Both call the same service layer.
 - `app/services/`: domain services (single source of behavior).
 - `app/services/reconcile.py`: deployment reconciliation orchestration.
 - `app/services/jobs.py`: reconcile job queue operations.
+- `app/services/builds.py`: build lifecycle (create, read, list, log slice).
+- `app/services/artifacts.py`: presigned upload slots and artifact lookup.
+- `app/services/build_jobs.py`: build Job manifest + the kubectl seam.
+- `app/build_worker.py`: the build worker's claim/advance/recover pass.
 - `app/provisioner.py`: Kubernetes/Helm adapter facade.
 - `app/proc.py`: subprocess runner wrapper + command error normalization.
 - `alembic/`: database migration history.
@@ -337,6 +341,9 @@ REST routes:
 - Deployments: `POST/GET /users/{user_id}/deployments`,
   `GET/PUT/DELETE /users/{user_id}/deployments/{deployment_id}`
 - Admin: `GET /deployments` (admin-only, all non-deleted deployments)
+- Artifacts: `POST /artifacts` (mint an upload slot)
+- Builds: `POST/GET /builds`, `GET /builds/{build_id}`,
+  `GET /builds/{build_id}/log` (plain text, HTTP Range)
 
 CLI equivalents (`caelus ...`):
 - `create-user`, `list-users`, `get-user`, `delete-user`
@@ -344,7 +351,9 @@ CLI equivalents (`caelus ...`):
 - `create-template`, `list-templates`, `get-template`, `delete-template`
 - `create-deployment`, `list-deployments`, `get-deployment`,
   `update-deployment`, `delete-deployment`
+- `build list|show|log|submit` — `submit` performs all three upload phases
 - `reconcile` (CLI-only operational command to run one reconcile pass)
+- `build-worker` (CLI-only; the build worker's process entry point)
 - `catalog apply|curate|lint` (CLI-only; intentionally exempt from parity — see
   [Product Catalog](#product-catalog-curated-products))
 
@@ -715,6 +724,147 @@ Without a lease that job is never retried and its deployment stays in
 - `mark_job_done` / `mark_job_failed` take an optional `worker_id`; when given,
   the write is conditional on the job still being leased to that worker, so a
   wedged worker that wakes up late cannot overwrite the new owner's result.
+
+## Builds (Project Archive → Container Image)
+
+Turns a user's project directory into a digest-pinned container image in the
+internal registry. Builds belong to a **user**, never to a deployment: most
+products build nothing, a single deployment may consume several images, and
+**nothing here triggers a rollout** — the client takes a successful build's
+`image` and submits it to the deployment update endpoint itself.
+
+### The three-phase upload
+
+Uploads never pass through the API; the bytes go straight to object storage.
+
+```
+1. POST /api/artifacts                → { artifact_id, url, fields, max_bytes, expires_in }
+2. POST {url}  (multipart/form-data)  → every entry of `fields` first, file part LAST
+3. POST /api/builds { artifact_id }   → 201 (or 200 for an in-flight retry)
+```
+
+The endpoint takes **no request body**. The object key is composed server-side
+from the authenticated caller and a generated identifier
+(`artifacts/{user_id}/{artifact_id}.tgz`), so an artifact is bound to its
+uploader by construction — there is no key, path, or URL a client could supply,
+and therefore no ownership check to bypass.
+
+Phase 2 is a presigned **POST**, not a PUT, because only POST carries a policy
+document and only a policy can express `content-length-range`. That is what
+puts the size cap at the object store rather than in a client that may ignore
+it. Send the form fields verbatim, file part last.
+
+Phase 3 confirms the artifact is actually present before creating the build, so
+an upload that silently failed surfaces immediately rather than minutes later
+as a fetch error inside a build container. Creating a build for an artifact
+whose build is still `queued`/`running` returns that build with **200** instead
+of creating a second one; once every build for the artifact is terminal, a
+repeat creates a new one — so a transient failure can be rebuilt without
+re-uploading.
+
+`caelus build submit <dir>` does all three phases in one command.
+
+### State machine
+
+`queued → running → succeeded | failed`. `canceled` is reserved and
+unreachable. Terminal states are final and a failed build is **never retried
+automatically** — recovery is creating a new build.
+
+`image` is null until `succeeded`, then carries the flat string
+`{user_id}@sha256:<64 hex>` — a real image reference **with the registry host
+stripped off**. That value is byte-identical to what the client submits as the
+`custom` product's `image` user value; withholding the host is what stops a
+tenant pointing a deployment at an arbitrary registry, and the chart asserts
+the `{user_id}` half matches the deployment's owner.
+
+### The log endpoint
+
+`GET /api/builds/{id}/log` serves `text/plain; charset=utf-8` and supports HTTP
+Range, so a client polls for output appended since its last read:
+
+```bash
+curl -H "Range: bytes=${read_so_far}-" .../log   # 206 + Content-Range: bytes N-M/*
+```
+
+- The total length is reported as **unknown** (`/*`) while the build runs — it
+  is still growing, so asserting a total would be a lie.
+- Polling at the current end returns an **empty 206**, not a 416. That is
+  deliberately outside RFC 7233: for a growing resource, "nothing new yet" is
+  the steady state of a polling loop, not an error. `Content-Range` is omitted
+  there, since the grammar cannot express a zero-length range.
+- **Every** response carries `X-Build-Status`, so a client learns the build has
+  finished without a second request. Stop polling on a terminal status.
+- Offsets are **bytes, not characters**. The log is stored as `bytea` and served
+  unmodified: container output is a tenant-controlled byte stream that may
+  contain invalid UTF-8 or NUL bytes (Postgres `text` cannot even store the
+  latter). Concatenate chunks and decode the result, rather than decoding each
+  chunk on its own.
+- Output is capped at `CAELUS_BUILD_LOG_MAX_BYTES` (10 MiB) and ends with an
+  explicit truncation marker; truncation never affects the build's own outcome.
+
+### The build worker
+
+A separate process (`caelus build-worker`, deployed as `caelus-build-worker`)
+running one repeating, **non-blocking** pass:
+
+1. advance every `running` build — mirror its Job's output into the log, adopt
+   its outcome if the Job finished, and apply the deadline backstop;
+2. claim queued builds while below `CAELUS_BUILD_MAX_IN_FLIGHT`, creating one
+   Kubernetes Job per build.
+
+Advancing happens before claiming, so a slot freed this pass is reused
+immediately. Nothing follows a log stream: blocking for the duration of a build
+would make recovery a second writer racing the follower, and at an in-flight
+limit of 1 a single long build would suspend recovery entirely.
+
+Concurrency is `CAELUS_BUILD_MAX_IN_FLIGHT`, **not** a process or replica
+count — one pass advances any number of running builds, so a second replica
+would only contend.
+
+Recovery is not a separate step: visiting every running build on every pass
+*is* the recovery. A worker that dies mid-build strands nothing — the next pass
+adopts a Job that has since succeeded rather than failing it. The log is a
+**mirror** of the Job's current output, re-read in full each pass, which needs
+no offset bookkeeping and self-heals after a gap; a read that comes back
+shorter than what is stored is discarded, since a container runtime may rotate
+output away and clients have already read the longer version.
+
+The build container holds **no database, Kubernetes, or long-lived registry
+credential**. Its only credential is an expiring presigned GET for one object,
+and it reports its result through the pod's termination message
+(`{"image": "..."}`), which the worker parses. A failure reports `{"error": ...}`
+with no `image` key, so it can never be mistaken for a success — and tenant
+build output cannot forge it, because it comes from pod status rather than the
+log.
+
+Deadlines are enforced by Kubernetes (`activeDeadlineSeconds`), because
+Kubernetes is the one participant guaranteed to be present. The worker only
+intervenes past a grace period, as a backstop for Kubernetes having failed.
+
+### Node prerequisites (not captured by Terraform)
+
+Two node-level settings are required for builds to work at all, and **a rebuilt
+node fails at two separate points with unrelated-looking errors**:
+
+1. `/etc/sysctl.d/99-buildkit-userns.conf` —
+   `kernel.apparmor_restrict_unprivileged_userns=0`. Ubuntu 24.04 ships this at
+   `1`, which transitions any unconfined process calling `userns_create` into a
+   restrictive AppArmor profile that then denies `CAP_SYS_ADMIN` in the new
+   namespace, so rootless BuildKit fails on `/proc/self/uid_map`. Setting the
+   pod's `appArmorProfile: Unconfined` does **not** help — the transition fires
+   *from* the unconfined profile.
+2. `/etc/rancher/k3s/registries.yaml` — `insecure_skip_verify` for the internal
+   registry, whose certificate is valid for a different name. Scope it to that
+   one host; a `"*"` entry would strip verification from ghcr.io and docker.io,
+   where every real image comes from. Requires `systemctl restart k3s`, and
+   lands in `/var/lib/rancher/k3s/agent/etc/containerd/certs.d/<host>/hosts.toml`,
+   **not** `config.toml`.
+
+The build Job additionally sets both `seccompProfile: Unconfined` and
+`appArmorProfile: Unconfined`, which cover the *container* profile blocking
+`mount`/`unshare` — a separate mechanism from the host sysctl above, and why
+the builds namespace runs under Pod Security `privileged`. See
+`products/custom/builder/README.md` for the builder image itself.
 
 ## Provisioning Boundary
 

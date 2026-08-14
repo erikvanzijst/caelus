@@ -88,6 +88,54 @@ class CaelusSettings(BaseSettings):
     s3_secret_access_key: str = ""
     s3_presigned_url_expiry_seconds: int = 900
 
+    # ── Builds ────────────────────────────────────────────────────────────
+    # The builder image is published by hand (see products/custom/builder/),
+    # not by the API's own CI, so it is versioned independently of the API
+    # image and pinned here rather than derived from it. The `railpack` binary
+    # it bundles is version-matched to the Railpack frontend digest baked into
+    # the entrypoint — a build plan is a contract between those two, so they
+    # move together or not at all.
+    #
+    # Pinned by digest as well as tag: the tag says which version this is, the
+    # digest is what actually gets run. Publishing a new builder means bumping
+    # the version and repointing this, never re-pushing an existing tag — a
+    # mutated tag would otherwise swap the builder out from under an in-flight
+    # build.
+    builder_image: str = (
+        "registry.home/caelus/builder:0.1.1"
+        "@sha256:762455b44189c21f9efbc1701201cdd4bd70842038e7eff148d6ca99845f9f11"
+    )
+
+    # Namespace the per-build Jobs run in. Deliberately neither the platform
+    # namespace nor a tenant one: build pods execute untrusted tenant code and
+    # get their own Pod Security Admission labels, ServiceAccount, and
+    # NetworkPolicy, none of which should be shared with anything else.
+    builds_namespace: str = "caelus-builds"
+    build_registry_host: str = "registry.home"
+
+    # Largest project archive accepted, enforced by Garage itself through the
+    # presigned POST policy's content-length-range rather than by the client or
+    # a proxy body limit.
+    artifact_max_bytes: int = 100 * 1024 * 1024
+    build_log_max_bytes: int = 10 * 1024 * 1024
+
+    # Wall-clock budget for a single build, applied as the Job's
+    # activeDeadlineSeconds so Kubernetes.
+    build_deadline_seconds: int = 3600
+
+    # How far past the deadline the worker waits before deleting the Job
+    # itself. This is a backstop for Kubernetes having failed to enforce its
+    # own deadline.
+    build_deadline_grace_seconds: int = 300
+
+    # How many builds may be running at once. Concurrency is this number, not
+    # the worker's process count — one worker advances every running build per
+    # pass without blocking on any of them.
+    build_max_in_flight: int = 1
+
+    # Sleep between worker passes.
+    build_worker_interval_seconds: float = 5.0
+
     mollie_api_key: str | None = None
     mollie_redirect_url: str | None = None
     mollie_webhook_base_url: str | None = None

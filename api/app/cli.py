@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -12,7 +13,7 @@ import typer
 import yaml
 from fastapi.encoders import jsonable_encoder
 
-from app.config import get_settings
+from app.config import CaelusSettings, get_settings
 from app.db import session_scope
 from app.logging_config import configure_logging
 from app.models import (
@@ -170,6 +171,23 @@ def _echo_yaml_entity(entity: object) -> None:
 def _echo_yaml_stream_item(entity: object) -> None:
     encoded = jsonable_encoder(entity)
     typer.echo(yaml.safe_dump(encoded, sort_keys=False).rstrip())
+
+
+def _echo_bytes(data: bytes) -> None:
+    """Write build output to stdout verbatim.
+
+    Bytes rather than text on purpose: a build log is whatever the tenant's
+    tooling emitted, which is only conventionally UTF-8. Writing through the
+    binary buffer passes it through unchanged, exactly as the REST log endpoint
+    does, instead of forcing a decode that could fail or mangle it.
+    """
+    stream = getattr(sys.stdout, "buffer", None)
+    if stream is None:  # a captured/text-only stdout, e.g. under CliRunner
+        sys.stdout.write(data.decode("utf-8", errors="replace"))
+        sys.stdout.flush()
+        return
+    stream.write(data)
+    stream.flush()
 
 
 @app.command("create-user")
@@ -687,6 +705,45 @@ def worker(
     )
 
 
+@app.command("build-worker")
+def build_worker(
+    interval_seconds: float | None = typer.Option(
+        None, "--interval-seconds", help="Seconds between passes (default: CAELUS_BUILD_WORKER_INTERVAL_SECONDS)"
+    ),
+    max_in_flight: int | None = typer.Option(
+        None, "--max-in-flight", help="Builds allowed to run at once (default: CAELUS_BUILD_MAX_IN_FLIGHT)"
+    ),
+) -> None:
+    """Run the build worker: claim queued builds, advance running ones.
+
+    Unlike `worker`, this takes no `--concurrency`: one process runs one
+    non-blocking pass that advances every running build, so how many builds run
+    at once is `--max-in-flight`, not a process count.
+    """
+    # Deferred like `worker` above, and for a measured reason: importing
+    # app.build_worker costs ~350ms because it pulls in boto3 via the artifacts
+    # service. At module level that would land on every `caelus` invocation,
+    # including `catalog lint` in CI and the catalog init container on rollout.
+    from app.build_worker import run_build_worker
+
+    settings = get_settings()
+    overrides: dict[str, object] = {}
+    if interval_seconds is not None:
+        if interval_seconds <= 0:
+            typer.echo("Error: --interval-seconds must be > 0", err=True)
+            raise typer.Exit(code=1)
+        overrides["build_worker_interval_seconds"] = interval_seconds
+    if max_in_flight is not None:
+        if max_in_flight < 1:
+            typer.echo("Error: --max-in-flight must be >= 1", err=True)
+            raise typer.Exit(code=1)
+        overrides["build_max_in_flight"] = max_in_flight
+    if overrides:
+        settings = CaelusSettings(**{**settings.model_dump(), **overrides})
+
+    run_build_worker(settings=settings, emit=_echo_yaml_stream_item)
+
+
 @app.command("sync-network-policies")
 def sync_network_policies(
     concurrency: int = typer.Option(16, "--concurrency", "-c", help="Parallel kubectl applies"),
@@ -880,6 +937,206 @@ def create_plan_template(
 # by an init container — so this group is intentionally CLI-only and exempt from
 # the REST parity convention. No parity gap is introduced: the protections these
 # commands rely on live in the service layer.
+
+build_app = typer.Typer(
+    help="Build project archives into container images.",
+    no_args_is_help=True,
+)
+app.add_typer(build_app, name="build")
+
+# Directories that are never source: reproducing them wastes the upload budget
+# and, for a Railpack build, is actively counterproductive — dependencies are
+# installed inside the build from the manifest, so a vendored tree would only
+# be overwritten.
+_ARCHIVE_EXCLUDES = frozenset(
+    {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache"}
+)
+
+
+def _build_or_exit(session: Session, build_id: UUID, user: UserORM):
+    from app.services import builds as build_service
+
+    try:
+        return build_service.get_build(
+            session, build_id=build_id, user_id=None if user.is_admin else user.id
+        )
+    except CaelusException as e:
+        _exit_for_domain_error(e)
+
+
+def _archive_directory(source: Path, *, max_bytes: int) -> bytes:
+    """Tar+gzip `source` into memory, skipping what is never source.
+
+    Checked against the cap here as well as at the object store: the store's
+    rejection is authoritative, but finding out locally beats spending the
+    upload to be told.
+    """
+    import io
+    import tarfile
+
+    if not source.is_dir():
+        typer.echo(f"Error: {source} is not a directory", err=True)
+        raise typer.Exit(code=1)
+
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        for path in sorted(source.rglob("*")):
+            if any(part in _ARCHIVE_EXCLUDES for part in path.relative_to(source).parts):
+                continue
+            if path.is_symlink() or not (path.is_file() or path.is_dir()):
+                continue
+            tar.add(path, arcname=str(path.relative_to(source)), recursive=False)
+
+    archive = buffer.getvalue()
+    if len(archive) > max_bytes:
+        typer.echo(
+            f"Error: project archive is {len(archive)} bytes, over the "
+            f"{max_bytes} byte limit. Remove large files or add them to .gitignore.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    return archive
+
+
+@build_app.command("list")
+def build_list(
+    user_id: int | None = typer.Argument(None, help="Whose builds to list (admin only)"),
+) -> None:
+    """List builds, most recent first."""
+    from app.services import builds as build_service
+
+    with session_scope() as session:
+        user = _require_cli_user(session)
+        if user_id is not None and user_id != user.id and not user.is_admin:
+            typer.echo("Error: listing another user's builds requires admin privileges", err=True)
+            raise typer.Exit(code=1)
+        _echo_yaml_entity(build_service.list_builds(session, user_id=user_id or user.id))
+
+
+@build_app.command("show")
+def build_show(build_id: UUID) -> None:
+    """Show one build's status, timestamps, and resulting image."""
+    with session_scope() as session:
+        user = _require_cli_user(session)
+        _echo_yaml_entity(_build_or_exit(session, build_id, user))
+
+
+@build_app.command("log")
+def build_log(
+    build_id: UUID,
+    follow: bool = typer.Option(False, "--follow", "-f", help="Poll until the build finishes"),
+) -> None:
+    """Print a build's output.
+
+    With `--follow`, polls from the offset already printed — the same
+    incremental read the REST log endpoint serves over HTTP Range.
+    """
+    from app.services import builds as build_service
+    from app.services.build_constants import is_terminal
+
+    with session_scope() as session:
+        user = _require_cli_user(session)
+        scope = None if user.is_admin else user.id
+        _build_or_exit(session, build_id, user)  # 404s before printing anything
+
+        offset = 0
+        while True:
+            slice_ = build_service.get_build_log(
+                session, build_id=build_id, user_id=scope, start=offset
+            )
+            if slice_.data:
+                _echo_bytes(slice_.data)
+                offset += len(slice_.data)
+            if not follow or is_terminal(slice_.status):
+                break
+            session.commit()  # release the snapshot so the next read sees new rows
+            time.sleep(get_settings().build_worker_interval_seconds)
+
+
+@build_app.command("submit")
+def build_submit(
+    directory: Path = typer.Argument(Path("."), help="Project directory to build"),
+    wait: bool = typer.Option(True, "--wait/--no-wait", help="Wait for the build to finish"),
+    timeout_seconds: float = typer.Option(
+        3900.0, "--timeout", help="How long to wait before giving up on a build"
+    ),
+) -> None:
+    """Build a project directory into an image: upload, then build.
+
+    Performs all three phases the REST API exposes — mint an upload slot,
+    upload the archive straight to object storage, create the build — so the
+    whole flow is exercisable without a separate client.
+
+    On success the resulting `image` is printed. That value is what you submit
+    as a deployment's `image` user value; nothing here deploys it for you, by
+    design: a deployment may consume several images and most consume none.
+    """
+    import httpx
+
+    from app.models import BuildCreate
+    from app.services import artifacts as artifact_service
+    from app.services import builds as build_service
+    from app.services.build_constants import BUILD_STATUS_SUCCEEDED, is_terminal
+
+    settings = get_settings()
+    archive = _archive_directory(directory, max_bytes=settings.artifact_max_bytes)
+
+    with session_scope() as session:
+        user = _require_cli_user(session)
+        scope = None if user.is_admin else user.id
+
+        try:
+            slot = artifact_service.mint_upload_slot(user.id)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        typer.echo(f"Uploading {len(archive)} bytes as artifact {slot.artifact_id}...", err=True)
+
+        response = httpx.post(
+            slot.url,
+            data=dict(slot.fields),
+            files={"file": ("project.tgz", archive, "application/gzip")},
+            timeout=300,
+        )
+        if response.status_code >= 400:
+            typer.echo(f"Error: upload rejected ({response.status_code}): {response.text[:300]}", err=True)
+            raise typer.Exit(code=1)
+
+        try:
+            result = build_service.create_build(
+                session, user_id=user.id, payload=BuildCreate(artifact_id=slot.artifact_id)
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+
+        build = result.build
+        typer.echo(f"Build {build.id} queued.", err=True)
+        if not wait:
+            _echo_yaml_entity(build)
+            return
+
+        offset = 0
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            slice_ = build_service.get_build_log(
+                session, build_id=build.id, user_id=scope, start=offset
+            )
+            if slice_.data:
+                _echo_bytes(slice_.data)
+                offset += len(slice_.data)
+            if is_terminal(slice_.status):
+                break
+            if time.monotonic() > deadline:
+                typer.echo(f"Error: gave up waiting for build {build.id}", err=True)
+                raise typer.Exit(code=1)
+            session.commit()
+            time.sleep(settings.build_worker_interval_seconds)
+
+        final = build_service.get_build(session, build_id=build.id, user_id=scope)
+        if final.status != BUILD_STATUS_SUCCEEDED:
+            typer.echo(f"Error: build {final.id} {final.status}", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(final.image)
+
 
 catalog_app = typer.Typer(
     help="Manage the git-authored product catalog (products/catalog/).",

@@ -39,6 +39,20 @@ terraform workspace select prod || terraform workspace new prod
 terraform apply
 ```
 
+## Build subsystem
+
+`tf/app` also creates a per-environment builds namespace
+(`caelus-builds` / `caelus-builds-dev`) where per-build Kubernetes Jobs run,
+along with a permissionless ServiceAccount, a default-deny NetworkPolicy, and
+the `caelus-build-worker` Deployment. It is the only namespace that runs
+untrusted tenant code; see [`app/README.md`](./app/README.md) for why it is
+per-environment and why it runs under Pod Security `privileged`.
+
+Two node-level prerequisites are **not** captured by Terraform and are needed
+again after any node rebuild (the userns sysctl for rootless BuildKit, and
+containerd's trust for the internal registry). Both are documented in
+[`../api/README.md`](../api/README.md) § Builds.
+
 ## Secrets
 
 Each project has its own `secrets.auto.tfvars` (gitignored):

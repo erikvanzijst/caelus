@@ -34,6 +34,7 @@ module "caelus" {
   wildcard_domains   = [local.domain]
   mollie_api_key     = var.mollie_api_key
   sshpiper_namespace = kubernetes_namespace.sshpiper.metadata[0].name
+  builds_namespace   = kubernetes_namespace.builds.metadata[0].name
   sftp_host          = local.sftp_host
   sftp_port          = local.sftp_port
 
@@ -46,5 +47,5 @@ module "caelus" {
   s3_access_key_id     = var.s3_access_key_ids[terraform.workspace]
   s3_secret_access_key = var.s3_secret_access_keys[terraform.workspace]
 
-  depends_on = [kubernetes_namespace.caelus]
+  depends_on = [kubernetes_namespace.caelus, kubernetes_namespace.builds]
 }

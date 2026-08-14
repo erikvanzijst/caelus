@@ -14,6 +14,13 @@ This repository is a monorepo with:
 - API and CLI are thin facades over services in `api/app/services/`.
 - Provisioning is stubbed in `api/app/provisioner.py` and should be replaced with a K8s implementation.
 - Product Templates are scoped to products; deployments are scoped to users.
+- **Builds** are a standalone subsystem: a build turns an uploaded project
+  archive into a container image and is owned by a **user**, never by a
+  deployment. Nothing auto-deploys a build — the client submits a successful
+  build's `image` to the deployment update endpoint itself. There are now two
+  worker processes: `caelus worker` (reconcile queue) and `caelus build-worker`
+  (builds), the latter running each build as a Kubernetes Job in a
+  per-environment `caelus-builds*` namespace. See `api/README.md` § Builds.
 - Products are either **curated** (declared in `products/catalog/<slug>.yaml`,
   reconciled into the database on rollout, and read-only through the API, CLI,
   and admin UI apart from `visibility`) or **non-curated** (database-authored).
@@ -66,6 +73,10 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
   identical rules and no parity gap is introduced.
 - Put all DB/ORM logic in `api/app/services/` and call from API + CLI (DRY).
 - Use `api/app/db.py:init_db()` to create tables for dev/test.
+- Build logs are stored as `bytea`, not text, and served as raw bytes:
+  container output is tenant-controlled and may contain invalid UTF-8 or NUL
+  bytes, which Postgres `text` cannot store at all. Do not decode it on the
+  way in or out.
 - Prefer nested routes:
   - Templates under products: `/products/{product_id}/templates`
   - Deployments under users: `/users/{user_id}/deployments`

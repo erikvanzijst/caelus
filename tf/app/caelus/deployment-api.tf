@@ -164,5 +164,12 @@ resource "kubernetes_deployment" "api" {
     }
   }
 
+  # Ignore restartedAt annotations written by `kubectl rollout restart`
+  lifecycle {
+    ignore_changes = [
+      spec[0].template[0].metadata[0].annotations["kubectl.kubernetes.io/restartedAt"],
+    ]
+  }
+
   depends_on = [kubernetes_cluster_role_binding.api]
 }

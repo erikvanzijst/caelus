@@ -153,11 +153,6 @@ resource "kubernetes_network_policy" "builds" {
     # from ghcr.io, and — because it resolves to the homelab's *public* address
     # even from inside the cluster — retrieving the artifact from Garage at
     # blob.freepod.eu.
-    #
-    # That last one is worth knowing: Garage is reached over a hairpin out to
-    # the router and back, not over the cluster network. If it is ever given an
-    # internally-resolving address, this policy needs an explicit allow for it
-    # or every build will fail to fetch its artifact.
     egress {
       to {
         ip_block {

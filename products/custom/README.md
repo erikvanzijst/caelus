@@ -15,11 +15,11 @@ values to paste.
 
 ## What it deploys
 
-| Component | Object(s) |
-|-----------|-----------|
-| Application | Deployment `<release>-app` running the user's image, or the placeholder while none exists |
-| Service | `<release>-app` `:80` → the container's `http` port |
-| Ingress | `<release>-ingress` (per-deployment TLS via `caelus.ingress.tls`), only once the reconciler injects a hostname |
+| Component   | Object(s)                                                                                                      |
+|-------------|----------------------------------------------------------------------------------------------------------------|
+| Application | Deployment `<release>-app` running the user's image, or the placeholder while none exists                      |
+| Service     | `<release>-app` `:80` → the container's `http` port                                                            |
+| Ingress     | `<release>-ingress` (per-deployment TLS via `caelus.ingress.tls`), only once the reconciler injects a hostname |
 
 No PVC: an image built from a user's source tree is stateless as far as this
 chart is concerned. Persistence, if it is ever offered here, is a separate
@@ -162,12 +162,12 @@ re-pushing an existing chart version.
 
 ## Caelus product template
 
-| Field | Value |
-|---|---|
-| Chart ref | `oci://registry.home/helm/custom` |
-| Chart version | `0.1.0` |
+| Field               | Value                                                                                                                                              |
+|---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Chart ref           | `oci://registry.home/helm/custom`                                                                                                                  |
+| Chart version       | `0.1.0`                                                                                                                                            |
 | Default Helm values | `{}` — the chart's own defaults already carry `registry`, `placeholderImage`, and `containerPort`. Set them here only to override per environment. |
-| User values schema | see below |
+| User values schema  | see below                                                                                                                                          |
 
 ### User values schema
 

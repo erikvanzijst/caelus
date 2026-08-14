@@ -8,9 +8,6 @@ locals {
     local.is_prod_workspace ? "prod" : "dev"
   )
 
-  # Cluster-scoped RBAC object names must be unique per deployment.
-  rbac_name = "caelus-api-${local.ns_caelus}"
-
   # Container images track a moving tag per environment: prod rolls to :master
   # (published by scripts/build-images.sh as the branch tag), dev to :latest.
   # var.api_image/var.ui_image override for pinning a specific SHA (rollback).
@@ -18,11 +15,6 @@ locals {
   api_image = var.api_image != null ? var.api_image : "ghcr.io/erikvanzijst/caelus/api:${local.image_tag}"
   ui_image  = var.ui_image != null ? var.ui_image : "ghcr.io/erikvanzijst/caelus/ui:${local.image_tag}"
 
-  # Per-build Kubernetes Jobs run here, one namespace per environment. Shared
-  # would have no Terraform owner (each workspace has its own state, so the
-  # second apply collides and a dev destroy would take prod's with it) and
-  # would let the dev build worker delete prod's build Jobs, since the worker's
-  # Role is namespaced and it deletes Jobs as its deadline backstop.
   ns_builds = local.is_prod_workspace ? "caelus-builds" : "caelus-builds-dev"
 
   # SFTP entry point (see the sftp-file-access OpenSpec change). The cluster

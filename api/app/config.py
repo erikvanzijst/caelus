@@ -134,7 +134,7 @@ class CaelusSettings(BaseSettings):
     build_max_in_flight: int = 1
 
     # Sleep between worker passes.
-    build_worker_interval_seconds: float = 5.0
+    build_worker_interval_seconds: float = 1
 
     mollie_api_key: str | None = None
     mollie_redirect_url: str | None = None

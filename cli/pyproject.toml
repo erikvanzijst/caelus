@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "freepod"
+version = "0.1.0"
+description = "Command-line client for Freepod — take a project directory to a running deployment"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Freepod" }]
+keywords = ["freepod", "deployment", "paas", "cli"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Build Tools",
+]
+
+# Every dependency is pure Python, so installation needs no compiler and every
+# published wheel is universal. See design D1.
+dependencies = [
+  "click>=8.0",
+  "httpx>=0.24",
+  "pathspec>=1.0",
+]
+
+[project.urls]
+Homepage = "https://freepod.eu"
+
+[project.scripts]
+freepod = "freepod.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/freepod"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/freepod", "tests", "README.md", "pyproject.toml"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]

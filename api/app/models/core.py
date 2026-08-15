@@ -93,9 +93,17 @@ class TosAcceptanceCreate(SQLModel):
 class TosAcceptanceRead(SQLModel):
     """The current user's ToS acceptance status. `version` is null until the
     user has accepted; this resource is always readable (a 200 status document,
-    not a 404-when-absent)."""
+    not a 404-when-absent).
+
+    `current_version` is the version the platform currently requires
+    (`settings.current_tos_version`) and is always present, so non-browser
+    clients — which have no bundled ToS document to parse an effective date
+    from — can learn which version to submit. It is independent of `version`:
+    the two differ whenever the terms have changed since the user accepted.
+    """
     version: Optional[str] = None
     accepted_at: Optional[datetime] = None
+    current_version: str
 
 
 class ProductVisibility(StrEnum):

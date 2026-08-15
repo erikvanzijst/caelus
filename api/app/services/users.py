@@ -34,10 +34,17 @@ def get_user(session: Session, *, user_id: int) -> UserRead:
 
 def get_tos_acceptance(user: UserORM) -> TosAcceptanceRead:
     """Return the user's ToS acceptance status. Always readable; `version` is
-    null when the user has not yet accepted."""
+    null when the user has not yet accepted.
+
+    `current_version` reports the version the platform currently requires, read
+    from settings the same way :func:`record_tos_acceptance` validates against
+    it. It is always set and is unrelated to what the user accepted: a user who
+    accepted an older version sees the two differ.
+    """
     return TosAcceptanceRead(
         version=user.tos_accepted_version,
         accepted_at=user.tos_accepted_at,
+        current_version=get_settings().current_tos_version,
     )
 
 

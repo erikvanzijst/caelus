@@ -112,7 +112,7 @@
 
 ## 12. End-to-end verification
 
-- [ ] 12.1 Verify `login` against `dev` with both flows — loopback on a desktop, device inside a container
+- [x] 12.1 Verify `login` against `dev` with both flows — loopback on a desktop, device inside a container
 - [x] 12.2 Confirm the `custom` product is visible to a **non-admin** on the target environment before attempting 12.3–12.4: `GET /api/products` unauthenticated must list it. An `admin`-visibility product resolves for administrators and correctly reports "this instance does not offer user-supplied deployments" for everyone else — correct behavior, but not a passing end-to-end, and it will read as a client bug to whoever hits it
 - [x] 12.3 Verify `init` in an empty project **as a non-admin**: product resolved by slug, hostname completed and checked, `.freepod.json` written, nothing created server-side
 - [x] 12.4 Verify a first `deploy` end to end on `dev`: one rollout, no placeholder page, live at the reported address
@@ -131,9 +131,9 @@
 
 ## 14. CI
 
-- [ ] 14.1 Add a CI job that installs `cli/` and runs its test suite
-- [ ] 14.2 Build the wheel and sdist in CI and verify the wheel installs and runs `freepod --help` in a clean environment
-- [ ] 14.3 Verify the test suite passes on the lowest supported Python (3.9) as well as the current one
+- [x] 14.1 Add a CI job that installs `cli/` and runs its test suite
+- [x] 14.2 Build the wheel and sdist in CI and verify the wheel installs and runs `freepod --help` in a clean environment
+- [x] 14.3 Verify the test suite passes on the lowest supported Python (3.9) as well as the current one
 
 ## 15. Terms of Service acceptance
 

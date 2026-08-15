@@ -59,6 +59,38 @@ identity model (`GET /api/me`).
   `GET /api/me/tos-acceptance`
 - **THEN** the response includes `version` equal to `2026-07-01`
 
+### Requirement: The acceptance resource reports the currently required version
+
+The acceptance status document MUST carry a `current_version` field holding the
+version the platform currently requires (the API's current ToS version), so a
+client that does not render the Terms itself — a CLI or any non-browser client
+with no bundled ToS document to parse an effective date from — can learn which
+value to submit. It MUST always be a non-null `YYYY-MM-DD` date, including for a
+user who has never accepted, and MUST be reported independently of `version`:
+`version` is what the *user* accepted (null until they do), `current_version` is
+what the *platform* requires. The field MUST be present on both the GET and the
+POST response, which share one status document.
+
+#### Scenario: Unaccepted user still learns the required version
+
+- **WHEN** a user who has never accepted calls `GET /api/me/tos-acceptance`
+- **THEN** the response is 200 with `version` null and `current_version` equal to
+  the API's current ToS version
+
+#### Scenario: A user whose accepted version is stale sees both
+
+- **WHEN** a user who accepted `2026-07-01` calls `GET /api/me/tos-acceptance`
+  after the current version has moved on to `2027-01-01`
+- **THEN** the response reports `version` `2026-07-01` and `current_version`
+  `2027-01-01`, and POSTing the reported `current_version` is accepted while the
+  stale `version` is rejected with **409**
+
+#### Scenario: Recording returns the required version too
+
+- **WHEN** a user POSTs `/api/me/tos-acceptance` with the current version
+- **THEN** the response carries `current_version`, equal to the just-recorded
+  `version`
+
 ### Requirement: CLI parity for recording acceptance
 
 The CLI MUST provide an `accept-tos` command mirroring `POST /api/me/tos-acceptance`

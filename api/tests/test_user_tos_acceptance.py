@@ -3,6 +3,7 @@
 Acceptance is recorded once, on the user, via `POST /api/me/tos-acceptance` and
 read via `GET /api/me/tos-acceptance`. Deploying requires prior acceptance.
 """
+import pytest
 from sqlmodel import select
 
 from app.config import get_settings
@@ -15,6 +16,23 @@ CURRENT = get_settings().current_tos_version
 
 def _headers(email):
     return {"X-Auth-Request-Email": email}
+
+
+@pytest.fixture
+def set_current_tos_version(monkeypatch):
+    """Repoint the platform's current ToS version at an arbitrary date.
+
+    The version is an lru_cached setting, so the cache is cleared both on the
+    way in and on the way out — otherwise the override would outlive
+    `monkeypatch`'s env cleanup and leak into other tests.
+    """
+    def _set(version: str) -> str:
+        monkeypatch.setenv("CAELUS_CURRENT_TOS_VERSION", version)
+        get_settings.cache_clear()
+        return version
+
+    yield _set
+    get_settings.cache_clear()
 
 
 def _setup_product_template_plan(client, db_session, name):
@@ -61,7 +79,59 @@ def test_acceptance_initially_absent(client, db_session):
     create_user(client, email, accept_tos=False)
     resp = client.get("/api/me/tos-acceptance", headers=_headers(email))
     assert resp.status_code == 200
-    assert resp.json() == {"version": None, "accepted_at": None}
+    # No acceptance yet, but the version to submit is still reported.
+    assert resp.json() == {
+        "version": None,
+        "accepted_at": None,
+        "current_version": CURRENT,
+    }
+
+
+def test_acceptance_reports_current_version_after_accepting(client, db_session):
+    """An accepted user reads back both their version and the current one."""
+    email = "tos-current-accepted@example.com"
+    create_user(client, email, accept_tos=False)
+    client.post("/api/me/tos-acceptance", json={"version": CURRENT}, headers=_headers(email))
+
+    body = client.get("/api/me/tos-acceptance", headers=_headers(email)).json()
+    assert body["version"] == CURRENT
+    assert body["accepted_at"] is not None
+    assert body["current_version"] == CURRENT
+
+
+def test_current_version_is_independent_of_accepted_version(
+    client, db_session, set_current_tos_version
+):
+    """The two fields report different facts and must not be conflated.
+
+    A client that has to re-accept learns *which* version to submit from
+    `current_version`; reporting the stale accepted version there would lock it
+    out with a 409 forever.
+    """
+    email = "tos-stale@example.com"
+    create_user(client, email, accept_tos=False)
+    client.post("/api/me/tos-acceptance", json={"version": CURRENT}, headers=_headers(email))
+
+    # The terms change under the user.
+    new_version = set_current_tos_version("2030-01-01")
+    assert new_version != CURRENT
+
+    body = client.get("/api/me/tos-acceptance", headers=_headers(email)).json()
+    assert body["version"] == CURRENT  # what the user accepted
+    assert body["current_version"] == new_version  # what the platform now wants
+
+    # And the reported current version is exactly what POST accepts: the stale
+    # one is a 409, the reported one succeeds.
+    assert client.post(
+        "/api/me/tos-acceptance", json={"version": CURRENT}, headers=_headers(email)
+    ).status_code == 409
+    resp = client.post(
+        "/api/me/tos-acceptance",
+        json={"version": body["current_version"]},
+        headers=_headers(email),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["version"] == new_version
 
 
 def test_record_acceptance(client, db_session):
@@ -75,6 +145,8 @@ def test_record_acceptance(client, db_session):
     body = resp.json()
     assert body["version"] == CURRENT
     assert body["accepted_at"] is not None
+    # The POST returns the same status document as the GET.
+    assert body["current_version"] == CURRENT
 
     # Persisted on the user and reflected by a subsequent GET.
     u = db_session.get(UserORM, user["id"])

@@ -40,3 +40,28 @@ drift from the document it represents.
   `settings.current_tos_version` (or vice-versa)
 - **THEN** the guard test fails
 
+### Requirement: The current ToS version is readable by clients
+
+The current ToS version MUST be readable over the API, as the `current_version`
+field of the `/api/me/tos-acceptance` status document, so clients never have to
+hardcode it. Because it is a release constant of the API image, a client that
+hardcoded it would be rejected with **409** the moment the terms are revised;
+reading it back is the only way for a client that ships on its own cadence — a
+CLI, or any client without the UI's bundled ToS markdown — to submit an
+acceptance that the API will accept. The API MUST serve the value it validates
+against, never a separately maintained copy.
+
+#### Scenario: A non-browser client reads the version to submit
+
+- **WHEN** a client with no bundled ToS document calls
+  `GET /api/me/tos-acceptance` and POSTs back the `current_version` it read
+- **THEN** the acceptance is recorded (the value served is exactly the value
+  validated against)
+
+#### Scenario: A revised release moves the served value
+
+- **WHEN** the terms are revised and `settings.current_tos_version` is bumped in
+  a new API release
+- **THEN** `current_version` served by the API reports the new version, without
+  any client release
+

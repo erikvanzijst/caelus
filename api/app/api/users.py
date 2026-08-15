@@ -56,17 +56,27 @@ def get_me(current_user: UserORM = Depends(get_current_user)) -> UserRead:
     response_model=TosAcceptanceRead,
     summary="Get the current user's Terms of Service acceptance",
     response_description="The caller's ToS acceptance status; `version` is null "
-    "if they have not accepted.",
+    "if they have not accepted, while `current_version` always reports the "
+    "version the platform currently requires.",
 )
 def get_my_tos_acceptance(
     current_user: UserORM = Depends(get_current_user),
 ) -> TosAcceptanceRead:
     """Return whether — and which version of — the Terms of Service the caller
-    has accepted.
+    has accepted, together with the version currently in force.
 
     This is always readable and returns **200** even when the caller has not yet
     accepted (in which case `version` and `accepted_at` are null), so clients can
     treat "not accepted" as a normal state rather than a 404.
+
+    ## Behavior
+    - **version** — the ToS version the caller accepted, or null if they never
+      have.
+    - **accepted_at** — when they accepted, or null.
+    - **current_version** — the version the platform currently requires, always a
+      non-null `YYYY-MM-DD` date. Clients submit this value to
+      `POST /me/tos-acceptance`; any other value is rejected with **409**. The
+      caller needs to (re-)accept whenever it differs from `version`.
     """
     return user_service.get_tos_acceptance(current_user)
 
@@ -75,7 +85,8 @@ def get_my_tos_acceptance(
     "/me/tos-acceptance",
     response_model=TosAcceptanceRead,
     summary="Record the current user's Terms of Service acceptance",
-    response_description="The updated ToS acceptance status.",
+    response_description="The updated ToS acceptance status, including the "
+    "`current_version` the platform requires.",
     responses={
         409: {"description": "The submitted version is not the current Terms of "
                              "Service version (the terms have changed)."},
@@ -92,6 +103,12 @@ def record_my_tos_acceptance(
     The submitted `version` MUST equal the current ToS version; a mismatch is
     rejected with **409** (the terms changed under the user, who must re-review).
     Recording is idempotent for the current version.
+
+    ## Behavior
+    Clients that do not render the Terms themselves can read the value to submit
+    from `current_version` on `GET /me/tos-acceptance`. The response is the same
+    status document as the GET, so on success `version` and `current_version`
+    are equal.
     """
     return user_service.record_tos_acceptance(
         session, user=current_user, version=payload.version

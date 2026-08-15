@@ -2,7 +2,7 @@ import { Box } from '@mui/material'
 import GitHubIcon from '@mui/icons-material/GitHub'
 import { fg, MONO } from './landing/landingTokens'
 
-export const REPO_URL = 'https://github.com/erikvanzijst/caelus'
+export const REPO_URL = 'https://github.com/erikvanzijst/freepod'
 
 export function RepoLink() {
   return (

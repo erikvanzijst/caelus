@@ -436,7 +436,7 @@ kubectl rollout restart deployment/keycloak -n keycloak
 ```
 
 The deployment references `var.keycloak_image`
-(default `ghcr.io/erikvanzijst/caelus/keycloak:latest`).
+(default `ghcr.io/erikvanzijst/freepod/keycloak:latest`).
 
 ### Assigning the theme to the realm
 

@@ -7,7 +7,7 @@ variable "keycloak_admin_password" {
 variable "keycloak_image" {
   description = "Keycloak container image with the Freepod theme baked in (see keycloak/Dockerfile)."
   type        = string
-  default     = "ghcr.io/erikvanzijst/caelus/keycloak:latest"
+  default     = "ghcr.io/erikvanzijst/freepod/keycloak:latest"
 }
 
 variable "keycloak_url" {

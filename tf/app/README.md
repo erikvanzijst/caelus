@@ -52,8 +52,16 @@ tracks `:master`, dev tracks `:latest`. Override `api_image` / `ui_image` via
 `-var` (or a `-var-file`) only to pin a specific tag, e.g. a SHA for rollback:
 
 ```bash
-terraform apply -var 'api_image=ghcr.io/erikvanzijst/caelus/api:<sha>'
+terraform apply -var 'api_image=ghcr.io/erikvanzijst/freepod/api:<sha>'
 ```
+
+**Every image these manifests reference must be a public GHCR package.**
+Nothing here configures an `imagePullSecret`, so a package left at GHCR's
+default visibility — private — fails the pull with `ImagePullBackOff` and no
+hint that permissions are the cause. This bites when a package is created for
+the first time, which includes the first push after the repository was renamed:
+a new name is a new package, at its default visibility, regardless of how the
+old one was set.
 
 Note that the API image also carries the product catalog (`products/catalog/`),
 which two init containers apply in order before the API starts: `migrate`

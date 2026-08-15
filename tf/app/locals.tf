@@ -12,8 +12,8 @@ locals {
   # (published by scripts/build-images.sh as the branch tag), dev to :latest.
   # var.api_image/var.ui_image override for pinning a specific SHA (rollback).
   image_tag = local.is_prod_workspace ? "master" : "latest"
-  api_image = var.api_image != null ? var.api_image : "ghcr.io/erikvanzijst/caelus/api:${local.image_tag}"
-  ui_image  = var.ui_image != null ? var.ui_image : "ghcr.io/erikvanzijst/caelus/ui:${local.image_tag}"
+  api_image = var.api_image != null ? var.api_image : "ghcr.io/erikvanzijst/freepod/api:${local.image_tag}"
+  ui_image  = var.ui_image != null ? var.ui_image : "ghcr.io/erikvanzijst/freepod/ui:${local.image_tag}"
 
   ns_builds = local.is_prod_workspace ? "caelus-builds" : "caelus-builds-dev"
 

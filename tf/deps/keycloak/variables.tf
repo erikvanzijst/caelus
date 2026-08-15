@@ -17,5 +17,5 @@ variable "keycloak_admin_password" {
 variable "keycloak_image" {
   description = "Keycloak container image with the Freepod theme baked in (see keycloak/Dockerfile). Built/pushed by scripts/build-images.sh --keycloak."
   type        = string
-  default     = "ghcr.io/erikvanzijst/caelus/keycloak:latest"
+  default     = "ghcr.io/erikvanzijst/freepod/keycloak:latest"
 }

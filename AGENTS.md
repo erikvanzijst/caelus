@@ -12,6 +12,12 @@ This repository is a monorepo with:
 
 ## Architecture Notes
 - API and CLI are thin facades over services in `api/app/services/`.
+- **Two different things are called "the CLI".** `caelus` (`api/app/cli.py`) is
+  the *operator* tool: it runs in-process against the database and services, and
+  every reference to "CLI" elsewhere in this file means that one. `freepod`
+  (`cli/`) is the *end-user client*: a separately installable package that talks
+  to a deployed platform over HTTP, imports nothing from `api/`, and shares no
+  code with it.
 - Provisioning is stubbed in `api/app/provisioner.py` and should be replaced with a K8s implementation.
 - Product Templates are scoped to products; deployments are scoped to users.
 - **Builds** are a standalone subsystem: a build turns an uploaded project
@@ -39,6 +45,14 @@ This repository is a monorepo with:
 - Run CLI: `uv run --no-sync python -m app.cli --help`
 - Tests: `uv run --no-sync pytest`
 For details, see `api/README.md`.
+
+### Client CLI (`cli/`)
+- `cd cli/`
+- Install deps: `uv sync`
+- Run: `uv run freepod --help`
+- Tests: `uv run pytest`
+Targets `prod` by default; use `--env dev` or `FREEPOD_ENV=dev` against
+`dev.freepod.eu`. For details, see `cli/README.md`.
 
 ### UI (`ui/`)
 - `cd ui/`
@@ -119,7 +133,11 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
 
 ## Contribution Checklist
 - Update or add tests for new behavior.
-- Keep API + CLI parity (same features and validations).
+- Keep API + `caelus` CLI parity (same features and validations).
+- When an API contract changes, check whether `freepod` (`cli/`) depends on it.
+  It ships on its own cadence, so it must learn values from the platform at
+  runtime rather than embedding them — a constant baked into the client is
+  wrong the first time the platform retunes it.
 - Update migrations for schema changes.
-- Update api/README.md, ui/README.md, tf/README.md, and AGENTS.md when
-  workflow changes.
+- Update api/README.md, ui/README.md, cli/README.md, tf/README.md, and
+  AGENTS.md when workflow changes.

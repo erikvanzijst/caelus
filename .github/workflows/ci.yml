@@ -52,10 +52,81 @@ jobs:
           uv sync
           uv run caelus catalog lint
 
+  # The client is a separately installable package on its own release cadence
+  # and imports nothing from `api/`, so it is tested on its own terms.
+  cli-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      # Report both interpreters on a failure. Which versions break is the
+      # whole point of the matrix, and the first failure cancelling the other
+      # hides half the answer.
+      fail-fast: false
+      matrix:
+        # The declared floor and the current release. `requires-python =
+        # ">=3.9"` is a promise to anyone running an older interpreter, and
+        # running the floor is the only thing that keeps it true: the rest of
+        # this repo targets >=3.11 and uses syntax 3.9 rejects outright.
+        python-version: ["3.9", "3.13"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run the CLI test suite on Python ${{ matrix.python-version }}
+        run: |
+          cd cli
+          # `--frozen` resolves from uv.lock instead of updating it, so a
+          # lockfile that drifted from pyproject.toml fails here rather than
+          # being silently re-resolved into a build nobody can reproduce.
+          uv run --python ${{ matrix.python-version }} --frozen pytest -q
+
+  # Proves the *distribution* works, which the test suite structurally cannot:
+  # `uv run pytest` imports out of `src/`, so a module missing from the wheel,
+  # an undeclared dependency, or a broken console script passes every test and
+  # fails on a user's first install.
+  cli-package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build the wheel and sdist
+        run: |
+          cd cli
+          uv build
+
+      - name: Install the wheel into a clean environment and run it
+        run: |
+          # Built against the declared floor, so the wheel is proven on the
+          # oldest interpreter it claims to support.
+          uv venv --python 3.9 /tmp/wheel-check
+          uv pip install --python /tmp/wheel-check/bin/python cli/dist/*.whl
+          # Run from outside the checkout. Inside it, `cli/src` on the path
+          # could satisfy the import even if the wheel were empty.
+          cd /tmp
+          /tmp/wheel-check/bin/freepod --version
+          /tmp/wheel-check/bin/freepod --help
+
+      - name: Upload the distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: freepod-dist
+          path: cli/dist/*
+          if-no-files-found: error
+
   publish-images:
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    needs: [ui-test, api-test, catalog-lint]
+    needs: [ui-test, api-test, catalog-lint, cli-test, cli-package]
     permissions:
       contents: read
       packages: write

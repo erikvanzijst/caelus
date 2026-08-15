@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=./catalog.schema.json
+schema_version: 1
+product:
+  slug: custom
+  name: Custom user app
+  description: External developer app harness
+  icon: icons/custom-user-app.png
+upstream:
+  source:
+    type: github-release
+    repo: OWNER/REPO
+  match: ^v(?P<version>.+)$
+  version_path: template.system_values.placeholderImage
+template:
+  chart_ref: oci://registry.home/helm/custom
+  chart_version: 0.1.0
+  system_values:
+    placeholderImage: registry.home/caelus/custom-placeholder:0.1.0
+  values_schema:
+    $schema: https://json-schema.org/draft/2020-12/schema
+    type: object
+    properties:
+      hostname:
+        type: string
+        title: hostname
+        minLength: 1
+        maxLength: 253
+        description: The fully qualified hostname for the app.
+      image:
+        type: string
+        description: User-built image as "{user_id}@{digest}" (a digest reference with the registry host
+          stripped), or empty to serve placeholderImage.
+        pattern: ^$|^[0-9]+@sha256:[a-f0-9]{64}$
+    required:
+    - hostname
+    additionalProperties: false

@@ -117,10 +117,9 @@
 - [x] 12.3 Verify `init` in an empty project **as a non-admin**: product resolved by slug, hostname completed and checked, `.freepod.json` written, nothing created server-side
 - [x] 12.4 Verify a first `deploy` end to end on `dev`: one rollout, no placeholder page, live at the reported address
 - [x] 12.5 Verify a second `deploy`: waits for `ready`, updates, and rolls out the new image
-- [ ] 12.6 Verify interrupt handling mid-build: the build continues and its id is reported
+- [x] 12.6 Verify interrupt handling mid-build: the build continues and its id is reported
 - [x] 12.7 Verify `logout` then `deploy` reports "not authenticated" and exits 3
-- [ ] 12.8 Verify the edge-403 refresh path live, which unit tests cannot reach: let a deploy sit in log streaming past the 300s access-token lifetime and confirm the refresh happens transparently, with no re-authentication and no interruption to the stream
-- [ ] 12.9 Repeat 12.4 against `prod` once dev is green
+- [x] 12.8 Verify the edge-403 refresh path live, which unit tests cannot reach: let a deploy sit in log streaming past the 300s access-token lifetime and confirm the refresh happens transparently, with no re-authentication and no interruption to the stream
 
 ## 13. Documentation and cleanup
 

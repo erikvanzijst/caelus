@@ -111,7 +111,7 @@ def cli(
     if verbose and quiet:
         raise UsageError("--verbose and --quiet contradict each other; pick one")
 
-    # Left as None, click decides per-stream, which would still colour a
+    # Left as None, click decides per-stream, which would still color a
     # terminal when `NO_COLOR` asks it not to. False forces the escape codes
     # stripped everywhere.
     if os.environ.get("NO_COLOR") or not sys.stdout.isatty():

@@ -1,0 +1,95 @@
+# Publishes the `freepod` client to PyPI.
+#
+# Nothing here runs on an ordinary commit. A tag push is a distinct event from
+# a branch push, so merges to `master` — including ones that touch `cli/` —
+# trigger this workflow zero times. Releasing is the deliberate act of bumping
+# `freepod.__version__`, committing, and pushing a `freepod-v*` tag. The tag
+# prefix is scoped because this is a monorepo and the client releases on its
+# own cadence.
+#
+# Authentication is PyPI Trusted Publishing (OIDC): the `id-token: write`
+# permission lets the runner exchange a GitHub-signed identity token for a
+# short-lived, project-scoped PyPI token. There is no API token in this
+# repository's secrets to leak or rotate.
+name: Publish CLI
+
+on:
+  push:
+    tags: ["freepod-v*"]
+  workflow_dispatch:
+
+# An upload is not idempotent. Serialize rather than race two runs of the same
+# ref, and never cancel one midway.
+concurrency:
+  group: publish-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # The same gate `ci.yml` runs, deliberately re-run here rather than trusted
+  # from the tagged commit's earlier CI: this run's `package` job produces the
+  # artifact that the publish job uploads, so what was proven and what ships
+  # are the same bytes rather than two builds that happen to agree.
+  checks:
+    uses: ./.github/workflows/cli-checks.yml
+
+  publish:
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      # Mints the OIDC token Trusted Publishing exchanges. Nothing else here
+      # needs write access — note there is no checkout step at all, so the only
+      # thing that can reach PyPI is the artifact `checks` built.
+      id-token: write
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && 'testpypi' || 'pypi' }}
+      url: ${{ github.event_name == 'workflow_dispatch' && 'https://test.pypi.org/p/freepod' || 'https://pypi.org/p/freepod' }}
+    steps:
+      - name: Download the distribution built by the checks
+        uses: actions/download-artifact@v4
+        with:
+          name: freepod-dist
+          path: dist
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Refuse a tag that disagrees with the built version
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          uvx --with packaging python - "$TAG" <<'PY'
+          import pathlib
+          import sys
+
+          from packaging.utils import parse_wheel_filename
+          from packaging.version import InvalidVersion, Version
+
+          tag = sys.argv[1]
+          wheels = sorted(pathlib.Path("dist").glob("*.whl"))
+          if len(wheels) != 1:
+              sys.exit(f"expected exactly one wheel in dist/, found {[w.name for w in wheels]}")
+
+          _, built, _, _ = parse_wheel_filename(wheels[0].name)
+          try:
+              claimed = Version(tag.removeprefix("freepod-v"))
+          except InvalidVersion:
+              sys.exit(f"tag {tag} is not a PEP 440 version after the `freepod-v` prefix")
+
+          if claimed != built:
+              sys.exit(f"tag {tag} claims {claimed}, but the built package is {built}")
+          print(f"tag {tag} matches the built version {built}")
+          PY
+
+      - name: Publish to TestPyPI
+        if: github.event_name == 'workflow_dispatch'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist
+
+      - name: Publish to PyPI
+        if: github.event_name == 'push'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

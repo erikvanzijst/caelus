@@ -1,20 +1,24 @@
 [build-system]
-requires = ["hatchling"]
+# A floor rather than an open range: 1.27 is the first release that understands
+# PEP 639, which the `license`/`license-files` fields below depend on.
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "freepod"
-version = "0.1.0"
-description = "Command-line client for Freepod — take a project directory to a running deployment"
+dynamic = ["version"]
+description = "Command-line client for Freepod — take a local project directory to a running deployment on freepod.eu."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
-authors = [{ name = "Freepod" }]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Freepod", email = "erik@freepod.eu" }]
 keywords = ["freepod", "deployment", "paas", "cli"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
   "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
@@ -24,8 +28,6 @@ classifiers = [
   "Topic :: Software Development :: Build Tools",
 ]
 
-# Every dependency is pure Python, so installation needs no compiler and every
-# published wheel is universal. See design D1.
 dependencies = [
   "click>=8.0",
   "httpx>=0.24",
@@ -34,15 +36,20 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://freepod.eu"
+Repository = "https://github.com/erikvanzijst/freepod"
+Issues = "https://github.com/erikvanzijst/freepod/issues"
 
 [project.scripts]
 freepod = "freepod.cli:main"
+
+[tool.hatch.version]
+path = "src/freepod/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/freepod"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/freepod", "tests", "README.md", "pyproject.toml"]
+include = ["src/freepod", "tests", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.ruff]
 line-length = 100

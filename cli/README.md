@@ -1,6 +1,6 @@
 # freepod
 
-Take a local project directory to a running Freepod deployment.
+Take a local project directory to a running deployment on freepod.eu.
 
 ```bash
 freepod login
@@ -9,8 +9,7 @@ freepod deploy
 ```
 
 `deploy` packs the working tree, uploads it, builds an image on the platform,
-and creates or updates the deployment that serves it. Everything a cheap read
-can refuse is refused before a build is spent.
+and creates or updates the deployment that serves it.
 
 ## Install
 
@@ -29,13 +28,13 @@ uv run freepod --help
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `login` | Authenticate and cache the credential. Offers the terms if outstanding. |
-| `logout` | Discard the **local** credential for the selected environment. |
-| `whoami` | Report who the cached credential authenticates as. Never opens a browser. |
-| `init` | Write `.freepod.json` for the current directory. Reads only — creates nothing. |
-| `deploy` | Preflight → pack → upload → build → release. |
+| Command  | What it does                                                                   |
+|----------|--------------------------------------------------------------------------------|
+| `login`  | Authenticate and cache the credential. Offers the terms if outstanding.        |
+| `logout` | Discard the **local** credential for the selected environment.                 |
+| `whoami` | Report who the cached credential authenticates as. Never opens a browser.      |
+| `init`   | Write `.freepod.json` for the current directory. Reads only — creates nothing. |
+| `deploy` | Preflight → pack → upload → build → release.                                   |
 
 Global flags: `--env`, `--verbose`, `--quiet`, `--timeout`.
 `deploy` adds `--recreate` and `--no-gitignore`; `init` adds `--force`.
@@ -51,50 +50,27 @@ URL=$(freepod deploy)      # https://myapp.freepod.eu
 
 The build log, the upload progress bar, and every status line are diagnostics
 and go to stderr. `--quiet` silences all of it and leaves the result and any
-error. Colour is suppressed automatically when stdout is not a terminal, and
+error. Color is suppressed automatically when stdout is not a terminal, and
 whenever `NO_COLOR` is set.
 
 ### Exit codes
 
-| Code | Meaning |
-| --- | --- |
-| 0 | success |
-| 1 | error |
-| 2 | usage error |
-| 3 | not authenticated |
-| 4 | the build failed |
-| 5 | the rollout failed |
+| Code | Meaning            |
+|------|--------------------|
+| 0    | success            |
+| 1    | error              |
+| 2    | usage error        |
+| 3    | not authenticated  |
+| 4    | the build failed   |
+| 5    | the rollout failed |
 
 A **timeout is not a failure** and does not get its own code. `--timeout` bounds
 how long the client waits, never what the platform does: when it elapses, the
-build or rollout is still running on the platform, uncancelled, and the message
+build or rollout is still running on the platform, uncanceled, and the message
 says so. Re-running picks it back up.
 
 `--timeout` applies to whichever wait is in progress, which means something
 different per command — login 300s, build 1800s, rollout 600s by default.
-
-## Environments
-
-Two public clients, one per environment. They hold no client secret — PKCE
-proves client identity instead, and is mandatory on both.
-
-| Env | Client ID | API base |
-| --- | --- | --- |
-| `prod` (default) | `freepod-cli-prod` | `https://freepod.eu` |
-| `dev` | `freepod-cli-dev` | `https://dev.freepod.eu` |
-
-Issuer: `https://keycloak.freepod.eu/realms/freepod`. Select with `--env` or
-`FREEPOD_ENV`. There is no flag for an arbitrary base URL: a token is bound to
-one environment by its `aud` claim, and an arbitrary address would need the
-issuer and client id to travel with it.
-
-Both clients register identical redirect URIs, so **the audience is the only
-thing separating dev from prod** — a dev token presented to `freepod.eu` is
-rejected, and vice versa.
-
-`.freepod.json` records which environment it belongs to, and a command targeting
-a different one stops rather than guessing: a deployment id minted on dev is
-meaningless on prod.
 
 ## The two flows
 
@@ -166,10 +142,8 @@ every 30 days.
 The refresh token is cached at:
 
 ```
-${XDG_CONFIG_HOME:-~/.config}/freepod/tokens.json     (mode 0600, in a 0700 dir)
+${XDG_CONFIG_HOME:-~/.config}/freepod/tokens.json
 ```
-
-Entries are **keyed by environment**, so dev and prod credentials never collide.
 
 Raw tokens are never printed. `--verbose` shows decoded *claims* (`aud`, `azp`,
 `email`, `exp`, `groups`, …) — decoded for display only, never used to make a
@@ -281,11 +255,6 @@ The refresh is bounded at once per request on purpose. The API issues its own
 unbounded "403 means refresh" rule would refresh, fail, re-login, and loop on a
 request no credential can satisfy.
 
-`dev.freepod.eu` additionally requires membership of the `freepod-dev` Keycloak
-group. A non-member with a perfectly valid token gets `401` — indistinguishable
-by status code from sending no credential at all. If dev returns `401` while
-prod works, check group membership before suspecting the token.
-
 ## Terms of Service
 
 The platform will not create a deployment for an account that has not accepted
@@ -321,3 +290,28 @@ uv run freepod --help
 
 The package depends on nothing in `api/`. It is a client, and it talks to a
 deployed platform over HTTP like any other.
+
+## Releasing
+
+The version has one home: `__version__` in `src/freepod/__init__.py`.
+`pyproject.toml` reads it through Hatch, and `--version` reports the installed
+metadata, so there is no second literal to keep in step.
+
+```bash
+# 1. Bump __version__, commit.
+# 2. Rehearse: run the "Publish CLI" workflow by hand → uploads to TestPyPI.
+# 3. Ship:
+git tag freepod-v0.2.0 && git push origin freepod-v0.2.0
+```
+
+`.github/workflows/publish-cli.yml` runs on `freepod-v*` tags only — no commit
+to `master` publishes anything, whether or not it touched `cli/`. It re-runs
+the full CLI gate and uploads *that run's* artifact, refusing any tag whose
+version disagrees with the built package.
+
+Uploads authenticate with PyPI Trusted Publishing (OIDC) through the `pypi` and
+`testpypi` GitHub environments. There is no PyPI token in the repository.
+
+**A version number is spent the moment it is uploaded.** PyPI refuses a
+re-upload of a version even after you delete it, so a botched release is fixed
+by bumping, never by replacing. That is what the TestPyPI rehearsal is for.

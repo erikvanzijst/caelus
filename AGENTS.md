@@ -54,6 +54,11 @@ For details, see `api/README.md`.
 Targets `prod` by default; use `--env dev` or `FREEPOD_ENV=dev` against
 `dev.freepod.eu`. For details, see `cli/README.md`.
 
+Published to PyPI as `freepod`, on its own release cadence: bump
+`__version__` in `cli/src/freepod/__init__.py` — the single source, which
+`pyproject.toml` reads through Hatch — and push a `freepod-v*` tag. No commit
+to `master` publishes the client. See `cli/README.md` § Releasing.
+
 ### UI (`ui/`)
 - `cd ui/`
 - Install deps: `npm install`

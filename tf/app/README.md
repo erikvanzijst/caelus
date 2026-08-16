@@ -63,6 +63,15 @@ the first time, which includes the first push after the repository was renamed:
 a new name is a new package, at its default visibility, regardless of how the
 old one was set.
 
+`builder_image` is a third image variable, and an unusual one: it is not a
+Caelus image at all but the tenant-build image published by hand from
+[`products/custom/builder/`](../../products/custom/builder/), on its own
+cadence. Set it to bump the builder without waiting for an API release:
+
+```bash
+terraform apply -var 'builder_image=registry.home/caelus/builder:0.1.3'
+```
+
 Note that the API image also carries the product catalog (`products/catalog/`),
 which two init containers apply in order before the API starts: `migrate`
 (`alembic upgrade head`) then `catalog` (`caelus catalog apply`). Pinning

@@ -113,6 +113,10 @@ variable "builds_namespace" {
   type        = string
 }
 
+variable "builder_image" {
+  type = string
+}
+
 variable "build_registry_cidr" {
   description = <<-EOT
     Address of the internal container registry, as a CIDR, for the builds

@@ -33,6 +33,11 @@ resource "kubernetes_deployment" "build_worker" {
         labels = {
           app = "caelus-build-worker"
         }
+
+        # Roll the pod when the config changes.
+        annotations = {
+          "checksum/config" = sha256(jsonencode(kubernetes_config_map.api.data))
+        }
       }
 
       spec {

@@ -12,6 +12,12 @@ variable "ui_image" {
   nullable    = true
 }
 
+variable "builder_image" {
+  description = "Image that runs tenant builds, published by hand from products/custom/builder/ on its own cadence"
+  type        = string
+  default     = "registry.home/caelus/builder:0.1.2"
+}
+
 variable "environment" {
   description = "Namespace label for environment (null = workspace default)"
   type        = string

@@ -18,6 +18,7 @@ resource "kubernetes_config_map" "api" {
     CAELUS_SFTP_HOST = var.sftp_host
     CAELUS_SFTP_PORT = tostring(var.sftp_port)
 
+    CAELUS_BUILDER_IMAGE = var.builder_image
     CAELUS_BUILDS_NAMESPACE    = var.builds_namespace
     CAELUS_BUILD_MAX_IN_FLIGHT = tostring(var.build_max_in_flight)
 

@@ -127,8 +127,7 @@ docker build --platform linux/amd64 -t registry.home/caelus/builder:0.1.2 .
 docker push registry.home/caelus/builder:0.1.2
 ```
 
-Then point `builder_image` in `api/app/config.py` (env
-`CAELUS_BUILDER_IMAGE`) at the pushed digest, keeping the tag for readability:
+Then point the platform to it through `builder_image` in Terraform.
 
 ## Node prerequisites
 

@@ -1,6 +1,6 @@
 #!/bin/sh
-# Idempotent bucket, access-key and permission provisioning for the shared
-# Garage singleton. Runs as the first step of the `garage-provision` Job.
+# Idempotent bucket, access-key, permission and lifecycle provisioning for the
+# shared Garage singleton. The whole of the `garage-provision` Job.
 #
 # WHY THIS TALKS TO THE ADMIN API AND NOT THE `garage` CLI
 # -------------------------------------------------------
@@ -17,6 +17,13 @@
 # Service name. Design D2 anticipates this ("where the admin API is used rather
 # than the CLI, use a scoped, expirable admin token").
 #
+# The lifecycle rules used to be a second Job step in an S3-client image,
+# because setting them was an S3-API call (`PutBucketLifecycleConfiguration`)
+# that needed the bucket's own access key. As of Garage v2.3.0
+# `POST /v2/UpdateBucket` takes `lifecycleRules` directly, in the same
+# S3-shaped JSON, so that step folded into this one: one container, one image,
+# one credential, and no S3 client anywhere in provisioning.
+#
 # EVERY STEP READS BEFORE IT WRITES, so a re-run is a no-op and an existing
 # access key is never rotated. Terraform re-runs this Job whenever the script or
 # its inputs change, which also repairs hand-made drift.
@@ -27,7 +34,7 @@ set -eu
 : "${ENVIRONMENTS:?}"
 : "${KEYS_SECRET_NAME:?}"
 : "${NAMESPACE:?}"
-: "${CREDS_DIR:?}"
+: "${OBJECT_EXPIRY_DAYS:?}"
 : "${HEALTH_TIMEOUT_SECONDS:?}"
 
 log() { echo "[provision] $*" >&2; }
@@ -66,7 +73,7 @@ log "Garage is healthy; cluster layout is committed."
 # 2. Mint a scoped, expiring admin token and do the real work with that.
 #
 # Required by the garage-bucket-provisioning spec: the working credential is
-# limited to the six endpoints below and expires on its own. Honest caveat —
+# limited to the seven endpoints below and expires on its own. Honest caveat —
 # this pod still holds the master token, because minting a scoped token is
 # itself a master-token operation. What this buys is that the credential
 # actually used for the provisioning calls cannot read cluster status, cannot
@@ -113,7 +120,7 @@ token_response=$(api POST /v2/CreateAdminToken "$(
   cat <<EOF
 {"name":"caelus-provisioning-$(date +%s)",
  "expiration":"${expires_at}",
- "scope":["ListBuckets","CreateBucket","ListKeys","CreateKey","GetKeyInfo","AllowBucketKey"]}
+ "scope":["ListBuckets","CreateBucket","UpdateBucket","ListKeys","CreateKey","GetKeyInfo","AllowBucketKey"]}
 EOF
 )")
 SCOPED_TOKEN_ID=$(echo "$token_response" | jq -r '.id')
@@ -121,7 +128,7 @@ TOKEN=$(echo "$token_response" | jq -r '.secretToken')
 log "using scoped admin token ${SCOPED_TOKEN_ID}, expiring ${expires_at}"
 
 # --------------------------------------------------------------------------
-# 3. Per environment: bucket, access key, permission grant.
+# 3. Per environment: bucket, access key, permission grant, lifecycle rules.
 #
 # Naming convention, single-sourced from var.environments in Terraform:
 #   bucket      <env>              (the bucket namespace is private to this
@@ -129,7 +136,6 @@ log "using scoped admin token ${SCOPED_TOKEN_ID}, expiring ${expires_at}"
 #                                   information)
 #   access key  caelus-api-<env>   (mirrors freepod-dev / freepod-prod)
 # --------------------------------------------------------------------------
-mkdir -p "$CREDS_DIR"
 set --
 
 for env in $ENVIRONMENTS; do
@@ -164,20 +170,47 @@ for env in $ENVIRONMENTS; do
 
   # Read and write on THIS environment's bucket only. `owner` is deliberately
   # omitted: AllowBucketKey activates the flags set to true and leaves the rest
-  # untouched, so omitting it neither grants nor is needed — bucket lifecycle
-  # configuration (the next Job step) is accepted by Garage on a read+write key.
+  # untouched, so omitting it neither grants nor is needed. Nothing in
+  # provisioning uses this key — it is minted for the Caelus API alone.
   api POST /v2/AllowBucketKey \
     "{\"bucketId\":\"${bucket_id}\",\"accessKeyId\":\"${access_key_id}\",\"permissions\":{\"read\":true,\"write\":true}}" \
     >/dev/null
   log "granted read+write on '${env}' to '${key_name}'"
 
-  # Handed to the lifecycle step through a memory-backed emptyDir, so the
-  # credentials never touch this node's disk.
-  umask 077
-  cat >"${CREDS_DIR}/${env}.env" <<EOF
-AWS_ACCESS_KEY_ID=${access_key_id}
-AWS_SECRET_ACCESS_KEY=${secret_access_key}
+  # Both of the lifecycle actions Garage implements are used, and they reclaim
+  # different things:
+  #
+  #   Expiration                       completed objects past their age
+  #   AbortIncompleteMultipartUpload   parts of uploads that never completed
+  #
+  # The second is not optional. Abandoned multipart parts consume disk while
+  # never appearing in a bucket listing — exactly the kind of invisible growth
+  # that produced this node's earlier disk-pressure incident.
+  #
+  # Declarative expiry is why this design needs no reaper CronJob and no
+  # cleanup code: reclamation is a property of the bucket, so it cannot be
+  # forgotten by a caller, skipped by a failed job, or lost in a refactor.
+  #
+  # Idempotent like every other step, for the same reason the S3 call this
+  # replaces was: UpdateBucket assigns `lifecycleRules` wholesale rather than
+  # appending, so re-running converges instead of accumulating rules. Every
+  # field of the request body is optional and an absent one is left untouched,
+  # so this leaves the bucket's quotas, CORS and website access alone.
+  api POST "/v2/UpdateBucket?id=${bucket_id}" "$(
+    cat <<EOF
+{"lifecycleRules":[
+  {"ID":"expire-objects",
+   "Status":"Enabled",
+   "Filter":{"Prefix":""},
+   "Expiration":{"Days":${OBJECT_EXPIRY_DAYS}}},
+  {"ID":"abort-incomplete-multipart-uploads",
+   "Status":"Enabled",
+   "Filter":{"Prefix":""},
+   "AbortIncompleteMultipartUpload":{"DaysAfterInitiation":${OBJECT_EXPIRY_DAYS}}}
+]}
 EOF
+  )" >/dev/null
+  log "applied lifecycle to '${env}' (expiry ${OBJECT_EXPIRY_DAYS}d)"
 
   set -- "$@" \
     --from-literal="${env}_access_key_id=${access_key_id}" \

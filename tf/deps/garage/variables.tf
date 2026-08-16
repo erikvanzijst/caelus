@@ -15,15 +15,9 @@ variable "garage_image" {
 }
 
 variable "kubectl_image" {
-  description = "Image for the provisioning Job's first step. Must provide curl, jq and kubectl."
+  description = "Image for the provisioning Job. Must provide curl, jq and kubectl."
   type        = string
   default     = "alpine/k8s:1.31.1"
-}
-
-variable "aws_cli_image" {
-  description = "Image for the provisioning Job's lifecycle step. Lifecycle is an S3-API operation (PutBucketLifecycleConfiguration), not a `garage` CLI one."
-  type        = string
-  default     = "amazon/aws-cli:2.31.9"
 }
 
 variable "meta_pvc_size" {

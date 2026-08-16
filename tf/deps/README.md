@@ -217,11 +217,12 @@ and keys are re-created by the Job, but the layout is not.
 
 ### Buckets, keys and expiry
 
-Provisioned by a Kubernetes Job (`garage/provisioning.tf`) that Terraform
-re-runs whenever its scripts or inputs change. Garage has no IAM, so there is no
-S3-policy-shaped Terraform resource to use, and `ImportKey` rejects keys Garage
-did not generate — so Garage must mint the key material and the Job reads it
-back into a `garage-keys` Secret.
+Provisioned by a single-container Kubernetes Job (`garage/provisioning.tf`,
+running `garage/scripts/provision.sh`) that Terraform re-runs whenever its
+script or inputs change. Garage has no IAM, so there is no S3-policy-shaped
+Terraform resource to use, and `ImportKey` rejects keys Garage did not
+generate — so Garage must mint the key material and the Job reads it back into
+a `garage-keys` Secret.
 
 | | dev | prod |
 |---|---|---|
@@ -234,8 +235,10 @@ has permission on **its own bucket only**, so a leaked dev credential cannot
 reach prod objects — enforced by Garage, not by convention.
 
 Every step reads before it writes, so **re-running the Job is a no-op**: an
-existing access key is never rotated. Re-running also repairs drift, which is
-the answer to "someone changed something with `kubectl exec`".
+existing access key is never rotated, and the lifecycle rules are assigned
+wholesale rather than appended, so they converge instead of accumulating.
+Re-running also repairs drift, which is the answer to "someone changed
+something with `kubectl exec`".
 
 Each bucket carries both lifecycle rules Garage implements, at
 `var.object_expiry_days` (default 2):
@@ -248,10 +251,15 @@ Each bucket carries both lifecycle rules Garage implements, at
 
 Declarative expiry is why there is no reaper CronJob and no cleanup code.
 
-The Job talks to the **admin API**, not the `garage` CLI: the CLI speaks RPC and
+The Job talks to the **admin API** for all of it — buckets, keys, grants and
+lifecycle — and to nothing else. Not the `garage` CLI: that speaks RPC and
 needs `<full-node-id>@host:port`, which cannot be known by a second pod, and it
-cannot be scripted inside the shell-less Garage image anyway. It mints a
-**scoped, expiring admin token** for the actual work and revokes it on exit.
+cannot be scripted inside the shell-less Garage image anyway. And no S3 client
+either: setting lifecycle used to require one (`PutBucketLifecycleConfiguration`
+is an S3-API call), which is why this Job once had a second container in an
+`amazon/aws-cli` image, but Garage v2.3.0's `POST /v2/UpdateBucket` accepts
+`lifecycleRules` directly in the same S3-shaped JSON. The Job mints a **scoped,
+expiring admin token** for the actual work and revokes it on exit.
 
 ### Reading the S3 credentials
 

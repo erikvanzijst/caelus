@@ -40,7 +40,9 @@ RUN set -eu; \
     # python3 is here for one reason: extracting an untrusted archive. Busybox
     # tar can neither reject traversal reliably nor bound expansion, and
     # Python's tarfile "data" filter is purpose-built for exactly this.
-    apk add --no-cache python3; \
+    #
+    # This is a busybox image without bash, so pull it in explicitly.
+    apk add --no-cache python3 bash; \
     wget -qO /tmp/railpack.tar.gz \
         "https://github.com/railwayapp/railpack/releases/download/v${RAILPACK_VERSION}/railpack-v${RAILPACK_VERSION}-x86_64-unknown-linux-musl.tar.gz"; \
     echo "${RAILPACK_SHA256}  /tmp/railpack.tar.gz" | sha256sum -c -; \

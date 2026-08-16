@@ -123,8 +123,8 @@ than producing an image whose `railpack` binary cannot exec.
 
 ```bash
 cd products/custom/builder
-docker build --platform linux/amd64 -t registry.home/caelus/builder:0.1.1 .
-docker push registry.home/caelus/builder:0.1.1
+docker build --platform linux/amd64 -t registry.home/caelus/builder:0.1.2 .
+docker push registry.home/caelus/builder:0.1.2
 ```
 
 Then point `builder_image` in `api/app/config.py` (env

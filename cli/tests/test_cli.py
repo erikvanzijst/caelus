@@ -1,8 +1,7 @@
-"""The command surface wired up so far: login, logout, whoami."""
+"""The command surface: login, logout, whoami, and the flags every command wires up."""
 
 from __future__ import annotations
 
-import httpx
 import pytest
 
 from freepod import EXIT_NOT_AUTHENTICATED, EXIT_OK, EXIT_USAGE
@@ -10,38 +9,6 @@ from freepod.auth import load_refresh_token, store_refresh_token
 from freepod.cli import main
 
 from conftest import json_response, sequence, text_response
-
-
-@pytest.fixture
-def stub_api(monkeypatch):
-    """Replace the command's API client with one on a mock transport."""
-
-    def install(handler):
-        from freepod.api import ApiClient
-        from freepod.cli import Context
-
-        def client(self, session):
-            return ApiClient(
-                self.env,
-                session,
-                client=httpx.Client(transport=httpx.MockTransport(handler)),
-                backoff_base=0,
-            )
-
-        monkeypatch.setattr(Context, "client", client)
-
-    return install
-
-
-@pytest.fixture
-def cached_credential(monkeypatch):
-    """A cached refresh token, and a Keycloak that honors it."""
-    from freepod import auth
-
-    store_refresh_token("prod", "freepod-cli-prod", "prod-refresh")
-    monkeypatch.setattr(
-        auth, "post_form", lambda url, fields, timeout=30: {"access_token": "fresh-at"}
-    )
 
 
 ME = {"id": 7, "email": "erik@example.com", "is_admin": False}
@@ -57,7 +24,9 @@ def test_help_exits_zero(capsys):
     assert "login" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("command", ["login", "logout", "whoami"])
+@pytest.mark.parametrize(
+    "command", ["login", "logout", "whoami", "init", "deploy", "delete", "builds"]
+)
 def test_every_command_has_help(command, capsys):
     assert main([command, "--help"]) == EXIT_OK
     capsys.readouterr()
@@ -70,6 +39,76 @@ def test_an_unknown_environment_is_a_usage_error(capsys):
 
 def test_an_unknown_command_is_a_usage_error(capsys):
     assert main(["frobnicate"]) == EXIT_USAGE
+    capsys.readouterr()
+
+
+# --------------------------------------------------------------------------
+# Negative flags
+#
+# `--no-gitignore` and `--no-wait` name the *departure* from the default, so
+# the default they depart from has to survive a click upgrade. It did not:
+# `flag_value=False, default=True` yields True on click 8.1 and False on 8.3,
+# which silently inverts both. These pin the resolved value rather than the
+# spelling, so either declaration passes only if it behaves.
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def capture_deploy(monkeypatch, cached_credential):
+    """Run `deploy` far enough to see the arguments it assembled."""
+    seen = {}
+
+    def fake_deploy(_api, _env_name, **kwargs):
+        seen.update(kwargs)
+        return "https://myapp.freepod.eu"
+
+    monkeypatch.setattr("freepod.cli.deploy_module.deploy", fake_deploy)
+    return seen
+
+
+@pytest.fixture
+def capture_delete(monkeypatch, cached_credential):
+    """Run `delete` far enough to see the arguments it assembled."""
+    seen = {}
+
+    def fake_delete(_api, _env_name, **kwargs):
+        seen.update(kwargs)
+        return True
+
+    monkeypatch.setattr("freepod.cli.delete_module.delete", fake_delete)
+    return seen
+
+
+def test_deploy_honors_gitignore_unless_told_not_to(capture_deploy, capsys):
+    assert main(["deploy"]) == EXIT_OK
+    assert capture_deploy["honor_gitignore"] is True
+    capsys.readouterr()
+
+
+def test_no_gitignore_turns_it_off(capture_deploy, capsys):
+    assert main(["deploy", "--no-gitignore"]) == EXIT_OK
+    assert capture_deploy["honor_gitignore"] is False
+    capsys.readouterr()
+
+
+def test_delete_follows_the_teardown_unless_told_not_to(capture_delete, capsys):
+    assert main(["delete"]) == EXIT_OK
+    assert capture_delete["wait"] is True
+    capsys.readouterr()
+
+
+def test_no_wait_returns_once_the_teardown_is_scheduled(capture_delete, capsys):
+    assert main(["delete", "--no-wait"]) == EXIT_OK
+    assert capture_delete["wait"] is False
+    capsys.readouterr()
+
+
+def test_delete_confirms_unless_yes_is_given(capture_delete, capsys):
+    assert main(["delete"]) == EXIT_OK
+    assert capture_delete["assume_yes"] is False
+
+    assert main(["delete", "--yes"]) == EXIT_OK
+    assert capture_delete["assume_yes"] is True
     capsys.readouterr()
 
 

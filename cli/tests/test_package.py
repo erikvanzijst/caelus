@@ -29,6 +29,8 @@ EXPECTED_MODULES = {
     "archive",
     "build",
     "deploy",
+    "delete",
+    "history",
 }
 
 

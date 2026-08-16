@@ -65,6 +65,8 @@ that locks users out until they upgrade.
 | `archive.py`  | Packing the working tree: ignore layering, pruning, and the tar stream.                     |
 | `build.py`    | Upload slot, presigned POST, build creation, and log streaming.                             |
 | `deploy.py`   | The pipeline: preflight → pack → upload → build → release, plus rollout following.          |
+| `delete.py`   | The teardown: confirming it, requesting it, and following it to gone.                       |
+| `history.py`  | The build history: reading the account's builds and rendering the table.                    |
 | `tos.py`      | Terms acceptance: the gate, the prompt, and recording an acceptance.                        |
 
 ## Environments
@@ -99,9 +101,19 @@ one.
 | `whoami` | Report who the cached credential authenticates as. Never opens a browser.      |                                     |
 | `init`   | Write `.freepod.json` for the current directory. Reads only — creates nothing. | `--force`                           |
 | `deploy` | Preflight → pack → upload → build → release.                                   | `--recreate`, `--no-gitignore`      |
+| `delete` | Tear down the project's deployment, and follow the teardown to gone.           | `--yes/-y`, `--no-wait`             |
+| `builds` | List the **account's** builds, marking the one this project runs.              | `--limit`, `--all`                  |
 
 Global: `--env`, `--verbose`, `--quiet`, `--timeout`, `--version`, `-h/--help`.
 `--verbose` and `--quiet` together are a usage error.
+
+> **A negative flag needs `is_flag=True` and an inverted variable, not
+> `flag_value=False, default=True`.** That declaration resolves to `True` on
+> click 8.1 (the Python 3.9 leg) and to `False` on 8.3+, so `--no-gitignore`
+> was silently *on* for everyone on a current click — deploy packed everything
+> `.gitignore` excludes. `pyproject.toml` asks only for `click>=8.0`, so both
+> versions are live. `tests/test_cli.py` pins the resolved default of every
+> negative flag rather than its spelling.
 
 `--version` reports the *installed* distribution metadata rather than a literal,
 so it only answers correctly for an installed package — which `uv run` arranges.
@@ -114,6 +126,10 @@ carries only the result:
 ```bash
 URL=$(freepod deploy)      # https://myapp.freepod.eu
 ```
+
+`builds` follows the same rule: the table is the result and goes to stdout,
+while the legend and the "showing N of M" note are diagnostics on stderr.
+`delete` writes nothing to stdout at all — a deletion has no result to pipe.
 
 The build log, the upload progress bar, and every status line are diagnostics.
 `--quiet` silences all of it and leaves the result and any error; a quiet deploy
@@ -341,6 +357,80 @@ pointer to something that may already be gone. The new pointer is written
 **before** the rollout is awaited: a deployment that exists but is not recorded
 is one the project can never address again.
 
+## Deleting a deployment
+
+`delete` is the only destructive thing this client does, and it addresses the
+deployment recorded in `.freepod.json` and nothing else. A command that could
+name an arbitrary deployment would be one whose worst typo is unrecoverable,
+and the project file is the only place the client knows a deployment by anyway.
+
+Four things about it are deliberate:
+
+- **Nothing is deleted without an answer.** `--yes` is the only way to confirm
+  in advance; without a terminal and without it, the command refuses rather
+  than proceeding. An unattended run that deletes because nobody was there to
+  object is the one behavior this must not have. `--quiet` silences the
+  preamble, which is why the question itself names the deployment.
+- **A decline is not a failure.** It returns 0 and says nothing was deleted.
+  The user was asked and answered.
+- **The teardown is followed to gone by default.** `DELETE` answers 204 and
+  moves the deployment to `deleting`; the reconciler uninstalls the release and
+  removes the namespace afterwards, and the **hostname stays claimed until that
+  lands**. A `delete` that returned early would collide with itself on the next
+  `deploy`. `--no-wait` opts out and says so.
+- **The pointer is cleared the moment the platform accepts the deletion**, not
+  once the teardown finishes. From that instant the deployment can never serve
+  this project again — an update is refused for anything outside `ready`/`error`
+  — so keeping the pointer would only make the next `deploy` fail on something
+  the user already asked to be rid of. The user values stay: the hostname is
+  intent, and re-deploying should re-claim the same name.
+
+Three answers mean "already gone", and all three end the same way — the stale
+pointer is cleared and nothing is deleted twice: a **404 on the read** (which
+is what a fully torn-down deployment gives; the platform stops serving the
+record rather than returning `deleted`), a read that comes back `deleting` or
+`deleted`, and a **404 on the `DELETE`** itself.
+
+A failed teardown lands in `error` with `last_error` set, exactly as a failed
+rollout does, so the wait reads that as the failure it is instead of waiting
+out the timeout reporting "still deleting". The 409 is the same
+`DeploymentInProgressException` a release can hit, so it is read through
+`deploy.describe_conflict` rather than a second copy of the same mapping.
+
+## The build history
+
+`builds` lists what `GET /api/builds` answers, which is **the account's**
+builds and not a project's. The platform has no notion of a project at all — a
+build is owned by a user, never by a deployment — so a project-scoped history
+is not a thing the API can be asked for, and pretending otherwise would mean
+inventing a filter with nothing behind it.
+
+What makes the listing project-relevant instead is the marker: the build whose
+image the current project's deployment is running is flagged `*`. That is the
+only reason the deployment is read at all, and every way of not knowing answers
+`None` rather than failing — no project file, one belonging to another
+environment, no deployment recorded yet, or a deployment the platform no longer
+has. The annotation is a convenience; the listing is the result.
+
+Details worth keeping:
+
+- **The platform's order is kept.** Most recent first is the endpoint's
+  contract. Re-sorting would mean parsing every timestamp to reproduce an
+  answer already given, and would reorder rows the moment one failed to parse.
+- **`--limit` is a display bound, not a query one.** The endpoint has no
+  pagination and returns everything; the note about what was hidden goes to
+  stderr.
+- **Timestamps arrive naive and are UTC by construction**, so a missing offset
+  is read as UTC and rendered in the reader's own zone. Reading it as local
+  would misreport every duration by the reader's offset. `Z` is handled by
+  hand: `fromisoformat` only learned it in 3.11 and 3.9 is the floor.
+- **Duration is measured from `started_at`**, not `created_at`. The wait for a
+  worker is queueing, and counting it would report a five-second build as a
+  five-minute one whenever the queue was busy.
+- **Digests are abbreviated to twelve characters** with the truncation marked.
+  A full reference is 75 characters of which 64 are a digest, which would make
+  that column wider than every other one together. `--verbose` prints it whole.
+
 ## The project file
 
 `.freepod.json`, written by `init`, meant to be committed:
@@ -511,7 +601,7 @@ else.
 
 ## Testing
 
-`uv run pytest`. Around 380 cases, none of which touch the network: the API,
+`uv run pytest`. Around 450 cases, none of which touch the network: the API,
 the object store, and Keycloak are all reached through `httpx.MockTransport`.
 Two autouse fixtures in `conftest.py` make that safe to rely on — `isolated_home`
 points `HOME` and `XDG_CONFIG_HOME` at a temp directory (so no test passes
@@ -527,6 +617,8 @@ because a real credential happened to be lying around) and `no_sleep` patches
 | `test_auth.py`                                                        | Both flows, PKCE, `state`, polling, the cache.                              |
 | `test_api.py`                                                         | The 401/403 contract, single refresh, retries.                              |
 | `test_build.py`                                                       | Slot minting, upload retry, log ranging, re-attachment.                     |
+| `test_delete.py`                                                      | Confirmation, the pointer's fate, already-gone reads, teardown waits.       |
+| `test_builds.py`                                                      | Listing, the deployed-build marker, durations, and the table's layout.      |
 | `test_tos.py`                                                         | Gate, prompt, recording, and the create-only rule.                          |
 | `test_values.py`                                                      | Schema walking, constraint checks, hostname normalization.                  |
 | `test_project.py` / `test_init.py` / `test_cli.py` / `test_config.py` | The file format, `init`'s refusals, command wiring, environment resolution. |
@@ -552,11 +644,10 @@ only by coincidence. It has no checkout step at all.
 
 The version's home is `__version__` in `src/freepod/__init__.py`;
 `pyproject.toml` reads it through Hatch and `--version` reports installed
-metadata. One literal escapes that: `USER_AGENT` in `config.py` spells the
-version out again, so bump it in the same commit.
+metadata.
 
 ```bash
-# 1. Bump __version__ (and USER_AGENT), commit.
+# 1. Bump __version__, commit.
 # 2. Rehearse: run the "Publish CLI" workflow by hand → uploads to TestPyPI.
 # 3. Ship:
 git tag freepod-v0.2.0 && git push origin freepod-v0.2.0

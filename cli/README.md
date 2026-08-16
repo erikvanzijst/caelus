@@ -38,13 +38,15 @@ filesystem is gone when it restarts, and at every release.
 
 ## Commands
 
-| Command          | What it does                                                                             |
-|------------------|------------------------------------------------------------------------------------------|
-| `freepod login`  | Sign in, and remember the credential.                                                    |
-| `freepod init`   | Set the current directory up as a project: choose a hostname, write `.freepod.json`.     |
-| `freepod deploy` | Pack, build and release the current project.                                             |
-| `freepod whoami` | Report who you are signed in as.                                                         |
-| `freepod logout` | Forget the stored credential.                                                            |
+| Command          | What it does                                                                          |
+|------------------|---------------------------------------------------------------------------------------|
+| `freepod login`  | Sign in, and remember the credential.                                                 |
+| `freepod init`   | Set the current directory up as a project: choose a hostname, write `.freepod.json`.  |
+| `freepod deploy` | Pack, build and release the current project.                                          |
+| `freepod builds` | List your builds, most recent first.                                                  |
+| `freepod delete` | Delete this project's deployment.                                                     |
+| `freepod whoami` | Report who you are signed in as.                                                      |
+| `freepod logout` | Forget the stored credential.                                                         |
 
 `freepod --help` and `freepod <command> --help` cover the flags.
 

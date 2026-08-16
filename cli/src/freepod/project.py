@@ -117,6 +117,19 @@ class Project:
         self.deployment = {"id": str(deployment_id), "name": name}
         self.save()
 
+    def forget_deployment(self) -> None:
+        """Drop the deployment pointer and persist it immediately.
+
+        The counterpart of `record_deployment`, and written the moment the
+        platform accepts a deletion rather than once the teardown lands: from
+        that point the deployment can never serve this project again, so a
+        pointer to it would only make the next deploy fail. Everything else in
+        the file — the environment, the user values — is intent and survives,
+        so a later `freepod deploy` re-creates under the same hostname.
+        """
+        self.deployment = None
+        self.save()
+
 
 # --------------------------------------------------------------------------
 # Discovery

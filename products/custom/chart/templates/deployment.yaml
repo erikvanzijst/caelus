@@ -19,6 +19,10 @@ spec:
       labels:
         {{- include "custom.selectorLabels" . | nindent 8 }}
     spec:
+      {{- /*
+      TODO: this needs to be in the reconciler -- not per-chart.
+      */}}
+      automountServiceAccountToken: false
       containers:
         - name: app
           image: {{ include "custom.imageRef" . | quote }}
@@ -35,6 +39,21 @@ spec:
             # platform-side detail we can change unilaterally.
             - name: PORT
               value: {{ .Values.containerPort | quote }}
+          {{- /*
+          Object storage credentials. The Secret carries the conventional AWS_* names, so a tenant's
+          `boto3.client("s3")` works with no configuration at all.
+          */}}
+          {{- /*
+          Two namespaces on purpose. `objectStorage.enabled` is the product's
+          own static declaration — a system value from the catalog, the same for
+          every deployment of this product. `caelus.objectStorage.*` are the
+          per-deployment facts the reconciler injects after provisioning.
+          */}}
+          {{- if .Values.objectStorage.enabled }}
+          envFrom:
+            - secretRef:
+                name: {{ required "custom: caelus.objectStorage.secretName is required when object storage is enabled" .Values.caelus.objectStorage.secretName | quote }}
+          {{- end }}
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

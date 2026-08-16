@@ -292,6 +292,63 @@ s3_secret_access_keys = {
 coupled with `terraform_remote_state` — same handoff ritual as the Keycloak
 client secrets.
 
+### Reading the Caelus API's admin token
+
+The API provisions a bucket and an access key per storage-enabled deployment at
+reconcile time, so it holds a Garage admin token of its own:
+
+```bash
+terraform output -raw garage_caelus_api_admin_token
+```
+
+A **scalar**, not a workspace-keyed map: every environment provisions on the one
+shared instance and the scope is identical, so both `tf/app` workspaces take the
+same value.
+
+```hcl
+garage_admin_token = "…"
+```
+
+Two things about it that the S3 credentials above do not share:
+
+- **It is far more powerful.** Those four values reach one bucket each. This one
+  administers buckets and keys across the instance and can read back the secret
+  of any access key it can see — so a compromise of the API is a compromise of
+  every tenant bucket. It is scoped (no cluster status, no layout changes, and
+  Garage refuses `CreateAdminToken`/`UpdateAdminToken` inside a scope as trivial
+  privilege escalation), which bounds what else it can do but not that.
+- **Its secret cannot be read back from Garage.** `CreateAdminToken` returns it
+  exactly once; `GetAdminTokenInfo` has no field for it. The `garage-keys` Secret
+  is therefore its only store of record, and `provision.sh` reads it from there
+  on every run. **If that Secret is lost, the token rotates** — the script
+  cannot recover the old secret, so it deletes the orphaned token and mints a
+  replacement, and you must re-paste it into `tf/app/secrets.auto.tfvars`. This
+  is the one place where re-running the Job is not a pure no-op.
+
+### Per-deployment tenant buckets
+
+Terraform provisions the two artifact buckets above and nothing else. The Caelus
+API provisions one bucket and one access key **per storage-enabled deployment**
+at reconcile time, using the admin token above, so those never appear in this
+module's state:
+
+|                  | name                  | created by                   |
+|------------------|-----------------------|------------------------------|
+| artifact buckets | `dev`, `prod`         | this module, at apply        |
+| tenant buckets   | `dep-<deployment-id>` | the Caelus API, at reconcile |
+
+**Drained, alias-carrying buckets are expected residue, not a fault.** Deleting a
+deployment deletes its access key and sets a one-day object-expiry rule; the
+bucket itself is left behind, because Garage refuses to delete a non-empty
+bucket and enumerating a tenant's objects synchronously is not viable inside a
+reconcile. What remains is an empty bucket no credential can reach, still
+carrying its `dep-<deployment-id>` alias.
+
+Nothing sweeps them up yet. When something does, note that the signal is "this
+alias names a deployment that is deleted in the database" — so **the reaper needs
+a database session**, not merely an admin token, and cannot be a standalone
+CronJob.
+
 ### Known limits
 
 Recorded plainly, because they decide whether a future use case fits:

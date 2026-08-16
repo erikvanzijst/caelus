@@ -38,5 +38,7 @@ resource "kubernetes_secret" "s3" {
     CAELUS_S3_BUCKET            = var.s3_bucket
     CAELUS_S3_ACCESS_KEY_ID     = var.s3_access_key_id
     CAELUS_S3_SECRET_ACCESS_KEY = var.s3_secret_access_key
+    CAELUS_GARAGE_ADMIN_URL     = var.garage_admin_url
+    CAELUS_GARAGE_ADMIN_TOKEN   = var.garage_admin_token
   }
 }

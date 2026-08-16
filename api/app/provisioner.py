@@ -113,6 +113,31 @@ class KubeAdapter:
 
         return {k: base64.b64decode(v).decode("utf-8") for k, v in raw.items()}
 
+    def upsert_secret(
+        self, *, namespace: str, name: str, string_data: dict[str, str], labels: dict[str, str]
+    ) -> None:
+        """Declaratively upsert an Opaque Secret.
+
+        ``stringData`` rather than ``data`` so nothing here has to base64 the
+        values; the API server does it. Keyed on (namespace, name), so a stable
+        name means in-place update and a re-reconcile rewrites the same object
+        rather than churning it.
+
+        The values are credentials, so they are handed to ``kubectl`` through a
+        temporary file that ``apply_manifest`` deletes rather than through argv,
+        where they would be visible to any process listing on the node.
+        """
+        self.apply_manifest(
+            {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "type": "Opaque",
+                "metadata": {"name": name, "namespace": namespace, "labels": labels},
+                "stringData": string_data,
+            },
+            error_message=f"Failed to apply Secret {namespace}/{name}",
+        )
+
     def apply_manifest(self, manifest: dict[str, Any], *, error_message: str) -> None:
         """Declaratively upsert a single manifest via ``kubectl apply``.
 
@@ -407,6 +432,14 @@ class Provisioner:
         return self.kube.read_secret_data_by_label(
             namespace=namespace,
             selector=f"caelus.dev/component=sftp,app.kubernetes.io/instance={instance}",
+        )
+
+    def upsert_secret(
+        self, *, namespace: str, name: str, string_data: dict[str, str], labels: dict[str, str]
+    ) -> None:
+        """Upsert a platform-owned Secret into a deployment's namespace."""
+        self.kube.upsert_secret(
+            namespace=namespace, name=name, string_data=string_data, labels=labels
         )
 
     def helm_upgrade_install(

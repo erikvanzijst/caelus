@@ -106,6 +106,17 @@ variable "s3_secret_access_key" {
   sensitive   = true
 }
 
+variable "garage_admin_url" {
+  description = "In-cluster Garage admin API URL, for per-deployment bucket provisioning"
+  type        = string
+}
+
+variable "garage_admin_token" {
+  description = "Scoped Garage admin token for per-deployment bucket provisioning"
+  type        = string
+  sensitive   = true
+}
+
 # --- Builds -----------------------------------------------------------------
 
 variable "builds_namespace" {

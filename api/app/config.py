@@ -88,6 +88,20 @@ class CaelusSettings(BaseSettings):
     s3_secret_access_key: str = ""
     s3_presigned_url_expiry_seconds: int = 900
 
+    # ── Per-deployment object storage ─────────────────────────────────────
+    # The API provisions a private bucket and access key for every deployment
+    # whose product template opts in, so it holds a Garage admin credential.
+    garage_admin_url: str = ""
+    garage_admin_token: str = ""
+
+    # Companion to the plan's byte allowance, which Garage requires to be set
+    # alongside it — one cannot be changed without the other.
+    deployment_bucket_max_objects: int = 1_000_000
+
+    # Applied to a deleted deployment's bucket so Garage reclaims the objects on
+    # its own.
+    deployment_bucket_expiry_days: int = 1
+
     # ── Builds ────────────────────────────────────────────────────────────
     # The builder image is published by hand (see products/custom/builder/),
     # not by the API's own CI, so it is versioned independently of the API

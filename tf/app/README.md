@@ -102,7 +102,17 @@ oauth2_proxy_client_secrets = {
 }
 
 oauth2_proxy_cookie_secret = "replace-with-oauth2-cookie-secret"
+
+# Garage admin token for per-deployment bucket provisioning. A scalar, not a
+# workspace map: both environments provision on the one shared instance.
+#   terraform -chdir=../deps output -raw garage_caelus_api_admin_token
+garage_admin_token = "replace-with-garage-admin-token"
 ```
+
+The S3 credential maps (`s3_access_key_ids`, `s3_secret_access_keys`,
+`s3_buckets`) also live here — see `tf/deps/README.md` § Reading the S3
+credentials for how to obtain them and why they are workspace-keyed while
+`garage_admin_token` is not.
 
 ### Authentication
 

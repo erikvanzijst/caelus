@@ -36,6 +36,8 @@ set -eu
 : "${NAMESPACE:?}"
 : "${OBJECT_EXPIRY_DAYS:?}"
 : "${HEALTH_TIMEOUT_SECONDS:?}"
+: "${API_TOKEN_NAME:?}"
+: "${API_TOKEN_SECRET_KEY:?}"
 
 log() { echo "[provision] $*" >&2; }
 
@@ -70,16 +72,32 @@ done
 log "Garage is healthy; cluster layout is committed."
 
 # --------------------------------------------------------------------------
-# 2. Mint a scoped, expiring admin token and do the real work with that.
+# 2a. Ensure the Caelus API's own long-lived admin token exists.
 #
-# Required by the garage-bucket-provisioning spec: the working credential is
-# limited to the seven endpoints below and expires on its own. Honest caveat —
-# this pod still holds the master token, because minting a scoped token is
-# itself a master-token operation. What this buys is that the credential
-# actually used for the provisioning calls cannot read cluster status, cannot
-# touch the layout, and cannot mint further tokens (Garage rejects
-# `CreateAdminToken`/`UpdateAdminToken` in a scope as trivial privilege
-# escalation), and that it is revoked on exit and expires regardless.
+# The API provisions a bucket and an access key per deployment at reconcile
+# time, so it needs an admin credential of its own. It is scoped to exactly
+# those operations and NEVER EXPIRES.
+#
+# That makes it the opposite animal from the short-lived, self-revoking token
+# minted in 2b for this script's own work. Two tokens, two lifetimes, one
+# script — deliberately. Do not "harmonize" them: giving the API an expiring
+# credential would break every deployment reconcile an hour later.
+#
+# ITS SECRET CANNOT BE READ BACK. An access key can (GetKeyInfo?showSecretKey),
+# which is what makes every other step here re-runnable. CreateAdminToken
+# returns `secretToken` exactly once and GetAdminTokenInfo has no field for it.
+# So the Kubernetes Secret written in step 4 is the store of record, and this
+# step consults it first:
+#
+#   Secret has the token, and it still exists in Garage -> reuse; change nothing
+#   Secret does not have it                             -> any existing token of
+#                                                          this name is
+#                                                          unrecoverable: delete
+#                                                          it and mint a new one
+#
+# A re-run is therefore still a no-op in the normal case. If the Secret is lost
+# the token rotates, which is the only recovery available, and the operator
+# re-pastes it into tf/app exactly as with any other credential here.
 # --------------------------------------------------------------------------
 TOKEN="$GARAGE_ADMIN_TOKEN"
 
@@ -105,6 +123,50 @@ api() { # api <METHOD> <PATH> [JSON_BODY]
   cat /tmp/api.out
 }
 
+# Absent Secret, absent key, or a malformed value all collapse to "empty", which
+# is the re-mint path. `|| true` because a missing Secret is the first-run case,
+# not an error.
+api_admin_token=$(kubectl get secret "$KEYS_SECRET_NAME" --namespace "$NAMESPACE" \
+  -o "jsonpath={.data.${API_TOKEN_SECRET_KEY}}" 2>/dev/null | base64 -d 2>/dev/null || true)
+
+existing_api_token_id=$(api GET /v2/ListAdminTokens |
+  jq -r --arg n "$API_TOKEN_NAME" 'map(select(.name == $n)) | .[0].id // empty')
+
+if [ -n "$api_admin_token" ] && [ -n "$existing_api_token_id" ]; then
+  log "Caelus API admin token '${API_TOKEN_NAME}' already provisioned (${existing_api_token_id})"
+else
+  if [ -n "$existing_api_token_id" ]; then
+    log "admin token '${API_TOKEN_NAME}' exists (${existing_api_token_id}) but its secret is not"
+    log "recoverable and is not in ${NAMESPACE}/${KEYS_SECRET_NAME}; replacing it."
+    api POST "/v2/DeleteAdminToken?id=${existing_api_token_id}" >/dev/null
+  fi
+  # The scope is exactly what deployment provisioning calls and nothing more.
+  # `CreateAdminToken`/`UpdateAdminToken` are absent on purpose: Garage
+  # documents either as trivially equivalent to a scope of `*`.
+  api_token_response=$(api POST /v2/CreateAdminToken "$(
+    cat <<EOF
+{"name":"${API_TOKEN_NAME}",
+ "neverExpires":true,
+ "scope":["ListBuckets","CreateBucket","GetBucketInfo","UpdateBucket",
+          "ListKeys","CreateKey","GetKeyInfo","DeleteKey","AllowBucketKey"]}
+EOF
+  )")
+  api_admin_token=$(echo "$api_token_response" | jq -r '.secretToken')
+  log "minted Caelus API admin token '${API_TOKEN_NAME}' ($(echo "$api_token_response" | jq -r '.id'))"
+fi
+
+# --------------------------------------------------------------------------
+# 2b. Mint a scoped, expiring admin token and do the real work with that.
+#
+# Required by the garage-bucket-provisioning spec: the working credential is
+# limited to the seven endpoints below and expires on its own. Honest caveat —
+# this pod still holds the master token, because minting a scoped token is
+# itself a master-token operation. What this buys is that the credential
+# actually used for the provisioning calls cannot read cluster status, cannot
+# touch the layout, and cannot mint further tokens (Garage rejects
+# `CreateAdminToken`/`UpdateAdminToken` in a scope as trivial privilege
+# escalation), and that it is revoked on exit and expires regardless.
+# --------------------------------------------------------------------------
 SCOPED_TOKEN_ID=""
 revoke_scoped_token() {
   [ -n "$SCOPED_TOKEN_ID" ] || return 0
@@ -216,6 +278,10 @@ EOF
     --from-literal="${env}_access_key_id=${access_key_id}" \
     --from-literal="${env}_secret_access_key=${secret_access_key}"
 done
+
+# The API's admin token rides in the same Secret as the S3 credentials: same
+# store of record, same handoff to tf/app, and step 2a reads it back from here.
+set -- "$@" --from-literal="${API_TOKEN_SECRET_KEY}=${api_admin_token}"
 
 # --------------------------------------------------------------------------
 # 4. Publish the credentials as a Secret in this namespace.

@@ -67,6 +67,44 @@ The placeholder image is the one exception — it is ours, and nginx will not
 read `$PORT` without templating, so it is pinned to the default and must be
 rebuilt if the default ever changes.
 
+## Object storage
+
+Every `custom` deployment gets a **private S3 bucket** on the platform's Garage
+instance, provisioned automatically. There is nothing to enable and nothing to
+configure: the credentials arrive in the container as environment variables, in
+the names an S3 SDK already looks for.
+
+```
+AWS_ACCESS_KEY_ID          AWS_ENDPOINT_URL_S3     S3_BUCKET
+AWS_SECRET_ACCESS_KEY      AWS_ENDPOINT_URL        BUCKET_NAME
+AWS_REGION / AWS_DEFAULT_REGION
+```
+
+So in Python this is the whole of it:
+
+```python
+import boto3, os
+s3 = boto3.client("s3")                    # reads AWS_* from the environment
+s3.put_object(Bucket=os.environ["S3_BUCKET"], Key="hello.txt", Body=b"hi")
+```
+
+**Presigned URLs work in a browser.** The endpoint is publicly reachable, so a
+URL your app signs can be handed straight to an end user, for download or for
+upload, and the bytes never pass through your pod. Cross-origin browser uploads
+are already permitted — the platform sets the bucket's CORS policy, including
+exposing `ETag`, which multipart uploads need.
+
+### Two things to know
+
+**Path-style addressing.** The endpoint serves `…/bucket/key`, not
+`bucket.host/key`. Python's boto3 selects this automatically for a custom
+endpoint and needs nothing. The JavaScript v3 client does not — it needs one
+flag:
+
+```javascript
+new S3Client({ forcePathStyle: true })     // endpoint/region come from the env
+```
+
 ## The ownership assertion
 
 `custom.imageRef` in

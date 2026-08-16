@@ -44,6 +44,28 @@ output "buckets" {
   value       = { for env in var.environments : env => env }
 }
 
+# The Caelus API's admin credential for per-deployment bucket provisioning.
+# Sensitive with no `nonsensitive()` escape hatch: unlike an access key ID, every
+# byte of this is the credential. It is scoped (no cluster status, no layout, no
+# minting further tokens) but within that scope it can read back the secret of
+# any access key, so it is the one output here that must never be printed
+# casually.
+output "caelus_api_admin_token" {
+  description = "Scoped, non-expiring Garage admin token for the Caelus API's per-deployment provisioning."
+  value       = data.kubernetes_secret.garage_keys.data[local.api_token_secret_key]
+  sensitive   = true
+}
+
+# The admin API, for the Caelus API's per-deployment provisioning. In-cluster
+# only and deliberately so: ingress.tf routes :3900 and nothing routes :3903.
+# This is the headless governing Service rather than `garage-s3`, because that
+# one exposes the S3 port alone precisely so no Ingress can reach admin by
+# mistake — see garage.tf.
+output "admin_url" {
+  description = "In-cluster Garage admin API URL. Not reachable from outside the cluster."
+  value       = "http://${kubernetes_service.garage.metadata[0].name}.${var.namespace}.svc.cluster.local:3903"
+}
+
 output "s3_endpoint" {
   description = "Public S3 endpoint URL, for the Caelus API's S3 client."
   value       = "https://blob.${var.domain}"

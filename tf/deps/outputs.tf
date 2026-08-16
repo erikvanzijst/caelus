@@ -70,6 +70,20 @@ output "garage_secret_access_key_prod" {
   sensitive   = true
 }
 
+# Not per-environment, unlike the S3 credentials above: the Caelus API in every
+# environment provisions buckets on the one shared instance, and the scope is
+# identical either way. Both tf/app workspaces take the same value.
+output "garage_caelus_api_admin_token" {
+  description = "Scoped Garage admin token for the Caelus API's per-deployment bucket provisioning."
+  value       = module.garage.caelus_api_admin_token
+  sensitive   = true
+}
+
+output "garage_admin_url" {
+  description = "In-cluster Garage admin API URL for the Caelus API. Never routed by an Ingress."
+  value       = module.garage.admin_url
+}
+
 output "garage_s3_endpoint" {
   description = "Public S3 endpoint URL for tf/app and the Caelus API."
   value       = module.garage.s3_endpoint

@@ -8,9 +8,9 @@ from uuid import UUID
 from sqlmodel import Session
 
 from app.config import get_settings
-from app.models import DeploymentORM, ProductTemplateVersionORM, DeploymentRead
+from app.models import DeploymentORM, ProductTemplateVersionORM
 from app.provisioner import Provisioner, provisioner as default_provisioner
-from app.services import template_values
+from app.services import object_storage, template_values
 from app.services.template_values import bytes_to_k8s_size
 from app.services.deployments import _get_deployment_orm
 from app.services.errors import IntegrityException
@@ -27,6 +27,15 @@ logger = logging.getLogger(__name__)
 # readiness behavior is the chart's own concern, so this is a single
 # platform-level timeout rather than a per-template knob.
 HELM_TIMEOUT_SEC = 300
+
+
+def storage_secret_name(deployment: DeploymentORM) -> str:
+    """Name of the Secret holding a deployment's object-storage credentials.
+
+    Derived from the release name, so it is stable across reconciles (the Secret
+    is updated in place rather than churned) and unique within the namespace.
+    """
+    return f"{deployment.name}-object-storage"
 
 
 @dataclass(frozen=True)
@@ -99,7 +108,9 @@ class DeploymentReconciler:
     def _reconcile_apply(self, deployment: DeploymentORM) -> ReconcileResult:
         template = deployment.desired_template
         assert template is not None
-        merged_values = self._build_merged_values(deployment, template)
+
+        template_values.validate_user_values(deployment.user_values_json, template.values_schema_json)
+
         logger.debug(
             "Applying deployment_id=%s release=%s namespace=%s template_id=%s",
             deployment.id,
@@ -110,6 +121,15 @@ class DeploymentReconciler:
 
         self._provisioner.ensure_namespace(name=deployment.namespace)
         self._provisioner.ensure_tenant_isolation(namespace=deployment.namespace)
+
+        # After the namespace exists, because the credentials Secret is written
+        # into it; after the isolation jail, which nothing may precede; and
+        # before Helm, so no pod ever starts expecting a Secret that is not
+        # there yet. The values depend on what provisioning returns, so they are
+        # built here rather than at the top.
+        storage = self._ensure_object_storage(deployment)
+        merged_values = self._build_merged_values(deployment, template, storage=storage)
+
         self._provisioner.helm_upgrade_install(
             release_name=deployment.name,
             namespace=deployment.namespace,
@@ -136,6 +156,9 @@ class DeploymentReconciler:
             deployment.name,
             deployment.namespace,
         )
+        if object_storage.is_enabled(deployment):
+            object_storage.teardown_object_storage(deployment)
+
         self._provisioner.helm_uninstall(
             release_name=deployment.name,
             namespace=deployment.namespace,
@@ -151,13 +174,60 @@ class DeploymentReconciler:
             last_reconcile_at=datetime.now(UTC),
         )
 
+    def _ensure_object_storage(
+        self, deployment: DeploymentORM
+    ) -> object_storage.ObjectStorageCredentials | None:
+        """Provision the deployment's bucket and publish its credentials.
+
+        Returns ``None`` for a product that has not opted in, which is what the
+        storage overrides key off so that such a deployment carries no storage
+        block at all.
+
+        The secret access key goes **straight into a Kubernetes Secret and never
+        into the Helm values**. Merged values are logged in full at INFO by the
+        provisioner and are persisted by Helm into a release Secret in the
+        tenant's own namespace; a credential routed through them would be
+        written to the log aggregator and to a tenant-namespace object on every
+        reconcile.
+        """
+        if not object_storage.is_enabled(deployment):
+            return None
+
+        credentials = object_storage.ensure_object_storage(deployment)
+        settings = get_settings()
+        self._provisioner.upsert_secret(
+            namespace=deployment.namespace,
+            name=storage_secret_name(deployment),
+            string_data={
+                # The conventional names an S3 SDK already recognizes, so a
+                # tenant's default client works with no configuration. Both
+                # endpoint spellings because SDKs differ on which they read.
+                "AWS_ACCESS_KEY_ID": credentials.access_key_id,
+                "AWS_SECRET_ACCESS_KEY": credentials.secret_access_key,
+                "AWS_REGION": settings.s3_region,
+                "AWS_DEFAULT_REGION": settings.s3_region,
+                "AWS_ENDPOINT_URL": settings.s3_endpoint_url,
+                "AWS_ENDPOINT_URL_S3": settings.s3_endpoint_url,
+                "S3_BUCKET": credentials.bucket,
+                "BUCKET_NAME": credentials.bucket,
+            },
+            labels={
+                "app.kubernetes.io/managed-by": "caelus",
+                "app.kubernetes.io/instance": deployment.name,
+                "caelus.dev/component": "object-storage",
+            },
+        )
+        return credentials
+
     def _build_merged_values(
         self,
         deployment: DeploymentORM,
         template: ProductTemplateVersionORM,
+        *,
+        storage: object_storage.ObjectStorageCredentials | None = None,
     ) -> dict:
         template_values.validate_user_values(deployment.user_values_json, template.values_schema_json)
-        system_overrides = self._build_system_overrides(deployment)
+        system_overrides = self._build_system_overrides(deployment, storage=storage)
         return template_values.merge_values_scoped(
             template.system_values_json,
             deployment.user_values_json,
@@ -165,7 +235,12 @@ class DeploymentReconciler:
         )
 
     @classmethod
-    def _build_system_overrides(cls, deployment: DeploymentORM) -> dict | None:
+    def _build_system_overrides(
+        cls,
+        deployment: DeploymentORM,
+        *,
+        storage: object_storage.ObjectStorageCredentials | None = None,
+    ) -> dict | None:
         """Combine all system-controlled value overrides under the ``caelus`` namespace.
 
         Each contributor returns a ``{"caelus": {...}}`` fragment; they are deep-merged
@@ -177,10 +252,46 @@ class DeploymentReconciler:
             cls._build_plan_overrides(deployment),
             cls._build_ingress_overrides(deployment),
             cls._build_owner_overrides(deployment),
+            cls._build_object_storage_overrides(deployment, storage),
         ):
             if part:
                 overrides = template_values.deep_merge(overrides, part)
         return overrides or None
+
+    @staticmethod
+    def _build_object_storage_overrides(
+        deployment: DeploymentORM,
+        storage: object_storage.ObjectStorageCredentials | None,
+    ) -> dict | None:
+        """Project object-storage *references* into the ``caelus.objectStorage`` namespace.
+
+        References only — the bucket, the endpoint, the region and the name of
+        the Secret holding the credentials. The secret access key is deliberately
+        absent: see ``_ensure_object_storage``. A chart reads the Secret by name
+        with ``envFrom``; nothing needs the credential to pass through here.
+
+        No ``enabled`` flag here: that is the chart's own top-level
+        ``objectStorage.enabled``, a static product declaration coming from the
+        catalog's system values. These are the per-deployment runtime facts, and
+        keeping the two apart is what makes "what did the platform inject?"
+        answerable at a glance.
+
+        Emits no block at all for a product that has not opted in, so such a
+        deployment renders exactly as it did before.
+        """
+        if storage is None:
+            return None
+        settings = get_settings()
+        return {
+            "caelus": {
+                "objectStorage": {
+                    "bucket": storage.bucket,
+                    "endpoint": settings.s3_endpoint_url,
+                    "region": settings.s3_region,
+                    "secretName": storage_secret_name(deployment),
+                }
+            }
+        }
 
     @staticmethod
     def _build_owner_overrides(deployment: DeploymentORM) -> dict | None:

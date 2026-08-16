@@ -14,6 +14,14 @@
 locals {
   keys_secret_name = "garage-keys"
 
+  # The Caelus API's own admin token: a *second* credential in the same Secret,
+  # scoped to the per-deployment bucket and key operations the API performs at
+  # reconcile time. Unlike an access key, an admin token's secret cannot be read
+  # back from Garage — CreateAdminToken shows it once — so this Secret is its
+  # only store of record, and the script reads it from here on re-runs.
+  api_token_name       = "caelus-api-provisioning"
+  api_token_secret_key = "caelus_api_admin_token"
+
   provision_script = file("${path.module}/scripts/provision.sh")
 
   # Job specs are immutable, so the Job is named after a digest of everything
@@ -25,6 +33,8 @@ locals {
     join(",", var.environments),
     tostring(var.object_expiry_days),
     var.kubectl_image,
+    local.api_token_name,
+    local.api_token_secret_key,
   ])), 0, 10)
 
   environments_arg = join(" ", var.environments)
@@ -159,6 +169,16 @@ resource "kubernetes_job" "provision" {
           env {
             name  = "OBJECT_EXPIRY_DAYS"
             value = tostring(var.object_expiry_days)
+          }
+
+          env {
+            name  = "API_TOKEN_NAME"
+            value = local.api_token_name
+          }
+
+          env {
+            name  = "API_TOKEN_SECRET_KEY"
+            value = local.api_token_secret_key
           }
 
           # Long enough that an operator can complete the one-time layout

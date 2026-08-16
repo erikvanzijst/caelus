@@ -76,6 +76,12 @@ resource "kubernetes_deployment" "worker" {
             }
           }
 
+          env_from {
+            secret_ref {
+              name = kubernetes_secret.s3.metadata[0].name
+            }
+          }
+
           volume_mount {
             name       = "sqlite-data"
             mount_path = "/app/db"

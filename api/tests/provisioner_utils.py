@@ -59,3 +59,19 @@ class FakeProvisioner:
     def delete_namespace(self, *, name: str):
         self.calls.append(("delete_namespace", {"name": name}))
         return None
+
+    def upsert_secret(
+        self, *, namespace: str, name: str, string_data: dict[str, str], labels: dict[str, str]
+    ):
+        self.calls.append(
+            (
+                "upsert_secret",
+                {
+                    "namespace": namespace,
+                    "name": name,
+                    "string_data": string_data,
+                    "labels": labels,
+                },
+            )
+        )
+        return None

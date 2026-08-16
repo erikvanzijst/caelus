@@ -48,5 +48,8 @@ module "caelus" {
   s3_access_key_id     = var.s3_access_key_ids[terraform.workspace]
   s3_secret_access_key = var.s3_secret_access_keys[terraform.workspace]
 
+  garage_admin_url   = var.garage_admin_url
+  garage_admin_token = var.garage_admin_token
+
   depends_on = [kubernetes_namespace.caelus, kubernetes_namespace.builds]
 }

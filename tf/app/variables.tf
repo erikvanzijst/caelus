@@ -157,3 +157,23 @@ variable "s3_region" {
   type        = string
   default     = "garage"
 }
+
+# --- Per-deployment object storage ------------------------------------------
+# The API provisions a bucket and access key per storage-enabled deployment, so
+# it needs a Garage admin credential of its own. Not per-workspace, unlike the S3
+# credentials above: every environment provisions on the one shared instance and
+# the scope is identical, so both workspaces take the same value.
+#
+# `terraform output -raw garage_caelus_api_admin_token` in tf/deps.
+
+variable "garage_admin_url" {
+  description = "In-cluster Garage admin API URL. Never routed by an Ingress; see tf/deps/garage/ingress.tf."
+  type        = string
+  default     = "http://garage.garage.svc.cluster.local:3903"
+}
+
+variable "garage_admin_token" {
+  description = "Scoped, non-expiring Garage admin token for per-deployment bucket provisioning. From tf/deps."
+  type        = string
+  sensitive   = true
+}

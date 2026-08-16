@@ -329,6 +329,43 @@ footgun section above.
 5. Reconciler applies/deletes resources via provisioner adapters.
 6. Deployment status and reconcile metadata are persisted back to DB.
 
+## Per-Deployment Object Storage
+
+Deployments of a product whose template sets `system_values.objectStorage.enabled` get
+a private bucket and a dedicated access key on the shared Garage instance,
+provisioned by the reconciler as part of the apply path:
+
+```
+_reconcile_apply
+    ensure_namespace
+    ensure_tenant_isolation
+    ensure_object_storage    ← key, bucket, grant, quota + CORS
+    upsert_secret            ← credentials into the tenant namespace
+    helm_upgrade_install     ← values carry only references
+```
+
+The ordering is load-bearing at both ends. The Secret is written **after** the
+namespace exists and **before** Helm runs, so no pod ever starts expecting a
+Secret that is not there. On delete, `teardown_object_storage` deletes the key
+**before** setting the bucket's expiry rule — a key with write access can
+replace its own bucket's lifecycle configuration, so revoking second would leave
+a window in which the tenant could strip the rule off.
+
+**The secret access key never enters Helm values.** Merged values are logged in
+full at INFO and are persisted by Helm into a release Secret in the tenant's own
+namespace; only the bucket, endpoint, region and the Secret's *name* travel that
+way. `services/object_storage.py` holds the policy, `services/garage.py` the
+transport.
+
+### Blast radius of the provisioning credential
+
+`CAELUS_GARAGE_ADMIN_TOKEN` is scoped by Terraform to the bucket and key
+operations above — it cannot read cluster status, cannot alter the cluster
+layout, and cannot mint further admin tokens. Within that scope it **can read
+back the secret of any access key it can see**, so compromise of this process is
+compromise of every tenant bucket. That is inherent to automated provisioning
+and is stated here rather than left to be discovered.
+
 ## API and CLI Parity
 
 Parity is achieved by sharing service functions, not by duplicating logic.

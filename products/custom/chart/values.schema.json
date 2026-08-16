@@ -45,6 +45,14 @@
     },
     "replicas": { "type": "integer", "minimum": 0 },
     "resources": { "type": "object" },
+    "objectStorage": {
+      "type": "object",
+      "description": "Whether this chart wires up object storage (an S3 bucket, not a volume). A system value set by the product's catalog entry, never tenant-settable — it is deliberately absent from the tenant-facing values schema. Distinct from caelus.objectStorage, which carries the per-deployment references the reconciler injects.",
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
     "caelus": {
       "type": "object",
       "description": "Reconciler-injected values. Open by design (additionalProperties: true throughout): this namespace is written by the platform, never by a tenant, so new reconciler fields can land without a schema bump in every chart.",
@@ -65,6 +73,20 @@
             "id": {
               "type": "integer",
               "description": "Owning user id. The image ownership assertion compares this against the repository half of `image`."
+            }
+          },
+          "additionalProperties": true
+        },
+        "objectStorage": {
+          "type": "object",
+          "description": "Per-deployment object storage references injected by the Caelus reconciler. References only — the credentials live in the Secret named by secretName, never in values. The toggle is the top-level objectStorage.enabled, not here: that is a static product declaration, these are per-deployment runtime facts. Optional throughout: a product that has not opted in gets an empty object.",
+          "properties": {
+            "bucket": { "type": "string" },
+            "endpoint": { "type": "string" },
+            "region": { "type": "string" },
+            "secretName": {
+              "type": "string",
+              "description": "Name of the Secret the reconciler writes into this deployment's namespace, projected into the app container with envFrom."
             }
           },
           "additionalProperties": true

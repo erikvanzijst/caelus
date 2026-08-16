@@ -61,6 +61,21 @@ replicas: 1
 # tenant-built images is measured.
 resources: {}
 
+# Whether this chart wires up object storage — an S3 bucket, NOT a volume. Named
+# `objectStorage` rather than `storage` to stay distinct from
+# `caelus.plan.storageBytes`, which is block storage (a PVC size).
+#
+# A **system value**, like `registry` and `placeholderImage` above: it is set by
+# the product's catalog entry and is deliberately absent from the tenant-facing
+# values schema, so a tenant can neither enable nor disable it.
+#
+# It sits here rather than under `caelus` because that namespace is for values
+# the reconciler injects *per deployment*. This one is a static product
+# declaration — identical for every deployment of the product — and it is a real
+# input this chart reads, so it belongs in the chart's own schema.
+objectStorage:
+  enabled: false
+
 # Injected per deployment by the Caelus reconciler. These defaults let the chart
 # render standalone (helm lint / helm template with no --set).
 caelus:
@@ -71,3 +86,16 @@ caelus:
   ingress:
     enabled: false
     tls: {}
+  # Per-deployment object storage references, injected by the reconciler once it
+  # has provisioned the bucket. The *toggle* is the top-level `objectStorage`
+  # above — a static product declaration; these are the per-deployment runtime
+  # facts, which is why they live in the reconciler-owned namespace.
+  #
+  # `secretName` names a Secret the reconciler writes into the deployment's
+  # namespace before Helm runs. The credentials themselves are deliberately not
+  # here — Helm values are logged and persisted, so they are the wrong carrier
+  # for a credential.
+  #
+  # Empty by default so the traversal in deployment.yaml resolves and `required`
+  # can report the missing value, rather than failing on a nil map.
+  objectStorage: {}

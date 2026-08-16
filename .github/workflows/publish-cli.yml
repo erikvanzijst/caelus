@@ -6,11 +6,6 @@
 # `freepod.__version__`, committing, and pushing a `freepod-v*` tag. The tag
 # prefix is scoped because this is a monorepo and the client releases on its
 # own cadence.
-#
-# Authentication is PyPI Trusted Publishing (OIDC): the `id-token: write`
-# permission lets the runner exchange a GitHub-signed identity token for a
-# short-lived, project-scoped PyPI token. There is no API token in this
-# repository's secrets to leak or rotate.
 name: Publish CLI
 
 on:
@@ -51,6 +46,7 @@ jobs:
           path: dist
 
       - name: Install uv
+        if: github.event_name == 'push'
         uses: astral-sh/setup-uv@v5
 
       - name: Refuse a tag that disagrees with the built version

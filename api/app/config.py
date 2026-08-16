@@ -91,20 +91,15 @@ class CaelusSettings(BaseSettings):
     # ── Builds ────────────────────────────────────────────────────────────
     # The builder image is published by hand (see products/custom/builder/),
     # not by the API's own CI, so it is versioned independently of the API
-    # image and pinned here rather than derived from it. The `railpack` binary
-    # it bundles is version-matched to the Railpack frontend digest baked into
-    # the entrypoint — a build plan is a contract between those two, so they
-    # move together or not at all.
+    # image and supplied by Terraform rather than pinned here — no version
+    # literal in this file means none to drift.
     #
-    # Pinned by digest as well as tag: the tag says which version this is, the
-    # digest is what actually gets run. Publishing a new builder means bumping
-    # the version and repointing this, never re-pushing an existing tag — a
-    # mutated tag would otherwise swap the builder out from under an in-flight
-    # build.
-    builder_image: str = (
-        "registry.home/caelus/builder:0.1.1"
-        "@sha256:762455b44189c21f9efbc1701201cdd4bd70842038e7eff148d6ca99845f9f11"
-    )
+    # Empty is not a usable value; it is what everything that is not a build
+    # worker gets away with. Nothing else reads this, so requiring it would
+    # only mean alembic, the tests and the local CLI could not construct
+    # settings at all. `build_job_manifest` rejects the empty string, which
+    # puts the failure on the one path that actually needs the image.
+    builder_image: str = ""
 
     # Namespace the per-build Jobs run in. Deliberately neither the platform
     # namespace nor a tenant one: build pods execute untrusted tenant code and

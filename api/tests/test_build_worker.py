@@ -90,6 +90,9 @@ def settings():
         s3_access_key_id="k",
         s3_secret_access_key="s",
         build_max_in_flight=1,
+        # Terraform supplies this in a real environment; the default is empty
+        # and `build_job_manifest` refuses to build a Job without it.
+        builder_image="registry.invalid/caelus/builder:0.0.0-test",
     )
 
 
@@ -590,13 +593,24 @@ def test_the_job_manifest_carries_only_the_artifact_credential(settings):
         assert forbidden not in blob, f"{forbidden} leaked into the build Job"
 
 
-def test_the_job_uses_the_digest_pinned_builder_image(settings):
+def test_the_job_uses_the_configured_builder_image(settings):
     manifest = build_job_manifest(
         build_id=uuid4(), user_id=7, artifact_url="https://x/y", settings=settings
     )
 
     assert manifest["spec"]["template"]["spec"]["containers"][0]["image"] == settings.builder_image
-    assert "@sha256:" in settings.builder_image
+
+
+def test_a_job_is_refused_when_no_builder_image_is_configured(settings):
+    """The setting defaults to empty so that alembic, the tests and the local
+    CLI can construct settings at all. Building is the one path that cannot,
+    and it should say so rather than submit a Job with an empty image."""
+    settings.builder_image = ""
+
+    with pytest.raises(ValueError, match="CAELUS_BUILDER_IMAGE"):
+        build_job_manifest(
+            build_id=uuid4(), user_id=7, artifact_url="https://x/y", settings=settings
+        )
 
 
 @pytest.mark.parametrize(

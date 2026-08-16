@@ -88,6 +88,12 @@ def build_job_manifest(
       it even if no worker is alive; the worker only intervenes past a grace
       period, as a backstop.
     """
+    if not settings.builder_image:
+        raise ValueError(
+            "CAELUS_BUILDER_IMAGE is not set; the build worker cannot run a build "
+            "without one. It is supplied by Terraform (builder_image in tf/app)."
+        )
+
     name = job_name(build_id)
     return {
         "apiVersion": "batch/v1",

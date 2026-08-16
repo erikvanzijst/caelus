@@ -431,9 +431,9 @@ def test_the_frontend_image_is_pinned_by_digest():
     assert len(digest) == len("sha256:") + 64
 
 
-def test_the_builder_image_setting_points_at_a_pinned_digest():
-    """`builder_image` must not drift to a bare tag: a mutated tag would swap
-    the builder out from under an in-flight build."""
+def test_the_builder_image_setting_carries_no_version_literal():
+    """The builder's version lives in Terraform, not here. A default naming a
+    real image would be a second place to bump, and the one nobody remembers."""
     from app.config import CaelusSettings
 
-    assert "@sha256:" in CaelusSettings(_env_file=None).builder_image
+    assert CaelusSettings(_env_file=None).builder_image == ""

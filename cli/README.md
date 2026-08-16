@@ -4,7 +4,7 @@ Take a local project directory to a running deployment on
 [freepod.eu](https://freepod.eu).
 
 ```bash
-pip install freepod
+pip install freepod || uv tool install freepod
 ```
 
 ```bash

@@ -10,9 +10,10 @@ belongs here, not there.** `README.md` changes only when the end-user surface
 does.
 
 The *behavioral contract* is specified in `openspec/specs/cli-*`:
-`cli-authentication`, `cli-build-submission`, `cli-deploy`, `cli-distribution`,
-`cli-environments`, `cli-init`, `cli-project-archive`, `cli-project-file`,
-`cli-terms-acceptance`. Those say what must be true. This file says how it is
+`cli-authentication`, `cli-build-history`, `cli-build-submission`, `cli-delete`,
+`cli-deploy`, `cli-distribution`, `cli-environments`, `cli-init`,
+`cli-project-archive`, `cli-project-file`, `cli-terms-acceptance`. Those say
+what must be true. This file says how it is
 arranged and why, and carries the operational detail specs do not.
 
 The original design discussion, with the numbered decisions the source comments

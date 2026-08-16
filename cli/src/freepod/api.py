@@ -153,6 +153,9 @@ class ApiClient:
     def put(self, path: str, **kwargs: Any) -> httpx.Response:
         return self.request("PUT", path, **kwargs)
 
+    def delete(self, path: str, **kwargs: Any) -> httpx.Response:
+        return self.request("DELETE", path, **kwargs)
+
     def get_json(self, path: str, **kwargs: Any) -> Any:
         """GET and decode, raising on any non-successful status."""
         return self._decode(self.get(path, **kwargs))

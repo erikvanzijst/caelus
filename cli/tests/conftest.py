@@ -128,6 +128,44 @@ class StubSession:
 
 
 @pytest.fixture
+def stub_api(monkeypatch):
+    """Replace the command's API client with one on a mock transport.
+
+    Command-level, unlike `make_api`: it patches `Context.client`, so a test
+    drives `main([...])` and the command builds its own client as it normally
+    would.
+    """
+
+    def install(handler):
+        from freepod.api import ApiClient
+        from freepod.cli import Context
+
+        def client(self, session):
+            return ApiClient(
+                self.env,
+                session,
+                client=httpx.Client(transport=httpx.MockTransport(handler)),
+                backoff_base=0,
+            )
+
+        monkeypatch.setattr(Context, "client", client)
+
+    return install
+
+
+@pytest.fixture
+def cached_credential(monkeypatch):
+    """A cached refresh token for `prod`, and a Keycloak that honors it."""
+    from freepod import auth
+    from freepod.auth import store_refresh_token
+
+    store_refresh_token("prod", "freepod-cli-prod", "prod-refresh")
+    monkeypatch.setattr(
+        auth, "post_form", lambda url, fields, timeout=30: {"access_token": "fresh-at"}
+    )
+
+
+@pytest.fixture
 def env() -> Environment:
     return ENVIRONMENTS["prod"]
 

@@ -18,7 +18,9 @@ from typing import Optional
 import click
 
 from . import EXIT_ERROR, EXIT_OK, FreepodError, UsageError
+from . import delete as delete_module
 from . import deploy as deploy_module
+from . import history
 from . import project
 from . import tos
 from .api import ApiClient
@@ -279,17 +281,22 @@ def init(context: Context, force: bool) -> None:
 )
 @click.option(
     "--no-gitignore",
-    "honor_gitignore",
-    flag_value=False,
-    default=True,
+    "no_gitignore",
+    is_flag=True,
     help="pack the tree without applying .gitignore rules",
 )
 @click.pass_obj
-def deploy(context: Context, recreate: bool, honor_gitignore: bool) -> None:
+def deploy(context: Context, recreate: bool, no_gitignore: bool) -> None:
     """Build the current project and release it to its deployment.
 
     Preflight, pack, upload, build, release — in that order, so that everything
     a cheap read can refuse is refused before a build is spent.
+
+    `--no-gitignore` is an `is_flag` option negated here rather than a
+    `flag_value=False` one, because click stopped honoring a `True` default
+    alongside a `False` flag value in 8.3 and silently inverted it — which is
+    the kind of default that fails by packing more than the user asked for.
+    `tests/test_cli.py` pins it.
     """
     session = context.session()
     session.authenticate(interactive=False)
@@ -299,7 +306,7 @@ def deploy(context: Context, recreate: bool, honor_gitignore: bool) -> None:
             api,
             context.env.name,
             recreate=recreate,
-            honor_gitignore=honor_gitignore,
+            honor_gitignore=not no_gitignore,
             verbose=context.verbose,
             quiet=context.quiet,
             interactive=sys.stdin.isatty(),
@@ -312,6 +319,103 @@ def deploy(context: Context, recreate: bool, honor_gitignore: bool) -> None:
     # `URL=$(freepod deploy)` yields exactly the URL.
     click.echo(address)
     context.say(f"Deployed. Live at {address}")
+
+
+@cli.command()
+@click.option(
+    "--yes",
+    "-y",
+    "assume_yes",
+    is_flag=True,
+    help="skip the confirmation prompt — the only way to delete unattended",
+)
+@click.option(
+    "--no-wait",
+    "no_wait",
+    is_flag=True,
+    help="return once the teardown is scheduled instead of following it",
+)
+@click.pass_obj
+def delete(context: Context, assume_yes: bool, no_wait: bool) -> None:
+    """Delete this project's deployment and everything it stores.
+
+    The teardown is followed to completion by default: the hostname stays
+    claimed until it lands, so a `delete` that returned early would collide
+    with itself on the next `freepod deploy`.
+
+    Nothing is written to stdout — a deletion has no result to pipe.
+    """
+    session = context.session()
+    session.authenticate(interactive=False)
+
+    with context.client(session) as api:
+        delete_module.delete(
+            api,
+            context.env.name,
+            assume_yes=assume_yes,
+            wait=not no_wait,
+            interactive=sys.stdin.isatty(),
+            timeout=wait_seconds(context.timeout, ROLLOUT_WAIT_SECONDS),
+            # One echo for progress and for the confirmation preamble alike.
+            # `--quiet` silences both, which is why the question itself names
+            # the deployment rather than relying on the lines above it.
+            echo=context.say,
+        )
+
+
+@cli.command()
+@click.option(
+    "--limit",
+    type=int,
+    metavar="N",
+    default=history.DEFAULT_LIMIT,
+    help=f"how many builds to show (default: {history.DEFAULT_LIMIT})",
+)
+@click.option("--all", "show_all", is_flag=True, help="show every build, ignoring --limit")
+@click.pass_obj
+def builds(context: Context, limit: int, show_all: bool) -> None:
+    """List this account's builds, most recent first.
+
+    Builds belong to the account rather than to a project — the platform has no
+    notion of one — so every build made from this account is listed, whichever
+    directory produced it. The build the current project's deployment is
+    running is marked.
+
+    The table is the result and goes to stdout; `--verbose` prints image
+    references in full rather than abbreviating their digests.
+    """
+    if limit <= 0 and not show_all:
+        raise UsageError("--limit must be a positive number of builds")
+
+    session = context.session()
+    session.authenticate(interactive=False)
+
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        records = history.list_builds(api)
+        live = history.deployed_image(api, user_id, context.env.name)
+
+    if not records:
+        context.say(
+            f"No builds on '{context.env.name}' yet — `freepod deploy` creates one."
+        )
+        return
+
+    shown = records if show_all else records[:limit]
+    click.echo(
+        history.render(
+            history.rows(shown, live_image=live, full_image=context.verbose)
+        )
+    )
+
+    if live and any(record.get("image") == live for record in shown):
+        context.say(
+            f"{history.LIVE_MARKER} the build this project's deployment is running."
+        )
+    if len(shown) < len(records):
+        context.say(
+            f"Showing {len(shown)} of {len(records)} builds; --all shows every one."
+        )
 
 
 def main(argv: Optional[list] = None) -> int:

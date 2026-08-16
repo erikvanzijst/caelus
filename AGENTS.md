@@ -52,12 +52,14 @@ For details, see `api/README.md`.
 - Run: `uv run freepod --help`
 - Tests: `uv run pytest`
 Targets `prod` by default; use `--env dev` or `FREEPOD_ENV=dev` against
-`dev.freepod.eu`. For details, see `cli/README.md`.
+`dev.freepod.eu`. For details, see `cli/DEVELOPMENT.md` — the invariants, the
+platform contracts, and the reasoning. `cli/README.md` is the package's PyPI
+landing page, written for end users; keep internals out of it.
 
 Published to PyPI as `freepod`, on its own release cadence: bump
 `__version__` in `cli/src/freepod/__init__.py` — the single source, which
 `pyproject.toml` reads through Hatch — and push a `freepod-v*` tag. No commit
-to `master` publishes the client. See `cli/README.md` § Releasing.
+to `master` publishes the client. See `cli/DEVELOPMENT.md` § CI and releasing.
 
 ### UI (`ui/`)
 - `cd ui/`
@@ -144,5 +146,6 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
   runtime rather than embedding them — a constant baked into the client is
   wrong the first time the platform retunes it.
 - Update migrations for schema changes.
-- Update api/README.md, ui/README.md, cli/README.md, tf/README.md, and
-  AGENTS.md when workflow changes.
+- Update api/README.md, ui/README.md, cli/DEVELOPMENT.md, tf/README.md, and
+  AGENTS.md when workflow changes. `cli/README.md` changes only when the
+  end-user surface does — it ships to PyPI as the package's landing page.

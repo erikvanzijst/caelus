@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 
-from . import UsageError
+from . import UsageError, __version__
 
 ISSUER = "https://keycloak.freepod.eu/realms/freepod"
 
@@ -29,7 +29,7 @@ CUSTOM_PRODUCT_SLUG = "custom"
 SCOPES = "openid email profile offline_access"
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 
-USER_AGENT = "freepod/0.1.0 (+https://freepod.eu)"
+USER_AGENT = f"freepod/{__version__} (+https://freepod.eu)"
 
 #: How long a single HTTP request may take. Long waits (build, rollout) are
 #: bounded separately by their own deadlines, not by this.

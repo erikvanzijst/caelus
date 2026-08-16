@@ -13,22 +13,18 @@
 
 locals {
   keys_secret_name = "garage-keys"
-  creds_dir        = "/creds"
 
   provision_script = file("${path.module}/scripts/provision.sh")
-  lifecycle_script = file("${path.module}/scripts/lifecycle.sh")
 
   # Job specs are immutable, so the Job is named after a digest of everything
-  # that determines what it does. Change a script, the environment list or the
+  # that determines what it does. Change the script, the environment list or the
   # expiry, and Terraform replaces the Job — which is what "re-run when the
   # script ConfigMap changes" means in practice.
   provision_hash = substr(sha256(join("\n", [
     local.provision_script,
-    local.lifecycle_script,
     join(",", var.environments),
     tostring(var.object_expiry_days),
     var.kubectl_image,
-    var.aws_cli_image,
   ])), 0, 10)
 
   environments_arg = join(" ", var.environments)
@@ -96,7 +92,6 @@ resource "kubernetes_config_map" "provisioner_scripts" {
 
   data = {
     "provision.sh" = local.provision_script
-    "lifecycle.sh" = local.lifecycle_script
   }
 }
 
@@ -118,11 +113,12 @@ resource "kubernetes_job" "provision" {
         service_account_name = kubernetes_service_account.provisioner.metadata[0].name
         restart_policy       = "Never"
 
-        # Step one: buckets, access keys and permission grants, over the Garage
-        # admin API. See the header of scripts/provision.sh for why this cannot
-        # run in the Garage image (FROM scratch, no shell) and why the CLI is
-        # not usable from a second pod (RPC needs the node ID).
-        init_container {
+        # Buckets, access keys, permission grants and bucket lifecycle rules —
+        # all of it over the Garage admin API, in one container. See the header
+        # of scripts/provision.sh for why this cannot run in the Garage image
+        # (FROM scratch, no shell) and why the CLI is not usable from a second
+        # pod (RPC needs the node ID).
+        container {
           name    = "provision"
           image   = var.kubectl_image
           command = ["/bin/sh", "/scripts/provision.sh"]
@@ -161,8 +157,8 @@ resource "kubernetes_job" "provision" {
           }
 
           env {
-            name  = "CREDS_DIR"
-            value = local.creds_dir
+            name  = "OBJECT_EXPIRY_DAYS"
+            value = tostring(var.object_expiry_days)
           }
 
           # Long enough that an operator can complete the one-time layout
@@ -179,57 +175,6 @@ resource "kubernetes_job" "provision" {
             mount_path = "/scripts"
             read_only  = true
           }
-
-          volume_mount {
-            name       = "creds"
-            mount_path = local.creds_dir
-          }
-        }
-
-        # Step two: the bucket lifecycle rules. Separate from step one because
-        # lifecycle is an S3-API call (PutBucketLifecycleConfiguration), not an
-        # admin-API or `garage` CLI one, so it needs an S3 client and the
-        # bucket's own access key rather than an admin token.
-        container {
-          name    = "lifecycle"
-          image   = var.aws_cli_image
-          command = ["/bin/sh", "/scripts/lifecycle.sh"]
-
-          env {
-            name  = "S3_ENDPOINT"
-            value = "http://${kubernetes_service.garage_s3.metadata[0].name}.${var.namespace}.svc.cluster.local:3900"
-          }
-
-          env {
-            name  = "AWS_DEFAULT_REGION"
-            value = local.s3_region
-          }
-
-          env {
-            name  = "ENVIRONMENTS"
-            value = local.environments_arg
-          }
-
-          env {
-            name  = "OBJECT_EXPIRY_DAYS"
-            value = tostring(var.object_expiry_days)
-          }
-
-          env {
-            name  = "CREDS_DIR"
-            value = local.creds_dir
-          }
-
-          volume_mount {
-            name       = "scripts"
-            mount_path = "/scripts"
-            read_only  = true
-          }
-
-          volume_mount {
-            name       = "creds"
-            mount_path = local.creds_dir
-          }
         }
 
         volume {
@@ -239,22 +184,13 @@ resource "kubernetes_job" "provision" {
             default_mode = "0555"
           }
         }
-
-        # Memory-backed: the access keys pass from step one to step two through
-        # this volume and never touch the node's disk.
-        volume {
-          name = "creds"
-          empty_dir {
-            medium = "Memory"
-          }
-        }
       }
     }
   }
 
   # Terraform blocks the apply until provisioning has actually succeeded, so
   # the data source below reads a Secret that exists. The generous timeout is
-  # the health wait in step one (see HEALTH_TIMEOUT_SECONDS).
+  # the health wait at the top of the script (see HEALTH_TIMEOUT_SECONDS).
   wait_for_completion = true
 
   timeouts {

@@ -47,6 +47,7 @@ filesystem is gone when it restarts, and at every release.
 | `freepod delete` | Delete this project's deployment.                                                     |
 | `freepod whoami` | Report who you are signed in as.                                                      |
 | `freepod logout` | Forget the stored credential.                                                         |
+| `freepod skill`  | Install deployment instructions for your coding agents.                               |
 
 `freepod --help` and `freepod <command> --help` cover the flags.
 
@@ -85,6 +86,20 @@ progress bar and every status line go to stderr:
 ```bash
 URL=$(freepod deploy)
 ```
+
+## Deploying with a coding agent
+
+Install the freepod skill:
+
+```bash
+freepod skill install
+```
+
+Then just prompt:
+
+> Build a URL shortener for freepod and deploy it to links.freepod.eu
+
+Supported: **Claude Code**, **Codex**, **OpenCode**, **Amp**, **Gemini CLI**
 
 ---
 

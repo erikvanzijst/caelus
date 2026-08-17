@@ -31,6 +31,7 @@ EXPECTED_MODULES = {
     "deploy",
     "delete",
     "history",
+    "skill",
 }
 
 

@@ -69,6 +69,7 @@ that locks users out until they upgrade.
 | `delete.py`   | The teardown: confirming it, requesting it, and following it to gone.                       |
 | `history.py`  | The build history: reading the account's builds and rendering the table.                    |
 | `tos.py`      | Terms acceptance: the gate, the prompt, and recording an acceptance.                        |
+| `skill.py`    | The packaged agent instructions: reading `assets/SKILL.md`, and where to install it.        |
 
 ## Environments
 
@@ -599,6 +600,79 @@ one. A decline is recorded nowhere.
 There is **no flag that accepts on the user's behalf.** A deploy with no
 terminal to ask on fails rather than proceeding unaccepted, in CI as anywhere
 else.
+
+## The agent skill
+
+`freepod skill install` writes `assets/SKILL.md` into the skills directory of
+every supported coding agent it finds on the machine. `freepod skill show`
+writes the same text to stdout for a runtime that keeps such files elsewhere.
+
+`SKILL.md` with YAML frontmatter is a **cross-agent format** — Claude Code,
+Codex, OpenCode, Amp and Gemini all read the same document — so there is one
+skill and `skill.py` is little more than a table of destinations:
+
+| Agent       | Detected by            | User skills                    | `--project`       |
+|-------------|------------------------|--------------------------------|-------------------|
+| Claude Code | `~/.claude`            | `~/.claude/skills`             | `.claude/skills`  |
+| Codex       | `~/.codex`             | `~/.codex/skills`              | `.codex/skills`   |
+| OpenCode    | `~/.config/opencode`   | `~/.config/opencode/skills`    | `.opencode/skills`|
+| Amp         | `~/.config/amp`        | `~/.config/agents/skills`      | `.agents/skills`  |
+| Gemini CLI  | `~/.gemini`            | `~/.gemini/skills`             | `.gemini/skills`  |
+
+`CLAUDE_CONFIG_DIR` and `CODEX_HOME` override their rows; `XDG_CONFIG_HOME`
+moves the two under `~/.config`. **Amp is the row where detection and
+destination differ**: its own directory is what says Amp is installed, but it
+reads user-level skills from `~/.config/agents/skills`.
+
+Detection is the *configuration* directory rather than the skills directory, so
+an agent the user has run but never given a skill to still counts. Selecting
+nothing installs for what is detected; `--agent` and `--all` override that, and
+`--dest` bypasses the table for an agent that is not listed — which is the
+escape hatch that keeps a user from being blocked on a release when one of
+these conventions moves. Two agents resolving to one directory are written once
+and reported once.
+
+**These paths are external conventions this package does not control**, and
+they are young enough to still be moving — `.agents/skills/` is visibly
+emerging as a shared location, and several agents already read each other's.
+`test_skill.py` therefore asserts the *shape* — one directory per agent,
+`<dir>/<name>/SKILL.md`, detection by configuration directory — and pins only
+the strings confirmed against a real installation of that agent.
+
+**There is no `--force`, and an existing skill is replaced without asking.**
+The path belongs to this client, the file is generated rather than authored,
+and `pip install --upgrade freepod && freepod skill install` only means
+something if a newer skill can supersede an older one unattended. An unchanged
+file is reported rather than rewritten so a re-run stays quiet.
+
+### Why it ships as package data
+
+The skill documents a contract — `$PORT`, no disk, no user environment
+variables, S3 for state, `.freepodignore` precedence — and an agent acting on a
+stale copy of that contract is worse off than an agent with none, because it
+will act confidently on something untrue. Shipping it inside the wheel makes
+the instructions and the client one artifact with one version, so
+`pip install --upgrade freepod && freepod skill install` is the entire update
+path. A file in this repository that users copy is stale the moment the next
+release changes anything.
+
+**What belongs in it.** Only what an agent cannot discover from `--help` and
+would otherwise get wrong. The bar is a wasted build cycle: the bucket name
+lives in `S3_BUCKET`, which is not an `AWS_*` variable and which no SDK
+supplies on its own; `init` prompts, so it needs `printf 'name\n' |` to run
+unattended; there are no runtime logs, so local verification is not optional.
+Everything already in `README.md` stays out of it.
+
+`test_skill.py` pins those facts by substring. It is a coarse test and
+deliberately so — the point is that an edit which drops one of them fails
+loudly rather than quietly shipping instructions that no longer say the thing
+that makes them worth reading.
+
+Nothing in the file is specific to any one agent — the destination is the only
+thing that varies. The `description` in the frontmatter is what every one of
+them matches against a user's request, which is why it enumerates the phrasings
+that should select it and why a test asserts it stays on one line: wrapped, it
+truncates.
 
 ## Testing
 

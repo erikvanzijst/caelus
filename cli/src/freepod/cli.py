@@ -22,6 +22,7 @@ from . import delete as delete_module
 from . import deploy as deploy_module
 from . import history
 from . import project
+from . import skill as skill_module
 from . import tos
 from .api import ApiClient
 from .auth import Session, forget_environment, format_claims, log
@@ -416,6 +417,133 @@ def builds(context: Context, limit: int, show_all: bool) -> None:
         context.say(
             f"Showing {len(shown)} of {len(records)} builds; --all shows every one."
         )
+
+
+def _join(labels: list) -> str:
+    """`a`, `a and b`, `a, b and c` — a list a person reads rather than parses."""
+    if len(labels) == 1:
+        return labels[0]
+    return f"{', '.join(labels[:-1])} and {labels[-1]}"
+
+
+@cli.group()
+def skill() -> None:
+    """Install the deployment instructions for your coding agents.
+
+    The client ships a skill file describing this platform's contract — bind
+    `$PORT`, no disk, no environment variables, S3 for state — which is what a
+    coding agent needs before it can deploy anything here successfully. It is
+    packaged with the client so the two versions cannot drift apart.
+
+    `SKILL.md` is a format every supported agent reads, so one file serves all
+    of them and only the destination differs.
+    """
+
+
+@skill.command("install")
+@click.option(
+    "--agent",
+    "names",
+    metavar="NAME",
+    multiple=True,
+    help="install for this agent whether or not it is detected; repeatable",
+)
+@click.option("--all", "everything", is_flag=True, help="install for every supported agent")
+@click.option(
+    "--project",
+    is_flag=True,
+    help="install into this directory's per-agent skill folders rather than the home directory",
+)
+@click.option(
+    "--dest",
+    type=click.Path(path_type=Path),
+    help=f"write {skill_module.SKILL_FILE} to this exact path instead, for an agent not listed",
+)
+@click.pass_obj
+def skill_install(
+    context: Context,
+    names: tuple,
+    everything: bool,
+    project: bool,
+    dest: Optional[Path],
+) -> None:
+    """Write the packaged skill where a coding agent will find it.
+
+    With no options it installs for every supported agent it can see on this
+    machine, which it decides by looking for each one's configuration
+    directory. `--agent` and `--all` override that; `--dest` bypasses the
+    table entirely.
+
+    Existing copies are replaced without asking. The file is generated, the
+    path belongs to this client, and a newer client's skill has to be able to
+    supersede an older one for `pip install --upgrade` to mean anything.
+
+    The installed paths are the result and go to stdout, one per line; which
+    agent each belongs to goes to stderr like every other diagnostic.
+    """
+    if dest is not None:
+        if names or everything or project:
+            raise UsageError("--dest names the exact path, so it takes no other selector.")
+        outcome = skill_module.write(dest)
+        context.say(
+            f"{'Already current' if outcome == 'current' else 'Installed'}: "
+            f"{skill_module.SKILL_NAME}"
+        )
+        click.echo(str(dest))
+        return
+
+    if names and everything:
+        raise UsageError("--agent selects specific agents and --all selects every one.")
+
+    chosen = skill_module.select(names, everything)
+    if not chosen:
+        raise UsageError(
+            "no supported coding agent found on this machine — none of "
+            f"{', '.join(skill_module.agent_keys())} has a configuration directory.\n"
+            "  Install for one anyway with `--agent NAME`, for all of them with "
+            "`--all`, or write the file wherever you need it with `--dest PATH`."
+        )
+
+    results = skill_module.install(chosen, project=project)
+
+    # The whole report to stderr first, then the paths to stdout, rather than
+    # alternating between the two. Both streams reach a terminal by default,
+    # and interleaved they read as every line printed twice.
+    width = max(len(agent.label) for agent, _, _ in results)
+    for agent, target, outcome in results:
+        note = " (already current)" if outcome == "current" else ""
+        context.say(f"  {agent.label.ljust(width)}  {target}{note}")
+
+    installed = [agent.label for agent, _, outcome in results if outcome != "current"]
+    scope = "this project" if project else "this machine"
+    if installed:
+        context.say(f"Installed '{skill_module.SKILL_NAME}' for {_join(installed)} on {scope}.")
+    else:
+        context.say(f"'{skill_module.SKILL_NAME}' was already current for every agent.")
+
+    if not names and not everything:
+        missing = [
+            agent.label for agent in skill_module.agents() if agent not in set(chosen)
+        ]
+        if missing:
+            context.say(
+                f"Not detected: {_join(missing)}. Use --agent or --all to install anyway."
+            )
+
+    context.say("Agents pick the skill up on their next session.")
+
+    for _agent, target, _outcome in results:
+        click.echo(str(target))
+
+
+@skill.command("show")
+def skill_show() -> None:
+    """Print the packaged skill to stdout.
+
+    For any agent runtime that is not Claude Code, or to read what `install`
+    would write before it writes it.
+    """
+    click.echo(skill_module.read_skill(), nl=False)
 
 
 def main(argv: Optional[list] = None) -> int:

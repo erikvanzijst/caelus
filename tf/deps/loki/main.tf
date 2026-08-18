@@ -37,6 +37,40 @@ resource "helm_release" "loki" {
         pattern_ingester = {
           enabled = true
         }
+        # Retention. Until this was set, nothing was ever deleted: the
+        # compactor already runs in-process (`-target=all`, `/services`
+        # reports `compactor => Running`), but without `retention_enabled`
+        # it only compacts indexes and never deletes. The top-level
+        # `compactor.replicas` below is inert in SingleBinary mode -- the
+        # chart only renders a compactor StatefulSet when deploymentMode is
+        # Distributed -- so do not raise it to "run the compactor"; that
+        # would start a second one competing over the same filesystem store.
+        #
+        # `delete_request_store` is not optional: Loki 3.5.5 refuses to start
+        # with `compactor.delete-request-store should be configured when
+        # retention is enabled`.
+        compactor = {
+          retention_enabled    = true
+          delete_request_store = "filesystem"
+        }
+        # 336h = 14 days, derived from measured ingest against a 3 GiB budget
+        # for the log store on this hardware (the volume is 10Gi; the cap is
+        # the operator's, not the volume's, and rises when the node does).
+        #
+        #   measured 2026-08-18, platform logs only:
+        #     chunks on disk   373 MB over a 20-day-old PVC ->  18.7 MB/day
+        #     ingest           3.14 GB over 17.0 days       -> 185 MB/day raw
+        #
+        #   3072 MiB / (18.7 MB/day * 14 d) = 11.7x
+        #
+        # So 14 days holds ~262 MB at today's rate and stays inside 3 GiB
+        # until tenant applications push total ingest to ~12x the platform
+        # baseline. Tenant output is the new and unmeasured load -- this is
+        # sized to survive it, not to promise users a history depth.
+        # Re-derive from the same two numbers before changing it.
+        limits_config = {
+          retention_period = "336h"
+        }
         storage = {
           type = "filesystem"
         }
@@ -165,6 +199,21 @@ resource "helm_release" "promtail" {
                   regex: ^;*([^;]+)(;.*)?$
                   action: replace
                   target_label: instance
+                # Promote the platform's per-rollout pod label to a stream
+                # label, so one release's output is an index lookup rather
+                # than a scan of everything the deployment ever wrote. The
+                # release id is constant within a pod and `pod` is already a
+                # stream label, so this widens each series without creating
+                # new ones. A pod without the label does not match the regex,
+                # so no `release_id` is set and it collects exactly as before
+                # -- which is every platform and system pod, and every tenant
+                # pod from a chart that does not render the label.
+                # `caelus.dev/release-id` -> `caelus_dev_release_id`.
+                - source_labels:
+                    - __meta_kubernetes_pod_label_caelus_dev_release_id
+                  regex: ^;*([^;]+)(;.*)?$
+                  action: replace
+                  target_label: release_id
                 - source_labels:
                     - __meta_kubernetes_pod_label_app_kubernetes_io_component
                     - __meta_kubernetes_pod_label_component

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 
 from app.config import get_settings
@@ -18,7 +19,9 @@ from app.models import (
     UserORM,
     UserRead, DeploymentUpdate,
 )
+from app.services import deployment_logs as log_service
 from app.services import deployments as deployment_service, users as user_service
+from app.services.loki import LokiException, LokiQueryClient
 from app.services.mollie import PaymentProvider
 from app.util import amend_url
 
@@ -488,3 +491,112 @@ def delete_deployment_endpoint(
     - **409 Conflict** — an operation is already in progress for this deployment.
     """
     deployment_service.delete_deployment(session, user_id=user_id, deployment_id=deployment_id)
+
+
+@router.get(
+    "/{user_id}/deployments/{deployment_id}/log",
+    summary="Stream a deployment's application output",
+    response_description=(
+        "The deployment's output as Server-Sent Events (SSE). Each `log` event carries "
+        "`ts` (the nanosecond timestamp the store recorded, as a **string**), "
+        "`line`, and `release`. Lines beginning with `:` are keepalive "
+        "comments and must be ignored."
+    ),
+    responses={
+        400: {"description": "Malformed resume point, or too many open streams."},
+        403: {"description": "Caller may only read their own deployments."},
+        404: {"description": "No such deployment, or no such release for it."},
+        503: {"description": "The log store could not be reached."},
+    },
+)
+async def get_deployment_log(
+    user_id: int = Path(..., description="ID of the user that owns the deployment."),
+    deployment_id: UUID = Path(..., description="UUID of the deployment to read."),
+    follow: bool = Query(
+        False, description="Hold the response open and emit lines as they arrive."
+    ),
+    tail: int | None = Query(
+        None, ge=1, description="How many trailing lines to start with."
+    ),
+    release: int | None = Query(
+        None, ge=1, description="Pin the read to one release, by its per-deployment number."
+    ),
+    since: str | None = Query(
+        None,
+        description=(
+            "Resume from this nanosecond timestamp, inclusive — the `ts` of the last "
+            "event received. Decimal digits only."
+        ),
+    ),
+    current_user: UserORM = Depends(require_self),
+    session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """Stream the application output of a deployment owned by ``user_id``.
+
+    ## Parameters
+    - **user_id** — owner of the deployment.
+    - **deployment_id** — UUID of the deployment.
+    - **follow** — hold the stream open (Heroku semantics: it follows the
+      *deployment*, so a redeploy appears as a rollover rather than an ending).
+    - **tail** — trailing lines to start with; bounded by the platform.
+    - **release** — pin to one release by number, including one that failed and
+      whose pods were deleted. Unavailable on products whose pods carry no
+      release label, which is reported rather than answered with an empty stream.
+    - **since** — inclusive resume point.
+
+    ## Errors
+    - **400 Bad Request** — malformed `since`, release pinning on a product that
+      does not support it, or more concurrent streams than the platform allows.
+    - **403 Forbidden** — reading another account's deployment without
+      administrator privileges.
+    - **404 Not Found** — no such deployment, or no such release number for it.
+    - **503 Service Unavailable** — the log store could not be reached.
+    """
+    settings = get_settings()
+    resume_ns = log_service.parse_resume_timestamp(since)
+    requested_tail = min(tail or settings.log_tail_lines, settings.log_max_tail_lines)
+
+    # Authorize and resolve *now*, while the session is still open, and hold
+    # nothing from it afterwards: the stream must not pin a database connection
+    # for its whole life.
+    target = log_service.resolve_target(
+        session, deployment_id=deployment_id, user_id=user_id, release_number=release
+    )
+
+    client = LokiQueryClient.from_settings(settings)
+    try:
+        initial = await log_service.fetch_initial(
+            client, target, tail=requested_tail, resume_ns=resume_ns, settings=settings
+        )
+    except LokiException as exc:
+        # Before the first byte, so a status code is still available. An
+        # unavailable store must never be reported as an empty success: that
+        # asserts the application printed nothing, which is a different and
+        # misleading claim.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Log store is unavailable: {exc}",
+        ) from exc
+
+    log_service.stream_registry.acquire(
+        current_user.id, limit=settings.log_max_streams_per_user
+    )
+
+    async def body():
+        try:
+            async for chunk in log_service.stream_log(
+                client, target, initial=initial, follow=follow, settings=settings
+            ):
+                yield chunk
+        finally:
+            log_service.stream_registry.release(current_user.id)
+
+    return StreamingResponse(
+        body(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )

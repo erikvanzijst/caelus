@@ -177,3 +177,15 @@ variable "garage_admin_token" {
   type        = string
   sensitive   = true
 }
+
+variable "loki_base_url" {
+  description = "In-cluster Loki query API URL. Never Ingress-routed; only the API may reach it."
+  type        = string
+  default     = "http://loki.monitoring.svc.cluster.local:3100"
+}
+
+variable "log_keepalive_seconds" {
+  description = "Interval between SSE keepalives on an open log stream. Must stay below the shortest connection timeout in the client -> homelab HAProxy -> Traefik -> API path. HAProxy's timeouts are operator-configured and not in this repo, so this is a variable rather than a constant -- measure against the live edge before changing it."
+  type        = number
+  default     = 15
+}

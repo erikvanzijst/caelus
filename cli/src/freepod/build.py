@@ -18,7 +18,7 @@ from __future__ import annotations
 import io
 import sys
 import time
-from typing import IO, Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, IO, NamedTuple, Optional, Tuple
 
 import click
 import httpx
@@ -312,6 +312,21 @@ def follow_build(
         raise
 
 
+class Built(NamedTuple):
+    """A successful build: what it produced, and which build produced it.
+
+    Both halves travel together because the platform records provenance on the
+    *release*, and an image reference cannot identify a build on its own — it
+    is `{user_id}@{digest}`, and digests are content-addressed, so image ->
+    build is many-to-one. Returning only the image, as this once did, meant
+    every release recorded a null build and the chain from source archive to
+    running pod was broken at its last link.
+    """
+
+    image: str
+    build_id: str
+
+
 def build_image(
     api: ApiClient,
     handle: IO[bytes],
@@ -322,8 +337,8 @@ def build_image(
     timeout: int = BUILD_WAIT_SECONDS,
     quiet: bool = False,
     echo: Callable[[str], None] = _log,
-) -> str:
-    """Upload, build, and return the resulting image reference.
+) -> Built:
+    """Upload, build, and return the image reference with its build id.
 
     Raises `BuildFailed` — exit 4 — when the build reaches any terminal status
     other than success, so a caller cannot mistake a failed build for something
@@ -355,4 +370,4 @@ def build_image(
             f"build {build_id} succeeded but carries no image reference — "
             f"this is an unexpected platform condition, please report it."
         )
-    return image
+    return Built(image=image, build_id=str(build_id))

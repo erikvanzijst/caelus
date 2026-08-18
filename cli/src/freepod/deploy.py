@@ -549,16 +549,18 @@ def create_deployment(
     template_id: int,
     plan_template_id: int,
     values: Dict[str, Any],
+    *,
+    build_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """`POST /api/users/{user_id}/deployments` — one rollout, image included."""
-    response = api.post(
-        f"/api/users/{user_id}/deployments",
-        json={
-            "desired_template_id": template_id,
-            "plan_template_id": plan_template_id,
-            "user_values_json": values,
-        },
-    )
+    body = {
+        "desired_template_id": template_id,
+        "plan_template_id": plan_template_id,
+        "user_values_json": values,
+    }
+    if build_id is not None:
+        body["build_id"] = build_id
+    response = api.post(f"/api/users/{user_id}/deployments", json=body)
     if response.status_code == 409:
         raise _conflict(response)
     if response.status_code == 400 and _json_detail(response) == tos.DEPLOY_REFUSAL:
@@ -597,6 +599,7 @@ def update_deployment(
     values: Dict[str, Any],
     *,
     move: Optional[str] = None,
+    build_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """`PUT` the same route, with the complete user-values document.
 
@@ -605,10 +608,13 @@ def update_deployment(
     sending `{"image": …}` alone fails on the missing required hostname. See
     design D8.
     """
-    response = api.put(
-        f"/api/users/{user_id}/deployments/{deployment_id}",
-        json={"desired_template_id": template_id, "user_values_json": values},
-    )
+    body: Dict[str, Any] = {
+        "desired_template_id": template_id,
+        "user_values_json": values,
+    }
+    if build_id is not None:
+        body["build_id"] = build_id
+    response = api.put(f"/api/users/{user_id}/deployments/{deployment_id}", json=body)
     if response.status_code == 409:
         raise _conflict(response, move=move)
     if not response.is_success:
@@ -742,11 +748,17 @@ def release(
     state: Preflight,
     image: str,
     *,
+    build_id: Optional[str] = None,
     timeout: int = ROLLOUT_WAIT_SECONDS,
     poll: float = POLL_SECONDS,
     echo: Callable[[str], None] = _log,
 ) -> str:
-    """Create or update the deployment, then follow the rollout. Returns the address."""
+    """Create or update the deployment, then follow the rollout. Returns the address.
+
+    `build_id` names the build that produced `image`, and is recorded on the
+    platform's release rather than on the deployment. Optional so that a caller
+    releasing an image it did not just build still works.
+    """
     values = dict(state.values)
     values[IMAGE_KEY] = image
 
@@ -759,6 +771,7 @@ def release(
             state.template_id,
             plan["template"]["id"],
             values,
+            build_id=build_id,
         )
         # Written before the rollout is awaited: a deployment that exists but
         # is not recorded is one this project can never address again.
@@ -777,6 +790,7 @@ def release(
             state.template_id,
             values,
             move=move,
+            build_id=build_id,
         )
 
     final = follow_rollout(
@@ -852,7 +866,7 @@ def deploy(
     ) as (handle, size, members):
         if not quiet:
             report(size, members, verbose=verbose, echo=echo)
-        image = build_image(
+        built = build_image(
             api,
             handle,
             size,
@@ -863,5 +877,13 @@ def deploy(
             echo=echo,
         )
 
-    echo(f"Built {image}.")
-    return release(api, state, image, timeout=rollout_timeout, poll=poll, echo=echo)
+    echo(f"Built {built.image}.")
+    return release(
+        api,
+        state,
+        built.image,
+        build_id=built.build_id,
+        timeout=rollout_timeout,
+        poll=poll,
+        echo=echo,
+    )

@@ -1132,3 +1132,57 @@ def test_the_build_log_and_the_address_are_kept_apart(make_api, tmp_path):
 
     assert log.getvalue() == b"step 1\n"
     assert live not in "\n".join(said).replace("Deployed", "")
+
+
+# --------------------------------------------------------------------------
+# Build provenance (task 8.0)
+# --------------------------------------------------------------------------
+
+
+def test_a_created_deployment_names_the_build_that_produced_its_image(make_api, tmp_path):
+    """Without this every release records a null build and the chain from
+    source archive through build to running pod is broken at its last link.
+
+    The platform stores it on the *release*, never on the deployment, so it
+    rides as a plain request field beside `plan_template_id`.
+    """
+    platform = Platform()
+    project_at(tmp_path, values={"hostname": "myapp.freepod.eu"})
+
+    run(make_api, platform, tmp_path)
+
+    assert platform.bodies["create"]["build_id"] == "b-1"
+    # And the image it names is the one that build produced.
+    assert platform.bodies["create"]["user_values_json"]["image"] == IMAGE
+
+
+def test_an_updated_deployment_names_the_build_too(make_api, tmp_path):
+    platform = Platform(
+        reads=[deployment(status="ready", generation=3), deployment(status="ready", generation=4)],
+        update=deployment(status="provisioning", generation=4),
+    )
+    project_at(
+        tmp_path,
+        values={"hostname": "myapp.freepod.eu"},
+        pointer={"id": deployment()["id"], "name": "custom-d8dtx4"},
+    )
+
+    run(make_api, platform, tmp_path)
+
+    assert platform.bodies["update"]["build_id"] == "b-1"
+
+
+def test_releasing_without_a_build_sends_no_build_reference(make_api, tmp_path):
+    """`release` is reachable with an image the caller did not just build, and
+    a null `build_id` is a legitimate record rather than an error -- so the key
+    is omitted entirely rather than sent as null."""
+    from freepod.deploy import preflight
+
+    platform = Platform()
+    project_at(tmp_path, values={"hostname": "myapp.freepod.eu"})
+    api, _, _ = make_api(platform)
+    state = preflight(api, "prod", root=tmp_path, echo=lambda _m: None)
+
+    release(api, state, IMAGE, poll=0, echo=lambda _m: None)
+
+    assert "build_id" not in platform.bodies["create"]

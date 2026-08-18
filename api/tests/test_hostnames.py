@@ -28,7 +28,7 @@ from sqlmodel import select
 from starlette.testclient import TestClient
 
 from tests.conftest import client, db_session
-from tests.conftest import create_free_plan_template, create_user
+from tests.conftest import create_free_plan_template, create_user, make_deployment_with_release
 
 
 def _settings(**overrides) -> CaelusSettings:
@@ -172,7 +172,8 @@ class TestCheckAvailable:
         _check_available(db_session, "free.example.com")
 
     def test_in_use_raises(self, db_session, seed_parents):
-        dep = DeploymentORM(
+        dep = make_deployment_with_release(
+            db_session,
             user_id=seed_parents["user_id"],
             desired_template_id=seed_parents["template_id"],
             hostname="taken.example.com",
@@ -180,13 +181,13 @@ class TestCheckAvailable:
             name="test-name",
             namespace="test-namespace",
         )
-        db_session.add(dep)
         db_session.flush()
         with pytest.raises(HostnameException, match="in_use"):
             _check_available(db_session, "taken.example.com")
 
     def test_deleted_deployment_not_in_use(self, db_session, seed_parents):
-        dep = DeploymentORM(
+        dep = make_deployment_with_release(
+            db_session,
             user_id=seed_parents["user_id"],
             desired_template_id=seed_parents["template_id"],
             hostname="recycled.example.com",
@@ -194,7 +195,6 @@ class TestCheckAvailable:
             name="test-name-2",
             namespace="test-namespace-2",
         )
-        db_session.add(dep)
         db_session.flush()
         _check_available(db_session, "recycled.example.com")
 
@@ -363,7 +363,8 @@ class TestRequireValidHostname:
 
     def test_mixed_case_detected_as_in_use(self, db_session, seed_parents):
         """Mixed-case FQDN should be detected as in-use when lowercase variant exists."""
-        dep = DeploymentORM(
+        dep = make_deployment_with_release(
+            db_session,
             user_id=seed_parents["user_id"],
             desired_template_id=seed_parents["template_id"],
             hostname="taken.example.com",
@@ -371,7 +372,6 @@ class TestRequireValidHostname:
             name="test-name-case",
             namespace="test-namespace-case",
         )
-        db_session.add(dep)
         db_session.flush()
         with pytest.raises(HostnameException) as exc_info:
             require_valid_hostname_for_deployment(
@@ -391,7 +391,8 @@ class TestRequireValidHostname:
 
     def test_short_circuits_on_in_use(self, db_session, seed_parents):
         """In-use failure should not perform DNS resolution."""
-        dep = DeploymentORM(
+        dep = make_deployment_with_release(
+            db_session,
             user_id=seed_parents["user_id"],
             desired_template_id=seed_parents["template_id"],
             hostname="taken.example.com",
@@ -399,7 +400,6 @@ class TestRequireValidHostname:
             name="test-name-3",
             namespace="test-namespace-3",
         )
-        db_session.add(dep)
         db_session.flush()
         with pytest.raises(HostnameException) as exc_info:
             require_valid_hostname_for_deployment(

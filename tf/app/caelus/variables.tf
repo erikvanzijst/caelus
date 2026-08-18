@@ -117,6 +117,18 @@ variable "garage_admin_token" {
   sensitive   = true
 }
 
+# --- Deployment logs --------------------------------------------------------
+
+variable "loki_base_url" {
+  description = "In-cluster Loki query API URL. Never routed by an Ingress: Loki runs auth_enabled=false over a single tenancy holding every tenant's logs and the platform's own, so only the API may reach it."
+  type        = string
+}
+
+variable "log_keepalive_seconds" {
+  description = "Interval between SSE keepalives on an open log stream. Must stay below the shortest connection timeout in the client -> HAProxy -> Traefik -> API path; HAProxy's is not configured in this repo."
+  type        = number
+}
+
 # --- Builds -----------------------------------------------------------------
 
 variable "builds_namespace" {

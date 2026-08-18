@@ -29,6 +29,9 @@ resource "kubernetes_deployment" "worker" {
         labels = {
           app = "caelus-worker"
         }
+        annotations = {
+          "checksum/config" = sha256(jsonencode(kubernetes_config_map.api.data))
+        }
       }
 
       spec {

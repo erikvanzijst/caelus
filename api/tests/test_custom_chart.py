@@ -197,3 +197,116 @@ def test_the_ownership_assertion_still_holds_with_storage_enabled():
     result = subprocess.run(args, capture_output=True, text=True)
     assert result.returncode != 0
     assert "does not match deployment owner" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Release labelling
+# ---------------------------------------------------------------------------
+
+RELEASE_ID = "3f2a9c14-0b6d-4e18-9a77-5c1e8d4b2f60"
+
+
+def _pod_template_labels(docs: list[dict]) -> dict:
+    deployment = next(d for d in docs if d["kind"] == "Deployment")
+    return deployment["spec"]["template"]["metadata"]["labels"]
+
+
+def _match_labels(docs: list[dict]) -> dict:
+    deployment = next(d for d in docs if d["kind"] == "Deployment")
+    return deployment["spec"]["selector"]["matchLabels"]
+
+
+def _service_selector(docs: list[dict]) -> dict:
+    return next(d for d in docs if d["kind"] == "Service")["spec"]["selector"]
+
+
+def test_the_release_id_is_rendered_onto_the_pod_template():
+    docs = _render(**BASE, caelus__releaseId=RELEASE_ID)
+    assert _pod_template_labels(docs)["caelus.dev/release-id"] == RELEASE_ID
+
+
+def test_the_release_id_never_reaches_a_selector():
+    """The regression that would otherwise surface as `field is immutable` on
+    the second apply, and as dropped traffic mid-rollout on the Service."""
+    docs = _render(**BASE, caelus__releaseId=RELEASE_ID)
+    assert "caelus.dev/release-id" not in _match_labels(docs)
+    assert "caelus.dev/release-id" not in _service_selector(docs)
+    # The selector must be byte-identical whatever the release is.
+    other = _render(**BASE, caelus__releaseId="00000000-0000-0000-0000-000000000000")
+    assert _match_labels(docs) == _match_labels(other)
+    assert _service_selector(docs) == _service_selector(other)
+
+
+def test_a_second_apply_with_a_new_release_id_changes_only_the_pod_template():
+    """A Deployment's `spec.selector` is immutable, so the second apply of a
+    deployment that already exists fails outright if the id leaked into it.
+    Rendering both and diffing is what a real second apply would hit."""
+    first = _render(**BASE, caelus__releaseId=RELEASE_ID)
+    second = _render(**BASE, caelus__releaseId="9c8b7a65-4321-4def-8abc-0123456789ab")
+
+    assert _match_labels(first) == _match_labels(second)
+    assert _service_selector(first) == _service_selector(second)
+    # ...and the pod template genuinely differs, which is what cycles the pods.
+    assert _pod_template_labels(first) != _pod_template_labels(second)
+
+
+def test_a_redeploy_with_identical_values_is_no_longer_a_helm_no_op():
+    """The accepted consequence: a fresh id changes the pod template hash on
+    every apply, so an otherwise byte-identical redeploy cycles pods. Matches
+    Heroku, Railway and Fly; at `replicas: 1` it costs a brief interruption."""
+    first = _render(**BASE, caelus__releaseId=RELEASE_ID)
+    second = _render(**BASE, caelus__releaseId="9c8b7a65-4321-4def-8abc-0123456789ab")
+    assert first != second
+
+
+def test_the_chart_still_renders_with_no_release_id():
+    """Standalone renders, and any apply that predates the reconciler supplying
+    the value, must emit no label at all rather than an empty one."""
+    docs = _render(**BASE)
+    assert "caelus.dev/release-id" not in _pod_template_labels(docs)
+    # And the surrounding labels are untouched.
+    assert _pod_template_labels(docs) == _match_labels(docs)
+
+
+def test_an_empty_release_id_emits_no_label():
+    docs = _render(**BASE, caelus__releaseId="")
+    assert "caelus.dev/release-id" not in _pod_template_labels(docs)
+
+
+def test_the_release_id_is_declared_in_values_and_schema():
+    values = yaml.safe_load((CHART / "values.yaml").read_text())
+    assert values["caelus"]["releaseId"] == ""
+    schema = json.loads((CHART / "values.schema.json").read_text())
+    assert schema["properties"]["caelus"]["properties"]["releaseId"]["type"] == "string"
+
+
+# ---------------------------------------------------------------------------
+# Detecting a startup that fails
+# ---------------------------------------------------------------------------
+
+
+def test_the_pod_must_stay_ready_before_counting_as_available():
+    """`helm upgrade --wait` otherwise accepts a container that dies on startup.
+
+    This chart declares no readiness probe, so a container is Ready the instant
+    it runs. An application crashing on startup was briefly Ready, Helm saw an
+    available ReplicaSet and reported success, `--atomic` rolled nothing back,
+    and the platform recorded a crash-looping deployment as `ready`. Observed
+    on dev before this was added.
+    """
+    deployment = next(d for d in _render(**BASE) if d["kind"] == "Deployment")
+    assert deployment["spec"]["minReadySeconds"] == 10
+
+
+def test_no_readiness_probe_is_declared():
+    """Deliberate, and worth asserting so it is not added casually.
+
+    Binding `$PORT` is a convention most applications follow, not a
+    requirement, and a headless workload would have nothing to probe. A real
+    readiness contract needs designing on its own terms rather than being
+    inferred from the HTTP case.
+    """
+    container = _app_container(_render(**BASE))
+    assert "readinessProbe" not in container
+    assert "livenessProbe" not in container
+    assert "startupProbe" not in container

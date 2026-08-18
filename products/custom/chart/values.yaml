@@ -79,6 +79,13 @@ objectStorage:
 # Injected per deployment by the Caelus reconciler. These defaults let the chart
 # render standalone (helm lint / helm template with no --set).
 caelus:
+  # Identifier of the rollout being applied, rendered onto the pod template as
+  # the `caelus.dev/release-id` label so a log line can be attributed to one
+  # release. The reconciler supplies it on every apply, for every product;
+  # rendering it is each chart's decision and only this one does. Empty by
+  # default so the chart renders standalone, in which case no label is emitted
+  # and collection behaves exactly as it did before.
+  releaseId: ""
   # owner.id is required whenever `image` is set. With the default empty image the
   # chart renders the placeholder and never reads it, which is what keeps a
   # standalone render working.

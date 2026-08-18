@@ -191,6 +191,10 @@ Do not report success because `deploy` returned. Exercise the live URL the way
 you exercised localhost — at minimum a health endpoint and the primary write
 path, since the S3 wiring is the part that could not be fully tested locally.
 
+Then read `freepod log`. An application can answer requests correctly and still
+be logging a failure on every one of them, and the log is the only place that
+shows. It is also the fastest way to see that a redeploy actually took effect.
+
 ## What gets uploaded
 
 The working tree, minus `.git/`, minus your `.gitignore`, minus built-in
@@ -212,25 +216,39 @@ things those rules miss. Two wrinkles:
 
 ## When it goes wrong
 
-| Symptom | What it means | What to do |
-|---|---|---|
-| Exit 3 | Not authenticated | Ask the user to run `freepod login` |
-| Exit 4, build log ends in an error | Build failed | The streamed log is the whole story; `freepod builds` lists status and duration |
-| Exit 5 | Image built, rollout failed or timed out | Usually the container exits at startup — check the start command and that it binds `0.0.0.0:$PORT` |
-| Deploy succeeds, requests hang or 502 | App is not listening where the platform expects | Bind `0.0.0.0:$PORT`, not a hardcoded port and not `127.0.0.1` |
-| Deploy succeeds, one endpoint 500s | A runtime fault you cannot see | See below |
+| Symptom                               | What it means                                   | What to do                                                                                         |
+|---------------------------------------|-------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| Exit 3                                | Not authenticated                               | Ask the user to run `freepod login`                                                                |
+| Exit 4, build log ends in an error    | Build failed                                    | The streamed log is the whole story; `freepod builds` lists status and duration                    |
+| Exit 5                                | Image built, rollout failed or timed out        | Usually the container exits at startup — check the start command and that it binds `0.0.0.0:$PORT` |
+| Deploy succeeds, requests hang or 502 | App is not listening where the platform expects | `freepod log` — then bind `0.0.0.0:$PORT`, not a hardcoded port and not `127.0.0.1`                |
+| Deploy succeeds, one endpoint 500s    | A runtime fault                                 | `freepod log -f`, then exercise the failing request                                                |
 
-**Diagnosing a runtime fault without logs.** Reproduce it locally first; that
-resolves most cases. When something fails *only* when deployed, the fastest
-path is to make the container answer the question over HTTP: add a temporary
-endpoint that reports what you need — which environment variables are present,
-whether the S3 client can list the bucket, what a failing call actually raised —
-deploy, read it, then remove it. Building a diagnostic into the app is not
-elegant, but it is the only channel available, and it is faster than guessing.
+**Read the logs first.** `freepod log` prints what the application wrote to
+stdout and stderr. Reach for it before theorizing, before adding instrumentation,
+and before redeploying — most runtime faults name themselves in a traceback that
+is already there.
 
-**That endpoint is on the public internet.** Report variable *names*, never
-values — dumping the environment publishes the bucket credentials — and take it
-out in the next deploy rather than leaving it behind.
+```bash
+freepod log             # recent output, then exit
+freepod log -f          # keep watching; then exercise the failing request
+freepod log -r 4        # one release, including one that failed and was rolled back
+```
+
+A failed deploy usually explains itself: `freepod deploy` already prints the tail
+of the failed release's output alongside the platform's error, so a container
+that died on startup tells you why without a second command. If you need more
+than the tail, `freepod log -r <number>` reads that release in full — the lines
+outlive the container, so a rollout that was rolled back is still readable.
+
+Anything the app writes to stdout or stderr is captured, so print what you need
+rather than building a way to fetch it. **Do not add a diagnostic HTTP endpoint
+that reports environment variables or configuration** — it would be on the public
+internet, and logs answer the same question privately.
+
+Two things logs cannot tell you, because they are not the application's output:
+whether the container is running at all, and what the platform did. For those,
+`freepod deploy`'s own error and the deployment status are the record.
 
 Give every app a `/healthz` from the start. It costs three lines and it
 separates "the container is not running" from "the container is running and the
@@ -238,15 +256,16 @@ app is wrong."
 
 ## Command reference
 
-| Command | Purpose |
-|---|---|
-| `freepod login` | Sign in. Interactive — a human must do it. |
-| `freepod whoami` | Report the authenticated account. Never starts a login. |
-| `freepod init` | Set up the directory; prompts for a hostname. |
-| `freepod deploy` | Pack, build, release. Prints the URL on stdout. |
-| `freepod builds` | List this account's builds, most recent first. |
+| Command          | Purpose                                                                                                                              |
+|------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| `freepod login`  | Sign in. Interactive — a human must do it.                                                                                           |
+| `freepod whoami` | Report the authenticated account. Never starts a login.                                                                              |
+| `freepod init`   | Set up the directory; prompts for a hostname.                                                                                        |
+| `freepod deploy` | Pack, build, release. Prints the URL on stdout.                                                                                      |
+| `freepod log`    | Read the application's output. `-f` follows, `-r N` pins one release, `-t` adds timestamps.                                          |
+| `freepod builds` | List this account's builds, most recent first.                                                                                       |
 | `freepod delete` | Delete the deployment **and everything it stores**. Destructive; confirm with the user first, and note it prompts unless given `-y`. |
-| `freepod logout` | Forget the cached credential. |
+| `freepod logout` | Forget the cached credential.                                                                                                        |
 
 Exit codes: `0` ok, `2` usage, `3` not authenticated, `4` build failed,
 `5` rollout failed, `1` anything else.

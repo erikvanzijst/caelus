@@ -15,6 +15,7 @@ The models are split across three modules:
 
 from app.models.core import (  # noqa: F401
     _utcnow,
+    ReleaseStatus,
     DeploymentBase,
     DeploymentCreate,
     DeploymentCreateResponse,
@@ -22,6 +23,9 @@ from app.models.core import (  # noqa: F401
     DeploymentRead,
     DeploymentReconcileJobBase,
     DeploymentReconcileJobORM,
+    DeploymentReleaseBase,
+    DeploymentReleaseORM,
+    DeploymentReleaseRead,
     DeploymentUpdate,
     ProductBase,
     ProductCreate,
@@ -73,5 +77,6 @@ from app.models.billing import (  # noqa: F401
 )
 
 # Rebuild DeploymentRead so Pydantic resolves the SubscriptionRead
-# forward reference (defined in billing.py, referenced in core.py).
+# forward reference (defined in billing.py, referenced in core.py) and the
+# DeploymentReleaseRead one (defined below it in core.py).
 DeploymentRead.model_rebuild()

@@ -22,6 +22,23 @@ resource "kubernetes_config_map" "api" {
     CAELUS_BUILDS_NAMESPACE    = var.builds_namespace
     CAELUS_BUILD_MAX_IN_FLIGHT = tostring(var.build_max_in_flight)
 
+    # Deployment logs. Loki is a singleton in tf/deps, shared by both
+    # workspaces, and is reached in-cluster -- it is deliberately not routed by
+    # an Ingress, so a tenant cannot query it directly. It has
+    # `auth_enabled = false` and holds every tenant's output *and* the
+    # platform's own in one tenancy, which is why the API builds every selector
+    # itself and accepts none from a client.
+    #
+    # Without this the API answers every log request with "log store is not
+    # configured" -- the setting defaults to empty so that migrations, tests
+    # and the operator CLI still construct settings without it.
+    CAELUS_LOKI_BASE_URL = var.loki_base_url
+    # Below the shortest connection timeout in the path, which is not a
+    # property of this repository: client -> homelab HAProxy -> Traefik -> API,
+    # and HAProxy's timeouts are operator-configured. Re-measure against the
+    # live edge before raising it.
+    CAELUS_LOG_KEEPALIVE_SECONDS = tostring(var.log_keepalive_seconds)
+
     # CAELUS_LOG_LEVEL    = "info"
     PYTHONUNBUFFERED    = "1"
 

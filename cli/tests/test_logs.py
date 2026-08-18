@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from pathlib import Path
 
 import httpx
@@ -398,13 +399,19 @@ def test_a_quiet_period_leaves_no_keepalive_residue_in_the_output(make_api):
 
 def test_the_command_adds_no_package_dependency():
     """The whole point of SSE over a WebSocket: `httpx` is already here and a
-    line format needs no library."""
-    import tomllib
+    line format needs no library.
 
-    manifest = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())
-    assert sorted(
-        d.split(">")[0].split("=")[0].strip() for d in manifest["project"]["dependencies"]
-    ) == ["click", "httpx", "pathspec"]
+    Asserted against the *installed distribution's* metadata rather than by
+    parsing `pyproject.toml`. It is the stronger claim -- what the built wheel
+    declares is what a user actually installs -- and `importlib.metadata` is
+    stdlib on every Python this package supports, where `tomllib` is 3.11+ and
+    would fail the 3.9 leg of CI.
+    """
+    import importlib.metadata
+
+    declared = importlib.metadata.requires("freepod") or []
+    names = sorted(re.split(r"[\s><=!~;\[]", spec)[0] for spec in declared)
+    assert names == ["click", "httpx", "pathspec"]
 
 
 def test_a_rollover_is_announced_on_stderr_and_never_prefixed_onto_a_line(make_api):

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Optional, Any
 from uuid import UUID, uuid4
@@ -15,11 +15,13 @@ from sqlalchemy import (
     JSON,
     Text,
     String,
+    UniqueConstraint,
     Uuid,
     func,
     text,
 )
 
+from app.config import get_settings
 from app.services.reconcile_constants import DEPLOYMENT_STATUS_DELETED
 
 
@@ -354,6 +356,74 @@ class DeploymentORM(DeploymentBase, table=True):
             index=True,
         ),
     )
+    # ── Release pointers ──────────────────────────────────────────────────
+    #
+    # The reference between `deployment` and `deployment_release` is mutual,
+    # and under immediate constraints neither row could be inserted first:
+    # the deployment would violate this NOT NULL, and the release would
+    # violate its `deployment_id` FK. Both primary keys are Python-generated
+    # `uuid4`, so both ids are known before either INSERT; the deployment is
+    # therefore inserted with `desired_release_id` already set, the release
+    # second, and DEFERRABLE INITIALLY DEFERRED defers the check to COMMIT.
+    #
+    # `use_alter` is what makes that work mechanically. It lifts these two
+    # FKs out of the table dependency graph, which would otherwise be cyclic
+    # -- breaking both `create_all`'s DDL ordering and SQLAlchemy's flush
+    # ordering, and leaving `deployment_release.deployment_id` as the only
+    # edge, which orders the INSERTs exactly as above.
+    #
+    # Deferred NO ACTION also replaces the `ON DELETE SET NULL` that would
+    # otherwise be reached for, and which would contradict the NOT NULL: a
+    # hard delete drops both rows in one transaction and the deferred check
+    # sees neither.
+    #
+    # NOT NULL: every deployment is created together with its first release,
+    # and the migration backfills one for every deployment that predates the
+    # ledger. A deployment without a release it wants to be running is not a
+    # state the system has.
+    desired_release_id: UUID = Field(
+        sa_column=Column(
+            Uuid,
+            ForeignKey(
+                "deployment_release.id",
+                name="fk_deployment_desired_release_id",
+                use_alter=True,
+                deferrable=True,
+                initially="DEFERRED",
+            ),
+            nullable=False,
+            index=True,
+        ),
+    )
+    applied_release_id: Optional[UUID] = Field(
+        default=None,
+        sa_column=Column(
+            Uuid,
+            ForeignKey(
+                "deployment_release.id",
+                name="fk_deployment_applied_release_id",
+                use_alter=True,
+                deferrable=True,
+                initially="DEFERRED",
+            ),
+            nullable=True,
+            index=True,
+        ),
+    )
+    applied_release: Optional["DeploymentReleaseORM"] = Relationship(
+        sa_relationship_kwargs={
+            "viewonly": True,
+            "lazy": "joined",
+            "foreign_keys": "DeploymentORM.applied_release_id",
+        }
+    )
+    desired_release: Optional["DeploymentReleaseORM"] = Relationship(
+        sa_relationship_kwargs={
+            "viewonly": True,
+            "lazy": "joined",
+            "foreign_keys": "DeploymentORM.desired_release_id",
+        }
+    )
     hostname: Optional[str] = Field(
         default=None, sa_column=Column(String(), nullable=True, index=True)
     )
@@ -397,11 +467,20 @@ class DeploymentORM(DeploymentBase, table=True):
         return f"{self.subscription.plan_template.plan.product.name} -- {self.subscription.plan_template.plan.name} (instance {self.id})"
 
 
+_BUILD_ID_FIELD_DESCRIPTION = (
+    "Build this rollout deploys, recorded on the release for provenance. "
+    "Optional; validated only for existence and ownership."
+)
+
+
 class DeploymentCreate(DeploymentBase):
     model_config = ConfigDict(extra="forbid")
     plan_template_id: int
     user_values_json: dict[str, Any] = Field(default=dict())
     user_id: Optional[int] = None
+    build_id: Optional[UUID] = Field(
+        default=None, description=_BUILD_ID_FIELD_DESCRIPTION
+    )
 
 
 class DeploymentUpdate(SQLModel):
@@ -410,6 +489,9 @@ class DeploymentUpdate(SQLModel):
     user_id: Optional[int] = None
     desired_template_id: int
     user_values_json: Optional[dict[str, Any]] = Field(default=None)
+    build_id: Optional[UUID] = Field(
+        default=None, description=_BUILD_ID_FIELD_DESCRIPTION
+    )
 
 
 class DeploymentRead(DeploymentBase):
@@ -419,6 +501,7 @@ class DeploymentRead(DeploymentBase):
     hostname: Optional[str] = None
     desired_template: ProductTemplateVersionRead
     applied_template: Optional[ProductTemplateVersionRead]
+    applied_release: Optional["DeploymentReleaseRead"] = None
     subscription_id: Optional[int] = None
     subscription: Optional["SubscriptionRead"] = None
     name: str
@@ -446,6 +529,142 @@ class DeploymentCreateResponse(SQLModel):
     """Envelope returned by the deployment creation endpoint only."""
     deployment: DeploymentRead
     checkout_url: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Deployment release
+# ---------------------------------------------------------------------------
+#
+# A release is the record of *one rollout* of a deployment. It is created by
+# the request that asks for the rollout -- POST/PUT /deployments, in the same
+# transaction as the deployment write -- and completed later by the reconciler
+# that applies it. The reconciler never creates one.
+#
+# No column is ever revised. The request writes identity and intent
+# (`number`, `template_id`, `build_id`, `values_json`, `created_at`); the
+# reconciler writes outcome (`started_at`, `ended_at`, `error`,
+# `helm_revision`). `started_at` is write-if-null so that a lease reclaim
+# after a worker died mid-Helm still records when work *first* began -- how
+# many attempts there were is `deployment_reconcile_job.attempt`, not
+# something to infer from here.
+
+
+class ReleaseStatus(StrEnum):
+    """A release's status, always derived and never stored.
+
+    Liveness is the opposite case and is *not* here: a release is live iff
+    it is `deployment.applied_release_id`, which the reconciler writes when
+    it succeeds. That is a recorded action, not an observation, so storing it
+    costs one column and no subquery.
+    """
+
+    QUEUED = "queued"
+    IN_FLIGHT = "in_flight"
+    ABANDONED = "abandoned"
+    FAILED = "failed"
+    SUCCEEDED = "succeeded"
+
+
+class DeploymentReleaseBase(SQLModel):
+    deployment_id: UUID
+    number: int
+    template_id: int
+
+
+class DeploymentReleaseORM(DeploymentReleaseBase, table=True):
+    __tablename__ = "deployment_release"
+    __table_args__ = (
+        # Structural, not incidental: `number` is assigned as max+1 per
+        # deployment, which is safe only because `enqueue_job` rejects a
+        # second open job and `update_deployment` requires ready/error.
+        # The constraint is what makes that a guarantee rather than a habit.
+        UniqueConstraint("deployment_id", "number", name="uq_release_number"),
+    )
+
+    id: UUID = Field(default_factory=uuid4, sa_column=Column(Uuid, primary_key=True))
+    number: int = Field(sa_column=Column(Integer, nullable=False))
+    deployment_id: UUID = Field(
+        sa_column=Column(
+            Uuid,
+            ForeignKey("deployment.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    template_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("product_template_version.id"),
+            nullable=False,
+        )
+    )
+    # Nullable and routinely null: builds exist only for products that deploy
+    # tenant-supplied code, so a null here is a curated product, not an
+    # incomplete record.
+    build_id: Optional[UUID] = Field(
+        default=None,
+        sa_column=Column(
+            Uuid,
+            ForeignKey("build.id"),
+            nullable=True,
+            index=True,
+        ),
+    )
+    # The *user* values, not the merged values. System overrides do not exist
+    # yet at request time and are largely per-apply platform detail; the user
+    # values are the intent, and are what comparing two releases would need.
+    values_json: Optional[dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
+    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
+
+    # ── Written by the reconciler, once each ──────────────────────────────
+    started_at: Optional[datetime] = Field(default=None, nullable=True)
+    ended_at: Optional[datetime] = Field(default=None, nullable=True)
+    error: Optional[str] = Field(default=None, sa_column=Column(Text(), nullable=True))
+    helm_revision: Optional[int] = Field(default=None, nullable=True)
+
+    @property
+    def status(self) -> ReleaseStatus:
+        """Derive the release's status from the three outcome columns.
+
+        A release that has been created but not yet applied is QUEUED rather
+        than missing or erroneous -- which is the state of every deployment
+        awaiting payment.
+
+        IN_FLIGHT becomes ABANDONED once work has been in flight for longer
+        than the reconcile job lease, because past that point another worker
+        is entitled to steal the job and the one that held it is presumed
+        dead. The lease is the right threshold rather than HELM_TIMEOUT_SEC:
+        a reconcile may legitimately spend the full Helm budget, and the
+        lease is already tuned to sit above it.
+        """
+        if self.started_at is None:
+            return ReleaseStatus.QUEUED
+        if self.ended_at is None:
+            started = self.started_at
+            # Postgres hands back naive datetimes for a plain DateTime column
+            # while `_utcnow()` writes aware ones; comparing the two raises.
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=UTC)
+            lease = timedelta(seconds=get_settings().reconcile_job_lease_seconds)
+            if datetime.now(UTC) - started > lease:
+                return ReleaseStatus.ABANDONED
+            return ReleaseStatus.IN_FLIGHT
+        return ReleaseStatus.FAILED if self.error else ReleaseStatus.SUCCEEDED
+
+
+class DeploymentReleaseRead(DeploymentReleaseBase):
+    id: UUID
+    build_id: Optional[UUID] = None
+    values_json: Optional[dict[str, Any]] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    error: Optional[str] = None
+    helm_revision: Optional[int] = None
+    # Derived on read from the property above; there is no column behind it.
+    status: ReleaseStatus
 
 
 class DeploymentReconcileJobBase(SQLModel):

@@ -6,10 +6,54 @@ app.kubernetes.io/part-of: custom
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 {{- end -}}
 
-{{/* Stable selector labels for the app pod. */}}
+{{/* Stable selector labels for the app pod.
+
+Stable is the operative word, and nothing per-release may be added here. This
+helper is included in three places and two of them cannot tolerate a value that
+changes between applies:
+
+  deployment.yaml  spec.selector.matchLabels     IMMUTABLE -- a second apply
+                                                 fails with "field is immutable"
+  deployment.yaml  spec.template.metadata.labels the only mutable one
+  service.yaml     spec.selector                 would select only the new
+                                                 release's pods before they are
+                                                 ready, dropping traffic
+                                                 mid-rollout
+
+Per-release labels belong in "custom.podLabels" below, which is used at the pod
+template and nowhere else. */}}
 {{- define "custom.selectorLabels" -}}
 app.kubernetes.io/name: custom
 app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/* Per-release labels for the app pod, and for the pod template *only*.
+
+`caelus.dev/release-id` identifies the individual rollout that produced a pod,
+so that a log query can attribute a line to one release even while two rollouts'
+pods are writing concurrently. Promtail relabels it into a `release_id` Loki
+stream label (tf/deps/loki).
+
+The value comes from the reconciler as a system override, so a tenant cannot
+claim another release's id -- `merge_values_scoped` applies system values last,
+which is the same thing `caelus.owner.id` above rests on.
+
+Because the id exists before any pod does, every pod of the release carries it,
+including one created hours later by an eviction or a kubelet restart with
+nobody watching. Timestamps and pod names cannot do that: both are learned by
+observation, and both mislabel a pod born after the observer stopped looking.
+
+Emitted only when the value is present, so the chart still renders standalone
+(`helm lint`, `helm template` with no --set).
+
+Consequence, accepted: a fresh id changes the pod template hash on every apply,
+so a redeploy with identical values genuinely cycles pods rather than being a
+Helm no-op. That matches Heroku, Railway and Fly; at `replicas: 1` it costs a
+brief interruption. */}}
+{{- define "custom.podLabels" -}}
+{{- with .Values.caelus.releaseId -}}
+caelus.dev/release-id: {{ . | quote }}
+{{- end -}}
 {{- end -}}
 
 {{/*

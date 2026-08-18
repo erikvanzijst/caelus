@@ -35,16 +35,17 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 
 ## Commands
 
-| Command          | What it does                                                                          |
-|------------------|---------------------------------------------------------------------------------------|
-| `freepod login`  | Sign in, and remember the credential.                                                 |
-| `freepod init`   | Set the current directory up as a project: choose a hostname, write `.freepod.json`.  |
-| `freepod deploy` | Pack, build and release the current project.                                          |
-| `freepod builds` | List your builds, most recent first.                                                  |
-| `freepod delete` | Delete this project's deployment.                                                     |
-| `freepod whoami` | Report who you are signed in as.                                                      |
-| `freepod logout` | Forget the stored credential.                                                         |
-| `freepod skill`  | Install deployment instructions for your coding agents.                               |
+| Command          | What it does                                                                         |
+|------------------|--------------------------------------------------------------------------------------|
+| `freepod login`  | Sign in, and remember the credential.                                                |
+| `freepod init`   | Set the current directory up as a project: choose a hostname, write `.freepod.json`. |
+| `freepod deploy` | Pack, build and release the current project.                                         |
+| `freepod log`    | Stream your application's pod output.                                                |
+| `freepod builds` | List your builds, most recent first.                                                 |
+| `freepod delete` | Delete this project's deployment.                                                    |
+| `freepod whoami` | Report who you are signed in as.                                                     |
+| `freepod logout` | Forget the stored credential.                                                        |
+| `freepod skill`  | Install deployment instructions for your coding agents.                              |
 
 `freepod --help` and `freepod <command> --help` cover the flags.
 

@@ -98,40 +98,44 @@ reference is never rendered by any chart.
 - **WHEN** a release is applied
 - **THEN** the values passed to Helm contain no build reference
 
-### Requirement: A named build must match the image and belong to the caller
+### Requirement: A named build must belong to the caller
 
-Every write that sets a deployment's user values or names a build SHALL validate the two against
-each other, using the **effective** values that will be stored rather than only those submitted.
+A build reference is optional on every write. Where one is named, it SHALL exist and SHALL belong
+to the same user as the deployment; a request naming any other build SHALL be rejected.
 
-Where the effective values carry no image, no build SHALL be named. Where they carry one, the named
-build SHALL be one that produced exactly that image, and SHALL belong to the caller.
+Validation SHALL occur at the write, where the caller can still be told, and SHALL NOT be deferred
+to the reconciler.
 
-A request failing either condition SHALL be rejected. Validation SHALL occur at the write, where
-the caller can still be told, and SHALL NOT be deferred to the reconciler.
+Ownership is the **only** condition. The platform SHALL NOT require agreement between a named build
+and any value in the deployment's user values, and SHALL NOT require a build to be named because
+some value is present.
 
-An image reference SHALL NOT be treated as identifying a build on its own: it is content-addressed,
-so more than one build can produce the same reference.
-
-#### Scenario: A build that did not produce the image
-
-- **WHEN** a request names a build whose image differs from the effective image
-- **THEN** the request is rejected and nothing is stored
-
-#### Scenario: Changing the image without naming a build
-
-- **WHEN** an update changes the image in user values and names no build, leaving the effective
-  values without a matching one
-- **THEN** the request is rejected
+`image` is a value of one product's chart, not a platform-wide concept: most products build nothing,
+charts choose their own value names, and a single build or release may come to carry more than one
+image. A rule tying the ledger to a particular chart's value key would make the release record an
+artifact of `custom`'s schema, and would have to be unpicked the first time either model grows.
+An image reference could not identify a build on its own in any case: it is content-addressed, so
+more than one build can produce the same reference.
 
 #### Scenario: Another user's build
 
 - **WHEN** a request names a build belonging to a different user
 - **THEN** the request is rejected, and no provenance from it is recorded
 
-#### Scenario: A product with no image
+#### Scenario: A build that does not exist
 
-- **WHEN** a deployment whose effective values carry no image is written with no build named
-- **THEN** the request is accepted
+- **WHEN** a request names a build that does not exist
+- **THEN** the request is rejected, indistinguishably from one belonging to another user
+
+#### Scenario: No build is named
+
+- **WHEN** a deployment is written with no build named, whatever its user values carry
+- **THEN** the request is accepted and the release records no build
+
+#### Scenario: A build is named for a product with no image value
+
+- **WHEN** a request names a build the caller owns, for a deployment whose values carry no image
+- **THEN** the request is accepted and the release records that build
 
 ### Requirement: Releases are numbered per deployment
 

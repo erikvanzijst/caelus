@@ -21,6 +21,7 @@ from . import EXIT_ERROR, EXIT_OK, FreepodError, UsageError
 from . import delete as delete_module
 from . import deploy as deploy_module
 from . import history
+from . import logs as logs_module
 from . import project
 from . import skill as skill_module
 from . import tos
@@ -579,3 +580,57 @@ def main(argv: Optional[list] = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())
+
+
+@cli.command(name="log")
+@click.option("-f", "--follow", is_flag=True, help="keep the stream open and print lines as they arrive")
+@click.option(
+    "-n", "--tail", type=int, metavar="LINES",
+    help="how many trailing lines to start with (default: the platform's)",
+)
+@click.option(
+    "-r", "--release", type=int, metavar="NUMBER",
+    help="pin to one release by its number, including one that failed and was rolled back",
+)
+@click.option(
+    "-t", "--timestamps", is_flag=True,
+    help="prefix each line with the time the platform recorded for it",
+)
+@click.pass_obj
+def log_command(
+    context: Context,
+    follow: bool,
+    tail: Optional[int],
+    release: Optional[int],
+    timestamps: bool,
+) -> None:
+    """Stream this project's application output.
+
+    Log lines go to stdout and everything this client says goes to stderr, so
+    `freepod log > app.log` captures the application and nothing else. That is
+    the opposite split from `deploy`, where the build log is the platform
+    narrating and the address is the result.
+
+    With `-f` the stream stays open across a redeploy, because you are watching
+    an application rather than a container.
+    """
+    session = context.session()
+    session.authenticate(interactive=False)
+    with context.client(session) as api:
+        try:
+            code = logs_module.run(
+                api,
+                context.env.name,
+                root=Path.cwd(),
+                follow=follow,
+                tail=tail,
+                release=release,
+                timestamps=timestamps,
+                say=context.say,
+            )
+        except KeyboardInterrupt:
+            # Interrupting a follow is how a follow ends. Nothing happened to
+            # the deployment and nothing should suggest otherwise.
+            context.say("")
+            raise SystemExit(EXIT_OK)
+    raise SystemExit(code)

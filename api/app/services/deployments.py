@@ -7,12 +7,15 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.models import (
+    BuildORM,
     DeploymentCreate,
     DeploymentORM,
     DeploymentRead,
+    DeploymentReleaseORM,
     MolliePaymentORM,
     MolliePaymentStatus,
     PaymentStatus,
@@ -71,6 +74,45 @@ def _get_deployment_orm(
     if not (deployment := session.exec(stmt).one_or_none()):
         raise NotFoundException("Deployment not found")
     return deployment
+
+
+def _validate_build_reference(session: Session, *, user_id: int, build_id: UUID | None) -> None:
+    """Reject a build the caller does not own, at the write.
+
+    Ownership is the *only* condition. Nothing here compares the build against
+    the deployment's user values: `image` is a value of the `custom` chart
+    rather than a platform concept, most products build nothing, and a build or
+    release may come to carry more than one image. Tying the ledger to one
+    chart's value key would make the release record an artifact of that chart's
+    schema. See design § D4.
+
+    "Not yours" and "does not exist" answer identically, so the endpoint cannot
+    be used to probe for other users' builds -- the same rule `builds.py`'s
+    `_get_build_orm` applies.
+    """
+    if build_id is None:
+        return
+    build = session.get(BuildORM, build_id)
+    if build is None or build.user_id != user_id:
+        raise ValidationException("Unknown build")
+
+
+def _next_release_number(session: Session, *, deployment_id: UUID) -> int:
+    """The next per-deployment release number, 1 for a deployment's first.
+
+    `max + 1` is safe rather than racy because writes against one deployment
+    already serialize: `enqueue_job` rejects a second queued-or-running job and
+    `update_deployment` requires status ready/error. The unique constraint on
+    (deployment_id, number) is what makes that structural instead of a habit --
+    a concurrent write loses on the constraint rather than silently reusing a
+    number.
+    """
+    highest = session.exec(
+        select(func.max(DeploymentReleaseORM.number)).where(
+            DeploymentReleaseORM.deployment_id == deployment_id
+        )
+    ).one()
+    return (highest or 0) + 1
 
 
 def _validate_user_values(template: ProductTemplateVersionORM, user_values_json: dict[str, Any] | None) -> None:
@@ -198,12 +240,21 @@ def create_deployment(
     if user.tos_accepted_version is None:
         raise ValidationException("Terms of Service must be accepted before deploying")
 
+    # A named build must be the caller's. Ownership only -- see
+    # `_validate_build_reference`.
+    _validate_build_reference(session, user_id=payload.user_id, build_id=payload.build_id)
+
     # Determine if this is a paid plan requiring payment.
     is_paid = payment_provider is not None and plan_template.price_cents > 0
 
     # Pre-generate the deployment UUID so we can use it in the Mollie
     # redirect URL and as an idempotency key before the DB transaction.
     deployment_id = uuid4()
+    # ...and the release UUID alongside it, because the two rows reference each
+    # other. Knowing both ids up front is what lets the deployment be inserted
+    # already naming a release that does not exist yet, with the deferred
+    # constraint checked at COMMIT. There is no insert-null-then-update step.
+    release_id = uuid4()
     checkout_url: str | None = None
 
     # --- DB transaction ---
@@ -226,10 +277,29 @@ def create_deployment(
             hostname=derived_hostname,
             status=DEPLOYMENT_STATUS_PENDING if is_paid else DEPLOYMENT_STATUS_PROVISIONING,
             subscription_id=sub.id,
-            **payload.model_dump(exclude={"plan_template_id"}),
+            desired_release_id=release_id,
+            # `build_id` joins `plan_template_id` here: both are request-only
+            # fields that the deployment does not store. The build lands on the
+            # release below instead.
+            **payload.model_dump(exclude={"plan_template_id", "build_id"}),
         )
     )
     session.add(deployment)
+    # The deployment's first release, in this same transaction. Added after the
+    # deployment so the flush orders the INSERTs that way: `deployment_release`
+    # carries an immediate FK to `deployment`, while the reverse pointer is
+    # deferred. Snapshots the *user* values -- system overrides do not exist
+    # yet at request time, and the user values are the intent worth keeping.
+    session.add(
+        DeploymentReleaseORM(
+            id=release_id,
+            number=1,
+            deployment_id=deployment_id,
+            template_id=payload.desired_template_id,
+            build_id=payload.build_id,
+            values_json=payload.user_values_json,
+        )
+    )
     session.flush()  # ensure deployment.subscription_id is available
 
     if is_paid:
@@ -404,6 +474,15 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
             session, derived_hostname, exclude_deployment_id=deployment.id,
         )
 
+    # A named build must be the caller's. Ownership only -- see
+    # `_validate_build_reference`.
+    _validate_build_reference(session, user_id=deployment.user_id, build_id=update.build_id)
+
+    # Minted before the guarded UPDATE so the pointer can move in the same
+    # statement; the row itself is only inserted once the guard has passed.
+    release_id = uuid4()
+    release_number = _next_release_number(session, deployment_id=deployment.id)
+
     # Atomic status guard: only update if deployment is in 'ready' state.
     # This prevents races with the reconciler and concurrent updates.
     # Uses session.execute (not session.exec) because this is a DML UPDATE,
@@ -419,6 +498,12 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
             user_values_json=new_user_values,
             hostname=derived_hostname,
             status=DEPLOYMENT_STATUS_PROVISIONING,
+            # Points at a release row that does not exist yet; the FK is
+            # DEFERRABLE INITIALLY DEFERRED and is checked at COMMIT, by which
+            # time the INSERT below has run. `applied_release_id` is untouched:
+            # what is running has not changed just because a rollout was asked
+            # for.
+            desired_release_id=release_id,
             # SQL expression: generates SET generation = generation + 1
             # evaluated atomically by the database, not from Python state.
             generation=DeploymentORM.generation + 1,
@@ -426,7 +511,24 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
         )
     )
     if result.rowcount == 0:
+        # The guard rejected the write, so no release is created: a rejected
+        # update must leave nothing behind. Nothing has been inserted at this
+        # point -- only the UPDATE ran, and it matched no rows.
         raise IntegrityException("Deployment is not in ready state")
+
+    # Only now, and unconditionally distinct from any previous release: two
+    # byte-identical updates produce two releases, because identity comes from
+    # the row rather than from the content.
+    session.add(
+        DeploymentReleaseORM(
+            id=release_id,
+            number=release_number,
+            deployment_id=deployment.id,
+            template_id=update.desired_template_id,
+            build_id=update.build_id,
+            values_json=new_user_values,
+        )
+    )
 
     # Expire the ORM instance so subsequent reads see the updated row
     session.expire(deployment)

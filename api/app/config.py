@@ -102,6 +102,57 @@ class CaelusSettings(BaseSettings):
     # its own.
     deployment_bucket_expiry_days: int = 1
 
+    # ── Deployment logs (Loki) ────────────────────────────────────────────
+    loki_base_url: str = ""
+    loki_query_timeout_seconds: float = 30.0
+    # How many trailing lines a log read starts with. A long-running
+    # application's whole history is not spooled to a caller who asked to watch
+    # what is happening now.
+    log_tail_lines: int = 200
+    # Ceiling on what a caller may ask for, and also the batch size the follow
+    # loop requests. Bounding both matters: the API is a single worker process.
+    log_max_tail_lines: int = 5000
+
+    # How far back the *first* read looks. Loki's own default window for
+    # `query_range` is one hour, which would silently return nothing for an
+    # application that has been quiet longer than that -- the exact case a
+    # reader is usually investigating. Sized to the store's retention: looking
+    # further back cannot find anything.
+    log_initial_lookback_seconds: int = 14 * 24 * 3600
+
+    # How often the follow loop re-queries the store. Trades latency against
+    # load on a single-replica Loki.
+    log_poll_interval_seconds: float = 2.0
+
+    # Keepalive interval for an open follow stream, as an SSE comment.
+    #
+    # MUST stay below the shortest connection timeout anywhere in the path,
+    # which is NOT a property of this repository: the platform edge is
+    # `client -> homelab HAProxy -> k3s Traefik -> API`, and HAProxy's
+    # `timeout client` / `timeout server` are operator-configured and commonly
+    # 30-60s. Configurable for exactly that reason. Re-measure against the live
+    # edge before raising it.
+    log_keepalive_seconds: int = 10
+
+    # Hard cap on how long one log stream may stay open, measured from when it
+    # opened -- **not** from its last line.
+    # It is to trigger periodic re-authorization.
+    # Costs the user nothing: the stream ends with an `end` event carrying a
+    # reason, and `freepod log -f` resumes from its cursor inclusively, so no
+    # line is lost and no gap appears.
+    log_stream_max_lifetime_seconds: int = 3600
+
+    # How many of a failed release's own log lines get attached to the
+    # deployment's `last_error`, so `freepod deploy` can report *why* the
+    # application refused to start without a second command.
+    log_failure_tail_lines: int = 50
+
+    # How many concurrent log streams one user may hold. The API runs
+    # `--workers 1` and serves every other endpoint from a bounded thread pool,
+    # so an unbounded number of long-lived streams would deny service to every
+    # endpoint, not just this one.
+    log_max_streams_per_user: int = 3
+
     # ── Builds ────────────────────────────────────────────────────────────
     # The builder image is published by hand (see products/custom/builder/),
     # not by the API's own CI, so it is versioned independently of the API

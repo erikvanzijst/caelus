@@ -620,9 +620,14 @@ def test_a_successful_build_yields_the_image_reference(make_api, capsys):
     store = Store(204)
     handle, size = archive()
 
-    image = build_image(api, handle, size, client=store.client(), out=io.BytesIO(), quiet=True)
+    built = build_image(api, handle, size, client=store.client(), out=io.BytesIO(), quiet=True)
 
-    assert image == digest
+    assert built.image == digest
+    # The build id travels with the image, because the platform records
+    # provenance on the release and an image reference cannot identify a build
+    # on its own -- digests are content-addressed, so image -> build is
+    # many-to-one.
+    assert built.build_id == "b-1"
     # `image` is null until success, so it is read from the record afterwards.
     assert ("GET", "/api/builds/b-1") in state["calls"]
     capsys.readouterr()

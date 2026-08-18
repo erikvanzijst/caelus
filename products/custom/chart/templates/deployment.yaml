@@ -11,6 +11,27 @@ metadata:
     {{- include "custom.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicas }}
+  {{- /*
+  How long a new pod must stay Ready before it counts as available, and
+  therefore before `helm upgrade --wait` will call the rollout done.
+
+  Without it, `--wait` accepts a container that starts and immediately dies.
+  This chart declares no readiness probe, so a container is Ready the instant
+  it runs; an application that crashes on startup was briefly Ready, Helm saw
+  an available ReplicaSet, and the rollout was reported successful. The pod
+  then crash-looped behind a deployment the platform had already recorded as
+  `ready`, `--atomic` never rolled anything back, and the user was told their
+  broken application was live.
+
+  Ten seconds is a floor, not a health check. It catches a process that exits
+  soon after starting, which is the common shape of a broken deploy, and
+  nothing else: an application that stays alive without ever serving anything
+  still passes. A real readiness contract is deliberately not attempted here --
+  binding $PORT is a convention that most applications follow rather than a
+  requirement, and headless workloads would have nothing to probe. Liveness
+  wants revisiting on its own terms.
+  */}}
+  minReadySeconds: 10
   selector:
     matchLabels:
       {{- include "custom.selectorLabels" . | nindent 6 }}
@@ -18,6 +39,10 @@ spec:
     metadata:
       labels:
         {{- include "custom.selectorLabels" . | nindent 8 }}
+        {{- /* Pod template only. Never spec.selector.matchLabels above
+               (immutable) and never the Service's selector -- see
+               "custom.podLabels" in _helpers.tpl. */}}
+        {{- include "custom.podLabels" . | nindent 8 }}
     spec:
       {{- /*
       TODO: this needs to be in the reconciler -- not per-chart.

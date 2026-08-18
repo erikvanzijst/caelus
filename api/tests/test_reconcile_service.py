@@ -137,6 +137,9 @@ def test_reconcile_apply_happy_path_returns_ready_and_applied_template(db_sessio
                 },
             },
             "owner": {"email": "reconcile-user@example.com", "id": deployment.user_id},
+            # Offered to every product with no per-product condition; whether a
+            # chart renders it is the chart's business.
+            "releaseId": str(deployment.desired_release_id),
         },
     }
 

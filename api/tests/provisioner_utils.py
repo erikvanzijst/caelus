@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from app.provisioner import HelmReleaseOperationResult
+
 
 class FakeProvisioner:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
         self.raise_on_upgrade: Exception | None = None
+        self.helm_revisions: dict[str, int] = {}
 
     def ensure_namespace(self, *, name: str):
         self.calls.append(("ensure_namespace", {"name": name}))
@@ -45,7 +48,17 @@ class FakeProvisioner:
         )
         if self.raise_on_upgrade is not None:
             raise self.raise_on_upgrade
-        return None
+        # A real Helm apply reports the revision it produced, which the
+        # reconciler records on the release. Counted per release name so a
+        # second apply of the same deployment reads 2, as Helm's would.
+        self.helm_revisions[release_name] = self.helm_revisions.get(release_name, 0) + 1
+        return HelmReleaseOperationResult(
+            release_name=release_name,
+            namespace=namespace,
+            changed=True,
+            status="deployed",
+            revision=self.helm_revisions[release_name],
+        )
 
     def helm_uninstall(self, *, release_name: str, namespace: str, timeout: int, wait: bool):
         self.calls.append(

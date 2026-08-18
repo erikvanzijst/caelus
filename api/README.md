@@ -662,6 +662,62 @@ the previous ReplicaSet keeps serving — rollback for free.
 - User values are stored in `user_values_json`.
 - Tracks workflow metadata: `status`, `generation`, `last_error`,
   `last_reconcile_at`, `deleted_at`.
+- Names two releases: `desired_release_id` (**NOT NULL**) and
+  `applied_release_id` (nullable). See DeploymentRelease.
+
+### DeploymentRelease
+
+The record of **one rollout**. Created by the request that asks for it — `POST`
+and `PUT /deployments`, in the same transaction as the deployment write — and
+completed later by the reconciler that applies it. **The reconciler creates no
+releases**; it reads `deployment.desired_release_id`, applies it, records the
+outcome, and on success sets `deployment.applied_release_id`.
+
+- `id` is a `uuid4`, generated before anything exists in the cluster to carry
+  it, and is the value stamped on the pod as `caelus.dev/release-id`. That is
+  why it must be unguessable.
+- `number` is a per-deployment integer from 1, the handle presented to and
+  accepted from users, and the ordering key in preference to timestamps.
+- `build_id` is nullable and routinely null — builds exist only for products
+  deploying tenant-supplied code. Validated for **ownership only**: a named
+  build must belong to the caller. Nothing is checked against the deployment's
+  values, because `image` is one chart's value rather than a platform concept.
+- `values_json` snapshots the **user** values, not the merged values.
+
+> **No column is ever revised, and there is no `status` column.** The request
+> writes identity and intent; the reconciler writes outcome (`started_at`,
+> `ended_at`, `error`, `helm_revision`). `started_at` is write-if-null, so a
+> lease reclaim after a worker died mid-Helm records when work *first* began —
+> how many attempts there were is `deployment_reconcile_job.attempt`.
+>
+> **Do not add a status column.** It would need a transition written when
+> something *else* changes — notably `superseded → live` when an atomic
+> rollback restores an earlier release — by code that is not watching. Status
+> derives instead:
+>
+> | Condition                             | Status     |
+> |---------------------------------------|------------|
+> | `started_at IS NULL`                  | queued (including awaiting payment) |
+> | started, not ended                    | in flight, or abandoned past the job lease |
+> | ended with `error`                    | failed     |
+> | ended without `error`                 | succeeded  |
+>
+> **Liveness is the opposite case and *is* stored.** `applied_release_id` is
+> written by the reconciler in the same transaction as `deployment.status`,
+> recording an action it just completed rather than a system it observes. On
+> failure it is left untouched, which is *correct* rather than a missed update:
+> `--atomic` has already restored the release it still names. It costs one
+> column and no subquery, where deriving liveness would cost a query per row on
+> a listing.
+
+The two tables reference each other, so both foreign keys on `deployment` are
+`DEFERRABLE INITIALLY DEFERRED` and declared with `use_alter`. Both primary
+keys are Python-generated `uuid4`, so the deployment is inserted already naming
+a release that does not exist yet, the release second, and the check happens at
+COMMIT. **`api/app/db.py` never sets `PRAGMA foreign_keys=ON`, so SQLite
+enforces no foreign keys at all** — an insert-order mistake passes the whole
+test suite and fails on Postgres, which is why
+`tests/test_deployment_release_postgres.py` exists.
 
 ### DeploymentReconcileJob
 

@@ -68,6 +68,7 @@ that locks users out until they upgrade.
 | `deploy.py`   | The pipeline: preflight → pack → upload → build → release, plus rollout following.          |
 | `delete.py`   | The teardown: confirming it, requesting it, and following it to gone.                       |
 | `history.py`  | The build history: reading the account's builds and rendering the table.                    |
+| `logs.py`     | `freepod log`: SSE parsing, the resume cursor, and reconnection.                            |
 | `tos.py`      | Terms acceptance: the gate, the prompt, and recording an acceptance.                        |
 | `skill.py`    | The packaged agent instructions: reading `assets/SKILL.md`, and where to install it.        |
 
@@ -105,6 +106,7 @@ one.
 | `deploy` | Preflight → pack → upload → build → release.                                   | `--recreate`, `--no-gitignore`      |
 | `delete` | Tear down the project's deployment, and follow the teardown to gone.           | `--yes/-y`, `--no-wait`             |
 | `builds` | List the **account's** builds, marking the one this project runs.              | `--limit`, `--all`                  |
+| `log`    | Stream the project deployment's application output.                            | `-f`, `-n`, `-r`, `-t`              |
 
 Global: `--env`, `--verbose`, `--quiet`, `--timeout`, `--version`, `-h/--help`.
 `--verbose` and `--quiet` together are a usage error.
@@ -673,6 +675,78 @@ thing that varies. The `description` in the frontmatter is what every one of
 them matches against a user's request, which is why it enumerates the phrasings
 that should select it and why a test asserts it stays on one line: wrapped, it
 truncates.
+
+## Reading logs
+
+`freepod log` streams a deployment's application output from
+`GET /api/users/{id}/deployments/{id}/log`. The transport is **Server-Sent
+Events** — a line format, not a protocol, so `httpx.iter_lines()` parses it and
+the package gains no dependency. A WebSocket would have needed one (`httpx` has
+none) and bought a return channel nothing would use.
+
+**Output goes to stdout, narration to stderr** — the opposite of `deploy`, and
+the reason is which of the two is the *result*. `deploy` narrates its progress
+towards an address, so the address is stdout. Here the lines are what the user
+asked for, so they must survive `freepod log > app.log` and a pipe into `grep`,
+and anything the client says about itself must not.
+
+### The cursor
+
+Every event carries the nanosecond timestamp the platform recorded, and that
+same field is both what `--timestamps` renders and what a reconnect resumes
+from. There is deliberately no separate cursor token: two representations of
+one fact drift apart, and the client parses the timestamp anyway in order to
+show it.
+
+Resumption is **inclusive** — the client hands back the last timestamp it saw,
+not one nanosecond later. Every undelivered line is at or after that instant,
+so an inclusive resume cannot leave a gap; its only cost is that a line sharing
+the boundary nanosecond may arrive twice. That trade is deliberate and must not
+be reversed: a duplicated line is cosmetic, a missing one is the one being
+looked for. **The client does not deduplicate**, because suppressing a line to
+avoid a repeat risks discarding one that was genuinely new.
+
+> **Parse the timestamp with `int`, never `float`.** A nanosecond value is
+> ~1.76e18 against a double's exact-integer ceiling of ~9.01e15, so any float
+> round trip silently corrupts both the rendered time and the resume point.
+> `tests/test_logs.py` round-trips a real value for exactly this reason.
+
+### Silence, and how a stream ends
+
+`DEFAULT_HTTP_TIMEOUT` (30s) is **not** applied to a followed stream. httpx
+applies a read timeout per read, so it would disconnect any application quiet
+for longer than an ordinary request should take — which is most of them, most
+of the time, and is not a fault. `LOG_STREAM_READ_TIMEOUT` bounds the
+*platform's* silence instead: the endpoint emits a keepalive comment on a fixed
+interval whether or not the application says anything, so keepalives stopping
+is the disconnection signal. Raising the platform's keepalive above this value
+would make a healthy stream look dead, so the two move together.
+
+Keepalives are discarded without ever reaching the output — not as a blank
+line, not as an empty event — so a quiet period leaves no trace in a redirect.
+
+A followed stream can end three ways:
+
+| Platform says          | Client does                                              |
+|------------------------|----------------------------------------------------------|
+| `end` reason `lifetime` | Reconnect silently. The platform caps how long one authorization keeps serving; the user asked to watch an application, not a connection. |
+| `end`, any other reason | Return. The platform said it had finished, so that is an answer. |
+| nothing                 | Treat as an interruption: back off, reconnect from the cursor, and **say so on stderr**. |
+
+Reconnection is bounded, but **progress resets the budget**: a long follow that
+drops every few hours and resumes cleanly each time is working, not failing,
+and counting those cumulatively would eventually abandon a healthy stream. On
+exhausting its attempts the client reports an interruption and says explicitly
+that this implies nothing about the application, which may still be running.
+
+### Build provenance
+
+`deploy` sends `build_id` alongside the image it already sends. The platform
+records it on the *release*, never on the deployment. Both halves travel
+together out of `build_image`, because an image reference cannot identify a
+build on its own: it is `{user_id}@{digest}`, digests are content-addressed, so
+image → build is many-to-one. Returning only the image, as this once did, left
+every release recording a null build.
 
 ## Testing
 

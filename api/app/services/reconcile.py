@@ -8,9 +8,10 @@ from uuid import UUID
 from sqlmodel import Session
 
 from app.config import get_settings
-from app.models import DeploymentORM, ProductTemplateVersionORM
+from app.models import DeploymentORM, DeploymentReleaseORM, ProductTemplateVersionORM
 from app.provisioner import Provisioner, provisioner as default_provisioner
-from app.services import object_storage, template_values
+from app.services import deployment_logs, object_storage, template_values
+from app.services.loki import DIRECTION_BACKWARD, LokiQueryClient
 from app.services.template_values import bytes_to_k8s_size
 from app.services.deployments import _get_deployment_orm
 from app.services.errors import IntegrityException
@@ -44,6 +45,10 @@ class ReconcileResult:
     applied_template_id: int | None
     last_error: str | None
     last_reconcile_at: datetime | None
+    # Helm's revision number for the release this reconcile applied, recorded
+    # on the `deployment_release` row. None on the delete path and on any
+    # failure that never reached Helm.
+    helm_revision: int | None = None
 
 
 class DeploymentReconciler:
@@ -56,7 +61,18 @@ class DeploymentReconciler:
     def reconcile(self, deployment_id: UUID) -> ReconcileResult:
         logger.info("Starting reconcile for deployment_id=%s", deployment_id)
         deployment = _get_deployment_orm(self._session, deployment_id=deployment_id)
+        release: DeploymentReleaseORM | None = None
         try:
+            # The reconciler creates no releases. It applies the one the request
+            # that asked for this rollout already recorded, and is
+            # level-triggered: it reads `desired_release_id` as it stands now,
+            # not as it stood when the request landed.
+            #
+            # Nothing is claimed on the delete path -- an uninstall is not a
+            # rollout of a release, and the desired release must not be marked
+            # as having been applied by one.
+            if deployment.deleted_at is None:
+                release = self._claim_desired_release(deployment)
             self._validate_input_state(deployment)
             if deployment.deleted_at is not None:
                 result = self._reconcile_delete(deployment)
@@ -64,26 +80,150 @@ class DeploymentReconciler:
                 result = self._reconcile_apply(deployment)
         except Exception as exc:
             logger.exception("Reconcile failed for deployment_id=%s", deployment_id)
+            last_error = str(exc)
+            if release is not None:
+                last_error = self._with_release_output(last_error, deployment, release)
             result = ReconcileResult(
                 status=DEPLOYMENT_STATUS_ERROR,
                 applied_template_id=deployment.applied_template_id,
-                last_error=str(exc),
+                last_error=last_error,
                 last_reconcile_at=datetime.now(UTC),
             )
+        # Both paths, success and failure, in the same transaction as the
+        # deployment's own status below.
+        if release is not None:
+            self._record_release_outcome(release, result)
         deployment.status = result.status
         deployment.applied_template_id = result.applied_template_id
         deployment.last_error = result.last_error
         deployment.last_reconcile_at = result.last_reconcile_at
+        if release is not None and result.status == DEPLOYMENT_STATUS_READY:
+            # On success only. On failure this is left untouched, which is
+            # *correct* rather than a missed update: `--atomic` has already
+            # rolled back to the previously applied release, so the value it
+            # still names is the one actually running. Nobody has to notice
+            # that a rollback happened and write a transition.
+            deployment.applied_release_id = release.id
         self._session.add(deployment)
         self._session.commit()
         self._session.refresh(deployment)
         logger.info(
-            "Finished reconcile for deployment_id=%s status=%s applied_template_id=%s",
+            "Finished reconcile for deployment_id=%s status=%s applied_template_id=%s "
+            "release_id=%s helm_revision=%s",
             deployment_id,
             result.status,
             result.applied_template_id,
+            None if release is None else release.id,
+            result.helm_revision,
         )
         return result
+
+    @staticmethod
+    def _with_release_output(
+        message: str, deployment: DeploymentORM, release: DeploymentReleaseORM
+    ) -> str:
+        """Append the failed release's own output to the error the user will see.
+
+        This works *only* because the lines outlive the pod that wrote them.
+        Helm runs with `--atomic`, so a rollout whose pods crash on startup is
+        rolled back and those pods deleted before anyone can ask -- reaching for
+        the pod here would race the thing it wants to observe and usually lose.
+        Promtail shipped the lines seconds earlier, so a query issued *after*
+        the rollback still finds them.
+
+        Appended after `str(exc)` rather than folded into it, and that ordering
+        matters: `AdapterCommandError._build_message` truncates Helm's own
+        detail at 400 characters (`app/proc.py`) while building the exception,
+        long before this runs. A tail added here is past that cut and survives
+        it.
+
+        Best effort throughout. A log store that is down, unconfigured or empty
+        must not turn a reported deployment failure into a different, less
+        useful one -- the Helm error is the thing the user actually needs.
+        """
+        settings = get_settings()
+        try:
+            started = release.started_at
+            if started is None:
+                return message
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=UTC)
+            target = deployment_logs.LogTarget(
+                deployment_id=str(deployment.id),
+                namespace=deployment.namespace,
+                name=deployment.name,
+                # Pinned where the chart labels its pods, so a rollout that
+                # overlapped the previous release's still-running pods cannot
+                # report the wrong release's output. Where it does not, the
+                # deployment selector bounded by this release's start time is
+                # the closest honest answer.
+                release_id=(
+                    str(release.id)
+                    if deployment_logs._renders_release_labels(deployment)
+                    else None
+                ),
+            )
+            entries = LokiQueryClient.from_settings(settings).query_range(
+                query=deployment_logs.build_selector(target),
+                start_ns=int(started.timestamp() * deployment_logs.NS_PER_SECOND),
+                limit=settings.log_failure_tail_lines,
+                direction=DIRECTION_BACKWARD,
+            )
+        except Exception:
+            logger.warning(
+                "Could not fetch failed release output for deployment_id=%s release=%s",
+                deployment.id,
+                release.id,
+                exc_info=True,
+            )
+            return message
+        if not entries:
+            return message
+        tail = "\n".join(entry.line for entry in entries)
+        return (
+            f"{message}\n\n"
+            f"Application output (release {release.number}, last {len(entries)} lines):\n"
+            f"{tail}"
+        )
+
+    def _claim_desired_release(self, deployment: DeploymentORM) -> DeploymentReleaseORM:
+        """Mark the desired release as started, and commit that before Helm runs.
+
+        Committed early on purpose. The point of `started_at` is that a worker
+        killed mid-Helm leaves a release with a start and no end -- evidence
+        that work began and was abandoned. Deferring the write to the end of
+        the reconcile would lose exactly the case it exists to record.
+
+        Write-if-null, so a lease reclaim after a worker died records when work
+        *first* began rather than when the retry did. How many attempts there
+        were is `deployment_reconcile_job.attempt`; it is not something to
+        infer from here.
+        """
+        release = self._session.get(DeploymentReleaseORM, deployment.desired_release_id)
+        if release is None:
+            # Not a reachable state: `desired_release_id` is NOT NULL behind a
+            # foreign key. Loud rather than silently applying nothing.
+            raise IntegrityException("Deployment's desired release is missing")
+        if release.started_at is None:
+            release.started_at = datetime.now(UTC)
+            self._session.add(release)
+            self._session.commit()
+        return release
+
+    @staticmethod
+    def _record_release_outcome(
+        release: DeploymentReleaseORM, result: ReconcileResult
+    ) -> None:
+        """Write the release's outcome, once.
+
+        These three are never rewritten: a failed reconcile is terminal
+        (`mark_job_failed` never re-enqueues), and a reclaimed job is by
+        definition one that never wrote them. `started_at` is deliberately not
+        touched here -- see `_claim_desired_release`.
+        """
+        release.ended_at = result.last_reconcile_at or datetime.now(UTC)
+        release.error = result.last_error
+        release.helm_revision = result.helm_revision
 
     @staticmethod
     def _validate_input_state(deployment: DeploymentORM) -> None:
@@ -130,7 +270,7 @@ class DeploymentReconciler:
         storage = self._ensure_object_storage(deployment)
         merged_values = self._build_merged_values(deployment, template, storage=storage)
 
-        self._provisioner.helm_upgrade_install(
+        outcome = self._provisioner.helm_upgrade_install(
             release_name=deployment.name,
             namespace=deployment.namespace,
             chart_ref=template.chart_ref,
@@ -147,6 +287,10 @@ class DeploymentReconciler:
             applied_template_id=deployment.desired_template_id,
             last_error=None,
             last_reconcile_at=datetime.now(UTC),
+            # getattr rather than attribute access: a provisioner double may
+            # return nothing, and a missing revision is not worth failing an
+            # otherwise successful apply over.
+            helm_revision=getattr(outcome, "revision", None),
         )
 
     def _reconcile_delete(self, deployment: DeploymentORM) -> ReconcileResult:
@@ -253,10 +397,33 @@ class DeploymentReconciler:
             cls._build_ingress_overrides(deployment),
             cls._build_owner_overrides(deployment),
             cls._build_object_storage_overrides(deployment, storage),
+            cls._build_release_overrides(deployment),
         ):
             if part:
                 overrides = template_values.deep_merge(overrides, part)
         return overrides or None
+
+    @staticmethod
+    def _build_release_overrides(deployment: DeploymentORM) -> dict | None:
+        """Project the desired release's identifier into ``caelus.releaseId``.
+
+        Offered to **every** product with no per-product condition. Rendering it
+        is each chart's decision: `custom` turns it into the
+        `caelus.dev/release-id` pod label, and the curated charts ignore it and
+        apply exactly as before (all of them set
+        `caelus.additionalProperties: true`, and `mattermost` has no schema at
+        all). Adopting it in another chart is therefore a chart-only change.
+
+        It arrives as a *system* override, applied after user values by
+        `merge_values_scoped`, so a tenant cannot claim another release's id.
+
+        Only the id travels. No build reference, no release number, nothing
+        else release-shaped: chart values carry what a chart renders.
+        """
+        release_id = getattr(deployment, "desired_release_id", None)
+        if release_id is None:
+            return None
+        return {"caelus": {"releaseId": str(release_id)}}
 
     @staticmethod
     def _build_object_storage_overrides(

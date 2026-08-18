@@ -38,8 +38,9 @@ the request that asks for it, whose identifier is stamped on the pod template be
   the release and is never stored on the deployment and never passed to Helm. Builds exist only for
   products that deploy tenant-supplied code; deployments are general, and chart values carry what a
   chart renders. It rides as a plain request field, following `plan_template_id`, which is already
-  accepted on create and never persisted on the deployment. Every write validates that the named
-  build produced the effective image and belongs to the caller.
+  accepted on create and never persisted on the deployment. Every write validates that a named
+  build belongs to the caller — and validates nothing else, because `image` is one chart's value
+  rather than a platform concept, and a build or release may come to carry several.
 - The release's `uuid4` is injected as a system value and rendered by the chart as the
   `caelus.dev/release-id` pod label, reaching Loki as a stream label through one Promtail relabel
   rule. Because the id exists before any pod does, every pod of that release carries it — including
@@ -65,9 +66,11 @@ the request that asks for it, whose identifier is stamped on the pod template be
 - On a failed apply the reconciler queries Loki for the failed release and attaches the tail to
   `last_error`, so `freepod deploy` reports *why* the application refused to start without a second
   command.
-- **Loki gains a retention policy.** It currently has `compactor.replicas = 0` and no
-  `limits_config.retention_period`, so nothing is ever deleted from a 10 GiB volume — tolerable for
-  incidental operator observability, not once a user-visible feature depends on it.
+- **Loki gains a retention policy.** Its compactor already runs in-process (`-target=all`), but
+  without `compactor.retention_enabled` it only compacts indexes, and with no
+  `limits_config.retention_period` nothing is ever deleted — tolerable for incidental operator
+  observability, not once a user-visible feature depends on it. The top-level
+  `compactor.replicas = 0` is inert in `SingleBinary` mode and is not the cause.
 - **Helm's `--atomic` is unchanged**, and the applied-release contract depends on it: a rollback
   restores the previously applied release, so leaving `applied_release_id` untouched on failure is
   correct rather than a missed update.
@@ -100,13 +103,19 @@ read by a DaemonSet, so no traffic leaves the tenant pod and the baseline Networ
   `deployment_release` because RELEASE is a SQL keyword and this repo runs SQLite in tests and
   Postgres in production.
 - **`api/app/services/deployments.py`** — create the release in the same transaction as the
-  deployment write, accept an optional `build_id`, and enforce the build/image/ownership invariant.
+  deployment write, accept an optional `build_id`, and enforce that a named build is the caller's.
 - **`api/app/services/reconcile.py`** — apply the desired release, record its outcome, contribute
   `caelus.releaseId` to system overrides, and set `applied_release_id` on success.
 - **`api/app/services/`** — a new Loki query client, a thin transport with no deployment or release
   concepts, following the Garage admin client's precedent.
 - **`api/app/api/users.py`** — the streaming endpoint, alongside the existing deployment routes.
-- **`api/app/config.py`** — Loki base URL, stream caps, keepalive interval, idle timeout.
+- **`api/app/config.py`** — Loki base URL, stream caps, keepalive interval, stream lifetime.
+- **`tf/app/`** — supplies `CAELUS_LOKI_BASE_URL` and `CAELUS_LOG_KEEPALIVE_SECONDS` to the API and
+  reconcile worker. Easy to overlook, and silent when overlooked: the setting defaults to empty so
+  that migrations, tests and the operator CLI still construct settings, which means an unwired
+  deployment fails only on the log path. The API and worker also gain the `checksum/config`
+  annotation that only the build worker had, without which a ConfigMap-only apply never restarts
+  them.
 - **`products/custom/chart/`** — a `custom.podLabels` helper on the pod template only, plus
   `caelus.releaseId` in `values.yaml` and `values.schema.json`.
 - **Not affected: the seven curated charts.** Their pods carry no release label, which Promtail

@@ -25,7 +25,8 @@ ever fires on them. That is exactly why `GET /api/me` must come first.
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from contextlib import contextmanager
+from typing import Any, Iterator, Optional
 from urllib.parse import quote
 
 import httpx
@@ -143,6 +144,84 @@ class ApiClient:
                 )
 
             return response
+
+    @contextmanager
+    def stream(
+        self,
+        method: str,
+        path: str,
+        *,
+        timeout: Any = None,
+        **kwargs: Any,
+    ) -> Iterator[httpx.Response]:
+        """Open a streaming response, under the same contract as `request`.
+
+        A separate method rather than a flag on `request` because the two
+        cannot share a return type: `request` hands back a response whose body
+        is already in memory, while this yields one whose body is still
+        arriving and must be consumed inside the `with`.
+
+        The contract itself is *not* reimplemented -- 401, the two flavours of
+        403, and the platform's odd 404 are decided by the same rules, and a
+        refresh still happens at most once. What differs is the mechanics: the
+        stream has to be opened to see the status at all, so a refusal means
+        closing it, refreshing, and opening a second one.
+
+        Retries are deliberately absent. `_send`'s three attempts exist for
+        idempotent *short* requests; replaying a long-lived stream would
+        re-deliver everything the caller had already consumed, and the caller
+        knows how to resume from where it stopped, which this does not.
+        """
+        url = self.env.url(path)
+        caller_headers = dict(kwargs.pop("headers", None) or {})
+        refreshed = False
+
+        while True:
+            headers = dict(self._headers())
+            headers.update(caller_headers)
+            try:
+                opened = self._client.stream(
+                    method, url, headers=headers, timeout=timeout, **kwargs
+                )
+            except httpx.HTTPError as exc:
+                raise FreepodError(f"cannot reach {url}: {exc}") from None
+
+            with opened as response:
+                status = response.status_code
+                if status >= 400:
+                    # The body decides between the two 403s and identifies the
+                    # platform's 404, and on a streaming response it has to be
+                    # pulled in explicitly before it can be read.
+                    response.read()
+
+                if status == 401:
+                    raise AuthenticationError(self._unauthenticated_message(url))
+
+                if status == 403:
+                    detail = _json_detail(response)
+                    if detail is not None:
+                        raise PermissionError_(f"403 from {url} — {detail}")
+                    if refreshed:
+                        raise PermissionError_(
+                            f"403 from {url} even after refreshing — the token is still "
+                            f"not verifiable. Run `freepod login --env {self.env.name}` "
+                            f"to re-authenticate from scratch."
+                        )
+                    refreshed = True
+                    self._renew()
+                    # Leaves the `with`, closing this stream before the retry
+                    # opens another.
+                    continue
+
+                if status == 404 and _json_detail(response) == "Not authenticated":
+                    raise FreepodError(
+                        f"404 'Not authenticated' from {url} — no identity reached the "
+                        f"API. This is an unexpected platform condition, not a "
+                        f"credential problem; please report it."
+                    )
+
+                yield response
+                return
 
     def get(self, path: str, **kwargs: Any) -> httpx.Response:
         return self.request("GET", path, **kwargs)

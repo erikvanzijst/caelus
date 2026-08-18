@@ -35,6 +35,28 @@ USER_AGENT = f"freepod/{__version__} (+https://freepod.eu)"
 #: bounded separately by their own deadlines, not by this.
 DEFAULT_HTTP_TIMEOUT = 30
 
+#: Read timeout for a followed log stream.
+#:
+#: Deliberately not DEFAULT_HTTP_TIMEOUT. That bounds how long a request may
+#: take to *answer*, and a followed stream is not trying to finish; httpx
+#: applies a read timeout per read, so 30s would disconnect any application
+#: that stayed quiet for half a minute -- which is most of them, most of the
+#: time, and is not a fault.
+#:
+#: What this bounds instead is the platform's silence. The endpoint emits a
+#: keepalive comment on a fixed interval whether or not the application says
+#: anything, so keepalives stopping is the disconnection signal and this must
+#: sit comfortably above their interval (15s at the time of writing). Raising
+#: the platform's keepalive above this value would make a healthy stream look
+#: dead, so the two move together.
+LOG_STREAM_READ_TIMEOUT = 120
+
+#: Reconnection attempts for an interrupted followed stream, and the first
+#: backoff interval, which doubles. Bounded because a stream that cannot be
+#: re-established is an interruption to report, not something to retry forever.
+LOG_RECONNECT_ATTEMPTS = 5
+LOG_RECONNECT_BACKOFF_SECONDS = 1.0
+
 # Per-operation wait defaults. `--timeout` is a single global override that
 # applies to whichever wait is active; unset, each operation uses its own
 # default. Only LOGIN_WAIT_SECONDS is consumed so far — the other two belong to

@@ -25,7 +25,7 @@ from app.models import (
 )
 from app.services.catalog import CatalogError, CatalogReconciler
 from app.services.images import generate_icon_filename, process_icon
-from tests.conftest import db_session  # noqa: F401
+from tests.conftest import db_session, make_deployment_with_release  # noqa: F401
 from tests.test_catalog_format import document, make_icon
 
 COMMIT = "75eccfc"
@@ -258,14 +258,14 @@ def test_existing_deployments_keep_their_applied_template(db_session, catalog_di
     user = UserORM(email="owner@example.com")
     db_session.add(user)
     db_session.commit()
-    deployment = DeploymentORM(
+    deployment = make_deployment_with_release(
+        db_session,
         user_id=user.id,
         desired_template_id=template.id,
         applied_template_id=template.id,
         name="app",
         namespace="tenant",
     )
-    db_session.add(deployment)
     db_session.commit()
 
     write_document(catalog_dir, document(**{"template.system_values": {"image": {"tag": "v3.1.0"}}}))

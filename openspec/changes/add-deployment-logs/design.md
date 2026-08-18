@@ -28,8 +28,8 @@ historical, including pods deleted minutes ago. No new collection infrastructure
 | Do reconciles serialize per deployment?                   | **Yes.** `enqueue_job` rejects a second queued-or-running job (`jobs.py:66-70`), and `update_deployment` requires status `ready`/`error`.                                                                                                                        |
 | Are failed reconciles retried?                            | **No.** `mark_job_failed` is terminal. Only a lease-expired *running* job is reclaimed — a worker that died mid-flight.                                                                                                                                          |
 | Which paths enqueue an apply?                             | `deployments.py:270` (create), `:435` (update), and `webhooks.py:199`, which only unblocks a `pending` deployment created earlier. All trace to a POST or PUT.                                                                                                   |
-| Is `--atomic` in use?                                     | **Yes.** `reconcile.py:141-142` — `atomic=True, wait=True`.                                                                                                                                                                                                      |
-| Does Loki enforce retention?                              | **No.** `compactor.replicas = 0`, no `limits_config.retention_period`. Nothing is ever deleted.                                                                                                                                                                  |
+| Is `--atomic` in use?                                     | **Yes.** `reconcile.py:141-142` — `atomic=True, wait=True`. But see D15: until `minReadySeconds` was added, `--wait` could not *detect* an application that crashed on startup, so `--atomic` never fired for the case this change exists to serve.               |
+| Does Loki enforce retention?                              | **No** — but not for the stated reason. The compactor already runs in-process (`-target=all`; `/services` reports `compactor => Running`) and `compactor.replicas = 0` is inert in `SingleBinary` mode. What is missing is `compactor.retention_enabled` and `limits_config.retention_period`. Enabling the first without `compactor.delete_request_store` is a hard `CONFIG ERROR` on Loki 3.5.5.                                                                                                                                                                  |
 | What kills an idle connection first?                      | **The client, at 30s** (`cli/src/freepod/config.py:36`), applied per read on a stream. Behind it the homelab HAProxy, whose timeouts are **not in this repo**. Traefik takes defaults — `writeTimeout: 0`, `idleTimeout: 180s` — and is the least likely killer. |
 | Can a new `caelus.*` value reach a chart that ignores it? | **Yes, by design.** Every curated chart sets `caelus.additionalProperties: true`; `mattermost` has no schema at all.                                                                                                                                             |
 
@@ -204,21 +204,31 @@ It is also never passed as a Helm value. Values carry what a chart renders and n
 `caelus.releaseId` qualifies because `custom.podLabels` renders it as a pod label; a build
 reference never would.
 
-Validation happens at the write, where a 400 is still available:
+Validation happens at the write, where a 400 is still available, and **ownership is the only
+condition**:
 
 ```
-  effective image absent  →  build_id must be absent            (curated products)
-  otherwise               →  build.image must equal that image
-                             and build.user_id must be the caller
+  build_id absent   →  accepted; the release records no build
+  build_id present  →  the build must exist and build.user_id must be the caller
 ```
 
 Ownership stops a client claiming another user's build as provenance — the same concern the
-chart's `caelus.owner.id` assertion answers on the image path. Agreement matters because
-`update_deployment` reuses stored values when a request omits them, so the check runs against the
-**effective** values (`new_user_values`), not only those submitted.
+chart's `caelus.owner.id` assertion answers on the image path.
 
-The image reference cannot identify the build on its own: it is `{user_id}@{digest}` and digests
-are content-addressed, so image → build is many-to-one.
+**Nothing is validated against the deployment's values.** An earlier draft required the named
+build to have produced exactly the effective `image`, and required a build whenever an image was
+present. Both were dropped deliberately. `image` is a value of the `custom` chart, not a platform
+concept: most products build nothing, another chart may name the field differently or carry
+several, and a build or release may come to reference more than one image. Tying the ledger to one
+chart's value key would make the release record an artifact of `custom`'s schema and would have to
+be unpicked the first time either model grows. The literal rule also had an immediate cost:
+`ui/src/api/endpoints.ts`'s `updateDeployment` sends no build reference, so the admin UI's
+template-upgrade button — which re-sends the deployment's stored values, image included — would
+have been rejected for every `custom` deployment, as would any write against a deployment created
+before this change.
+
+The image reference could not have identified the build on its own in any case: it is
+`{user_id}@{digest}` and digests are content-addressed, so image → build is many-to-one.
 
 ### D5. The release id is stamped on the pod template before any pod exists
 
@@ -378,6 +388,33 @@ including `caelus-api`, which logs full Helm values at INFO (`provisioner.py`). 
 selector would be a cross-tenant read and a platform-secret read at once. The selector is built
 from the deployment row fetched under `require_self`; no client string is interpolated. A
 deployment belonging to another user answers 404, matching the build endpoint.
+
+### D15. `--atomic` only helps if Helm can tell the rollout failed
+
+Verified against dev, after the rest of this change was in place: deploying an image that exits on
+startup produced `Deployed. Live at …`, a release recorded with `error = NULL` and marked
+`applied_release_id`, and a pod in `CrashLoopBackOff` behind a deployment the platform reported as
+`ready`. The Deployment itself said
+`Available: False — Deployment does not have minimum availability`.
+
+The cause is not `--atomic` and not the reconciler. The `custom` chart declares **no readiness
+probe**, so a container is Ready the instant it runs. A container that starts, prints and dies is
+therefore briefly Ready, Kubernetes marks the new ReplicaSet available, and `helm upgrade --wait`
+returns success. No exception is raised, so the reconciler's `except` branch — and with it the
+failure tail of D12 — is never reached.
+
+`minReadySeconds: 10` on the pod template closes it: a pod must hold Ready for ten seconds before
+counting as available, so a process that exits soon after starting fails the rollout and `--atomic`
+does what the rest of this design assumes.
+
+It is a floor, not a health check, and deliberately so. Binding `$PORT` is a convention most
+applications follow rather than a requirement — headless workloads are a stated future use and
+would have nothing to probe — so a TCP or HTTP readiness probe would refuse to deploy applications
+the platform means to support. An application that stays alive without ever serving anything still
+passes. **Liveness wants designing on its own terms and is not attempted here.**
+
+This is a pre-existing platform defect rather than one this change introduces, but every claim
+about `--atomic` in D1 and D12 depends on it, so it is fixed here rather than noted and left.
 
 ## Risks / Trade-offs
 

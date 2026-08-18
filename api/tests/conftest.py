@@ -2,6 +2,7 @@ import pytest
 import sys
 import importlib
 from pathlib import Path
+from uuid import uuid4
 
 from starlette.testclient import TestClient
 from sqlalchemy import create_engine
@@ -13,7 +14,14 @@ from app.config import get_settings
 from app.db import get_session, init_db
 from app.deps import get_payment_provider
 from app.main import app
-from app.models import UserORM, PlanORM, PlanTemplateVersionORM, BillingInterval
+from app.models import (
+    UserORM,
+    PlanORM,
+    PlanTemplateVersionORM,
+    BillingInterval,
+    DeploymentORM,
+    DeploymentReleaseORM,
+)
 from app.models.core import _utcnow
 from app.services.mollie import FakePaymentProvider
 
@@ -82,6 +90,36 @@ def cli_runner(tmp_path, monkeypatch):
     importlib.reload(cli)
 
     return CliRunner(), cli.app
+
+
+def make_deployment_with_release(session: Session, **kwargs) -> DeploymentORM:
+    """Hand-build a deployment together with its first release.
+
+    Every deployment names a desired release -- `desired_release_id` is NOT
+    NULL, which is the whole point of the ledger -- so a test that builds a
+    `DeploymentORM` directly has to build both. It does so in the order
+    production uses: the deployment first, already naming a release that does
+    not exist yet, then the release. The reverse FK is DEFERRABLE INITIALLY
+    DEFERRED, so Postgres checks it at COMMIT; SQLite enforces no foreign keys
+    at all here, which is exactly why the ordering wants a Postgres test of its
+    own (see tests/test_deployment_release_postgres.py).
+
+    Tests that go through `deployments.create_deployment` need none of this --
+    the service creates the release itself.
+    """
+    release_id = uuid4()
+    deployment = DeploymentORM(desired_release_id=release_id, **kwargs)
+    session.add(deployment)
+    session.add(
+        DeploymentReleaseORM(
+            id=release_id,
+            number=1,
+            deployment_id=deployment.id,
+            template_id=deployment.desired_template_id,
+            values_json=deployment.user_values_json,
+        )
+    )
+    return deployment
 
 
 def create_free_plan_template(session: Session, product_id: int) -> int:

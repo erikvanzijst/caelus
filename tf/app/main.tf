@@ -51,5 +51,9 @@ module "caelus" {
   garage_admin_url   = var.garage_admin_url
   garage_admin_token = var.garage_admin_token
 
+  # Loki, like Garage above, is a tf/deps singleton shared by both workspaces.
+  loki_base_url         = var.loki_base_url
+  log_keepalive_seconds = var.log_keepalive_seconds
+
   depends_on = [kubernetes_namespace.caelus, kubernetes_namespace.builds]
 }

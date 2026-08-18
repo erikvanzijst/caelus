@@ -33,9 +33,6 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
   `os.environ["PORT"]`, …) rather than a fixed number. An app that picks its own
   port receives no traffic.
 
-Deployments have no persistent disk. Whatever the app writes to its own
-filesystem is gone when it restarts, and at every release.
-
 ## Commands
 
 | Command          | What it does                                                                          |
@@ -57,6 +54,15 @@ filesystem is gone when it restarts, and at every release.
 served at `myapp.freepod.eu`. To use a domain of your own, point a CNAME at
 `freepod.eu` first, then give `init` the full name. Certificates are issued and
 renewed for you either way.
+
+## Persistence
+
+Deployments have no persistent disks or volumes. Whatever the app writes to its
+own filesystem is gone when it restarts, and at every release.
+
+Instead, each pod has its own private S3-compatible bucket for object storage.
+Use with any aws-s3 client. `S3_BUCKET`, `BUCKET_NAME` and `AWS_*` environment
+variables and access keys are already set.
 
 ## .freepod.json
 

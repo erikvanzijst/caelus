@@ -40,6 +40,36 @@ CURATED = {
 }
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _resolved_dependencies():
+    """Resolve each chart's declared dependencies before anything renders.
+
+    `helm template` refuses a chart whose `Chart.yaml` declares a dependency
+    absent from `charts/`, and that directory is a **build artifact**:
+    `products/.gitignore` ignores `**/*.tgz`, so a clean checkout has none.
+    Five of these seven depend on `caelus-sftp`.
+
+    This is the failure mode where a developer's machine and CI disagree, and
+    it disagrees in the dangerous direction: a tree that happens to hold the
+    artifacts from an earlier `helm dependency build` passes, while a clean
+    checkout does not. That is precisely how it reached CI.
+
+    `build` rather than `update`, so the tracked `Chart.lock` decides what is
+    fetched and is not rewritten. The `caelus-sftp` dependency is a `file://`
+    path into `products/_lib`, so this resolves offline and deterministically.
+    """
+    for chart in CURATED:
+        chart_dir = PRODUCTS / chart / "chart"
+        if "dependencies:" not in (chart_dir / "Chart.yaml").read_text():
+            continue
+        result = subprocess.run(
+            ["helm", "dependency", "build", str(chart_dir)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"{chart}: {result.stderr}"
+
+
 def _render(chart: str, values: dict[str, str]) -> str:
     args = ["helm", "template", "t", str(PRODUCTS / chart / "chart")]
     for key, value in values.items():

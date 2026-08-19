@@ -17,6 +17,9 @@ const ProductsPanel = lazy(() =>
 const DeploymentsPanel = lazy(() =>
   import('./components/DeploymentsPanel').then((m) => ({ default: m.DeploymentsPanel })),
 )
+const UsersPanel = lazy(() =>
+  import('./components/UsersPanel').then((m) => ({ default: m.UsersPanel })),
+)
 const PlansPanel = lazy(() =>
   import('./components/PlansPanel').then((m) => ({ default: m.PlansPanel })),
 )
@@ -58,6 +61,7 @@ function AuthedApp() {
             <Route index element={<Navigate to="products" replace />} />
             <Route path="products" element={<ProductsPanel />} />
             <Route path="deployments" element={<DeploymentsPanel />} />
+            <Route path="users" element={<UsersPanel />} />
             <Route path="plans" element={<PlansPanel />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

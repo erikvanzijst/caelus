@@ -10,6 +10,7 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
+  GroupOutlined,
   Inventory2Outlined,
   LocalOfferOutlined,
   RocketLaunchOutlined,
@@ -21,6 +22,7 @@ import type { CSSObject, Theme } from '@mui/material/styles'
 const navItems = [
   { label: 'Products', path: '/admin/products', icon: <Inventory2Outlined /> },
   { label: 'Deployments', path: '/admin/deployments', icon: <RocketLaunchOutlined /> },
+  { label: 'Users', path: '/admin/users', icon: <GroupOutlined /> },
   { label: 'Plans', path: '/admin/plans', icon: <LocalOfferOutlined /> },
 ]
 

@@ -69,7 +69,7 @@ Caelus image at all but the tenant-build image published by hand from
 cadence. Set it to bump the builder without waiting for an API release:
 
 ```bash
-terraform apply -var 'builder_image=registry.home/caelus/builder:0.1.3'
+terraform apply -var 'builder_image=registry.home/caelus/builder:0.1.5'
 ```
 
 Note that the API image also carries the product catalog (`products/catalog/`),

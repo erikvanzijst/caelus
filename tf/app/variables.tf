@@ -15,7 +15,7 @@ variable "ui_image" {
 variable "builder_image" {
   description = "Image that runs tenant builds, published by hand from products/custom/builder/ on its own cadence"
   type        = string
-  default     = "registry.home/caelus/builder:0.1.2"
+  default     = "registry.home/caelus/builder:0.1.4"
 }
 
 variable "environment" {

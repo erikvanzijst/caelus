@@ -17,6 +17,7 @@ import importlib.util
 import io
 import json
 import tarfile
+import tomllib
 import urllib.error
 from pathlib import Path
 
@@ -410,7 +411,13 @@ def test_optional_integers_fall_back_and_validate(monkeypatch):
 
 
 def test_main_exits_non_zero_without_an_artifact_url(monkeypatch, tmp_path):
-    for name in ("CAELUS_ARTIFACT_URL", "CAELUS_USER_ID", "CAELUS_BUILD_ID", "CAELUS_REGISTRY"):
+    for name in (
+        "CAELUS_ARTIFACT_URL",
+        "CAELUS_USER_ID",
+        "CAELUS_BUILD_ID",
+        "CAELUS_REGISTRY",
+        "CAELUS_CACHE_SCOPE",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("CAELUS_TERMINATION_LOG", str(tmp_path / "term"))
 
@@ -437,3 +444,240 @@ def test_the_builder_image_setting_carries_no_version_literal():
     from app.config import CaelusSettings
 
     assert CaelusSettings(_env_file=None).builder_image == ""
+
+
+# ---------------------------------------------------------------------------
+# The per-owner layer cache
+# ---------------------------------------------------------------------------
+
+
+def _captured_buildctl(monkeypatch, **overrides) -> list[str]:
+    """Run `build_and_push` against a stubbed `_run` and return the argv."""
+    captured: list[list[str]] = []
+    monkeypatch.setattr(
+        build, "_run", lambda command, *, stage, env=None: captured.append(command)
+    )
+
+    kwargs = {
+        "source": Path("/work/src"),
+        "plan_dir": Path("/work/plan"),
+        "metadata_file": Path("/work/metadata.json"),
+        "image_ref": "registry.home/7:some-build-id",
+        "cache_key": "7",
+        "cache_image_ref": build.cache_ref("registry.home", "caelus-builds", "7"),
+        "buildkitd_flags": ["--config", "/work/buildkitd.toml"],
+    }
+    kwargs.update(overrides)
+    build.build_and_push(**kwargs)
+
+    assert len(captured) == 1
+    return captured[0]
+
+
+def _attrs(argv: list[str], flag: str) -> dict[str, str]:
+    """Parse the comma-separated attribute list following `flag`."""
+    value = argv[argv.index(flag) + 1]
+    pairs = [item.split("=", 1) for item in value.split(",")]
+    return {key: val for key, val in pairs}
+
+
+def test_the_cache_ref_is_scoped_to_the_owner():
+    """The whole isolation argument is that two owners cannot name the same
+    ref. A cache one tenant can write and another can read is a way to hand a
+    tenant's build a step result of your choosing."""
+    assert build.cache_ref("registry.home", "caelus-builds", "7") != build.cache_ref(
+        "registry.home", "caelus-builds", "8"
+    )
+    assert "/7:" in build.cache_ref("registry.home", "caelus-builds", "7")
+
+
+def test_the_cache_ref_is_scoped_to_the_environment_too():
+    """Dev and prod keep separate databases behind one registry, so their user
+    id sequences are independent — user 1 in dev is a different person from
+    user 1 in prod. Owner alone would put them on one repository under one
+    moving tag, reading and overwriting each other's cache."""
+    assert build.cache_ref("registry.home", "caelus-builds", "1") != build.cache_ref(
+        "registry.home", "caelus-builds-dev", "1"
+    )
+
+
+def test_the_cache_lives_in_the_registry_the_image_is_pushed_to():
+    """Cross-repository mounting is what keeps a cache hit from turning into a
+    download and re-upload of layers the registry already holds."""
+    assert build.cache_ref("registry.home", "caelus-builds", "7").startswith("registry.home/")
+
+
+def test_the_build_imports_and_exports_the_owner_cache(monkeypatch):
+    argv = _captured_buildctl(monkeypatch)
+
+    assert "--import-cache" in argv
+    assert "--export-cache" in argv
+
+    imported = _attrs(argv, "--import-cache")
+    exported = _attrs(argv, "--export-cache")
+    assert imported["type"] == exported["type"] == "registry"
+    # Reading and writing the same ref is what makes it a cache rather than a
+    # one-way seed.
+    assert imported["ref"] == exported["ref"] == build.cache_ref("registry.home", "caelus-builds", "7")
+
+
+def test_the_cache_export_records_intermediate_steps(monkeypatch):
+    """mode=min would only record the runtime image's own layers. The costly
+    step is dependency installation, which never reaches the runtime image, so
+    min would leave the expensive half of every build uncached."""
+    assert _attrs(_captured_buildctl(monkeypatch), "--export-cache")["mode"] == "max"
+
+
+def test_the_cache_export_cannot_fail_an_already_pushed_build(monkeypatch):
+    """The image is pushed before the cache is written. A full or briefly
+    unreachable registry must cost the build its cache, not its result."""
+    assert _attrs(_captured_buildctl(monkeypatch), "--export-cache")["ignore-error"] == "true"
+
+
+def test_the_cache_export_uses_a_manifest_a_plain_registry_accepts(monkeypatch):
+    """Without these the exporter writes a manifest type the internal
+    distribution registry rejects, and every export fails — silently, since
+    ignore-error swallows it."""
+    exported = _attrs(_captured_buildctl(monkeypatch), "--export-cache")
+    assert exported["image-manifest"] == "true"
+    assert exported["oci-mediatypes"] == "true"
+
+
+def test_both_cache_ends_tolerate_the_registry_certificate(monkeypatch):
+    """Same reason as the image push: the registry presents a certificate for a
+    name it is not addressed by. A cache end without this fails to connect."""
+    argv = _captured_buildctl(monkeypatch)
+    assert _attrs(argv, "--import-cache")["registry.insecure"] == "true"
+    assert _attrs(argv, "--export-cache")["registry.insecure"] == "true"
+
+
+def test_the_cache_ref_reaching_buildctl_is_the_one_it_was_given(monkeypatch):
+    """`build_and_push` must not re-derive the ref from anything of its own —
+    `main` computes it from the platform-supplied owner and that is the only
+    input that may decide it."""
+    argv = _captured_buildctl(monkeypatch, cache_image_ref="registry.home/cache/99:latest")
+    assert _attrs(argv, "--import-cache")["ref"] == "registry.home/cache/99:latest"
+    assert _attrs(argv, "--export-cache")["ref"] == "registry.home/cache/99:latest"
+
+
+# ---------------------------------------------------------------------------
+# The ghcr.io mirror
+# ---------------------------------------------------------------------------
+
+MIRROR_SCRIPT = REPO_ROOT / "scripts" / "mirror-railpack-images.sh"
+
+
+def _buildkitd_config(registry: str = "registry.home") -> dict:
+    return tomllib.loads(build.buildkitd_config(registry))
+
+
+def test_the_generated_daemon_config_is_valid_toml():
+    """buildkitd refuses to start on a malformed config, which in a build pod
+    surfaces as a connection timeout rather than a parse error."""
+    assert _buildkitd_config()["registry"]
+
+
+def test_ghcr_is_mirrored_to_the_supplied_registry():
+    """The mirror host follows CAELUS_REGISTRY rather than being baked in, so
+    the registry is named in one place and cannot drift out of agreement with
+    the image push and the cache."""
+    config = _buildkitd_config("some.registry")
+    assert config["registry"]["ghcr.io"]["mirrors"] == ["some.registry"]
+
+
+def test_the_mirror_entry_tolerates_the_registry_certificate():
+    """BuildKit reads a mirror's TLS settings from that mirror's *own* section,
+    not from the entry naming it. Without this the mirror fetch fails and the
+    build falls back to ghcr.io silently — the log looks normal and nothing
+    gets faster."""
+    assert _buildkitd_config("some.registry")["registry"]["some.registry"]["insecure"] is True
+
+
+def test_only_ghcr_is_mirrored():
+    """A build reaches PyPI, npm and crates.io while running tenant code.
+    Redirecting those through our registry would be a different feature with a
+    different threat model; this one covers the images pulled before any tenant
+    code runs."""
+    registries = _buildkitd_config()["registry"]
+
+    assert [host for host, cfg in registries.items() if cfg.get("mirrors")] == ["ghcr.io"]
+
+
+def test_the_config_is_written_where_the_returned_flags_point(tmp_path):
+    """The flag is passed explicitly because buildkitd's default config path
+    differs between rootless and root mode."""
+    flags = build.write_buildkitd_config(tmp_path / "nested" / "buildkitd.toml", "registry.home")
+
+    assert flags[0] == "--config"
+    written = Path(flags[1])
+    assert written.is_file()
+    assert tomllib.loads(written.read_text())["registry"]["ghcr.io"]["mirrors"]
+
+
+def test_the_daemon_flags_keep_the_ones_the_image_set(monkeypatch):
+    """`--oci-worker-no-process-sandbox` comes from the image's ENV and rootless
+    buildkitd does not start without it. Assigning BUILDKITD_FLAGS instead of
+    appending would drop it."""
+    monkeypatch.setenv("BUILDKITD_FLAGS", "--oci-worker-no-process-sandbox")
+
+    flags = build.buildkitd_env(["--config", "/somewhere.toml"])["BUILDKITD_FLAGS"].split()
+
+    assert "--oci-worker-no-process-sandbox" in flags
+    assert flags[-2:] == ["--config", "/somewhere.toml"]
+
+
+def test_the_daemon_flags_survive_an_image_that_sets_none(monkeypatch):
+    monkeypatch.delenv("BUILDKITD_FLAGS", raising=False)
+
+    assert build.buildkitd_env(["--config", "/x.toml"])["BUILDKITD_FLAGS"] == "--config /x.toml"
+
+
+def test_the_daemon_flags_reach_the_spawned_buildkitd(monkeypatch):
+    """`buildctl-daemonless.sh` reads BUILDKITD_FLAGS from its environment and
+    word-splits it into the daemon. A config the daemon never sees means every
+    build silently keeps pulling from ghcr.io."""
+    monkeypatch.setenv("BUILDKITD_FLAGS", "--oci-worker-no-process-sandbox")
+    seen: list[dict[str, str]] = []
+    monkeypatch.setattr(
+        build, "_run", lambda command, *, stage, env=None: seen.append(env or {})
+    )
+
+    build.build_and_push(
+        source=Path("/work/src"),
+        plan_dir=Path("/work/plan"),
+        metadata_file=Path("/work/metadata.json"),
+        image_ref="registry.home/7:b",
+        cache_key="7",
+        cache_image_ref=build.cache_ref("registry.home", "caelus-builds", "7"),
+        buildkitd_flags=["--config", "/work/buildkitd.toml"],
+    )
+
+    assert seen[0]["BUILDKITD_FLAGS"].split() == [
+        "--oci-worker-no-process-sandbox",
+        "--config",
+        "/work/buildkitd.toml",
+    ]
+
+
+def test_the_mirror_script_pins_the_frontend_build_py_names():
+    """The script mirrors the frontend by tag; build.py names it by digest. If
+    they disagree the mirror holds an image nothing ever asks for, and every
+    build keeps pulling the frontend from ghcr.io without saying so."""
+    assert MIRROR_SCRIPT.is_file(), f"mirror script not found at {MIRROR_SCRIPT}"
+    script = MIRROR_SCRIPT.read_text()
+
+    _, pinned_digest = build.FRONTEND_IMAGE.split("@", 1)
+    assert f"FRONTEND_DIGEST={pinned_digest}" in script
+
+
+def test_the_mirror_script_pins_the_railpack_version_the_dockerfile_builds():
+    """Same version-matched set as the binary and the frontend: a mirror of the
+    wrong release's base images is never consulted."""
+    dockerfile = (REPO_ROOT / "products" / "custom" / "builder" / "Dockerfile").read_text()
+    version = next(
+        line.split("=", 1)[1].strip()
+        for line in dockerfile.splitlines()
+        if line.startswith("ARG RAILPACK_VERSION=")
+    )
+
+    assert f"RAILPACK_VERSION={version}" in MIRROR_SCRIPT.read_text()

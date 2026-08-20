@@ -1,6 +1,6 @@
 ---
 name: deploy-to-freepod
-description: Deploy a web app to freepod.eu using the `freepod` CLI — it builds a container from source with no Dockerfile and serves it on its own HTTPS hostname. Use when asked to deploy, ship, host, or put a web app online; when adapting an existing codebase to run on Freepod; or when the user mentions freepod, `freepod deploy`, or `.freepod.json`. Also read it *before* designing a new app that will be deployed there, because the platform's constraints (bind `$PORT`, no disk, no env vars, S3 for all state) decide whether an app can run at all.
+description: Deploy a web app to freepod.eu using the `freepod` CLI — it builds a container from source with no Dockerfile and serves it on its own HTTPS hostname. Use when asked to deploy, ship, host, or put a web app online; when adapting an existing codebase to run on Freepod; or when the user mentions freepod, `freepod deploy`, or `.freepod.json`. Also read it *before* designing a new app that will be deployed there, because the platform's constraints (bind `$PORT`, no disk, no runtime env vars, S3 for all state) decide whether an app can run at all.
 ---
 
 # Deploying to Freepod
@@ -39,14 +39,24 @@ an S3 bucket (below) and nothing else. Porting an app with a relational schema
 means either rewriting its persistence onto object storage or pointing it at a
 database you host somewhere else and reaching it over the network.
 
-**4. There is no mechanism for supplying environment variables or secrets.**
-The only variables injected into the container are `PORT` and the S3
-credentials. You cannot set an API key through the CLI or the project file.
-The only way to get configuration in is to put it in the source tree, which
-means it is baked into the image — acceptable for non-secret configuration,
-and a real disclosure risk for anything else. Note that `.env` is deliberately
-**not** excluded from the upload (`.env.local` and `.env.*.local` are), so an
-`.env` committed to the tree will ship.
+**4. There is no mechanism for supplying environment variables or secrets at
+runtime.** The only variables injected into the running container are `PORT`
+and the S3 credentials. You cannot set an API key through the CLI or the
+project file, so an app that needs a credential to reach a third-party service
+at request time has nowhere to put it.
+
+Build-time configuration is a different matter, and it does work, because the
+upload carries your dotenv files. `.env` and `.env.<mode>` ship; `.env.local`
+and `.env.*.local` are excluded and never leave your machine. A framework that
+resolves its own dotenv cascade at build time therefore reads them here:
+`vite build` and `next build` run in production mode, so a committed
+`.env.production` is picked up on the platform and ignored by your local dev
+server, with no `.local` file needed. That is the idiomatic way to give a
+static site a different `API_BASE_URL` in production than in development.
+
+Whatever you put there is compiled into the image, which is why it is only
+safe for non-secret configuration. A secret in `.env` or `.env.production` is
+committed to your repository and baked into a layer in the registry.
 
 **5. One HTTP service per deployment.** No sidecars, no worker processes, no
 scheduled jobs. If the app is a stack of cooperating services, only one of them

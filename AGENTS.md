@@ -21,9 +21,16 @@ This repository is a monorepo with:
 - Provisioning is stubbed in `api/app/provisioner.py` and should be replaced with a K8s implementation.
 - Product Templates are scoped to products; deployments are scoped to users.
 - **Builds** are a standalone subsystem: a build turns an uploaded project
-  archive into a container image and is owned by a **user**, never by a
-  deployment. Nothing auto-deploys a build — the client submits a successful
-  build's `image` to the deployment update endpoint itself. There are now two
+  archive into a container image and is owned by a **user**. Nothing
+  auto-deploys a build — the client submits a successful build's `image` to the
+  deployment create/update endpoint itself, and may pass that build's
+  `build_id` alongside it. Since `deployment_release`, that `build_id` is
+  recorded on the release row, so a build does have an explicit link to a
+  deployment; ownership still runs through the user, and
+  `_validate_build_reference` checks only that the caller owns the build.
+  Nothing currently stops one build being named by releases of *different*
+  deployments — an image is technically reusable that way, it is not the
+  intended case, and rejecting it is an open item. There are now two
   worker processes: `caelus worker` (reconcile queue) and `caelus build-worker`
   (builds), the latter running each build as a Kubernetes Job in a
   per-environment `caelus-builds*` namespace. See `api/README.md` § Builds.

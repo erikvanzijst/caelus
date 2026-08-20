@@ -588,9 +588,29 @@ def test_the_job_manifest_carries_only_the_artifact_credential(settings):
     assert env["CAELUS_ARTIFACT_URL"] == "https://store/one-object"
     assert env["CAELUS_USER_ID"] == "7"
     assert env["CAELUS_REGISTRY"] == settings.build_registry_host
+    assert env["CAELUS_CACHE_SCOPE"] == settings.builds_namespace
     blob = json.dumps(manifest).lower()
     for forbidden in ("database_url", "postgres", "secret_access_key", "s3_access"):
         assert forbidden not in blob, f"{forbidden} leaked into the build Job"
+
+
+def test_the_cache_scope_separates_the_environments(settings):
+    """Dev and prod push to one registry but keep independent user id
+    sequences, so the owner alone does not identify a cache. The builds
+    namespace is what keeps dev user 1 and prod user 1 apart."""
+    prod = build_job_manifest(
+        build_id=uuid4(), user_id=1, artifact_url="https://x/y", settings=settings
+    )
+    settings.builds_namespace = f"{settings.builds_namespace}-dev"
+    dev = build_job_manifest(
+        build_id=uuid4(), user_id=1, artifact_url="https://x/y", settings=settings
+    )
+
+    def scope(manifest):
+        env = manifest["spec"]["template"]["spec"]["containers"][0]["env"]
+        return next(e["value"] for e in env if e["name"] == "CAELUS_CACHE_SCOPE")
+
+    assert scope(prod) != scope(dev)
 
 
 def test_the_job_uses_the_configured_builder_image(settings):

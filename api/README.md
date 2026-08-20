@@ -895,6 +895,27 @@ curl -H "Range: bytes=${read_so_far}-" .../log   # 206 + Content-Range: bytes N-
 - Output is capped at `CAELUS_BUILD_LOG_MAX_BYTES` (10 MiB) and ends with an
   explicit truncation marker; truncation never affects the build's own outcome.
 
+### The layer cache
+
+BuildKit runs inside each build's pod and dies with it, so no local cache
+survives to the next build. Each build instead imports from and exports to a
+registry cache at `{registry}/cache/{builds_namespace}/{user_id}:latest` —
+**one repository per owner per environment, never shared**, since a build cache
+two tenants can reach is a way to hand one tenant's build a step result chosen
+by another. The builds namespace is in the path because dev and prod keep
+separate databases behind one registry, so their user id sequences are
+independent and the owner alone does not identify a tenant; the worker passes
+it as `CAELUS_CACHE_SCOPE`. The builds NetworkPolicy already reaches the
+registry, so nothing new is opened up for it.
+
+An absent cache is the normal first build for an owner and is not an error, and
+a failed export never fails a build (the image is pushed before the cache is
+written). Both properties mean the cache repository can be deleted at any time
+to force a cold rebuild. The cost is registry disk, on the registry host rather
+than the cluster node, and it is currently unbounded per owner. See
+`products/custom/builder/README.md` for the full reasoning and the failure
+modes worth knowing.
+
 ### The build worker
 
 A separate process (`caelus build-worker`, deployed as `caelus-build-worker`)

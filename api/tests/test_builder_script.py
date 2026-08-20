@@ -410,7 +410,13 @@ def test_optional_integers_fall_back_and_validate(monkeypatch):
 
 
 def test_main_exits_non_zero_without_an_artifact_url(monkeypatch, tmp_path):
-    for name in ("CAELUS_ARTIFACT_URL", "CAELUS_USER_ID", "CAELUS_BUILD_ID", "CAELUS_REGISTRY"):
+    for name in (
+        "CAELUS_ARTIFACT_URL",
+        "CAELUS_USER_ID",
+        "CAELUS_BUILD_ID",
+        "CAELUS_REGISTRY",
+        "CAELUS_CACHE_SCOPE",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("CAELUS_TERMINATION_LOG", str(tmp_path / "term"))
 
@@ -437,3 +443,114 @@ def test_the_builder_image_setting_carries_no_version_literal():
     from app.config import CaelusSettings
 
     assert CaelusSettings(_env_file=None).builder_image == ""
+
+
+# ---------------------------------------------------------------------------
+# The per-owner layer cache
+# ---------------------------------------------------------------------------
+
+
+def _captured_buildctl(monkeypatch, **overrides) -> list[str]:
+    """Run `build_and_push` against a stubbed `_run` and return the argv."""
+    captured: list[list[str]] = []
+    monkeypatch.setattr(build, "_run", lambda command, *, stage: captured.append(command))
+
+    kwargs = {
+        "source": Path("/work/src"),
+        "plan_dir": Path("/work/plan"),
+        "metadata_file": Path("/work/metadata.json"),
+        "image_ref": "registry.home/7:some-build-id",
+        "cache_key": "7",
+        "cache_image_ref": build.cache_ref("registry.home", "caelus-builds", "7"),
+    }
+    kwargs.update(overrides)
+    build.build_and_push(**kwargs)
+
+    assert len(captured) == 1
+    return captured[0]
+
+
+def _attrs(argv: list[str], flag: str) -> dict[str, str]:
+    """Parse the comma-separated attribute list following `flag`."""
+    value = argv[argv.index(flag) + 1]
+    pairs = [item.split("=", 1) for item in value.split(",")]
+    return {key: val for key, val in pairs}
+
+
+def test_the_cache_ref_is_scoped_to_the_owner():
+    """The whole isolation argument is that two owners cannot name the same
+    ref. A cache one tenant can write and another can read is a way to hand a
+    tenant's build a step result of your choosing."""
+    assert build.cache_ref("registry.home", "caelus-builds", "7") != build.cache_ref(
+        "registry.home", "caelus-builds", "8"
+    )
+    assert "/7:" in build.cache_ref("registry.home", "caelus-builds", "7")
+
+
+def test_the_cache_ref_is_scoped_to_the_environment_too():
+    """Dev and prod keep separate databases behind one registry, so their user
+    id sequences are independent — user 1 in dev is a different person from
+    user 1 in prod. Owner alone would put them on one repository under one
+    moving tag, reading and overwriting each other's cache."""
+    assert build.cache_ref("registry.home", "caelus-builds", "1") != build.cache_ref(
+        "registry.home", "caelus-builds-dev", "1"
+    )
+
+
+def test_the_cache_lives_in_the_registry_the_image_is_pushed_to():
+    """Cross-repository mounting is what keeps a cache hit from turning into a
+    download and re-upload of layers the registry already holds."""
+    assert build.cache_ref("registry.home", "caelus-builds", "7").startswith("registry.home/")
+
+
+def test_the_build_imports_and_exports_the_owner_cache(monkeypatch):
+    argv = _captured_buildctl(monkeypatch)
+
+    assert "--import-cache" in argv
+    assert "--export-cache" in argv
+
+    imported = _attrs(argv, "--import-cache")
+    exported = _attrs(argv, "--export-cache")
+    assert imported["type"] == exported["type"] == "registry"
+    # Reading and writing the same ref is what makes it a cache rather than a
+    # one-way seed.
+    assert imported["ref"] == exported["ref"] == build.cache_ref("registry.home", "caelus-builds", "7")
+
+
+def test_the_cache_export_records_intermediate_steps(monkeypatch):
+    """mode=min would only record the runtime image's own layers. The costly
+    step is dependency installation, which never reaches the runtime image, so
+    min would leave the expensive half of every build uncached."""
+    assert _attrs(_captured_buildctl(monkeypatch), "--export-cache")["mode"] == "max"
+
+
+def test_the_cache_export_cannot_fail_an_already_pushed_build(monkeypatch):
+    """The image is pushed before the cache is written. A full or briefly
+    unreachable registry must cost the build its cache, not its result."""
+    assert _attrs(_captured_buildctl(monkeypatch), "--export-cache")["ignore-error"] == "true"
+
+
+def test_the_cache_export_uses_a_manifest_a_plain_registry_accepts(monkeypatch):
+    """Without these the exporter writes a manifest type the internal
+    distribution registry rejects, and every export fails — silently, since
+    ignore-error swallows it."""
+    exported = _attrs(_captured_buildctl(monkeypatch), "--export-cache")
+    assert exported["image-manifest"] == "true"
+    assert exported["oci-mediatypes"] == "true"
+
+
+def test_both_cache_ends_tolerate_the_registry_certificate(monkeypatch):
+    """Same reason as the image push: the registry presents a certificate for a
+    name it is not addressed by. A cache end without this fails to connect."""
+    argv = _captured_buildctl(monkeypatch)
+    assert _attrs(argv, "--import-cache")["registry.insecure"] == "true"
+    assert _attrs(argv, "--export-cache")["registry.insecure"] == "true"
+
+
+def test_the_cache_ref_reaching_buildctl_is_the_one_it_was_given(monkeypatch):
+    """`build_and_push` must not re-derive the ref from anything of its own —
+    `main` computes it from the platform-supplied owner and that is the only
+    input that may decide it."""
+    argv = _captured_buildctl(monkeypatch, cache_image_ref="registry.home/cache/99:latest")
+    assert _attrs(argv, "--import-cache")["ref"] == "registry.home/cache/99:latest"
+    assert _attrs(argv, "--export-cache")["ref"] == "registry.home/cache/99:latest"

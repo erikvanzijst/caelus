@@ -23,7 +23,8 @@ presigned artifact URL
         │
         ▼
   push {registry}/{user_id}:{build_id}   →   digest from --metadata-file
-        │
+        │                     ▲
+        │                     └── layer cache in/out: {registry}/cache/{scope}/{user_id}
         ▼
   /dev/termination-log:  {"image": "{user_id}@{digest}"}
 ```
@@ -42,14 +43,76 @@ The build worker sets all of these on the Job.
 | Variable                     | Required | Meaning                                                                                                                    |
 |------------------------------|----------|----------------------------------------------------------------------------------------------------------------------------|
 | `CAELUS_ARTIFACT_URL`        | yes      | Presigned GET for the project archive. Expiring, single-object.                                                            |
-| `CAELUS_USER_ID`             | yes      | The build's owner. Becomes the repository name and the frontend cache key.                                                 |
+| `CAELUS_USER_ID`             | yes      | The build's owner. Becomes the repository name, the frontend cache key, and the layer cache repository.                    |
 | `CAELUS_BUILD_ID`            | yes      | The build's id. Becomes the anchor tag.                                                                                    |
 | `CAELUS_REGISTRY`            | yes      | Registry host, e.g. `registry.home`. Must match `registry` in the chart's `values.yaml`.                                   |
+| `CAELUS_CACHE_SCOPE`         | yes      | Environment discriminator for the layer cache repository. The worker sets it to the builds namespace.                      |
 | `CAELUS_WORKDIR`             | no       | Working tree. Default `/home/user/work`; the Job mounts an emptyDir here.                                                  |
 | `CAELUS_MAX_ARTIFACT_BYTES`  | no       | Ceiling on the *compressed* stream. Default 100 MiB, matching the API's upload cap.                                        |
 | `CAELUS_MAX_EXTRACTED_BYTES` | no       | Ceiling on the *extracted* tree. Default 800 MiB. This is the bound that matters: a 741-byte archive can expand to 500 KB. |
 | `CAELUS_MAX_ENTRIES`         | no       | Archive entry ceiling. Default 100,000.                                                                                    |
 | `CAELUS_TERMINATION_LOG`     | no       | Default `/dev/termination-log`.                                                                                            |
+
+## The layer cache is per owner, and that is the whole design
+
+BuildKit runs *inside* this pod and dies with it. Its state — content store,
+snapshots, and the frontend's dependency-install mount caches — lives on an
+emptyDir, so nothing local survives to the next build. Left alone, every build
+re-downloads and re-extracts the ~225 MB Railpack builder base before doing any
+work of its own: measured at roughly 26s of a 62s build, split about evenly
+between transfer and decompression.
+
+So the cache that survives has to be a remote one. Each build imports from and
+exports to a registry cache at:
+
+```
+{CAELUS_REGISTRY}/cache/{CAELUS_CACHE_SCOPE}/{CAELUS_USER_ID}:latest
+```
+
+**One repository per owner per environment, never shared.** A build cache is an
+execution result keyed by a hash the tenant controls, so a cache two tenants
+can reach is not an optimization, it is a channel: poison an entry and the next
+tenant's build executes it. The ref is built in `cache_ref()` from values the
+platform supplies and nothing from inside the archive, which is what makes that
+claim checkable. It pairs with `build-arg:cache-key`, which scopes the
+frontend's own mount cache ids the same way.
+
+`CAELUS_CACHE_SCOPE` — the builds namespace, so `caelus-builds` or
+`caelus-builds-dev` — is why the owner alone is not enough. Dev and prod run
+**separate databases behind one registry**, so their user id sequences are
+independent and user 1 in dev is a different person from user 1 in prod. Under
+the owner alone they would share a repository *and* a stable tag, reading and
+overwriting each other. The image repositories (`{registry}/{user_id}`) carry
+the same ambiguity and get away with it only because their tags are
+unguessable build UUIDs — a cache under one moving tag has no such cover. The
+variable is required rather than defaulted for the same reason: a missing scope
+would silently collapse the two environments back together.
+
+Some consequences worth knowing:
+
+- **The first build for an owner has nothing to import.** BuildKit warns and
+  proceeds; there is no repository to create beforehand and nothing to repair
+  if one is deleted.
+- **A failed export never fails a build.** The image is already pushed by the
+  time the cache is written, so the export carries `ignore-error=true`: a full
+  or briefly unreachable registry costs a build its cache, not its result.
+  The flip side is that a *persistently* broken export is silent — if build
+  times stop improving, look for `error: failed to solve: ... exporting cache`
+  in the build log rather than assuming the cache is working.
+- **`mode=max` is deliberate.** The expensive step is dependency installation,
+  whose result never reaches the runtime image. `mode=min` records only the
+  final image's layers and would leave that step re-running every time.
+- **It costs registry disk**, on the registry host rather than the cluster
+  node, and it grows per owner with every distinct dependency set. There is no
+  eviction policy yet: `mode=max` under one moving tag means each export
+  unreferences the previous one's blobs, so a registry garbage collection pass
+  reclaims them, but nothing bounds a single owner's working set. Worth
+  watching before the owner count grows.
+- **Emptying `cache/{scope}/{user_id}` is always safe** — it forces the next
+  build cold and nothing needs recreating.
+- **The cache shares the registry with the images.** That is what lets a cache
+  hit be mounted across repositories at push time instead of pulled down and
+  sent back up.
 
 ## Untrusted input handling
 
@@ -123,8 +186,8 @@ than producing an image whose `railpack` binary cannot exec.
 
 ```bash
 cd products/custom/builder
-docker build --platform linux/amd64 -t registry.home/caelus/builder:0.1.2 .
-docker push registry.home/caelus/builder:0.1.2
+docker build --platform linux/amd64 -t registry.home/caelus/builder:0.1.3 .
+docker push registry.home/caelus/builder:0.1.3
 ```
 
 Then point the platform to it through `builder_image` in Terraform.

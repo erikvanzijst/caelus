@@ -42,6 +42,22 @@ FRONTEND_IMAGE = (
 # The name the frontend looks for inside `--local dockerfile=`.
 PLAN_FILENAME = "railpack-plan.json"
 
+# Repository prefix for the layer cache, under the same registry the built image
+# is pushed to. One repository per owner per environment, never shared — see
+# `cache_ref` for why both halves are needed: a build cache is an execution
+# result keyed by a hash the tenant controls, so a cache reachable by two
+# tenants is a channel between them, not an optimization.
+#
+# Same registry as the output on purpose. A cache hit's layers are then already
+# where the push needs them, so BuildKit can mount them across repositories
+# instead of pulling them down and sending them back up.
+CACHE_REPO_PREFIX = "cache"
+
+# A single moving tag: the cache is a rolling working set, not a history. Each
+# export overwrites the last, and the blobs it stops referencing become
+# unreferenced for the registry's own garbage collection to reclaim.
+CACHE_TAG = "latest"
+
 DIGEST_PREFIX = "sha256:"
 DIGEST_HEX_LEN = 64
 
@@ -223,6 +239,26 @@ def prepare_plan(source: Path, plan_dir: Path) -> None:
         raise BuildFailure("stack detection produced no build plan")
 
 
+def cache_ref(registry: str, scope: str, user_id: str) -> str:
+    """The layer cache repository for one owner within one environment.
+
+    Derived entirely from values the platform supplies — never from anything
+    inside the archive — because this string *is* the isolation boundary. Two
+    owners resolving to one ref would share a cache, and a shared build cache
+    is a write primitive: poison an entry and the next tenant executes it.
+
+    `scope` is why the owner alone is not enough. Dev and prod run separate
+    databases behind one registry, so their user id sequences are independent:
+    user 1 in dev and user 1 in prod are different people. Without the scope
+    they would land on the same repository under the same moving tag and read
+    each other's cache — the exact channel this is meant to prevent. The image
+    repositories share that ambiguity today and get away with it only because
+    their tags are unguessable build UUIDs, which a cache under one stable tag
+    is not.
+    """
+    return f"{registry}/{CACHE_REPO_PREFIX}/{scope}/{user_id}:{CACHE_TAG}"
+
+
 def build_and_push(
     *,
     source: Path,
@@ -230,6 +266,7 @@ def build_and_push(
     metadata_file: Path,
     image_ref: str,
     cache_key: str,
+    cache_image_ref: str,
 ) -> None:
     """Run the gateway build and push the result to the registry.
 
@@ -239,7 +276,9 @@ def build_and_push(
 
     `buildctl-daemonless.sh` spawns an ephemeral rootless buildkitd for this one
     invocation and tears it down after, which is exactly the per-build daemon
-    lifetime the isolation argument depends on.
+    lifetime the isolation argument depends on. That daemon's state lives on an
+    emptyDir and dies with the pod, so *every* local cache is cold on arrival —
+    which is why the cache that survives has to be a remote one.
     """
     _run(
         [
@@ -250,17 +289,41 @@ def build_and_push(
             f"source={FRONTEND_IMAGE}",
             "--opt",
             f"filename={PLAN_FILENAME}",
-            # Namespaces the frontend's mount cache ids per owner. There is no
-            # shared cache today (the daemon dies with the build), so this
-            # matters only if one is ever introduced — at which point a
-            # per-owner key is the difference between a cache and a
-            # cross-tenant channel.
+            # Namespaces the frontend's mount cache ids per owner. Now that a
+            # per-owner remote cache exists, this is the second half of the
+            # same boundary rather than a precaution about a hypothetical one.
             "--opt",
             f"build-arg:cache-key={cache_key}",
             "--local",
             f"context={source}",
             "--local",
             f"dockerfile={plan_dir}",
+            # An absent ref is the normal first build for an owner. BuildKit
+            # warns and carries on rather than failing, so there is nothing to
+            # create up front and nothing to clean up when a repository is
+            # emptied.
+            "--import-cache",
+            f"type=registry,ref={cache_image_ref},registry.insecure=true",
+            # mode=max records the intermediate steps too, not just the layers
+            # of the final image. The expensive step here is dependency
+            # installation, whose result never reaches the runtime image — with
+            # mode=min it would be re-run on every build and the cache would
+            # buy almost nothing.
+            #
+            # ignore-error: the image has already been pushed by the time this
+            # runs. A registry that is full, or briefly unreachable, must cost
+            # the build its cache and nothing else — failing here would discard
+            # a good image over a missed optimization.
+            #
+            # image-manifest with oci-mediatypes is what makes the cache
+            # storable in a plain OCI registry at all; without it BuildKit
+            # writes a manifest type registry.home rejects.
+            "--export-cache",
+            (
+                f"type=registry,ref={cache_image_ref},mode=max,"
+                "image-manifest=true,oci-mediatypes=true,"
+                "ignore-error=true,registry.insecure=true"
+            ),
             # registry.insecure: the internal registry presents a certificate
             # for a name it is not addressed by. Tracked separately; giving it
             # a cert-valid internal name would retire this.
@@ -321,6 +384,10 @@ def main() -> int:
         user_id = _env("CAELUS_USER_ID")
         build_id = _env("CAELUS_BUILD_ID")
         registry = _env("CAELUS_REGISTRY")
+        # Required, not defaulted: a missing scope silently collapsing two
+        # environments onto one cache repository is precisely the failure the
+        # scope exists to prevent, so it fails the build instead.
+        cache_scope = _env("CAELUS_CACHE_SCOPE")
         workdir = Path(os.environ.get("CAELUS_WORKDIR", "/home/user/work"))
 
         # Both bounds are on *expansion*, since the upload cap already bounds
@@ -345,6 +412,10 @@ def main() -> int:
         # referencing it by digest.
         image_ref = f"{registry}/{user_id}:{build_id}"
 
+        # Scoped to the owner rather than to this build: a cache that only its
+        # own build could read would never be read at all.
+        cache_image_ref = cache_ref(registry, cache_scope, user_id)
+
         log(f"Build {build_id} for user {user_id}")
         with open_artifact(artifact_url, max_bytes=max_artifact_bytes) as stream:
             extract_stream(
@@ -357,6 +428,7 @@ def main() -> int:
             metadata_file=metadata_file,
             image_ref=image_ref,
             cache_key=user_id,
+            cache_image_ref=cache_image_ref,
         )
         digest = read_digest(metadata_file)
 

@@ -143,6 +143,16 @@ def build_job_manifest(
                                 {"name": "CAELUS_USER_ID", "value": str(user_id)},
                                 {"name": "CAELUS_BUILD_ID", "value": str(build_id)},
                                 {"name": "CAELUS_REGISTRY", "value": settings.build_registry_host},
+                                # Scopes the builder's per-owner layer cache
+                                # repository. The builds namespace is the one
+                                # value that already differs between dev and
+                                # prod, which is what stops their independent
+                                # user id sequences colliding on one cache in
+                                # the registry both environments share.
+                                {
+                                    "name": "CAELUS_CACHE_SCOPE",
+                                    "value": settings.builds_namespace,
+                                },
                                 {"name": "CAELUS_WORKDIR", "value": WORK_DIR},
                             ],
                             "resources": {

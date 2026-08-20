@@ -121,7 +121,8 @@ resource "kubernetes_network_policy" "builds" {
       }
     }
 
-    # The internal registry, to push the built image. A LAN address, so it sits
+    # The internal registry, to push the built image and to read and write the
+    # owner's layer cache at `cache/{namespace}/{user_id}`. A LAN address, so it sits
     # inside the `except` list below and would otherwise be unreachable.
     #
     # This CIDR and `build_registry_host` in api/app/config.py name the same

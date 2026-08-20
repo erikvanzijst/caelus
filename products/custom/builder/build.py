@@ -42,6 +42,12 @@ FRONTEND_IMAGE = (
 # The name the frontend looks for inside `--local dockerfile=`.
 PLAN_FILENAME = "railpack-plan.json"
 
+# Where the Railpack images live upstream, and therefore the registry the
+# internal one is configured to stand in for. Not a general mirror: this is the
+# only host whose pulls are worth redirecting, since it is the only one a build
+# reaches before running any of the tenant's own code.
+UPSTREAM_REGISTRY = "ghcr.io"
+
 # Repository prefix for the layer cache, under the same registry the built image
 # is pushed to. One repository per owner per environment, never shared — see
 # `cache_ref` for why both halves are needed: a build cache is an execution
@@ -204,14 +210,14 @@ def extract_stream(fileobj, dest: Path, *, max_bytes: int, max_entries: int) -> 
     log(f"Extracted {entries} entries, {total} bytes")
 
 
-def _run(command: list[str], *, stage: str) -> None:
+def _run(command: list[str], *, stage: str, env: dict[str, str] | None = None) -> None:
     """Run a subprocess, streaming its output into ours, and fail on non-zero.
 
     Output is inherited rather than captured so progress appears in the build
     log as it happens, which is the whole point of a log a user can poll.
     """
     log(f"{stage}: {' '.join(command)}")
-    result = subprocess.run(command, check=False)
+    result = subprocess.run(command, check=False, env=env)
     if result.returncode != 0:
         raise BuildFailure(f"{stage} failed with exit status {result.returncode}")
 
@@ -239,6 +245,36 @@ def prepare_plan(source: Path, plan_dir: Path) -> None:
         raise BuildFailure("stack detection produced no build plan")
 
 
+def buildkitd_config(registry: str) -> str:
+    """The ephemeral daemon's registry configuration, as TOML.
+
+    A mirror that does not have an image is not an error: BuildKit puts the
+    upstream host last in the same list and falls through to it. So a railpack
+    bump whose new base images have not been mirrored yet still builds, just at
+    the old speed — which is why this may be configured before, or without, any
+    mirroring having happened.
+    """
+    return (
+        f'[registry."{UPSTREAM_REGISTRY}"]\n'
+        f'  mirrors = ["{registry}"]\n'
+        "\n"
+        f'[registry."{registry}"]\n'
+        "  insecure = true\n"
+    )
+
+
+def write_buildkitd_config(path: Path, registry: str) -> list[str]:
+    """Write the daemon config and return the buildkitd flags that select it.
+
+    Generated rather than baked into the image so `CAELUS_REGISTRY` stays the
+    single place the registry is named; a checked-in TOML would be a second
+    copy of that host, silently ignored whenever the two disagreed.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(buildkitd_config(registry))
+    return ["--config", str(path)]
+
+
 def cache_ref(registry: str, scope: str, user_id: str) -> str:
     """The layer cache repository for one owner within one environment.
 
@@ -259,6 +295,20 @@ def cache_ref(registry: str, scope: str, user_id: str) -> str:
     return f"{registry}/{CACHE_REPO_PREFIX}/{scope}/{user_id}:{CACHE_TAG}"
 
 
+def buildkitd_env(extra_flags: list[str]) -> dict[str, str]:
+    """This process's environment with `extra_flags` added to BUILDKITD_FLAGS.
+
+    `buildctl-daemonless.sh` word-splits BUILDKITD_FLAGS into the daemon it
+    spawns, so this is the only channel for a flag. Appended rather than
+    assigned: the image already sets `--oci-worker-no-process-sandbox` there,
+    without which rootless buildkitd does not start at all.
+    """
+    env = dict(os.environ)
+    existing = env.get("BUILDKITD_FLAGS", "").split()
+    env["BUILDKITD_FLAGS"] = " ".join(existing + extra_flags)
+    return env
+
+
 def build_and_push(
     *,
     source: Path,
@@ -267,6 +317,7 @@ def build_and_push(
     image_ref: str,
     cache_key: str,
     cache_image_ref: str,
+    buildkitd_flags: list[str],
 ) -> None:
     """Run the gateway build and push the result to the registry.
 
@@ -336,6 +387,7 @@ def build_and_push(
             "--progress=plain",
         ],
         stage="Building and pushing image",
+        env=buildkitd_env(buildkitd_flags),
     )
 
 
@@ -415,6 +467,7 @@ def main() -> int:
         # Scoped to the owner rather than to this build: a cache that only its
         # own build could read would never be read at all.
         cache_image_ref = cache_ref(registry, cache_scope, user_id)
+        buildkitd_flags = write_buildkitd_config(workdir / "buildkitd.toml", registry)
 
         log(f"Build {build_id} for user {user_id}")
         with open_artifact(artifact_url, max_bytes=max_artifact_bytes) as stream:
@@ -429,6 +482,7 @@ def main() -> int:
             image_ref=image_ref,
             cache_key=user_id,
             cache_image_ref=cache_image_ref,
+            buildkitd_flags=buildkitd_flags,
         )
         digest = read_digest(metadata_file)
 

@@ -148,12 +148,32 @@ bytes, and the platform stores them faithfully rather than rewriting them,
 which is why the `build.log` column is `bytea`. Rendering is the reader's
 choice; a client that wants a tidy transcript can collapse CR runs itself.
 
-## The two pinned versions must move together
+## Pulls from ghcr.io go through the internal registry
 
-`railpack` (Dockerfile `ARG RAILPACK_VERSION`) and the frontend image
-(`FRONTEND_IMAGE` in `build.py`) are a **version-matched pair**. The build plan
-`railpack prepare` emits is a contract between them, so bumping one without the
-other hands a plan to a frontend that cannot read it.
+Before a build runs a line of the tenant's own code it pulls the Railpack
+frontend, builder and runtime images. With BuildKit's state on an emptyDir none
+of that is ever reused — measured on a 62s build, materializing the 225 MB
+builder base alone took ~26s, split roughly evenly between transfer and
+decompression.
+
+The ephemeral daemon is therefore configured with the internal registry as a
+**mirror for ghcr.io** (`buildkitd_config` in `build.py`, written at startup and
+passed as `--config` through `BUILDKITD_FLAGS`). `scripts/mirror-railpack-images.sh`
+copies the images in.
+
+A mirror is a per-repository substitution, not a host alias: BuildKit asks the
+mirror for the *same* path, so `ghcr.io/railwayapp/foo` is looked for at
+`{registry}/railwayapp/foo`. That is where the script puts them.
+
+## The pinned versions must move together
+
+`railpack` (Dockerfile `ARG RAILPACK_VERSION`), the frontend image
+(`FRONTEND_IMAGE` in `build.py`) and the mirror script's pins are a
+**version-matched set**. The build plan `railpack prepare` emits is a contract
+between the binary and the frontend, so bumping one without the other hands a
+plan to a frontend that cannot read it; a mirror of the wrong release's images
+is simply never consulted. Tests in `api/tests/test_builder_script.py` fail if
+the script drifts from the other two.
 
 Currently both are v0.36.4:
 
@@ -178,6 +198,17 @@ Pinning by digest here is about that coupling, not supply chain — a digest is
 content-addressed, and the project already consumes public images by tag
 elsewhere.
 
+`MISE_TAG` in the mirror script is the third pin, and unlike the other two it
+is chosen by Railpack rather than by us, so it is recorded nowhere else in this
+repo. After a bump, run one build and read the images out of its log:
+
+```bash
+kubectl logs -n caelus-builds <build pod> | grep -o 'docker-image://[^ ]*' | sort -u
+```
+
+Then update `MISE_TAG` and re-run the mirror script. Until you do, builds fall
+back to ghcr.io and are merely slow.
+
 ## Build and publish
 
 **amd64 only.** The cluster node is amd64 and multi-arch is an explicit
@@ -186,11 +217,16 @@ than producing an image whose `railpack` binary cannot exec.
 
 ```bash
 cd products/custom/builder
-docker build --platform linux/amd64 -t registry.home/caelus/builder:0.1.3 .
-docker push registry.home/caelus/builder:0.1.3
+docker build --platform linux/amd64 -t registry.home/caelus/builder:0.1.4 .
+docker push registry.home/caelus/builder:0.1.4
 ```
 
-Then point the platform to it through `builder_image` in Terraform.
+Then point the platform to it through `builder_image` in Terraform, and mirror
+the Railpack base images if this is a new registry or a new Railpack version:
+
+```bash
+./scripts/mirror-railpack-images.sh
+```
 
 ## Node prerequisites
 

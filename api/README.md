@@ -916,6 +916,14 @@ than the cluster node, and it is currently unbounded per owner. See
 `products/custom/builder/README.md` for the full reasoning and the failure
 modes worth knowing.
 
+### The ghcr.io mirror
+
+The builder configures its ephemeral daemon to treat the internal
+registry as a **mirror for ghcr.io**, and `scripts/mirror-railpack-images.sh`
+copies those images in.
+
+See `products/custom/builder/README.md`.
+
 ### The build worker
 
 A separate process (`caelus build-worker`, deployed as `caelus-build-worker`)

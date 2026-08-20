@@ -17,6 +17,7 @@ import importlib.util
 import io
 import json
 import tarfile
+import tomllib
 import urllib.error
 from pathlib import Path
 
@@ -453,7 +454,9 @@ def test_the_builder_image_setting_carries_no_version_literal():
 def _captured_buildctl(monkeypatch, **overrides) -> list[str]:
     """Run `build_and_push` against a stubbed `_run` and return the argv."""
     captured: list[list[str]] = []
-    monkeypatch.setattr(build, "_run", lambda command, *, stage: captured.append(command))
+    monkeypatch.setattr(
+        build, "_run", lambda command, *, stage, env=None: captured.append(command)
+    )
 
     kwargs = {
         "source": Path("/work/src"),
@@ -462,6 +465,7 @@ def _captured_buildctl(monkeypatch, **overrides) -> list[str]:
         "image_ref": "registry.home/7:some-build-id",
         "cache_key": "7",
         "cache_image_ref": build.cache_ref("registry.home", "caelus-builds", "7"),
+        "buildkitd_flags": ["--config", "/work/buildkitd.toml"],
     }
     kwargs.update(overrides)
     build.build_and_push(**kwargs)
@@ -554,3 +558,126 @@ def test_the_cache_ref_reaching_buildctl_is_the_one_it_was_given(monkeypatch):
     argv = _captured_buildctl(monkeypatch, cache_image_ref="registry.home/cache/99:latest")
     assert _attrs(argv, "--import-cache")["ref"] == "registry.home/cache/99:latest"
     assert _attrs(argv, "--export-cache")["ref"] == "registry.home/cache/99:latest"
+
+
+# ---------------------------------------------------------------------------
+# The ghcr.io mirror
+# ---------------------------------------------------------------------------
+
+MIRROR_SCRIPT = REPO_ROOT / "scripts" / "mirror-railpack-images.sh"
+
+
+def _buildkitd_config(registry: str = "registry.home") -> dict:
+    return tomllib.loads(build.buildkitd_config(registry))
+
+
+def test_the_generated_daemon_config_is_valid_toml():
+    """buildkitd refuses to start on a malformed config, which in a build pod
+    surfaces as a connection timeout rather than a parse error."""
+    assert _buildkitd_config()["registry"]
+
+
+def test_ghcr_is_mirrored_to_the_supplied_registry():
+    """The mirror host follows CAELUS_REGISTRY rather than being baked in, so
+    the registry is named in one place and cannot drift out of agreement with
+    the image push and the cache."""
+    config = _buildkitd_config("some.registry")
+    assert config["registry"]["ghcr.io"]["mirrors"] == ["some.registry"]
+
+
+def test_the_mirror_entry_tolerates_the_registry_certificate():
+    """BuildKit reads a mirror's TLS settings from that mirror's *own* section,
+    not from the entry naming it. Without this the mirror fetch fails and the
+    build falls back to ghcr.io silently — the log looks normal and nothing
+    gets faster."""
+    assert _buildkitd_config("some.registry")["registry"]["some.registry"]["insecure"] is True
+
+
+def test_only_ghcr_is_mirrored():
+    """A build reaches PyPI, npm and crates.io while running tenant code.
+    Redirecting those through our registry would be a different feature with a
+    different threat model; this one covers the images pulled before any tenant
+    code runs."""
+    registries = _buildkitd_config()["registry"]
+
+    assert [host for host, cfg in registries.items() if cfg.get("mirrors")] == ["ghcr.io"]
+
+
+def test_the_config_is_written_where_the_returned_flags_point(tmp_path):
+    """The flag is passed explicitly because buildkitd's default config path
+    differs between rootless and root mode."""
+    flags = build.write_buildkitd_config(tmp_path / "nested" / "buildkitd.toml", "registry.home")
+
+    assert flags[0] == "--config"
+    written = Path(flags[1])
+    assert written.is_file()
+    assert tomllib.loads(written.read_text())["registry"]["ghcr.io"]["mirrors"]
+
+
+def test_the_daemon_flags_keep_the_ones_the_image_set(monkeypatch):
+    """`--oci-worker-no-process-sandbox` comes from the image's ENV and rootless
+    buildkitd does not start without it. Assigning BUILDKITD_FLAGS instead of
+    appending would drop it."""
+    monkeypatch.setenv("BUILDKITD_FLAGS", "--oci-worker-no-process-sandbox")
+
+    flags = build.buildkitd_env(["--config", "/somewhere.toml"])["BUILDKITD_FLAGS"].split()
+
+    assert "--oci-worker-no-process-sandbox" in flags
+    assert flags[-2:] == ["--config", "/somewhere.toml"]
+
+
+def test_the_daemon_flags_survive_an_image_that_sets_none(monkeypatch):
+    monkeypatch.delenv("BUILDKITD_FLAGS", raising=False)
+
+    assert build.buildkitd_env(["--config", "/x.toml"])["BUILDKITD_FLAGS"] == "--config /x.toml"
+
+
+def test_the_daemon_flags_reach_the_spawned_buildkitd(monkeypatch):
+    """`buildctl-daemonless.sh` reads BUILDKITD_FLAGS from its environment and
+    word-splits it into the daemon. A config the daemon never sees means every
+    build silently keeps pulling from ghcr.io."""
+    monkeypatch.setenv("BUILDKITD_FLAGS", "--oci-worker-no-process-sandbox")
+    seen: list[dict[str, str]] = []
+    monkeypatch.setattr(
+        build, "_run", lambda command, *, stage, env=None: seen.append(env or {})
+    )
+
+    build.build_and_push(
+        source=Path("/work/src"),
+        plan_dir=Path("/work/plan"),
+        metadata_file=Path("/work/metadata.json"),
+        image_ref="registry.home/7:b",
+        cache_key="7",
+        cache_image_ref=build.cache_ref("registry.home", "caelus-builds", "7"),
+        buildkitd_flags=["--config", "/work/buildkitd.toml"],
+    )
+
+    assert seen[0]["BUILDKITD_FLAGS"].split() == [
+        "--oci-worker-no-process-sandbox",
+        "--config",
+        "/work/buildkitd.toml",
+    ]
+
+
+def test_the_mirror_script_pins_the_frontend_build_py_names():
+    """The script mirrors the frontend by tag; build.py names it by digest. If
+    they disagree the mirror holds an image nothing ever asks for, and every
+    build keeps pulling the frontend from ghcr.io without saying so."""
+    assert MIRROR_SCRIPT.is_file(), f"mirror script not found at {MIRROR_SCRIPT}"
+    script = MIRROR_SCRIPT.read_text()
+
+    _, pinned_digest = build.FRONTEND_IMAGE.split("@", 1)
+    assert f"FRONTEND_DIGEST={pinned_digest}" in script
+
+
+def test_the_mirror_script_pins_the_railpack_version_the_dockerfile_builds():
+    """Same version-matched set as the binary and the frontend: a mirror of the
+    wrong release's base images is never consulted."""
+    dockerfile = (REPO_ROOT / "products" / "custom" / "builder" / "Dockerfile").read_text()
+    version = next(
+        line.split("=", 1)[1].strip()
+        for line in dockerfile.splitlines()
+        if line.startswith("ARG RAILPACK_VERSION=")
+    )
+
+    assert f"RAILPACK_VERSION={version}" in MIRROR_SCRIPT.read_text()

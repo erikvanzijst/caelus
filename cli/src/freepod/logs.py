@@ -23,7 +23,7 @@ from typing import Any, Callable, Dict, Iterator, Optional, TextIO
 
 import httpx
 
-from . import FreepodError
+from . import FreepodError, UsageError
 from .api import ApiClient
 from .auth import log
 from .config import (
@@ -77,10 +77,14 @@ def resolve_deployment(root: Path, env_name: str) -> str:
             "  Run it from a project directory, or run `freepod init` to create one."
         )
     project = load(found)
-    if project.env != env_name:
-        raise FreepodError(
-            f"this project targets '{project.env}', not '{env_name}'.\n"
-            f"  Run `freepod --env {project.env} log`, or deploy it to '{env_name}' first."
+    if project.env != env_name and project.deployment_id:
+        # The recorded deployment is minted on another environment. Naming it
+        # keeps the pointer legible: a bare "no deployment here" would send the
+        # user to `freepod deploy` for a project that already has one.
+        raise UsageError(
+            f"this project's deployment is on '{project.env}', not on "
+            f"'{env_name}'.\n"
+            f"  Re-run without --env (or with --env {project.env}) to read it."
         )
     if not project.deployment_id:
         raise FreepodError(

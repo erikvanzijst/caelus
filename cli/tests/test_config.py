@@ -40,6 +40,24 @@ def test_the_environment_variable_selects_the_environment(monkeypatch):
     assert resolve_environment().name == "dev"
 
 
+def test_the_project_file_selects_the_environment():
+    """The reported friction: a project on dev must not need `--env dev`."""
+    dev = resolve_environment(project_env="dev")
+    assert dev.name == "dev"
+    assert dev.api_base == "https://dev.freepod.eu"
+
+
+def test_explicit_selection_wins_over_the_project_file():
+    assert resolve_environment("prod", project_env="dev").name == "prod"
+
+
+def test_the_project_file_wins_over_the_environment_variable(monkeypatch):
+    """The file is the most specific signal of where this project lives, so a
+    global default must not pull a command away from it."""
+    monkeypatch.setenv("FREEPOD_ENV", "prod")
+    assert resolve_environment(project_env="dev").name == "dev"
+
+
 def test_explicit_selection_wins_over_the_environment_variable(monkeypatch):
     monkeypatch.setenv("FREEPOD_ENV", "dev")
     assert resolve_environment("prod").name == "prod"
@@ -58,6 +76,14 @@ def test_an_unknown_environment_variable_is_also_a_usage_error(monkeypatch):
     with pytest.raises(UsageError) as raised:
         resolve_environment()
     assert "FREEPOD_ENV" in str(raised.value)
+
+
+def test_an_unknown_environment_in_the_project_file_names_the_file():
+    with pytest.raises(UsageError) as raised:
+        resolve_environment(project_env="staging")
+    message = str(raised.value)
+    assert "staging" in message
+    assert ".freepod.json" in message
 
 
 def test_only_dev_gates_on_a_group():

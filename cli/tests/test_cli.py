@@ -150,6 +150,78 @@ def test_logout_targets_only_the_selected_environment(capsys):
 
 
 # --------------------------------------------------------------------------
+# Environment inference from the project file
+# --------------------------------------------------------------------------
+
+
+def test_the_project_file_selects_the_environment(capsys, tmp_path, monkeypatch):
+    """The reported friction: a project on dev must not need `--env dev`."""
+    from freepod.project import Project
+
+    store_refresh_token("prod", "freepod-cli-prod", "prod-refresh")
+    store_refresh_token("dev", "freepod-cli-dev", "dev-refresh")
+    Project(root=tmp_path, env="dev", user_values={"hostname": "a.dev.freepod.eu"}).save()
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["logout"]) == EXIT_OK
+
+    assert load_refresh_token("dev") is None
+    assert load_refresh_token("prod") == "prod-refresh"
+    capsys.readouterr()
+
+
+def test_an_explicit_env_overrides_the_project_file(capsys, tmp_path, monkeypatch):
+    from freepod.project import Project
+
+    store_refresh_token("prod", "freepod-cli-prod", "prod-refresh")
+    store_refresh_token("dev", "freepod-cli-dev", "dev-refresh")
+    Project(root=tmp_path, env="dev", user_values={"hostname": "a.dev.freepod.eu"}).save()
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["--env", "prod", "logout"]) == EXIT_OK
+
+    assert load_refresh_token("prod") is None
+    assert load_refresh_token("dev") == "dev-refresh"
+    capsys.readouterr()
+
+
+def test_a_broken_project_file_does_not_break_a_command_without_one(capsys, tmp_path, monkeypatch):
+    """Inference is best-effort: `logout` has no business in the project, so a
+    broken file falls back to the ordinary default rather than failing."""
+    (tmp_path / ".freepod.json").write_text("{not json", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["logout"]) == EXIT_OK
+    assert "No cached credential for 'prod'" in capsys.readouterr().err
+
+
+def test_an_unknown_environment_in_the_file_does_not_break_other_commands(
+    capsys, tmp_path, monkeypatch
+):
+    """A name this client does not know must not brick the directory: `init
+    --force` is the only way to repair the file, and it runs through the same
+    group callback as everything else."""
+    from freepod.project import Project
+
+    Project(root=tmp_path, env="staging", user_values={}).save()
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["logout"]) == EXIT_OK
+    assert "No cached credential for 'prod'" in capsys.readouterr().err
+
+
+def test_an_empty_env_is_a_usage_error(capsys, tmp_path, monkeypatch):
+    """An unset shell variable expands to this. Falling through to prod would
+    deploy on the strength of a variable the script believed it had set."""
+    from freepod import EXIT_USAGE
+
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["--env", "", "whoami"]) == EXIT_USAGE
+    assert "--env was given an empty value" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------
 # whoami
 # --------------------------------------------------------------------------
 

@@ -141,9 +141,17 @@ def test_a_project_with_no_deployment_says_so(tmp_path):
         resolve_deployment(tmp_path, "prod")
 
 
-def test_a_project_for_another_environment_is_refused(tmp_path):
+def test_a_project_for_another_environment_is_named(tmp_path):
     project_at(tmp_path, env="dev")
-    with pytest.raises(FreepodError, match="targets 'dev'"):
+    with pytest.raises(FreepodError, match="deployment is on 'dev'"):
+        resolve_deployment(tmp_path, "prod")
+
+
+def test_a_project_for_another_environment_without_a_deployment_says_so(tmp_path):
+    """No pointer means nothing is minted on either environment, so the
+    ordinary "nothing to read" answer is the right one."""
+    project_at(tmp_path, env="dev", deployment=None)
+    with pytest.raises(FreepodError, match="no deployment"):
         resolve_deployment(tmp_path, "prod")
 
 

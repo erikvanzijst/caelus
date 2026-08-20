@@ -10,13 +10,17 @@ client package to exist.
 
 ### Requirement: The command reads the project's deployment
 
-The client SHALL resolve the deployment to read from the project in the working directory and
-the selected environment, in the same way the other project-scoped commands do, so that
-`freepod log` in a project directory needs no arguments.
+The client SHALL resolve the deployment to read from the project in the working directory,
+in the same way the other project-scoped commands do, so that `freepod log` in a project
+directory needs no arguments.
 
-Where no project file exists, or the project records no deployment for the selected
-environment, the client SHALL say so plainly and SHALL NOT guess at a deployment from the
-account's other deployments.
+Where no project file exists, or the project records no deployment, the client SHALL say
+so plainly and SHALL NOT guess at a deployment from the account's other deployments.
+
+Where the project records a deployment on an environment other than the one targeted, the
+client SHALL name the environment that deployment lives on rather than report that there
+is nothing to read, which would send the user to deploy a project that already has a
+deployment.
 
 #### Scenario: Reading from a project directory
 
@@ -27,6 +31,12 @@ account's other deployments.
 
 - **WHEN** `freepod log` runs where no project file exists
 - **THEN** the client reports that there is no deployment to read and streams nothing
+
+#### Scenario: A deployment on another environment is named
+
+- **WHEN** `freepod log` targets one environment and the project records its deployment
+  on another
+- **THEN** the client names the environment that deployment lives on and streams nothing
 
 ### Requirement: Output goes to stdout and status goes to stderr
 

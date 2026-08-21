@@ -84,9 +84,21 @@ not publish (design D2).
 | `prod` | `https://freepod.eu`     | `freepod-cli-prod` | The default.                               |
 | `dev`  | `https://dev.freepod.eu` | `freepod-cli-dev`  | Gated on the `freepod-dev` Keycloak group. |
 
-Selection is `--env`, then `FREEPOD_ENV`, then `prod`. Both clients are public:
-PKCE proves client identity and no secret exists. The issuer is
-`https://keycloak.freepod.eu/realms/freepod` for both.
+Selection is `--env`, then the environment recorded in `.freepod.json`, then
+`FREEPOD_ENV`, then `prod`. The file outranks the variable because it is the
+most specific statement of where this project lives: a deployment id minted on
+dev is meaningless on prod, so a global default must never pull a command away
+from the environment its project was created on. Inference is what makes `dev`
+invisible to the end user — a project on dev is deployed, logged, and deleted
+by the same commands as one on prod, without `--env` anywhere.
+
+Reading the file for the environment is best-effort, because it happens for
+every command, including ones with no business in a project: a missing or
+unreadable file yields nothing and the ordinary default applies. The command
+that actually needs the project loads it itself and reports the real problem.
+
+Both clients are public: PKCE proves client identity and no secret exists. The
+issuer is `https://keycloak.freepod.eu/realms/freepod` for both.
 
 The dev gate is `allowed_groups` in `tf/app/main.tf`, empty on prod. A non-member
 holding a perfectly valid token gets a bare 401 on every request, which is why
@@ -309,11 +321,14 @@ a cheap read can refuse is refused before a build is spent.
 
 Preflight, cheapest and most fatal first:
 
-1. The project file, and that it belongs to this environment.
+1. The project file, and that its recorded deployment applies to this
+   environment — a project whose pointer was minted elsewhere needs
+   `--recreate` before it can deploy here.
 2. `GET /api/me` — the first request that actually exercises the credential.
 3. `GET /api/products` — the `custom` product and its canonical template.
 4. The recorded deployment, so one deleted out of band is reported here rather
-   than after a four-minute build.
+   than after a four-minute build. Skipped under `--recreate`, which has
+   already decided to abandon it.
 5. On a create only: a free plan, then the terms.
 6. Any newly required value, by asking.
 7. The hostname, but only when it is new or changed.
@@ -354,12 +369,15 @@ Things worth knowing about each step:
   quoted verbatim rather than guessed at — an invented message would be wrong
   exactly when it mattered most.
 
-`--recreate` discards the recorded deployment pointer in memory and creates a
-new deployment; the discard is not persisted until the creation succeeds, since
-losing the old pointer to a failed create is strictly worse than holding a
-pointer to something that may already be gone. The new pointer is written
-**before** the rollout is awaited: a deployment that exists but is not recorded
-is one the project can never address again.
+`--recreate` creates a new deployment and re-points the file at it. The old
+pointer is left on the project until the create succeeds, because losing it to
+a failed create is strictly worse than holding a pointer to something that may
+already be gone — and preflight is not free of writes in between, since
+`_settle_values` saves the file the moment the template requires a value it
+lacks. What `--recreate` changes before then is only what preflight reads: the
+recorded deployment is not fetched, so the run takes the create path. The new
+pointer is written **before** the rollout is awaited: a deployment that exists
+but is not recorded is one the project can never address again.
 
 ## Deleting a deployment
 
@@ -455,6 +473,23 @@ a merge conflict for any team of two. `image` is stripped on write even if a
 caller passes one, because the platform's schema declares it under
 `additionalProperties: false`, so neither a value nor an explicit null belongs
 in a file that is committed and diffed.
+
+`env` is both a record and an instruction: it says which environment the
+recorded deployment was minted on, and it is the environment every command run
+from this directory targets unless `--env` says otherwise. The two readings
+cannot be allowed to drift apart, so the environment travels with the pointer
+in the same write — a file that recorded a deployment while still declaring
+another environment would name an id its own environment cannot answer. Only a
+create moves it, which today means `deploy --recreate` or a first deploy.
+
+A command that targets an environment other than the one recorded is not
+refused for disagreeing; it is refused only when the recorded pointer would be
+stranded by it, and then by the command that knows what the pointer is for.
+`deploy` demands `--recreate`, because the old deployment keeps running while
+the project stops being able to address it. `delete` and `log` name the
+environment the deployment actually lives on, because a delete that silently
+did nothing would read as success, and a bare "no deployment here" would send
+the user to `deploy` for a project that already has one.
 
 `deploy` prompts for a required value the file lacks and records the answer,
 rather than sending the user back to `init` — which would discard the deployment

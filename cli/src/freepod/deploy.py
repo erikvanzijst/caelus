@@ -10,7 +10,8 @@ Preflight is the whole point of the ordering. Packing and building cost
 minutes; every question that can be answered from a cheap read is answered
 first, in this order:
 
-1. the project file, and that it belongs to this environment,
+1. the project file, and that its recorded deployment applies to this
+   environment — a cross-environment deploy needs `--recreate`,
 2. `GET /api/me` — the first request that actually exercises the credential,
 3. `GET /api/products` — the product and its canonical template,
 4. the recorded deployment, so one deleted out of band is reported here rather
@@ -34,7 +35,7 @@ from typing import IO, Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
-from . import FreepodError, RolloutFailed
+from . import FreepodError, RolloutFailed, UsageError
 from . import tos
 from .api import ApiClient, _json_detail
 from .archive import packed_archive, report
@@ -160,7 +161,21 @@ def preflight(
     echo: Callable[[str], None] = _log,
 ) -> Preflight:
     """Read everything a deploy depends on, cheapest and most fatal first."""
-    project = require_project(env_name, root)
+    project = require_project(root)
+
+    if project.env != env_name and project.deployment and not recreate:
+        # The recorded deployment is minted on another environment, and no
+        # request to this one can reach it. Deploying here would start fresh
+        # and leave it running but unaddressable from this project — a
+        # consequence that needs the same confirmation as --recreate.
+        raise UsageError(
+            f"{project.path} records deployment "
+            f"'{project.deployment_name}' on '{project.env}', but this command "
+            f"targets '{env_name}'.\n"
+            f"  The deployment would keep running, but this project could no "
+            f"longer address it. Re-run with --recreate to point the project "
+            f"at a new deployment on '{env_name}'."
+        )
 
     if recreate and project.deployment:
         echo(
@@ -168,10 +183,12 @@ def preflight(
             f"'{project.deployment_name}' ({project.deployment_id}). It is not "
             f"deleted — if it still exists, it keeps running unattended."
         )
-        # Held in memory only. Persisting the discard now would lose the old
-        # pointer even if the creation that follows fails, which is strictly
-        # worse than a pointer to something that may already be gone.
-        project.deployment = None
+        # The pointer stays on the project until the replacement exists.
+        # Clearing it here would be persisted by any save between now and the
+        # create — `_settle_values` writes one whenever the template requires a
+        # value this file lacks — and a deploy that then failed would leave a
+        # deployment nothing can address. A pointer to something that may
+        # already be gone is strictly the better wreckage.
 
     # `/api/me` first: the reads below are on the edge's skip-auth list and are
     # answered anonymously however bad the credential is. See design D15.
@@ -204,7 +221,9 @@ def preflight(
             f"it — this is a platform problem, please report it."
         )
 
-    deployment = _read_deployment(api, user_id, project)
+    # `--recreate` is a decision to abandon the recorded deployment, so its
+    # state is not worth a request: whatever it says, this deploy creates.
+    deployment = None if recreate else _read_deployment(api, user_id, project)
 
     # Everything above is a read. Everything below may ask a question, so the
     # cheap fatal checks are exhausted first: there is no point collecting a
@@ -774,7 +793,12 @@ def release(
             build_id=build_id,
         )
         # Written before the rollout is awaited: a deployment that exists but
-        # is not recorded is one this project can never address again.
+        # is not recorded is one this project can never address again. The
+        # environment travels with the pointer, in the same write: a file that
+        # recorded a deployment while still declaring another environment
+        # would point at an id the declared environment cannot answer.
+        if state.project.env != api.env.name:
+            state.project.env = api.env.name
         state.project.record_deployment(record["id"], record["name"])
         echo(f"Created deployment '{record['name']}' ({record['id']}).")
     else:

@@ -9,7 +9,7 @@ import re
 import httpx
 import pytest
 
-from freepod import FreepodError, RolloutFailed
+from freepod import FreepodError, RolloutFailed, UsageError
 from freepod.deploy import (
     describe_conflict,
     deploy,
@@ -19,6 +19,7 @@ from freepod.deploy import (
     select_free_plan,
     wait_until_settled,
 )
+from freepod.project import load
 
 from conftest import json_response
 
@@ -418,6 +419,30 @@ def test_a_newly_required_value_is_prompted_for_and_the_pointer_survives(
     assert saved["deployment"] == pointer
 
 
+def test_recreate_keeps_the_old_pointer_until_the_replacement_exists(
+    make_api, tmp_path, monkeypatch
+):
+    """`--recreate` discards the pointer at release, not at preflight. The
+    value prompt in between writes the file, and a deploy that failed after
+    that write would otherwise leave a deployment nothing can address."""
+    schema = json.loads(json.dumps(SCHEMA))
+    schema["properties"]["region"] = {"type": "string"}
+    schema["required"] = ["hostname", "region"]
+    platform = Platform(catalog=[product(template=template(schema=schema))])
+    pointer = {"id": deployment()["id"], "name": "custom-d8dtx4"}
+    project_at(tmp_path, pointer=pointer)
+
+    monkeypatch.setattr("click.prompt", lambda *a, **k: "eu-west")
+    api, _, _ = make_api(platform)
+
+    state = preflight(api, "prod", root=tmp_path, recreate=True, echo=lambda _m: None)
+
+    # Nothing was asked about the abandoned deployment: this deploy creates.
+    assert state.deployment is None
+    saved = json.loads((tmp_path / ".freepod.json").read_text())
+    assert saved["deployment"] == pointer
+
+
 def test_a_missing_value_without_a_terminal_names_the_field(make_api, tmp_path):
     schema = json.loads(json.dumps(SCHEMA))
     schema["properties"]["region"] = {"type": "string"}
@@ -541,6 +566,67 @@ def test_a_first_deploy_checks_its_hostname(make_api, tmp_path):
     preflight(api, "prod", root=tmp_path, echo=lambda _m: None)
 
     assert platform.hostname_checks == ["myapp.freepod.eu"]
+
+
+# --------------------------------------------------------------------------
+# Cross-environment deploys
+# --------------------------------------------------------------------------
+
+
+def test_a_deploy_to_another_environment_needs_recreate(make_api, tmp_path):
+    """The recorded deployment is minted on the file's environment and cannot
+    be reached from the target one, so pointing the project elsewhere needs
+    the same confirmation as discarding it."""
+    platform = Platform()
+    project_at(
+        tmp_path, env="dev", pointer={"id": "40bd8dea-54f3-430d", "name": "custom-dev123"}
+    )
+    api, _, _ = make_api(platform)
+
+    with pytest.raises(UsageError) as raised:
+        deploy(api, "prod", root=tmp_path, echo=lambda _m: None)
+
+    message = str(raised.value)
+    assert "'dev'" in message and "'prod'" in message
+    assert "--recreate" in message
+    # Nothing was read from the platform: the file already answers.
+    assert platform.calls == []
+
+
+def test_recreate_points_the_project_at_the_target_environment(make_api, tmp_path):
+    """The old deployment keeps running; the file follows the new pointer,
+    environment and all, in the same write."""
+    platform = Platform(
+        create=deployment(status="provisioning", generation=1),
+        reads=[deployment(status="ready", generation=1)],
+    )
+    project_at(
+        tmp_path, env="dev", pointer={"id": "40bd8dea-54f3-430d", "name": "custom-dev123"}
+    )
+
+    run(make_api, platform, tmp_path, recreate=True)
+
+    recorded = load(tmp_path)
+    assert recorded.env == "prod"
+    assert recorded.deployment_id == deployment()["id"]
+
+
+def test_a_deploy_to_another_environment_without_a_pointer_starts_fresh(
+    make_api, tmp_path
+):
+    """No recorded deployment means nothing is orphaned: the file simply
+    follows the pointer it gains."""
+    platform = Platform(
+        create=deployment(status="provisioning", generation=1),
+        reads=[deployment(status="ready", generation=1)],
+    )
+    project_at(tmp_path, env="dev")
+
+    run(make_api, platform, tmp_path)
+
+    recorded = load(tmp_path)
+    assert recorded.env == "prod"
+    assert recorded.deployment_id == deployment()["id"]
 
 
 # --------------------------------------------------------------------------

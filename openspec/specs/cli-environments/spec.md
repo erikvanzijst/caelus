@@ -8,7 +8,8 @@ a closed set of named environments rather than a caller-supplied address.
 
 The client SHALL support exactly two environments, `prod` and `dev`, each carrying its
 own API base address, OAuth2 client identifier, and issuer. The environment SHALL be
-selectable per invocation and SHALL default to `prod`.
+selectable per invocation, SHALL otherwise be taken from the project file in the working
+directory, and SHALL default to `prod` where neither answers.
 
 The client SHALL NOT accept a caller-supplied API base address. An access token is bound
 by its audience to exactly one environment, so an arbitrary address would additionally
@@ -17,7 +18,8 @@ publish.
 
 #### Scenario: Production is the default target
 
-- **WHEN** a command runs with no environment selected
+- **WHEN** a command runs with no environment selected, in a directory that holds no
+  project
 - **THEN** the client targets the production environment
 
 #### Scenario: The environment can be selected explicitly
@@ -27,13 +29,53 @@ publish.
 
 #### Scenario: The environment can be selected through the environment variable
 
-- **WHEN** `FREEPOD_ENV` names an environment and no explicit selection is made
+- **WHEN** `FREEPOD_ENV` names an environment, no explicit selection is made, and the
+  working directory holds no project
 - **THEN** the client targets that environment
 
 #### Scenario: An unknown environment is refused
 
 - **WHEN** a command runs with an environment name that is not `prod` or `dev`
 - **THEN** the client refuses with a usage error naming the accepted values
+
+### Requirement: A project selects the environment it lives on
+
+Where the working directory or an ancestor holds a project file, the client SHALL target
+the environment that file records unless an environment is selected explicitly. The file
+SHALL outrank `FREEPOD_ENV`, because it is the most specific statement of where the
+project lives and a deployment identifier minted on one environment has no meaning on
+the other: a global default must not pull a command away from the environment its
+project was created on.
+
+Resolving the environment this way SHALL NOT fail. The client reads the file for every
+command, including those that do not otherwise touch a project, so a file that is
+missing, unreadable, or records an environment this client does not recognize SHALL
+leave the ordinary default in place rather than refuse. A command that needs the project
+reports the problem itself.
+
+#### Scenario: A project on the development environment needs no flag
+
+- **WHEN** a command runs in a project whose file records `dev`, with no environment
+  selected
+- **THEN** the client targets the development environment
+
+#### Scenario: An explicit selection outranks the project file
+
+- **WHEN** a command runs in a project whose file records `dev`, with `prod` selected
+  explicitly
+- **THEN** the client targets the production environment
+
+#### Scenario: The project file outranks the environment variable
+
+- **WHEN** `FREEPOD_ENV` names one environment and the project file records another,
+  with no explicit selection
+- **THEN** the client targets the environment the project file records
+
+#### Scenario: An unusable project file does not refuse the command
+
+- **WHEN** a command that does not require a project runs where the project file cannot
+  be read or records an unrecognized environment
+- **THEN** the client targets the default environment and the command proceeds
 
 ### Requirement: State is never shared between environments
 

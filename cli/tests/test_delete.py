@@ -113,13 +113,22 @@ def test_a_project_with_no_deployment_has_nothing_to_delete(make_api, tmp_path):
     assert platform.calls == []
 
 
-def test_a_project_for_another_environment_is_refused(make_api, tmp_path):
+def test_a_project_for_another_environment_is_named_rather_than_touched(
+    make_api, tmp_path
+):
+    """A delete on the wrong environment must not read as success, so the
+    deployment is named where it actually lives."""
+    platform = Platform()
     project_at(tmp_path, pointer=POINTER, env="dev")
 
     with pytest.raises(UsageError) as raised:
-        run(make_api, Platform(), tmp_path)
+        run(make_api, platform, tmp_path)
 
-    assert "'dev' environment" in str(raised.value)
+    message = str(raised.value)
+    assert "'dev'" in message and "'prod'" in message
+    assert "Re-run without --env" in message
+    # Nothing was read from the platform: the file already answers.
+    assert platform.calls == []
 
 
 def test_the_credential_is_exercised_before_the_deployment_is_read(make_api, tmp_path):

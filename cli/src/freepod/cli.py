@@ -31,6 +31,7 @@ from .config import (
     BUILD_WAIT_SECONDS,
     CUSTOM_PRODUCT_SLUG,
     DEFAULT_HTTP_TIMEOUT,
+    ENVIRONMENTS,
     ENV_VAR,
     LOGIN_WAIT_SECONDS,
     ROLLOUT_WAIT_SECONDS,
@@ -39,8 +40,29 @@ from .config import (
     resolve_environment,
     wait_seconds,
 )
-from .project import PROJECT_FILE
+from .project import PROJECT_FILE, find_project_root, load
 from .values import ValueCollector
+
+
+def _declared_environment() -> Optional[str]:
+    """The environment this directory's project declares, or None.
+
+    Best-effort, because it runs for every command, including ones with no
+    business in the project: a missing file yields None, and a broken one does
+    too — the command that actually needs the project loads it itself and
+    reports the real problem.
+    """
+    root = find_project_root()
+    if root is None:
+        return None
+    try:
+        name = load(root).env
+    except FreepodError:
+        return None
+    # A name this client does not know is not a reason to refuse a command that
+    # never touches the project — `init --force`, the one way to repair the
+    # file, included. The commands that use the pointer report it themselves.
+    return name if name in ENVIRONMENTS else None
 
 
 class Context:
@@ -53,7 +75,11 @@ class Context:
         quiet: bool,
         timeout: Optional[int],
     ):
-        self.env = resolve_environment(env_name)
+        # An explicit --env outranks the project file; without one, a project
+        # in this directory decides where the command goes, so the environment
+        # is something the user never has to think about.
+        project_env = None if env_name is not None else _declared_environment()
+        self.env = resolve_environment(env_name, project_env=project_env)
         self.verbose = verbose
         self.quiet = quiet
         self.timeout = timeout
@@ -85,8 +111,8 @@ class Context:
     "--env",
     "env_name",
     metavar="NAME",
-    help=f"target environment: {environment_names()} (default: prod, "
-    f"overridable with {ENV_VAR})",
+    help=f"target environment: {environment_names()} (default: the environment "
+    f"recorded in {PROJECT_FILE}, else {ENV_VAR}, else prod)",
 )
 @click.option("--verbose", is_flag=True, help="show extra detail, including token claims")
 @click.option(
@@ -114,6 +140,15 @@ def cli(
     """Take a local project directory to a running Freepod deployment."""
     if verbose and quiet:
         raise UsageError("--verbose and --quiet contradict each other; pick one")
+
+    # An unset shell variable expands to this. Falling through to the default
+    # would deploy to prod on the strength of a variable the script believed it
+    # had set, which is the one outcome an explicit --env must never produce.
+    if env_name is not None and not env_name.strip():
+        raise UsageError(
+            f"--env was given an empty value — name one of {environment_names()}, "
+            f"or omit it to use the environment recorded in {PROJECT_FILE}"
+        )
 
     # Left as None, click decides per-stream, which would still color a
     # terminal when `NO_COLOR` asks it not to. False forces the escape codes

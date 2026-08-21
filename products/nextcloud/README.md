@@ -7,15 +7,15 @@ read-only SFTP access to the data volume.
 
 ## What it deploys
 
-| Component | Object(s) |
-|-----------|-----------|
-| Nextcloud | Deployment `<release>-nextcloud` (+ read-only SFTP sidecar, + wait-for-DB init), Service `<release>-nextcloud` `:8080→80` |
-| PostgreSQL | StatefulSet `<release>-postgresql` on `postgres:17-alpine` + headless Service + Secret `<release>-db` (auto-generated password); data on PVC `data-<release>-postgresql-0` |
-| Data | PVC `<release>-data` (plan-sized), mounted into the app via subPaths (`html`, `data`, `config`, `custom_apps`, `themes`, `tmp`) |
-| App secrets | Secret `<release>-app` (admin bootstrap + SMTP) |
-| App config | ConfigMap `<release>-config` (non-secret env via `envFrom`) + ConfigMap `<release>-hooks` (a `before-starting` entrypoint hook that runs `occ db:add-missing-indices/columns/primary-keys` and `occ maintenance:repair --include-expensive` after each upgrade, clearing the "missing indices" and "mimetype migrations available" admin warnings) + ConfigMap `<release>-apache` (`hsts.conf` so Nextcloud's server-side HTTP-headers check sees HSTS; edge Traefik still owns the browser-facing header) |
-| Ingress | `<release>-ingress` (per-deployment TLS via `caelus.ingress.tls`) |
-| SFTP | Secret + ConfigMap + Service + sshpiper Pipe (`caelus-sftp`, uid 33 to match Nextcloud's `www-data`) |
+| Component   | Object(s)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+|-------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Nextcloud   | Deployment `<release>-nextcloud` (+ read-only SFTP sidecar, + wait-for-DB init), Service `<release>-nextcloud` `:8080→80`                                                                                                                                                                                                                                                                                                                                                                                  |
+| PostgreSQL  | StatefulSet `<release>-postgresql` on `postgres:17-alpine` + headless Service + Secret `<release>-db` (auto-generated password); data on PVC `data-<release>-postgresql-0`                                                                                                                                                                                                                                                                                                                                 |
+| Data        | PVC `<release>-data` (plan-sized), mounted into the app via subPaths (`html`, `data`, `config`, `custom_apps`, `themes`, `tmp`)                                                                                                                                                                                                                                                                                                                                                                            |
+| App secrets | Secret `<release>-app` (admin bootstrap + SMTP)                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| App config  | ConfigMap `<release>-config` (non-secret env via `envFrom`) + ConfigMap `<release>-hooks` (a `before-starting` entrypoint hook that runs `occ db:add-missing-indices/columns/primary-keys` and `occ maintenance:repair --include-expensive` after each upgrade, clearing the "missing indices" and "mimetype migrations available" admin warnings) + ConfigMap `<release>-apache` (`hsts.conf` so Nextcloud's server-side HTTP-headers check sees HSTS; edge Traefik still owns the browser-facing header) |
+| Ingress     | `<release>-ingress` (per-deployment TLS via `caelus.ingress.tls`)                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| SFTP        | Secret + ConfigMap + Service + sshpiper Pipe (`caelus-sftp`, uid 33 to match Nextcloud's `www-data`)                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 The bundled PostgreSQL password is generated on first install and reused from the
 `<release>-db` Secret on upgrade, so it never rotates a live credential. Set
@@ -57,11 +57,11 @@ helm pull oci://registry.home/helm/nextcloud --version 0.1.4 \
 
 The published chart is then referenced from a Caelus product template:
 
-| Field | Value |
-|---|---|
-| Chart ref | `oci://registry.home/helm/nextcloud` |
-| Chart version | `0.1.4` |
-| User values schema | see [User values schema](#user-values-schema) below |
+| Field               | Value                                                                               |
+|---------------------|-------------------------------------------------------------------------------------|
+| Chart ref           | `oci://registry.home/helm/nextcloud`                                                |
+| Chart version       | `0.1.4`                                                                             |
+| User values schema  | see [User values schema](#user-values-schema) below                                 |
 | Default Helm values | see [Default values (system_values_json)](#default-values-system_values_json) below |
 
 ## User values schema

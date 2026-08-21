@@ -150,7 +150,7 @@ def test_a_command_from_a_subdirectory_loads_the_root_project(tmp_path):
     nested = tmp_path / "src"
     nested.mkdir()
 
-    project = require_project("prod", start=nested)
+    project = require_project(start=nested)
     assert project.root == tmp_path.resolve()
     assert project.hostname == "myapp.freepod.eu"
 
@@ -162,7 +162,7 @@ def test_a_command_from_a_subdirectory_loads_the_root_project(tmp_path):
 
 def test_an_uninitialized_directory_names_the_init_command(tmp_path):
     with pytest.raises(UsageError) as raised:
-        require_project("prod", start=tmp_path)
+        require_project(start=tmp_path)
 
     message = str(raised.value)
     assert "not initialized" in message
@@ -174,29 +174,22 @@ def test_an_uninitialized_directory_is_a_usage_error(tmp_path):
     from freepod import EXIT_USAGE
 
     with pytest.raises(UsageError) as raised:
-        require_project("prod", start=tmp_path)
+        require_project(start=tmp_path)
     assert raised.value.exit_code == EXIT_USAGE
 
 
 # --------------------------------------------------------------------------
-# Environment pinning (task 5.3)
+# The declared environment (task 5.3)
 # --------------------------------------------------------------------------
 
 
-def test_an_environment_mismatch_is_refused_reporting_both(tmp_path):
+def test_the_declared_environment_is_not_refused(tmp_path):
+    """The file's environment is the default target of every command run from
+    this directory, not a check: a command that disagrees with it is the
+    caller's to reconcile, and it alone knows what the recorded deployment is
+    for."""
     write_project(tmp_path, env="dev")
-
-    with pytest.raises(UsageError) as raised:
-        require_project("prod", start=tmp_path)
-
-    message = str(raised.value)
-    assert "'dev'" in message and "'prod'" in message
-    assert "--env dev" in message
-
-
-def test_a_matching_environment_is_accepted(tmp_path):
-    write_project(tmp_path, env="dev")
-    assert require_project("dev", start=tmp_path).env == "dev"
+    assert require_project(start=tmp_path).env == "dev"
 
 
 # --------------------------------------------------------------------------

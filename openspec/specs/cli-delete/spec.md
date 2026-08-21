@@ -7,14 +7,18 @@ teardown that the platform performs asynchronously.
 ## Requirements
 ### Requirement: Deletion addresses only the deployment the project records
 
-The client SHALL delete the deployment recorded in the project file for the targeted
-environment, and SHALL NOT accept a deployment named by the caller. A command able to
+The client SHALL delete the deployment recorded in the project file, and SHALL NOT
+accept a deployment named by the caller. A command able to
 name an arbitrary deployment is one whose worst mistake is unrecoverable, and the
 project file is the only place the client knows a deployment by.
 
-When no project file is found, when the project file records no deployment, or when the
-project belongs to a different environment than the command targets, the client SHALL
-refuse with a usage error and SHALL delete nothing.
+When no project file is found, or when the project file records no deployment, the
+client SHALL refuse with a usage error and SHALL delete nothing.
+
+Where the project records a deployment on an environment other than the one targeted,
+the client SHALL refuse and SHALL name the environment that deployment lives on. No
+request can reach it from the targeted environment, and a deletion that silently found
+nothing would report success for a deployment still running.
 
 The client SHALL establish the authenticated account before reading the deployment, so
 that a credential problem is reported as one rather than surfacing later as a missing
@@ -31,10 +35,12 @@ deployment.
 - **THEN** the client refuses with a usage error
 - **AND** no request is made to the platform
 
-#### Scenario: A project belonging to another environment is refused
+#### Scenario: A deployment on another environment is named rather than missed
 
-- **WHEN** deletion targets one environment and the project file belongs to another
-- **THEN** the client refuses and names the environment the project belongs to
+- **WHEN** deletion targets one environment and the project records its deployment on
+  another
+- **THEN** the client refuses and names the environment the deployment lives on
+- **AND** no request is made to the platform
 
 #### Scenario: The credential is exercised before the deployment is read
 

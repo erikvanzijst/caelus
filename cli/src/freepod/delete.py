@@ -247,7 +247,18 @@ def delete(
     A declined confirmation returns False rather than raising: the user was
     asked and answered, which is not a failure of the command.
     """
-    project = require_project(env_name, root)
+    project = require_project(root)
+
+    if project.env != env_name and project.deployment_id:
+        # The recorded deployment is minted on another environment. Naming it
+        # rather than refusing opaquely keeps the pointer safe: a delete that
+        # silently did nothing on the wrong environment would read as success.
+        raise UsageError(
+            f"{project.path} records deployment "
+            f"'{project.deployment_name}' on '{project.env}', not on "
+            f"'{env_name}'.\n"
+            f"  Re-run without --env (or with --env {project.env}) to delete it."
+        )
 
     if not project.deployment_id:
         raise UsageError(

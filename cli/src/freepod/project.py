@@ -190,12 +190,13 @@ def load(root: Path) -> Project:
     )
 
 
-def require_project(env_name: str, start: Optional[Path] = None) -> Project:
-    """Find and load the project, refusing an environment mismatch.
+def require_project(start: Optional[Path] = None) -> Project:
+    """Find and load the project, refusing a directory that has none.
 
-    The environment check is the same audience-scoping problem as the token
-    cache, one level up: a deployment id minted on dev is meaningless on prod,
-    so a mismatch is an error rather than something to guess at.
+    The environment the file declares is not checked here: it is the default
+    target of every command run from this directory, and an explicit `--env`
+    that disagrees with it is reconciled by the caller, which alone knows what
+    it is about to do with the recorded deployment.
     """
     root = find_project_root(start)
     if root is None:
@@ -204,13 +205,4 @@ def require_project(env_name: str, start: Optional[Path] = None) -> Project:
             f"no {PROJECT_FILE} found in {where} or any parent directory — "
             f"this project is not initialized. Run `freepod init` to set it up."
         )
-
-    project = load(root)
-    if project.env != env_name:
-        raise UsageError(
-            f"{project.path} belongs to the '{project.env}' environment, but this "
-            f"command targets '{env_name}'.\n"
-            f"  Re-run with --env {project.env}, or work in a project initialized "
-            f"for '{env_name}'."
-        )
-    return project
+    return load(root)

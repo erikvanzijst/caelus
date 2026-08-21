@@ -44,18 +44,40 @@ root for every subsequent operation.
 - **THEN** the client reports that the project is not initialized and names the command
   that initializes it
 
-### Requirement: A project file is pinned to one environment
+### Requirement: The recorded environment selects the target
 
-The project file SHALL record the environment its deployment belongs to. When a command
-targets a different environment than the file records, the client SHALL refuse rather
-than proceed, because a deployment identifier has no meaning in another environment.
+The project file SHALL record the environment its deployment belongs to, and that record
+SHALL be the environment every command run from the project targets unless one is
+selected explicitly.
 
-#### Scenario: A mismatched environment is refused
+A command that targets another environment SHALL NOT be refused for disagreeing with the
+file. It SHALL be refused only where the recorded deployment would be stranded by
+proceeding, and by the command that knows what that deployment is for, because a
+deployment identifier has no meaning in another environment.
 
-- **WHEN** a deploy targets an environment other than the one recorded in the project
-  file
-- **THEN** the client refuses and reports both environments
+The recorded environment SHALL be written together with the deployment it describes, so
+that the file never names an identifier the environment it declares cannot answer for.
+
+#### Scenario: The recorded environment needs no flag
+
+- **WHEN** a command runs in a project whose file records an environment, with none
+  selected explicitly
+- **THEN** the client targets the recorded environment
+
+#### Scenario: A deploy that would strand the recorded deployment is refused
+
+- **WHEN** a deploy targets an environment other than the one recorded, in a project
+  whose file records a deployment, without asking to recreate it
+- **THEN** the client refuses, names the environment the deployment lives on, and
+  reports that recreating is what points the project elsewhere
 - **AND** no deployment is created or modified
+
+#### Scenario: A project with nothing to strand follows the target
+
+- **WHEN** a deploy targets an environment other than the one recorded, in a project
+  whose file records no deployment
+- **THEN** the deploy proceeds on the targeted environment
+- **AND** the project file records that environment together with the new deployment
 
 ### Requirement: Build outputs are never recorded in the project file
 

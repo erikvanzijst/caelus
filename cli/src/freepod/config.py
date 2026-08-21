@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from . import UsageError, __version__
+from .project import PROJECT_FILE
 
 ISSUER = "https://keycloak.freepod.eu/realms/freepod"
 
@@ -129,18 +130,30 @@ def environment_names() -> str:
     return ", ".join(sorted(ENVIRONMENTS))
 
 
-def resolve_environment(selected: Optional[str] = None) -> Environment:
-    """Pick the environment: explicit selection, then `FREEPOD_ENV`, then prod.
+def resolve_environment(
+    selected: Optional[str] = None, *, project_env: Optional[str] = None
+) -> Environment:
+    """Pick the environment: explicit selection, then the project file, then
+    `FREEPOD_ENV`, then prod.
 
-    The default flips relative to the demo client, which targeted dev because
-    it was a developer's tool. A released client defaults to production.
+    The project file outranks the environment variable because it is the most
+    specific signal of where this project lives: a deployment id minted on dev
+    is meaningless on prod, so a global default must not pull a command away
+    from the environment its project was created on. The default flips relative
+    to the demo client, which targeted dev because it was a developer's tool.
+    A released client defaults to production.
     """
-    name = selected or os.environ.get(ENV_VAR) or DEFAULT_ENV
+    name = selected or project_env or os.environ.get(ENV_VAR) or DEFAULT_ENV
     name = name.strip()
     try:
         return ENVIRONMENTS[name]
     except KeyError:
-        source = "--env" if selected else ENV_VAR if os.environ.get(ENV_VAR) else "--env"
+        if selected:
+            source = "--env"
+        elif project_env:
+            source = PROJECT_FILE
+        else:
+            source = ENV_VAR
         raise UsageError(
             f"unknown environment {name!r} for {source} — "
             f"accepted values are {environment_names()}"

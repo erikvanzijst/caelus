@@ -58,10 +58,13 @@ For details, see `api/README.md`.
 - Install deps: `uv sync`
 - Run: `uv run freepod --help`
 - Tests: `uv run pytest`
-Targets `prod` by default; use `--env dev` or `FREEPOD_ENV=dev` against
-`dev.freepod.eu`. For details, see `cli/DEVELOPMENT.md` — the invariants, the
-platform contracts, and the reasoning. `cli/README.md` is the package's PyPI
-landing page, written for end users; keep internals out of it.
+Targets the environment recorded in `.freepod.json` when run from a project,
+and `prod` otherwise. `--env dev` overrides both; `FREEPOD_ENV=dev` only moves
+the default for directories that hold no project, so it cannot pull a command
+away from the environment its project lives on. For details, see
+`cli/DEVELOPMENT.md` — the invariants, the platform contracts, and the
+reasoning. `cli/README.md` is the package's PyPI landing page, written for end
+users; keep internals out of it.
 
 Published to PyPI as `freepod`, on its own release cadence: bump
 `__version__` in `cli/src/freepod/__init__.py` — the single source, which

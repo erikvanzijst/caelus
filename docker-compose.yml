@@ -35,6 +35,7 @@ services:
       - KUBECONFIG=/workspace/k8s/kubeconfigs/dev-k3s.yaml
       # https://github.com/anthropics/claude-code/issues/1736#issuecomment-3170502150
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
+      - QWEN_STREAM_IDLE_TIMEOUT_MS=900000
     volumes:
       - .:/workspace
     depends_on:

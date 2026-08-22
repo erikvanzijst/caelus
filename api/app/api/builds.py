@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Response, status
+from fastapi import APIRouter, Depends, Header, Path, Response, status
 from fastapi.responses import PlainTextResponse
 from sqlmodel import Session
 from uuid import UUID
 
 from app.db import get_session
-from app.deps import get_current_user
+from app.deps import require_self
 from app.models import BuildCreate, BuildRead, UserORM
 from app.services import builds as build_service
 
-router = APIRouter(prefix="/builds", tags=["builds"])
+router = APIRouter(prefix="/users/{user_id}/builds", tags=["builds"])
 
 # Only the two forms a polling client produces: `bytes=N-` and `bytes=N-M`.
 # Anything else — a suffix range, multiple ranges, a unit other than bytes — is
@@ -35,15 +35,6 @@ def _parse_range(value: str | None) -> tuple[int, int | None] | None:
     return start, end
 
 
-def _resolve_scope(current_user: UserORM, user_id: int | None) -> int:
-    """The user whose builds a request may read."""
-    if user_id is None or user_id == current_user.id:
-        return current_user.id
-    if not current_user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-    return user_id
-
-
 @router.post(
     "",
     response_model=BuildRead,
@@ -62,6 +53,7 @@ def _resolve_scope(current_user: UserORM, user_id: int | None) -> int:
             )
         },
         400: {"description": "The artifact id is malformed, or no such artifact was uploaded."},
+        403: {"description": "Caller may only create builds under their own account."},
         404: {"description": "The request carried no authenticated identity."},
         422: {"description": "The body carried a field other than `artifact_id` (such as `user_id`)."},
     },
@@ -69,14 +61,17 @@ def _resolve_scope(current_user: UserORM, user_id: int | None) -> int:
 def create_build(
     payload: BuildCreate,
     response: Response,
-    current_user: UserORM = Depends(get_current_user),
+    user_id: int = Path(..., description="ID of the user the build is created for."),
+    current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> BuildRead:
     """Queue a build of an artifact previously uploaded via `POST /api/artifacts`.
 
     Phase three of three. The body carries **only** `artifact_id`; the owner
     comes from the authenticated session, and any other field — `user_id`
-    included — is rejected outright rather than quietly dropped.
+    included — is rejected outright rather than quietly dropped. The path
+    `user_id` says whose account is being acted on and is what authorizes the
+    request; it is not where the owner comes from.
 
     ## Behavior
     Retrying while the original build is still `queued` or `running` returns
@@ -88,7 +83,7 @@ def create_build(
     `image` to the deployment update endpoint itself.
     """
     result = build_service.create_build(session, user_id=current_user.id, payload=payload)
-    response.headers["Location"] = f"/api/builds/{result.build.id}"
+    response.headers["Location"] = f"/api/users/{user_id}/builds/{result.build.id}"
     if not result.created:
         response.status_code = status.HTTP_200_OK
     return result.build
@@ -97,32 +92,33 @@ def create_build(
 @router.get(
     "",
     response_model=list[BuildRead],
-    summary="List the caller's builds",
-    response_description="A JSON array of the caller's builds, most recent first.",
+    summary="List a user's builds",
+    response_description="A JSON array of the user's builds, most recent first.",
     responses={
-        200: {"description": "The caller's builds, most recent first."},
+        200: {"description": "The user's builds, most recent first."},
         403: {"description": "A non-administrator asked for another user's builds."},
         404: {"description": "The request carried no authenticated identity."},
     },
 )
 def list_builds(
-    user_id: int | None = Query(
-        None,
-        description=(
-            "Whose builds to list. Defaults to the caller. Only an "
-            "administrator may name another user."
-        ),
-    ),
-    current_user: UserORM = Depends(get_current_user),
+    user_id: int = Path(..., description="ID of the user whose builds to list."),
+    current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> list[BuildRead]:
-    """Return builds owned by the caller, most recent first.
+    """Return the builds owned by `user_id`, most recent first.
 
-    Other users' builds never appear. Enumeration is what keeps a previously
-    produced image reachable after a client has forgotten its build id, which
-    is what a redeploy or a rollback needs.
+    ## Authorization
+    You may only list your own builds; administrators may list any account's.
+    Other requests receive **403 Forbidden**.
+
+    ## Behavior
+    Enumeration is what keeps a previously produced image reachable after a
+    client has forgotten its build id, which is what a redeploy or a rollback
+    needs.
     """
-    return build_service.list_builds(session, user_id=_resolve_scope(current_user, user_id))
+    return build_service.list_builds(
+        session, user_id=None if current_user.is_admin else user_id
+    )
 
 
 @router.get(
@@ -135,6 +131,7 @@ def list_builds(
     ),
     responses={
         200: {"description": "The build."},
+        403: {"description": "Caller may only read their own builds."},
         404: {
             "description": (
                 "No such build, or it belongs to another user — the two are "
@@ -144,21 +141,23 @@ def list_builds(
     },
 )
 def get_build(
+    user_id: int = Path(..., description="ID of the user that owns the build."),
     build_id: UUID = Path(..., description="ID of the build."),
-    current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> BuildRead:
-    """Return one of the caller's builds.
+    """Return one of the user's builds.
 
     ## Authorization
-    Scoped to the caller's own builds; administrators may read any. A build
-    owned by someone else answers **404**, identically to one that does not
-    exist, so the endpoint cannot be used to probe for other users' builds.
+    Scoped to your own builds; administrators may read any. Naming another
+    account answers **403**; a build under your own account that belongs to
+    someone else answers **404**, identically to one that does not exist, so
+    the endpoint cannot be used to probe for other users' builds.
     """
     return build_service.get_build(
         session,
         build_id=build_id,
-        user_id=None if current_user.is_admin else current_user.id,
+        user_id=None if current_user.is_admin else user_id,
     )
 
 
@@ -181,17 +180,19 @@ def get_build(
                 "a 416, so a polling client needs no special case."
             )
         },
+        403: {"description": "Caller may only read their own builds' logs."},
         404: {"description": "No such build, or it belongs to another user."},
     },
 )
 def get_build_log(
+    user_id: int = Path(..., description="ID of the user that owns the build."),
     build_id: UUID = Path(..., description="ID of the build."),
     range_header: str | None = Header(
         None,
         alias="Range",
         description="Byte range to return, as `bytes=N-` or `bytes=N-M`.",
     ),
-    current_user: UserORM = Depends(get_current_user),
+    current_user: UserORM = Depends(require_self),
     session: Session = Depends(get_session),
 ) -> Response:
     """Return a build's accumulated output as plain text.
@@ -208,13 +209,14 @@ def get_build_log(
     result, rather than decoding each chunk on its own.
 
     ## Errors
+    - **403 Forbidden** — reading another account's build log.
     - **404 Not Found** — no such build, or it belongs to another user.
     """
     parsed = _parse_range(range_header)
     slice_ = build_service.get_build_log(
         session,
         build_id=build_id,
-        user_id=None if current_user.is_admin else current_user.id,
+        user_id=None if current_user.is_admin else user_id,
         start=parsed[0] if parsed else None,
         end=parsed[1] if parsed else None,
     )

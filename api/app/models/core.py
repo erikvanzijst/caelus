@@ -617,6 +617,11 @@ class DeploymentReleaseORM(DeploymentReleaseBase, table=True):
         default=None, sa_column=Column(JSON, nullable=True)
     )
     created_at: datetime = Field(default_factory=_utcnow, nullable=False)
+    # `lazy="raise"`: readers must ask for it with `joinedload`. Not imported --
+    # `models/build.py` imports this module; the registry resolves the name.
+    build: Optional["BuildORM"] = Relationship(  # noqa: F821
+        sa_relationship_kwargs={"viewonly": True, "lazy": "raise"}
+    )
 
     # ── Written by the reconciler, once each ──────────────────────────────
     started_at: Optional[datetime] = Field(default=None, nullable=True)
@@ -665,6 +670,17 @@ class DeploymentReleaseRead(DeploymentReleaseBase):
     helm_revision: Optional[int] = None
     # Derived on read from the property above; there is no column behind it.
     status: ReleaseStatus
+
+
+class DeploymentReleaseWithBuildRead(DeploymentReleaseRead):
+    """A release read as a resource, with its build inlined.
+
+    Kept distinct from `DeploymentReleaseRead`, which is what
+    `DeploymentRead.applied_release` uses: deployment queries carry no
+    `joinedload`, so a `build` field there would raise.
+    """
+
+    build: Optional["BuildRead"] = None
 
 
 class DeploymentReconcileJobBase(SQLModel):

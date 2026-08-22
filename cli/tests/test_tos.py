@@ -268,7 +268,7 @@ def test_an_unaccepted_first_deploy_is_stopped_before_anything_is_built(
         run(make_api, platform, tmp_path)
 
     assert "/api/artifacts" not in platform.paths()
-    assert "/api/builds" not in platform.paths()
+    assert f"/api/users/7/builds" not in platform.paths()
 
 
 def test_a_headless_deploy_fails_rather_than_skipping_the_check(make_api, tmp_path):
@@ -285,7 +285,7 @@ def test_a_headless_deploy_fails_rather_than_skipping_the_check(make_api, tmp_pa
     assert "has not accepted" in str(raised.value)
     # Not a warning, not a skip: nothing whatsoever was spent.
     assert "/api/artifacts" not in platform.paths()
-    assert "/api/builds" not in platform.paths()
+    assert f"/api/users/7/builds" not in platform.paths()
     assert "tos" not in platform.bodies
     assert not any(m == "POST" and "deployments" in p for m, p in platform.calls)
 

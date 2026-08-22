@@ -188,6 +188,14 @@ the database directly and simply asserts who it is acting as. It must run
 next to the database and grants whatever the asserted email can do. External,
 remote clients use OAuth2 tokens instead — see below.
 
+**`caelus` is therefore not a security boundary.** It bypasses the API
+entirely and only runs inside the Caelus containers, so anyone who can invoke
+it is already an operator with database access — there is no privilege for a
+missing check to escalate. Where a command does scope by acting user (`build
+list`, `list-releases`, `get-release`), that is for consistency with the REST
+behavior and to keep output useful, not to enforce anything. A command that
+omits such a check is not a vulnerability, and neither is one that adds it.
+
 ### External API clients (OAuth2 tokens)
 
 Non-browser clients authenticate with a Keycloak access token presented as
@@ -379,8 +387,13 @@ REST routes:
   `GET/PUT/DELETE /users/{user_id}/deployments/{deployment_id}`
 - Admin: `GET /deployments` (admin-only, all non-deleted deployments)
 - Artifacts: `POST /artifacts` (mint an upload slot)
-- Builds: `POST/GET /builds`, `GET /builds/{build_id}`,
-  `GET /builds/{build_id}/log` (plain text, HTTP Range)
+- Releases: `GET /users/{user_id}/deployments/{deployment_id}/releases`,
+  `GET /users/{user_id}/deployments/{deployment_id}/releases/{number}`
+  (addressed by the per-deployment release **number**, not the uuid; the
+  single-release read and the listing both inline the build)
+- Builds: `POST/GET /users/{user_id}/builds`,
+  `GET /users/{user_id}/builds/{build_id}`,
+  `GET /users/{user_id}/builds/{build_id}/log` (plain text, HTTP Range)
 
 CLI equivalents (`caelus ...`):
 - `create-user`, `list-users`, `get-user`, `delete-user`
@@ -388,6 +401,7 @@ CLI equivalents (`caelus ...`):
 - `create-template`, `list-templates`, `get-template`, `delete-template`
 - `create-deployment`, `list-deployments`, `get-deployment`,
   `update-deployment`, `delete-deployment`
+- `list-releases`, `get-release` (by per-deployment release number)
 - `build list|show|log|submit` — `submit` performs all three upload phases
 - `reconcile` (CLI-only operational command to run one reconcile pass)
 - `build-worker` (CLI-only; the build worker's process entry point)
@@ -833,7 +847,7 @@ Uploads never pass through the API; the bytes go straight to object storage.
 ```
 1. POST /api/artifacts                → { artifact_id, url, fields, max_bytes, expires_in }
 2. POST {url}  (multipart/form-data)  → every entry of `fields` first, file part LAST
-3. POST /api/builds { artifact_id }   → 201 (or 200 for an in-flight retry)
+3. POST /api/users/{uid}/builds       → { artifact_id }; 201 (or 200 for a retry)
 ```
 
 The endpoint takes **no request body**. The object key is composed server-side
@@ -872,7 +886,8 @@ the `{user_id}` half matches the deployment's owner.
 
 ### The log endpoint
 
-`GET /api/builds/{id}/log` serves `text/plain; charset=utf-8` and supports HTTP
+`GET /api/users/{uid}/builds/{id}/log` serves `text/plain; charset=utf-8` and
+supports HTTP
 Range, so a client polls for output appended since its last read:
 
 ```bash

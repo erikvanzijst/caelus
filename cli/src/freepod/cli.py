@@ -23,6 +23,7 @@ from . import deploy as deploy_module
 from . import history
 from . import logs as logs_module
 from . import project
+from . import releases as releases_module
 from . import skill as skill_module
 from . import tos
 from .api import ApiClient
@@ -429,7 +430,7 @@ def builds(context: Context, limit: int, show_all: bool) -> None:
 
     with context.client(session) as api:
         user_id = api.me()["id"]
-        records = history.list_builds(api)
+        records = history.list_builds(api, user_id)
         live = history.deployed_image(api, user_id, context.env.name)
 
     if not records:
@@ -452,6 +453,83 @@ def builds(context: Context, limit: int, show_all: bool) -> None:
     if len(shown) < len(records):
         context.say(
             f"Showing {len(shown)} of {len(records)} builds; --all shows every one."
+        )
+
+
+@cli.command()
+@click.option(
+    "--limit",
+    type=int,
+    metavar="N",
+    default=releases_module.DEFAULT_LIMIT,
+    help=f"how many releases to show (default: {releases_module.DEFAULT_LIMIT})",
+)
+@click.option("--all", "show_all", is_flag=True, help="show every release, ignoring --limit")
+@click.pass_obj
+def releases(context: Context, limit: int, show_all: bool) -> None:
+    """List this project's deployment's releases, most recent first.
+
+    A release is one rollout of one deployment, so this needs a project that
+    has deployed — unlike `freepod builds`, there is no account-wide listing to
+    fall back on. The release the deployment is currently running is marked.
+
+    The table is the result and goes to stdout; `--verbose` prints image
+    references in full rather than abbreviating their digests.
+    """
+    if limit <= 0 and not show_all:
+        raise UsageError("--limit must be a positive number of releases")
+
+    project_file = project.require_project()
+
+    if project_file.env != context.env.name and project_file.deployment_id:
+        raise UsageError(
+            f"{project_file.path} records deployment "
+            f"'{project_file.deployment_name}' on '{project_file.env}', not on "
+            f"'{context.env.name}'.\n"
+            f"  Re-run without --env (or with --env {project_file.env}) to list it."
+        )
+
+    if not project_file.deployment_id:
+        raise UsageError(
+            f"{project_file.path} records no deployment, so there are no "
+            f"releases to list.\n"
+            f"  Run `freepod deploy` to create one."
+        )
+
+    session = context.session()
+    session.authenticate(interactive=False)
+
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        deployment = releases_module.read_deployment(
+            api, user_id, project_file.deployment_id
+        )
+        records = releases_module.list_releases(
+            api, user_id, project_file.deployment_id
+        )
+
+    if not records:
+        context.say(
+            f"Deployment '{project_file.deployment_name}' has no releases on "
+            f"'{context.env.name}'."
+        )
+        return
+
+    live = releases_module.applied_number(deployment)
+    shown = records if show_all else records[:limit]
+    click.echo(
+        releases_module.render_table(shown, live_number=live, full_image=context.verbose)
+    )
+
+    if live is not None and any(r.get("number") == live for r in shown):
+        context.say(
+            f"{releases_module.LIVE_MARKER} the release this deployment is running."
+        )
+    for note in releases_module.failures(shown):
+        context.say(note)
+    if len(shown) < len(records):
+        context.say(
+            f"Showing {len(shown)} of {len(records)} releases; --all shows every one."
         )
 
 

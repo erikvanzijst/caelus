@@ -584,6 +584,51 @@ def get_deployment(user_id: int, deployment_id: UUID) -> None:
         _echo_yaml_entity(deployment)
 
 
+def _release_scope(user: UserORM, user_id: int) -> int | None:
+    """The scope to read releases under, or exit for a refused cross-user read.
+
+    There is no `require_self` here as there is on the REST side, so the check
+    is explicit -- passing the argument through unguarded would let anyone read
+    any account's releases.
+    """
+    if user.is_admin:
+        return None
+    if user_id != user.id:
+        typer.echo("Error: reading another user's releases requires admin privileges", err=True)
+        raise typer.Exit(code=1)
+    return user_id
+
+
+@app.command("list-releases")
+def list_releases(user_id: int, deployment_id: UUID) -> None:
+    """List a deployment's releases, most recent first."""
+    with session_scope() as session:
+        user = _require_cli_user(session)
+        scope = _release_scope(user, user_id)
+        try:
+            releases = deployment_service.list_releases(
+                session, deployment_id=deployment_id, user_id=scope
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(releases)
+
+
+@app.command("get-release")
+def get_release(user_id: int, deployment_id: UUID, number: int) -> None:
+    """Show one release by its per-deployment number, with its build inlined."""
+    with session_scope() as session:
+        user = _require_cli_user(session)
+        scope = _release_scope(user, user_id)
+        try:
+            release = deployment_service.get_release(
+                session, deployment_id=deployment_id, number=number, user_id=scope
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(release)
+
+
 @app.command("get-deployment-sftp")
 def get_deployment_sftp(user_id: int, deployment_id: UUID) -> None:
     with session_scope() as session:

@@ -254,13 +254,13 @@ class Platform:
                     "max_bytes": 104857600,
                 },
             )
-        if path == "/api/builds" and method == "POST":
+        if path == f"/api/users/{self.user_id}/builds" and method == "POST":
             return json_response(201, {"id": "b-1", "status": "queued"})
         if path.endswith("/log"):
             return httpx.Response(
                 206, content=b"step 1\n", headers={"X-Build-Status": "succeeded"}
             )
-        if path.startswith("/api/builds/"):
+        if path.startswith(f"/api/users/{self.user_id}/builds/"):
             return json_response(200, {"id": "b-1", "status": "succeeded", "image": self.image})
 
         return json_response(404, {"detail": "Not Found"})
@@ -345,7 +345,7 @@ def test_a_deleted_deployment_is_reported_before_a_build_is_spent(make_api, tmp_
     assert "no longer exists" in str(raised.value)
     # Nothing was packed, uploaded, or built.
     assert "/api/artifacts" not in platform.paths()
-    assert "/api/builds" not in platform.paths()
+    assert f"/api/users/7/builds" not in platform.paths()
 
 
 def test_preflight_completes_before_anything_is_packed(make_api, tmp_path):
@@ -690,7 +690,7 @@ def test_no_free_plan_is_refused_before_a_build_is_spent(make_api, tmp_path):
 
     assert "publishes no plans" in str(raised.value)
     assert "/api/artifacts" not in platform.paths()
-    assert "/api/builds" not in platform.paths()
+    assert f"/api/users/7/builds" not in platform.paths()
 
 
 def test_plans_are_not_read_when_a_deployment_already_exists(make_api, tmp_path):
@@ -739,7 +739,7 @@ def test_the_build_completes_before_the_deployment_is_created(make_api, tmp_path
 
     run(make_api, platform, tmp_path)
 
-    assert platform.index_of("GET", "/api/builds/b-1") < platform.index_of(
+    assert platform.index_of("GET", "/api/users/7/builds/b-1") < platform.index_of(
         "POST", "/api/users/7/deployments"
     )
 

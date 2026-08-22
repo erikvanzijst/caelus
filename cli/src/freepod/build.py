@@ -7,7 +7,7 @@ Three phases, in this order:
    that. Minting persists nothing, so an unused slot costs nothing.
 2. **Submit the archive** — a presigned form POST straight to the object store,
    every field verbatim and in order with the file part last.
-3. **Create and follow the build** — `POST /api/builds` with the artifact id
+3. **Create and follow the build** — `POST /api/users/{uid}/builds` with the artifact id
    alone, then read the log by byte range until `X-Build-Status` is terminal.
 
 See design D9, D12, and D13.
@@ -221,15 +221,19 @@ def upload_archive(
 # --------------------------------------------------------------------------
 
 
-def create_build(api: ApiClient, artifact_id: str) -> Tuple[Dict[str, Any], bool]:
-    """`POST /api/builds` with the artifact id alone.
+def create_build(
+    api: ApiClient, user_id: int, artifact_id: str
+) -> Tuple[Dict[str, Any], bool]:
+    """`POST /api/users/{user_id}/builds` with the artifact id alone.
 
     Returns `(build, reattached)`. A **200** rather than 201 means the platform
     handed back a build already queued or running for this artifact instead of
     creating a second one — which is what makes re-running a deploy safe, and
     is worth saying out loud rather than silently following.
     """
-    response = api.post("/api/builds", json={"artifact_id": artifact_id})
+    response = api.post(
+        f"/api/users/{user_id}/builds", json={"artifact_id": artifact_id}
+    )
     if response.status_code not in (200, 201):
         detail = response.text.strip()[:300]
         raise FreepodError(f"could not create the build: HTTP {response.status_code} {detail}")
@@ -238,6 +242,7 @@ def create_build(api: ApiClient, artifact_id: str) -> Tuple[Dict[str, Any], bool
 
 def follow_build(
     api: ApiClient,
+    user_id: int,
     build_id: str,
     *,
     out: Optional[IO[bytes]] = None,
@@ -265,7 +270,7 @@ def follow_build(
     try:
         while True:
             response = api.get(
-                f"/api/builds/{build_id}/log",
+                f"/api/users/{user_id}/builds/{build_id}/log",
                 headers={"Range": f"bytes={offset}-"},
             )
             if response.status_code not in (200, 206):
@@ -329,6 +334,7 @@ class Built(NamedTuple):
 
 def build_image(
     api: ApiClient,
+    user_id: int,
     handle: IO[bytes],
     size: int,
     *,
@@ -346,14 +352,14 @@ def build_image(
     """
     artifact_id = upload_archive(api, handle, size, client=client, quiet=quiet, echo=echo)
 
-    build, reattached = create_build(api, artifact_id)
+    build, reattached = create_build(api, user_id, artifact_id)
     build_id = build["id"]
     if reattached:
         echo(f"  Re-attaching to the build already in progress for this archive ({build_id}).")
     else:
         echo(f"  Build {build_id} queued.")
 
-    status = follow_build(api, build_id, out=out, timeout=timeout, echo=echo)
+    status = follow_build(api, user_id, build_id, out=out, timeout=timeout, echo=echo)
 
     if status != STATUS_SUCCEEDED:
         raise BuildFailed(
@@ -363,7 +369,7 @@ def build_image(
 
     # `image` is null until the build succeeds, so it is read from the record
     # afterwards rather than from the creation response.
-    record = api.get_json(f"/api/builds/{build_id}")
+    record = api.get_json(f"/api/users/{user_id}/builds/{build_id}")
     image = record.get("image")
     if not image:
         raise FreepodError(

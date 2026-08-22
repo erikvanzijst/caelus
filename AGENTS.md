@@ -33,7 +33,10 @@ This repository is a monorepo with:
   intended case, and rejecting it is an open item. There are now two
   worker processes: `caelus worker` (reconcile queue) and `caelus build-worker`
   (builds), the latter running each build as a Kubernetes Job in a
-  per-environment `caelus-builds*` namespace. See `api/README.md` § Builds.
+  per-environment `caelus-builds*` namespace. Builds are addressed under their
+  owner — `/api/users/{user_id}/builds*` — like every other user-owned
+  resource; there is no root-level `/api/builds`, and no `user_id` query
+  parameter. See `api/README.md` § Builds.
 - Products are either **curated** (declared in `products/catalog/<slug>.yaml`,
   reconciled into the database on rollout, and read-only through the API, CLI,
   and admin UI apart from `visibility`) or **non-curated** (database-authored).
@@ -111,6 +114,10 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
 - Prefer nested routes:
   - Templates under products: `/products/{product_id}/templates`
   - Deployments under users: `/users/{user_id}/deployments`
+  - Releases under deployments:
+    `/users/{user_id}/deployments/{deployment_id}/releases`, addressed by the
+    per-deployment release **number** rather than the `uuid4`
+  - Builds under users: `/users/{user_id}/builds`
 
 ## Database & Migrations
 - Prod DB: Postgres via `DATABASE_URL`.

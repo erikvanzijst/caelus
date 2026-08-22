@@ -26,6 +26,7 @@ from app.models.core import (  # noqa: F401
     DeploymentReleaseBase,
     DeploymentReleaseORM,
     DeploymentReleaseRead,
+    DeploymentReleaseWithBuildRead,
     DeploymentUpdate,
     ProductBase,
     ProductCreate,
@@ -80,3 +81,6 @@ from app.models.billing import (  # noqa: F401
 # forward reference (defined in billing.py, referenced in core.py) and the
 # DeploymentReleaseRead one (defined below it in core.py).
 DeploymentRead.model_rebuild()
+# Same reason, other direction: DeploymentReleaseWithBuildRead names BuildRead,
+# which lives in build.py and is only imported above.
+DeploymentReleaseWithBuildRead.model_rebuild()

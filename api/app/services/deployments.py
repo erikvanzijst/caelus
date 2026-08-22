@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from sqlmodel import Session, select
 
 from app.models import (
@@ -16,6 +17,7 @@ from app.models import (
     DeploymentORM,
     DeploymentRead,
     DeploymentReleaseORM,
+    DeploymentReleaseWithBuildRead,
     MolliePaymentORM,
     MolliePaymentStatus,
     PaymentStatus,
@@ -379,6 +381,56 @@ def get_deployment(session: Session, *, deployment_id: UUID, user_id: int | None
     if deployment.status == DEPLOYMENT_STATUS_DELETED:
         raise NotFoundException("Deployment not found")
     return DeploymentRead.model_validate(deployment)
+
+
+def _require_readable_deployment(
+    session: Session, *, deployment_id: UUID, user_id: int | None
+) -> DeploymentORM:
+    """The deployment, or `NotFoundException`.
+
+    Missing, not yours, and deleted answer identically.
+    """
+    deployment = _get_deployment_orm(session, user_id=user_id, deployment_id=deployment_id)
+    if deployment.status == DEPLOYMENT_STATUS_DELETED:
+        raise NotFoundException("Deployment not found")
+    return deployment
+
+
+def list_releases(
+    session: Session, *, deployment_id: UUID, user_id: int | None = None
+) -> list[DeploymentReleaseWithBuildRead]:
+    """A deployment's releases, highest number first, each with its build inlined.
+
+    Every release is returned whatever its outcome. One statement, whatever the
+    number of releases.
+    """
+    _require_readable_deployment(session, deployment_id=deployment_id, user_id=user_id)
+    releases = session.exec(
+        select(DeploymentReleaseORM)
+        .where(DeploymentReleaseORM.deployment_id == deployment_id)
+        .order_by(DeploymentReleaseORM.number.desc())  # type: ignore[attr-defined]
+        .options(joinedload(DeploymentReleaseORM.build))  # type: ignore[arg-type]
+    ).all()
+    return [DeploymentReleaseWithBuildRead.model_validate(r) for r in releases]
+
+
+def get_release(
+    session: Session, *, deployment_id: UUID, number: int, user_id: int | None = None
+) -> DeploymentReleaseWithBuildRead:
+    """One release of a deployment, by its per-deployment number, build inlined.
+
+    A number the deployment has never reached raises `NotFoundException`.
+    """
+    _require_readable_deployment(session, deployment_id=deployment_id, user_id=user_id)
+    release = session.exec(
+        select(DeploymentReleaseORM)
+        .where(DeploymentReleaseORM.deployment_id == deployment_id)
+        .where(DeploymentReleaseORM.number == number)
+        .options(joinedload(DeploymentReleaseORM.build))  # type: ignore[arg-type]
+    ).one_or_none()
+    if release is None:
+        raise NotFoundException("Release not found")
+    return DeploymentReleaseWithBuildRead.model_validate(release)
 
 
 def get_sftp_credentials(

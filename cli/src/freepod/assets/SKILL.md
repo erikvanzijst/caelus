@@ -226,13 +226,13 @@ things those rules miss. Two wrinkles:
 
 ## When it goes wrong
 
-| Symptom                               | What it means                                   | What to do                                                                                         |
-|---------------------------------------|-------------------------------------------------|----------------------------------------------------------------------------------------------------|
-| Exit 3                                | Not authenticated                               | Ask the user to run `freepod login`                                                                |
-| Exit 4, build log ends in an error    | Build failed                                    | The streamed log is the whole story; `freepod builds` lists status and duration                    |
-| Exit 5                                | Image built, rollout failed or timed out        | Usually the container exits at startup — check the start command and that it binds `0.0.0.0:$PORT` |
-| Deploy succeeds, requests hang or 502 | App is not listening where the platform expects | `freepod log` — then bind `0.0.0.0:$PORT`, not a hardcoded port and not `127.0.0.1`                |
-| Deploy succeeds, one endpoint 500s    | A runtime fault                                 | `freepod log -f`, then exercise the failing request                                                |
+| Symptom                               | What it means                                   | What to do                                                                                                                                                                |
+|---------------------------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Exit 3                                | Not authenticated                               | Ask the user to run `freepod login`                                                                                                                                       |
+| Exit 4, build log ends in an error    | Build failed                                    | The streamed log is the whole story; `freepod builds` lists status and duration                                                                                           |
+| Exit 5                                | Image built, rollout failed or timed out        | Usually the container exits at startup — check the start command and that it binds `0.0.0.0:$PORT`. `freepod releases` shows which release failed and which is still live |
+| Deploy succeeds, requests hang or 502 | App is not listening where the platform expects | `freepod log` — then bind `0.0.0.0:$PORT`, not a hardcoded port and not `127.0.0.1`                                                                                       |
+| Deploy succeeds, one endpoint 500s    | A runtime fault                                 | `freepod log -f`, then exercise the failing request                                                                                                                       |
 
 **Read the logs first.** `freepod log` prints what the application wrote to
 stdout and stderr. Reach for it before theorizing, before adding instrumentation,
@@ -244,6 +244,19 @@ freepod log             # recent output, then exit
 freepod log -f          # keep watching; then exercise the failing request
 freepod log -r 4        # one release, including one that failed and was rolled back
 ```
+
+`freepod releases` is where the number for `-r` comes from. It lists this
+project's rollouts, most recent first, with the status of each, the image it
+shipped, and a `*` on the one currently serving traffic:
+
+```bash
+freepod releases        # RELEASE  STATUS  CREATED  DURATION  IMAGE
+```
+
+The marked release is not always the newest one — a rollout that failed leaves
+the previous release live — so this is also how you tell "my deploy failed and
+the old version is still up" from "my deploy worked and the app is wrong",
+which are different problems with the same symptom.
 
 A failed deploy usually explains itself: `freepod deploy` already prints the tail
 of the failed release's output alongside the platform's error, so a container
@@ -266,16 +279,17 @@ app is wrong."
 
 ## Command reference
 
-| Command          | Purpose                                                                                                                              |
-|------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| `freepod login`  | Sign in. Interactive — a human must do it.                                                                                           |
-| `freepod whoami` | Report the authenticated account. Never starts a login.                                                                              |
-| `freepod init`   | Set up the directory; prompts for a hostname.                                                                                        |
-| `freepod deploy` | Pack, build, release. Prints the URL on stdout.                                                                                      |
-| `freepod log`    | Read the application's output. `-f` follows, `-r N` pins one release, `-t` adds timestamps.                                          |
-| `freepod builds` | List this account's builds, most recent first.                                                                                       |
-| `freepod delete` | Delete the deployment **and everything it stores**. Destructive; confirm with the user first, and note it prompts unless given `-y`. |
-| `freepod logout` | Forget the cached credential.                                                                                                        |
+| Command            | Purpose                                                                                                                              |
+|--------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| `freepod login`    | Sign in. Interactive — a human must do it.                                                                                           |
+| `freepod whoami`   | Report the authenticated account. Never starts a login.                                                                              |
+| `freepod init`     | Set up the directory; prompts for a hostname.                                                                                        |
+| `freepod deploy`   | Pack, build, release. Prints the URL on stdout.                                                                                      |
+| `freepod log`      | Read the application's output. `-f` follows, `-r N` pins one release, `-t` adds timestamps.                                          |
+| `freepod builds`   | List this account's builds, most recent first.                                                                                       |
+| `freepod releases` | List this project's rollouts, newest first, marking the live one. Where `log -r N` gets its N.                                       |
+| `freepod delete`   | Delete the deployment **and everything it stores**. Destructive; confirm with the user first, and note it prompts unless given `-y`. |
+| `freepod logout`   | Forget the cached credential.                                                                                                        |
 
 Exit codes: `0` ok, `2` usage, `3` not authenticated, `4` build failed,
 `5` rollout failed, `1` anything else.

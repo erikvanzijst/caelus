@@ -70,7 +70,7 @@ class Platform:
 
         if path == "/api/me":
             return json_response(200, {"id": self.user_id, "email": "dev@example.com"})
-        if path == "/api/builds":
+        if path == f"/api/users/{self.user_id}/builds":
             return json_response(200, self.builds)
         if re.fullmatch(r"/api/users/\d+/deployments/[^/]+", path):
             if self.deployment_status != 200:
@@ -117,7 +117,7 @@ def test_the_platforms_order_is_kept(make_api):
     ordered = [build(id="b-1"), build(id="b-2"), build(id="b-3")]
     api, _, _ = make_api(Platform(builds=ordered))
 
-    assert [record["id"] for record in list_builds(api)] == ["b-1", "b-2", "b-3"]
+    assert [record["id"] for record in list_builds(api, 7)] == ["b-1", "b-2", "b-3"]
 
 
 def test_the_deployed_image_comes_from_the_projects_deployment(make_api, tmp_path):

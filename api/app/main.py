@@ -14,6 +14,7 @@ from app.api import (
     deployments,
     hostnames,
     plans,
+    releases,
     subscriptions,
     webhooks,
 )
@@ -62,6 +63,7 @@ def redirect_to_docs() -> RedirectResponse:
 app.include_router(users.me_router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
+app.include_router(releases.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
 app.include_router(hostnames.router, prefix="/api")
 app.include_router(plans.router, prefix="/api")

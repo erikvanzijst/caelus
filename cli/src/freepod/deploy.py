@@ -892,6 +892,7 @@ def deploy(
             report(size, members, verbose=verbose, echo=echo)
         built = build_image(
             api,
+            state.user_id,
             handle,
             size,
             client=store,

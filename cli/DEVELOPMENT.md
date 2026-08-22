@@ -68,6 +68,8 @@ that locks users out until they upgrade.
 | `deploy.py`   | The pipeline: preflight → pack → upload → build → release, plus rollout following.          |
 | `delete.py`   | The teardown: confirming it, requesting it, and following it to gone.                       |
 | `history.py`  | The build history: reading the account's builds and rendering the table.                    |
+| `releases.py` | The release history: this project's deployment's rollouts, and the live mark.               |
+| `table.py`    | Shared listing rendering: timestamps, durations, digest abbreviation, columns. A leaf.      |
 | `logs.py`     | `freepod log`: SSE parsing, the resume cursor, and reconnection.                            |
 | `tos.py`      | Terms acceptance: the gate, the prompt, and recording an acceptance.                        |
 | `skill.py`    | The packaged agent instructions: reading `assets/SKILL.md`, and where to install it.        |
@@ -421,8 +423,8 @@ out the timeout reporting "still deleting". The 409 is the same
 
 ## The build history
 
-`builds` lists what `GET /api/builds` answers, which is **the account's**
-builds and not a project's. The platform has no notion of a project at all — a
+`builds` lists what `GET /api/users/{uid}/builds` answers, which is **the
+account's** builds and not a project's. The platform has no notion of a project at all — a
 build is owned by a user, never by a deployment — so a project-scoped history
 is not a thing the API can be asked for, and pretending otherwise would mean
 inventing a filter with nothing behind it.
@@ -452,6 +454,36 @@ Details worth keeping:
 - **Digests are abbreviated to twelve characters** with the truncation marked.
   A full reference is 75 characters of which 64 are a digest, which would make
   that column wider than every other one together. `--verbose` prints it whole.
+
+The last four apply to `releases` too, and live in `table.py` so that both
+commands share one implementation rather than two that drift.
+
+## The release history
+
+`releases` is the other listing, and the one place the two differ is scope:
+a release belongs to a **deployment**, so there is no account-wide listing to
+fall back on. The command therefore requires a project that records a
+deployment, and refuses — naming the fix — when there is none, rather than
+printing an empty table. An empty table would read as "this deployment has
+never rolled out", which is a different and untrue statement. A project
+pointing at another environment is refused the same way `delete` refuses it,
+and for the same reason: reading the wrong environment would report another
+deployment's history as this one's.
+
+- **The mark comes from the deployment, not from the listing.** The row flagged
+  `*` is the one the deployment reports as `applied_release`. Never
+  `desired_release`, and never the top row: after a failed rollout the newest
+  release is not the one serving traffic, and marking it would say a failed
+  release was live.
+- **Releases are addressed by number.** The platform orders by it, presents it,
+  and accepts it in `GET .../releases/{number}`. The `uuid4` is what gets
+  stamped onto pods and never appears in a URL.
+- **The image comes from the build inlined on each row**, so the table costs one
+  request rather than one per row. A release naming no build shows `-` and is
+  still listed — most products build nothing.
+- **Every outcome is listed**, including `queued`, `abandoned` and `failed`.
+  A failed release's recorded error goes to stderr, per row, so the table's
+  columns stay aligned and a redirected listing still carries only rows.
 
 ## The project file
 
@@ -590,8 +622,9 @@ Three phases (designs D9, D12, D13):
    plain `httpx.Client`, not `ApiClient` — no bearer token, and none of the
    401/403 contract, which describes the platform's edge. A `403` means an
    expired slot or a policy violation: mint one fresh slot and submit once more.
-3. **Create and follow the build** — `POST /api/builds` with the artifact id
-   alone, then read the log by byte range until `X-Build-Status` is terminal.
+3. **Create and follow the build** — `POST /api/users/{uid}/builds` with the
+   artifact id alone, then read the log by byte range until `X-Build-Status`
+   is terminal.
    A **200** rather than 201 means the platform handed back a build already
    queued or running for this artifact instead of creating a second one, which
    is what makes re-running a deploy safe; the client says so rather than

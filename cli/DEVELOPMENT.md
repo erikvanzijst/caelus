@@ -29,6 +29,16 @@ uv run pytest          # the full suite
 uv run freepod --help
 ```
 
+That last line only suits commands needing no project — `--help`, `whoami`,
+`login`. Anything project-scoped discovers `.freepod.json` by walking up from
+**cwd**, which `cd cli` has moved. Stay in the project and point uv at this
+package instead:
+
+```bash
+cd ~/myapp
+uv run --project /path/to/cli freepod releases
+```
+
 Four rules hold the package's shape. Each is pinned by a test in
 `tests/test_package.py`, so breaking one fails CI rather than shipping.
 

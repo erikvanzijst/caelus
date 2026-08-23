@@ -108,11 +108,14 @@ new S3Client({ forcePathStyle: true })     // endpoint/region come from the env
 ## Runtime configuration
 
 Whatever vars the deployment has set arrive in the container as environment
-variables. The platform writes them into a Secret named `<release>-vars` in the
-deployment's own namespace before Helm runs, and passes the chart only the
-Secret's *name* under `caelus.vars.secretName` — values never travel through
-the Helm values, which are logged in full and persisted into a
-tenant-namespace object.
+variables. The platform writes them into a Secret named
+`<release>-vars-<number>` in the deployment's own namespace before Helm runs,
+and passes the chart only the Secret's *name* under `caelus.vars.secretName` —
+values never travel through the Helm values, which are logged in full and
+persisted into a tenant-namespace object.
+
+One Secret per rollout, so a failed deploy that rolls back leaves the previous
+one intact; superseded Secrets are removed after the next successful deploy.
 
 A deployment with no vars gets no Secret and no `envFrom` source at all, rather
 than an empty one.

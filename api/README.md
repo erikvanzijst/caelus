@@ -393,24 +393,11 @@ release_var      the snapshot: which var rows a release was created with. That
                  reproducible after later writes and deletions.
 ```
 
-**Head** is the effective set: the newest row per key, tombstones excluded. It
-is resolved in exactly one function (`services/vars.py:head`) because the
-tombstone filter is easy to omit and the omission is silent — a deleted var
-would come back. It is spelled `id = max(id) per key` rather than Postgres
-`DISTINCT ON` so it runs on SQLite too; a head query that only runs in
-production is a head query nothing tests.
+**Head** is the effective set: the newest row per key, tombstones excluded.
 
 - A **deployment read** reports head — desired state, matching
   `user_values_json` beside it.
 - A **release read** reports that release's snapshot.
-- `pending` is true when head differs from the **applied** release's snapshot,
-  never the desired one. After a failed rollout head equals the *failed*
-  release's snapshot, so comparing against desired would report nothing pending
-  while the running pod carries none of the changes.
-
-Neither listing carries vars: head is a query per deployment and a snapshot is
-a query per release, and no caller reads vars from a listing. Both fields are
-`null` there, which is "not reported" and not "has none".
 
 ### Routing markers
 
@@ -444,9 +431,7 @@ their author rather than at some tenant's next deployment.
 
 A var marked sensitive is **never readable again through any endpoint, by
 anyone, including an administrator**. Reads omit the `value` field entirely —
-not a mask, which invites a caller to write it back verbatim, and not a null,
-which is the delete gesture and would make a read/modify/write round-trip
-delete every secret the caller could not read.
+not a mask.
 
 Omission gives a third state and the rule that follows from it: **an absent
 `value` on write means "leave unchanged"**, which is what makes
@@ -454,12 +439,7 @@ Omission gives a third state and the rule that follows from it: **an absent
 
 Every value is encrypted at rest, sensitive or not — one column, one code path,
 no per-row branch on where the plaintext lives. Each row records the
-*fingerprint* of the key that encrypted it (`services/var_crypto.py`), never a
-position in the configured list, because rotation introduces a key by
-prepending and a positional identifier would silently renumber history. Errors
-raised for an invalid var are built from the JSON path and the failed keyword
-only: `jsonschema`'s own message embeds the offending instance, and that
-message reaches both the caller and the log aggregator.
+*fingerprint* of the key that encrypted it (`services/var_crypto.py`).
 
 The API and the reconcile worker both refuse to start when their keyring cannot
 cover what is stored. See `tf/README.md` § Deployment var encryption keyring
@@ -472,18 +452,27 @@ _reconcile_apply
     ensure_namespace
     ensure_tenant_isolation
     ensure_object_storage
-    ensure_vars_secret       ← the desired release's snapshot, decrypted
+    ensure_vars_secret       ← the applied release's snapshot, decrypted
     helm_upgrade_install     ← values carry only the Secret's name
+    reap_vars_secrets        ← superseded releases' Secrets, on success only
 ```
 
-The Secret is named from the **deployment** (`{name}-vars`), so it is updated in
-place across releases rather than accumulating one per release. Only
-`caelus.vars.secretName` is projected into the values, for the same reason the
-object-storage credential is not: merged values are logged in full at INFO and
-persisted by Helm into a tenant-namespace object. Every row is decrypted before
-anything is written, so a keyring that cannot read one row leaves the previous
-Secret untouched — a pod holding some of its variables is worse than one that
-does not start.
+The Secret is named per **release** (`{deployment}-vars-{number}`). A shared
+Secret updated in place would be written before Helm runs and would not be
+rolled back when Helm fails, leaving the reverted pod spec paired with the
+failed release's values — harmless until the next pod starts, then silently
+wrong. Per-release naming makes a rollback land on a Secret this apply never
+touched, and makes a var-only change alter the pod template so the rollout
+restarts the pod. Superseded Secrets are deleted after a *successful* apply
+only (`_reap_vars_secrets`), scoped by the deployment's instance label; a
+failure there is logged, since litter is cheaper than a wrong pod.
+
+Only `caelus.vars.secretName` is projected into the values, for the same reason
+the object-storage credential is not: merged values are logged in full at INFO
+and persisted by Helm into a tenant-namespace object. Every row is decrypted
+before anything is written, so a keyring that cannot read one row leaves the
+previous Secret untouched — a pod holding some of its variables is worse than
+one that does not start.
 
 An empty snapshot produces no Secret and no values block at all, so a chart
 that requires vars fails visibly instead of rendering an empty `envFrom`. In

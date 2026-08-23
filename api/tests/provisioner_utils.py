@@ -69,6 +69,17 @@ class FakeProvisioner:
         )
         return None
 
+    def delete_secrets_by_label(
+        self, *, namespace: str, selector: str, except_name: str | None = None
+    ):
+        self.calls.append(
+            (
+                "delete_secrets_by_label",
+                {"namespace": namespace, "selector": selector, "except_name": except_name},
+            )
+        )
+        return None
+
     def delete_namespace(self, *, name: str):
         self.calls.append(("delete_namespace", {"name": name}))
         return None

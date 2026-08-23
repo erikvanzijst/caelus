@@ -138,6 +138,29 @@ class KubeAdapter:
             error_message=f"Failed to apply Secret {namespace}/{name}",
         )
 
+    def delete_secrets_by_label(
+        self, *, namespace: str, selector: str, except_name: str | None = None
+    ) -> None:
+        """Delete every Secret matching ``selector``, optionally sparing one.
+
+        Matching nothing is success.
+        """
+        cmd = [
+            "kubectl", "delete", "secret",
+            "-n", namespace,
+            "-l", selector,
+            "--ignore-not-found",
+        ]
+        if except_name is not None:
+            cmd += ["--field-selector", f"metadata.name!={except_name}"]
+        run_command(
+            cmd,
+            runner=self._runner,
+            error_message=(
+                f"Failed to delete Secrets matching {selector} in namespace {namespace}"
+            ),
+        )
+
     def apply_manifest(self, manifest: dict[str, Any], *, error_message: str) -> None:
         """Declaratively upsert a single manifest via ``kubectl apply``.
 
@@ -440,6 +463,14 @@ class Provisioner:
         """Upsert a platform-owned Secret into a deployment's namespace."""
         self.kube.upsert_secret(
             namespace=namespace, name=name, string_data=string_data, labels=labels
+        )
+
+    def delete_secrets_by_label(
+        self, *, namespace: str, selector: str, except_name: str | None = None
+    ) -> None:
+        """Remove platform-owned Secrets a deployment no longer references."""
+        self.kube.delete_secrets_by_label(
+            namespace=namespace, selector=selector, except_name=except_name
         )
 
     def helm_upgrade_install(

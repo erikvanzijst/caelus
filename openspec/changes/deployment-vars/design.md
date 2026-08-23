@@ -424,37 +424,62 @@ never changes retroactively, and `pending` (D8) reports correctly.
 Steps 4 and 6 sharing a transaction with 5 is what makes the snapshot atomic, and on
 create it is what stops the first release's snapshot from being empty.
 
-### D10. One Secret per deployment, referenced by name only
+### D10. One Secret per release, referenced by name only
 
-The reconciler reads the desired release's snapshot, decrypts, and upserts a Secret in
-the tenant namespace, following the path `_ensure_object_storage` established
+The reconciler reads the release it is applying, decrypts its snapshot, and upserts a
+Secret in the tenant namespace, following the path `_ensure_object_storage` established
 (`api/app/services/reconcile.py:320`):
 
 ```python
 self._provisioner.upsert_secret(
     namespace=deployment.namespace,
-    name=vars_secret_name(deployment),
+    name=vars_secret_name(deployment, release),
     string_data={key: plaintext for key, plaintext in release_vars},
-    labels={...},
+    labels=vars_secret_labels(deployment),
 )
 ```
 
-`vars_secret_name(deployment)` returns `f"{deployment.name}-vars"` — derived from the
-**deployment**, so stable across reconciles *and across releases*, updated in place
-rather than churned.
+`vars_secret_name(deployment, release)` returns `f"{deployment.name}-vars-{number}"` —
+per **`deployment_release`**.
+
+**Why not one Secret per deployment, updated in place.** The Secret is written *before*
+Helm runs, and it is not part of the Helm release, so `--atomic` does not roll it back. A
+failed rollout would therefore leave the pod spec reverted to the previous release while
+the Secret held the *failed* release's values. Nothing breaks at that moment — `envFrom`
+is resolved once at container start, so the surviving pods keep their environment — but
+the next pod created for any reason at all (a crash, an OOM kill, an eviction, a node
+drain) would come up with configuration the platform does not believe is applied. That is
+a silent divergence with an unbounded window, and it is the same class of failure E11
+refuses for partial Secrets.
+
+Per-release naming closes it by construction: a rolled-back pod spec names the Secret of
+the release it rolled back to, which this apply never touched. It also makes a var-only
+change alter the pod template, so **the rollout restarts the pod without the chart having
+to stamp anything** — which removes `caelus.releaseId` adoption as a prerequisite for
+curated products (D14). `releaseId` remains what it was built for: a log-attribution
+label.
 
 > A caution for anyone working in the neighboring code: `storage_secret_name`'s docstring
 > says it is "derived from the release name" (`api/app/services/reconcile.py:33`), where
-> *release* means the **Helm release**, whose name is `deployment.name` — which is why
+> *release* means the **Helm** release, whose name is `deployment.name` — which is why
 > the body is `f"{deployment.name}-object-storage"`. It does **not** mean
 > `deployment_release`, which is what *release* means everywhere in this document.
-> Carrying that phrase over would read as a per-`deployment_release` Secret name, which is
-> not this design and would change the rollout semantics below.
+
+**The accumulated Secrets are reaped, not left.** After a *successful* apply, and only
+then, `_reap_vars_secrets` deletes every Secret matching
+`caelus.dev/component=vars,app.kubernetes.io/instance={deployment.name}` except the one
+the applied release names. The instance label is load-bearing: a namespace is not
+guaranteed to hold exactly one deployment.
+
+The reaper is best-effort and its failure is logged, not raised. That asymmetry is the
+whole point of preferring it to the alternative below: a reaper that fails leaves litter,
+which the next successful apply clears; a compensating write that fails leaves a pod
+running configuration nobody asked for.
 
 Only the **name** is projected into the merged values:
 
 ```json
-{"caelus": {"vars": {"secretName": "vw-abc123-vars"}}}
+{"caelus": {"vars": {"secretName": "vw-abc123-vars-7"}}}
 ```
 
 Values must never travel through the values document, for the reason recorded at
@@ -462,10 +487,11 @@ Values must never travel through the values document, for the reason recorded at
 persisted by Helm into a tenant-namespace object, so a value routed through them reaches
 the log aggregator on every reconcile.
 
-**No vars, no block.** An empty head emits no `caelus.vars` block and creates no Secret,
-mirroring `_build_object_storage_overrides` returning `None`
+**No vars, no block.** An empty snapshot emits no `caelus.vars` block and creates no
+Secret, mirroring `_build_object_storage_overrides` returning `None`
 (`api/app/services/reconcile.py:449`), so a chart that requires vars fails loudly instead
-of rendering an empty `envFrom`.
+of rendering an empty `envFrom`. The reaper then keeps nothing, which is correct: the
+rendered pod spec references no vars Secret.
 
 **Reserved names and `envFrom` precedence** — two protections, because they fail
 differently. The denylist (D12) rejects the name at the API. Independently, a later
@@ -474,20 +500,10 @@ differently. The denylist (D12) rejects the name at the API. Independently, a la
 `PORT` is already safe, being an explicit `env` entry
 (`products/custom/chart/templates/deployment.yaml:65`).
 
-**Rollout on a var-only change.** `helm upgrade` does not restart pods when only a
-Secret's contents change — the rendered pod spec is identical. For `custom` this is
-already solved: `caelus.releaseId` is projected on every reconcile
-(`api/app/services/reconcile.py:405`) and the chart stamps it into the
-`caelus.dev/release-id` pod label (`products/custom/chart/templates/_helpers.tpl:54`), so
-a new release always changes the pod template. **The curated charts ignore `releaseId`**
-and would take the new Secret while continuing to run the old configuration, silently —
-which is why adopting `releaseId` or a Secret checksum annotation is a *prerequisite* for
-D14, not a follow-up.
-
-*Alternative considered.* A per-release Secret name (`{deployment.name}-vars-{number}`),
-which would change the pod spec on every var change and force the rollout for free.
-Rejected: it accumulates one Secret per release in the tenant namespace and needs a
-garbage collector, while `releaseId` already does the job for `custom` with no litter.
+*Alternative considered.* One Secret per deployment, restored from the applied release's
+snapshot on the failure path. Rejected: it puts a compensating write in the error handler,
+where a second failure reinstates exactly the divergence it exists to prevent, and it
+splits the fix across the reconciler while the hazard is created by the write ordering.
 
 ### D11. `deploy --no-build` is the primitive; `var set` applies by default
 

@@ -18,6 +18,7 @@ from app.models import (
     BillingInterval,
     DeploymentCreate,
     DeploymentORM,
+    DeploymentReleaseORM,
     PlanORM,
     PlanTemplateVersionORM,
     ProductORM,
@@ -103,11 +104,39 @@ def _seed(db_session, *, vars: dict | None = None):
 
 
 def _helm_values(provisioner: FakeProvisioner) -> dict:
-    return next(c[1]["values"] for c in provisioner.calls if c[0] == "helm_upgrade_install")
+    """The values of the *most recent* apply, which is what a second reconcile
+    in one test is asking about."""
+    return [c[1]["values"] for c in provisioner.calls if c[0] == "helm_upgrade_install"][-1]
 
 
 def _secrets(provisioner: FakeProvisioner) -> list[dict]:
     return [c[1] for c in provisioner.calls if c[0] == "upsert_secret"]
+
+
+def _reaps(provisioner: FakeProvisioner) -> list[dict]:
+    return [c[1] for c in provisioner.calls if c[0] == "delete_secrets_by_label"]
+
+
+def _second_release(db_session, deployment, entries) -> DeploymentReleaseORM:
+    """Write vars and mint the release that captures them, as an update would."""
+    vars_service.write_vars(
+        db_session, deployment=deployment, actor=deployment.user, entries=entries
+    )
+    release = DeploymentReleaseORM(
+        number=2,
+        deployment_id=deployment.id,
+        template_id=deployment.desired_template_id,
+    )
+    db_session.add(release)
+    db_session.commit()
+    db_session.refresh(release)
+    vars_service.snapshot_release(
+        db_session, release_id=release.id, deployment_id=deployment.id
+    )
+    deployment.desired_release_id = release.id
+    db_session.add(deployment)
+    db_session.commit()
+    return release
 
 
 def test_a_release_with_vars_publishes_a_secret_before_helm(db_session):
@@ -123,8 +152,9 @@ def test_a_release_with_vars_publishes_a_secret_before_helm(db_session):
     DeploymentReconciler(session=db_session, provisioner=provisioner).reconcile(deployment_id)
 
     deployment = db_session.get(DeploymentORM, deployment_id)
+    release = db_session.get(DeploymentReleaseORM, deployment.desired_release_id)
     secret = _secrets(provisioner)[0]
-    assert secret["name"] == vars_secret_name(deployment) == f"{deployment.name}-vars"
+    assert secret["name"] == vars_secret_name(deployment, release) == f"{deployment.name}-vars-1"
     assert secret["namespace"] == deployment.namespace
     assert secret["string_data"] == {"LOG_LEVEL": "debug", "ADMIN_TOKEN": SECRET}
 
@@ -144,8 +174,9 @@ def test_the_merged_values_carry_the_name_and_no_value(db_session):
     DeploymentReconciler(session=db_session, provisioner=provisioner).reconcile(deployment_id)
 
     deployment = db_session.get(DeploymentORM, deployment_id)
+    release = db_session.get(DeploymentReleaseORM, deployment.desired_release_id)
     values = _helm_values(provisioner)
-    assert values["caelus"]["vars"] == {"secretName": vars_secret_name(deployment)}
+    assert values["caelus"]["vars"] == {"secretName": vars_secret_name(deployment, release)}
     # Merged values are logged in full and persisted by Helm into a
     # tenant-namespace object, so no value may travel through them.
     serialized = json.dumps(values)
@@ -175,30 +206,85 @@ def test_a_release_with_no_vars_produces_no_secret_and_no_block(db_session):
     assert "vars" not in _helm_values(provisioner).get("caelus", {})
 
 
-def test_the_secret_name_is_stable_across_releases(db_session):
-    """Updated in place, rather than one Secret accumulating per release."""
+def test_each_release_gets_its_own_secret_and_supersedes_the_last(db_session):
+    """The pod template changes with the Secret's name, so a var-only change
+    rolls the pod -- and the superseded Secret is reaped once Helm succeeds."""
     deployment_id = _seed(db_session, vars={"LOG_LEVEL": VarWrite(value="debug")})
     provisioner = FakeProvisioner()
     reconciler = DeploymentReconciler(session=db_session, provisioner=provisioner)
     reconciler.reconcile(deployment_id)
 
     deployment = db_session.get(DeploymentORM, deployment_id)
-    vars_service.write_vars(
-        db_session,
-        deployment=deployment,
-        actor=deployment.user,
-        entries={"LOG_LEVEL": VarWrite(value="trace")},
-    )
-    vars_service.snapshot_release(
-        db_session,
-        release_id=deployment.desired_release_id,
-        deployment_id=deployment.id,
-    )
-    db_session.commit()
+    second = _second_release(db_session, deployment, {"LOG_LEVEL": VarWrite(value="trace")})
     reconciler.reconcile(deployment_id)
 
-    names = {secret["name"] for secret in _secrets(provisioner)}
-    assert names == {f"{deployment.name}-vars"}
+    assert [secret["name"] for secret in _secrets(provisioner)] == [
+        f"{deployment.name}-vars-1",
+        f"{deployment.name}-vars-2",
+    ]
+    # The second apply keeps its own Secret and sweeps the first.
+    reaps = _reaps(provisioner)
+    assert reaps[-1]["except_name"] == f"{deployment.name}-vars-{second.number}"
+    assert reaps[-1]["namespace"] == deployment.namespace
+
+
+def test_the_reaper_cannot_reach_another_deployments_secrets(db_session):
+    """A namespace is not guaranteed to hold exactly one deployment."""
+    deployment_id = _seed(db_session, vars={"LOG_LEVEL": VarWrite(value="debug")})
+    provisioner = FakeProvisioner()
+    DeploymentReconciler(session=db_session, provisioner=provisioner).reconcile(deployment_id)
+
+    deployment = db_session.get(DeploymentORM, deployment_id)
+    selector = _reaps(provisioner)[0]["selector"]
+    assert "caelus.dev/component=vars" in selector
+    assert f"app.kubernetes.io/instance={deployment.name}" in selector
+
+
+def test_a_failed_apply_reaps_nothing(db_session):
+    """`--atomic` rolls the pod spec back onto the previous release's Secret,
+    which is exactly the object a reap on this path would delete."""
+    deployment_id = _seed(db_session, vars={"LOG_LEVEL": VarWrite(value="debug")})
+    provisioner = FakeProvisioner()
+    provisioner.raise_on_upgrade = RuntimeError("helm exploded")
+
+    result = DeploymentReconciler(session=db_session, provisioner=provisioner).reconcile(
+        deployment_id
+    )
+
+    assert result.status == "error"
+    assert _reaps(provisioner) == []
+
+
+def test_a_release_with_no_vars_reaps_every_secret(db_session):
+    """Removing the last var leaves no Secret to keep, and none to reference."""
+    deployment_id = _seed(db_session, vars={"LOG_LEVEL": VarWrite(value="debug")})
+    provisioner = FakeProvisioner()
+    reconciler = DeploymentReconciler(session=db_session, provisioner=provisioner)
+    reconciler.reconcile(deployment_id)
+
+    deployment = db_session.get(DeploymentORM, deployment_id)
+    _second_release(db_session, deployment, {"LOG_LEVEL": VarWrite(value=None)})
+    reconciler.reconcile(deployment_id)
+
+    assert _reaps(provisioner)[-1]["except_name"] is None
+    assert "vars" not in _helm_values(provisioner).get("caelus", {})
+
+
+def test_a_failing_reap_does_not_fail_the_rollout(db_session):
+    """Litter is a cheaper failure than the one this naming scheme prevents."""
+    deployment_id = _seed(db_session, vars={"LOG_LEVEL": VarWrite(value="debug")})
+    provisioner = FakeProvisioner()
+
+    def boom(**_kwargs):
+        raise RuntimeError("kubectl unavailable")
+
+    provisioner.delete_secrets_by_label = boom
+
+    result = DeploymentReconciler(session=db_session, provisioner=provisioner).reconcile(
+        deployment_id
+    )
+
+    assert result.status == "ready"
 
 
 def test_the_applied_snapshot_is_the_releases_not_head(db_session):

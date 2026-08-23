@@ -13,9 +13,15 @@ containing each var's key and plaintext value. The Secret SHALL be written befor
 chart is installed or upgraded, so no pod ever starts expecting a Secret that is not
 there.
 
-The Secret's name SHALL be derived from the **deployment**, making it stable across
-reconciles and across releases, and it SHALL be updated in place rather than a new
-object being created per release.
+The Secret's name SHALL identify the **release**, not merely the deployment, so that a
+rollout which fails and is rolled back leaves the previous release's Secret untouched.
+
+The Secret is written before the chart runs and is not part of the Helm release, so a
+rollback does not revert it. Were one Secret shared across releases, a failed rollout
+would leave the reverted pod specification paired with the failed release's values: no
+running pod would change, because environment variables are resolved once at container
+start, but the next pod created for any reason would silently start with configuration
+the platform does not report as applied.
 
 #### Scenario: A release with vars is applied
 - **WHEN** the reconciler applies a release whose snapshot holds three vars
@@ -24,8 +30,43 @@ object being created per release.
 
 #### Scenario: A second release changes one var
 - **WHEN** a later release changes one var's value
-- **THEN** the same Secret is updated in place
-- **AND** no additional Secret is created
+- **THEN** that release's vars are written to a Secret of its own
+- **AND** the pod specification names it, so the rollout replaces the running pod
+
+#### Scenario: A rollout fails and is rolled back
+- **WHEN** applying a release with changed vars fails and the chart is rolled back
+- **THEN** the Secret the restored pod specification names still holds the values of the
+  release that is applied
+- **AND** no pod started afterwards receives the failed release's values
+
+### Requirement: Superseded var Secrets are removed after a successful apply
+Once an apply succeeds, the reconciler SHALL delete every var Secret belonging to that
+deployment except the one the applied release names, so that per-release naming does not
+accumulate objects in the tenant's namespace without bound.
+
+Removal SHALL happen only after a **successful** apply: a failed one is rolled back onto
+the previous release, whose Secret the running pod specification still names.
+
+Removal SHALL be scoped to the deployment rather than to the namespace, and a failure to
+remove SHALL NOT fail the rollout — an unremoved Secret is unreferenced, and the next
+successful apply removes it.
+
+#### Scenario: A third release supersedes the second
+- **WHEN** a release is applied successfully and earlier releases' var Secrets exist
+- **THEN** only the applied release's var Secret remains
+
+#### Scenario: An apply fails
+- **WHEN** an apply fails
+- **THEN** no var Secret is removed
+
+#### Scenario: The applied release has no vars
+- **WHEN** a release whose snapshot is empty is applied successfully
+- **THEN** every earlier var Secret for that deployment is removed
+- **AND** no new one is created
+
+#### Scenario: Removal fails
+- **WHEN** deleting a superseded Secret fails
+- **THEN** the rollout still reports success
 
 ### Requirement: Var values never travel through the Helm values
 The reconciler SHALL project only the **name** of the Secret into the merged Helm

@@ -119,9 +119,10 @@
 
 ## 8. Reconciler and chart
 
-- [x] 8.1 `vars_secret_name(deployment)` returning `f"{deployment.name}-vars"` — derived
-      from the deployment, stable across releases. Read the caution in design.md D10 before
-      naming it from anything else.
+- [x] 8.1 `vars_secret_name(deployment, release)` returning
+      `f"{deployment.name}-vars-{number}"` — per release, so a Helm rollback lands on a
+      Secret the failed apply never touched (design.md D10). Read the caution there about
+      `storage_secret_name`'s "release name" before naming it from anything else.
 - [x] 8.2 In `reconcile.py`, decrypt the desired release's snapshot and `upsert_secret` it
       into the tenant namespace before Helm runs, following `_ensure_object_storage`.
       Fail the reconcile naming the missing fingerprint if any row cannot be decrypted;
@@ -134,6 +135,9 @@
       appears in no captured log record from a full reconcile; an empty snapshot yields no
       Secret and no block; a var named like a platform credential does not reach the pod
       ahead of the platform's value.
+- [x] 8.6 `_reap_vars_secrets(deployment, keep)` after a **successful** apply only,
+      deleting the deployment's superseded vars Secrets. Best-effort: a failure is logged,
+      never raised.
 
 ## 9. CLI
 

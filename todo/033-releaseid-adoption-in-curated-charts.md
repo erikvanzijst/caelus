@@ -1,22 +1,20 @@
 # Issue 033: `caelus.releaseId` Adoption In Curated Charts
 
 ## Goal
-Make a var-only change actually restart the pod for curated products, so that
-they can adopt deployment vars at all.
+Let a curated deployment's log lines be attributed to the release that produced
+them, as `custom` already allows.
 
-## Why This Blocks Something
-`helm upgrade` does not restart pods when only a Secret's *contents* change —
-the rendered pod spec is byte-identical, so Helm has nothing to roll. The
-platform already projects `caelus.releaseId` into the merged values on every
-reconcile (`api/app/services/reconcile.py:_build_release_overrides`), and
-`products/custom/chart` stamps it into the `caelus.dev/release-id` pod label,
-which is what makes the pod template differ per release.
+## Status: no longer a blocker for vars
+This started as a prerequisite for curated products adopting vars: a Secret
+whose *contents* change leaves the rendered pod spec byte-identical, so Helm
+has nothing to roll, and the curated charts ignore `caelus.releaseId`.
 
-**The curated charts ignore `releaseId`.** A curated product that adopted vars
-today would take the new Secret and keep running the old configuration,
-silently and indefinitely. That is why `deployment-vars` deliberately kept
-curated products out of v1 (design.md D14) — the trap cannot be sprung by
-accident while no curated schema declares a runtime property.
+Vars Secrets are now named per release (`{deployment}-vars-{number}`, design.md
+D10), so a var change alters the pod template on its own and the rollout
+restarts the pod in any chart, stamped or not. **This issue is now only about
+log attribution**, which is what `releaseId` was built for: without the label,
+a curated deployment's log lines cannot be attributed to one release while two
+rollouts' pods write concurrently.
 
 ## Scope
 1. In each curated chart (`nextcloud`, `immich`, `vaultwarden`, `matrix`),
@@ -27,9 +25,8 @@ accident while no curated schema declares a runtime property.
    - emit no label at all when `releaseId` is empty, so the chart still renders
      standalone.
 2. Bump each chart version and repoint its catalog `chart_version`.
-3. Alternative worth considering per chart: a checksum annotation over the vars
-   Secret. `releaseId` is preferred because it is already injected for every
-   product and needs no per-chart knowledge of which Secrets exist.
+3. A checksum annotation over the vars Secret is *not* an alternative here:
+   the restart it would force already happens through the Secret's name.
 
 ## Required Tests
 1. Rendering with a `releaseId` puts it on the pod template and nowhere else
@@ -38,9 +35,10 @@ accident while no curated schema declares a runtime property.
 3. The chart still renders with no `releaseId` set.
 
 ## Acceptance Criteria
-1. A var-only change to a curated deployment rolls its pods.
+1. A curated deployment's pods carry `caelus.dev/release-id`.
 2. Every curated chart renders unchanged when `releaseId` is absent.
 
 ## Notes
-Prerequisite for migrating any curated product onto vars (design.md D14 and
-§ Migration Plan, in `openspec/changes/deployment-vars/design.md`).
+Was a hard prerequisite for D14 (curated products adopting vars) until
+per-release Secret naming landed; see `openspec/changes/deployment-vars/design.md`
+§ D10.

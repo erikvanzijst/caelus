@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 from cryptography.fernet import Fernet
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app.config import CaelusSettings
 from app.models import DeploymentVarORM, ProductTemplateVersionORM, ProductORM, UserORM
@@ -135,6 +135,27 @@ def test_a_colliding_key_list_is_rejected_at_construction():
 def test_verify_passes_on_an_empty_store(db_session, keyring_settings):
     keyring_settings([KEY_A])
     verify_keyring(db_session)
+
+
+def test_verify_names_the_migration_when_the_table_is_missing(keyring_settings):
+    """The first thing anyone pulling this branch hits is a stale database."""
+    from sqlalchemy import create_engine
+    from sqlmodel import SQLModel
+
+    engine = create_engine("sqlite://")
+    SQLModel.metadata.create_all(
+        engine,
+        tables=[
+            table
+            for name, table in SQLModel.metadata.tables.items()
+            if name not in ("deployment_var", "release_var")
+        ],
+    )
+    keyring_settings([KEY_A])
+    with Session(engine) as session:
+        with pytest.raises(VarEncryptionException) as exc:
+            verify_keyring(session)
+    assert "alembic upgrade head" in str(exc.value)
 
 
 def test_verify_fails_on_a_fingerprint_collision(db_session, keyring_settings):

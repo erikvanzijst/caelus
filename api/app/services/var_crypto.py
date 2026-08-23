@@ -25,6 +25,7 @@ from functools import lru_cache
 from typing import Callable
 
 from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy import inspect as sa_inspect
 from sqlmodel import Session, select
 
 from app.config import get_settings
@@ -155,6 +156,15 @@ def verify_keyring(session: Session) -> None:
                 "no encryption key is configured (CAELUS_VAR_ENCRYPTION_KEYS is empty) "
                 f"while product template(s) {declaring} declare vars"
             )
+
+    # Checked before querying, so a database that has not been migrated says so
+    # in one line instead of surfacing as an UndefinedTable traceback out of
+    # the ASGI lifespan, where the actionable part is a hundred lines up.
+    if not sa_inspect(session.get_bind()).has_table(DeploymentVarORM.__tablename__):
+        raise VarEncryptionException(
+            f"table {DeploymentVarORM.__tablename__} does not exist; "
+            "run `alembic upgrade head` against this database"
+        )
 
     stored = {
         key_id

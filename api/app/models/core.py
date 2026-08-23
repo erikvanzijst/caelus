@@ -6,13 +6,17 @@ from uuid import UUID, uuid4
 from pydantic import ConfigDict, field_validator, model_validator
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import (
+    BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     Enum as SAEnum,
     ForeignKey,
+    Identity,
     Integer,
     Index,
     JSON,
+    PrimaryKeyConstraint,
     Text,
     String,
     UniqueConstraint,
@@ -681,6 +685,106 @@ class DeploymentReleaseWithBuildRead(DeploymentReleaseRead):
     """
 
     build: Optional["BuildRead"] = None
+
+
+# ---------------------------------------------------------------------------
+# Deployment vars
+# ---------------------------------------------------------------------------
+#
+# A var is one entry in a deployment's process environment. The table is
+# append-only: setting a key inserts a row, deleting it inserts a *tombstone*
+# -- a row with no value -- and nothing is ever updated in place except the
+# re-encryption sweep, which rewrites a row's representation and never its
+# plaintext.
+#
+# The effective set ("head") is the newest row per key with the tombstones
+# filtered out (`app/services/vars.py`).
+#
+# `release_var` freezes head onto a release at the moment it is created, which
+# is what makes a release reproducible after later writes and deletions.
+
+
+class DeploymentVarORM(SQLModel, table=True):
+    __tablename__ = "deployment_var"
+    __table_args__ = (
+        CheckConstraint(
+            "(value_encrypted IS NULL) = (key_id IS NULL)",
+            name="ck_deployment_var_tombstone",
+        ),
+        # Head resolution: newest row per key within one deployment.
+        Index("ix_deployment_var_head", "deployment_id", "key", text("id DESC")),
+        # Serves key retirement and the re-encryption sweep.
+        Index("ix_deployment_var_key_id", "key_id"),
+    )
+
+    # `Identity(always=True)` because nothing may choose an id here: head
+    # resolution and the release snapshot both order by it, so the sequence is
+    # the record of what was written after what. SQLite ignores Identity, and
+    # only auto-increments a column typed exactly INTEGER -- hence the variant.
+    id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger().with_variant(Integer, "sqlite"),
+            Identity(always=True),
+            primary_key=True,
+            autoincrement=True,
+        ),
+    )
+    deployment_id: UUID = Field(
+        sa_column=Column(
+            Uuid,
+            ForeignKey("deployment.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    key: str = Field(sa_column=Column(String(64), nullable=False))
+    # NULL is meaningful: it is the tombstone. Never plaintext -- non-sensitive
+    # values are encrypted by the same code path as sensitive ones.
+    value_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text(), nullable=True)
+    )
+    # The fingerprint of the encrypting key (8 hex chars), not its position in
+    # the configured list: keys are introduced by prepending, which would
+    # silently renumber every historical row.
+    key_id: Optional[str] = Field(default=None, sa_column=Column(String(8), nullable=True))
+    # Per row rather than per key, which is what lets a key be flipped to
+    # sensitive by writing a new row.
+    sensitive: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=text("false"))
+    )
+    created_by: int = Field(
+        sa_column=Column(Integer, ForeignKey("user.id"), nullable=False)
+    )
+    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
+
+
+class ReleaseVarORM(SQLModel, table=True):
+    """The var rows a release was created with. Immutable once written.
+
+    No `key` column: it is reachable through the join, and denormalizing it
+    would create a second place for a key name to be wrong.
+    """
+
+    __tablename__ = "release_var"
+    __table_args__ = (
+        PrimaryKeyConstraint("release_id", "var_id"),
+        Index("ix_release_var_var", "var_id"),
+    )
+
+    release_id: UUID = Field(
+        sa_column=Column(
+            Uuid,
+            ForeignKey("deployment_release.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    var_id: int = Field(
+        sa_column=Column(
+            BigInteger().with_variant(Integer, "sqlite"),
+            ForeignKey("deployment_var.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
 
 
 class DeploymentReconcileJobBase(SQLModel):

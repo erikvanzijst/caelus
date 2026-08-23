@@ -1,38 +1,38 @@
 ## 1. Encryption keyring
 
-- [ ] 1.1 Add `cryptography` to `api/pyproject.toml` and lock it.
-- [ ] 1.2 Add `var_encryption_keys: list[str] = []` to `api/app/config.py` (env
+- [x] 1.1 Add `cryptography` to `api/pyproject.toml` and lock it.
+- [x] 1.2 Add `var_encryption_keys: list[str] = []` to `api/app/config.py` (env
       `CAELUS_VAR_ENCRYPTION_KEYS`, comma-separated, newest-first). Document that only the
       first key encrypts and that all of them decrypt.
-- [ ] 1.3 New `api/app/services/var_crypto.py`: build `{fingerprint: Fernet}` from the
+- [x] 1.3 New `api/app/services/var_crypto.py`: build `{fingerprint: Fernet}` from the
       configured list, where fingerprint is the first 4 bytes of
       `sha256(urlsafe_b64decode(key))` as lowercase hex (design.md D5). Expose
       `encrypt(plaintext) -> (ciphertext, key_id)`, `decrypt(ciphertext, key_id)`, and
       `current_key_id()`. Do **not** use `MultiFernet`; decryption is a direct lookup by
       `key_id`, and a missing key raises an error naming the fingerprint.
-- [ ] 1.4 Startup verification, run by both `app.main` and `caelus worker`: fail on a
+- [x] 1.4 Startup verification, run by both `app.main` and `caelus worker`: fail on a
       fingerprint collision between configured keys; fail when the list is empty while any
       reachable template declares vars; fail when any `key_id` present in `deployment_var`
       is not configured. All three are fatal, not warnings (design.md D5).
-- [ ] 1.5 A `caelus vars-rotate` operator command that sweeps rows where
+- [x] 1.5 A `caelus vars-rotate` operator command that sweeps rows where
       `key_id <> current`, re-encrypting in place in batches, resumable and safe to
       interrupt.
-- [ ] 1.6 Unit tests: round-trip encrypt/decrypt; fingerprint is stable and independent of
+- [x] 1.6 Unit tests: round-trip encrypt/decrypt; fingerprint is stable and independent of
       list position; prepending a key leaves existing rows readable and their `key_id`
       unchanged; a dropped key produces the naming error; each startup check fails as
       specified; a half-swept table is fully readable.
 
 ## 2. Data model and migration
 
-- [ ] 2.1 Add `DeploymentVarORM` and `ReleaseVarORM` to `api/app/models/core.py` per the
+- [x] 2.1 Add `DeploymentVarORM` and `ReleaseVarORM` to `api/app/models/core.py` per the
       DDL in design.md D4, including the tombstone check constraint, both cascades, and
       indexes `ix_deployment_var_head` and `ix_deployment_var_key_id`.
-- [ ] 2.2 Alembic migration creating both tables and all indexes. No existing table is
+- [x] 2.2 Alembic migration creating both tables and all indexes. No existing table is
       altered.
-- [ ] 2.3 Verify the migration on both backends the project supports, and confirm
+- [x] 2.3 Verify the migration on both backends the project supports, and confirm
       `distinct on` head resolution behaves identically (see the existing
       `cross-database-partial-index-parity` spec for the precedent).
-- [ ] 2.4 Tests: cascade from `deployment` removes both var rows and release bindings; the
+- [x] 2.4 Tests: cascade from `deployment` removes both var rows and release bindings; the
       check constraint rejects a row with a value and no `key_id`, and one with a `key_id`
       and no value.
 

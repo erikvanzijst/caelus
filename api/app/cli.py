@@ -39,6 +39,7 @@ from app.services import (
     jobs as jobs_service,
     plans as plan_service,
     subscriptions as subscription_service,
+    var_crypto,
 )
 from app.services.errors import CaelusException
 from app.services.reconcile_constants import (
@@ -741,6 +742,15 @@ def worker(
 
     from app.worker import run_worker
 
+    # The worker decrypts a release's vars to build the tenant's Secret, so a
+    # keyring that cannot cover storage has to stop it here rather than inside
+    # somebody's rollout, after the release row already exists.
+    with session_scope() as session:
+        try:
+            var_crypto.verify_keyring(session)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+
     base_worker_id = os.environ.get("CAELUS_WORKER_ID") or f"worker-{int(time.time())}"
     run_worker(
         base_worker_id=base_worker_id,
@@ -787,6 +797,33 @@ def build_worker(
         settings = CaelusSettings(**{**settings.model_dump(), **overrides})
 
     run_build_worker(settings=settings, emit=_echo_yaml_stream_item)
+
+
+@app.command("vars-rotate")
+def vars_rotate(
+    batch_size: int = typer.Option(
+        200, "--batch-size", help="Rows re-encrypted per committed batch"
+    ),
+) -> None:
+    """Re-encrypt deployment vars under the current encryption key.
+
+    Run after promoting a new key to the front of CAELUS_VAR_ENCRYPTION_KEYS.
+    Every batch commits on its own, so the sweep can be interrupted and
+    re-run: a row names the key that encrypted it, and a half-swept table
+    stays fully readable throughout. The old key may be retired once this
+    reports nothing left to rotate.
+    """
+    with session_scope() as session:
+        try:
+            rotated = var_crypto.rotate_vars(
+                session,
+                batch_size=batch_size,
+                on_batch=lambda n: logger.info("Re-encrypted %d rows so far", n),
+            )
+            key_id = var_crypto.current_key_id()
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+    _echo_yaml_entity({"rotated": rotated, "current_key_id": key_id})
 
 
 @app.command("sync-network-policies")

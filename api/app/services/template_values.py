@@ -32,6 +32,27 @@ def deep_merge(base: Any, override: Any) -> Any:
     return deepcopy(override)
 
 
+# Routing markers (D1/D2 of the deployment-vars design). A property carrying
+# `x-caelus-target: runtime` is a process environment variable, not a chart
+# value; anything else, marker or not, configures the chart.
+TARGET_KEY = "x-caelus-target"
+TARGET_RUNTIME = "runtime"
+TARGET_CHART = "chart"
+
+
+def schema_declares_vars(values_schema_json: dict[str, Any] | None) -> bool:
+    """Whether a template schema routes any top-level property to the runtime."""
+    if not isinstance(values_schema_json, dict):
+        return False
+    properties = values_schema_json.get("properties")
+    if not isinstance(properties, dict):
+        return False
+    return any(
+        isinstance(prop, dict) and prop.get(TARGET_KEY) == TARGET_RUNTIME
+        for prop in properties.values()
+    )
+
+
 def validate_user_values(
     user_values_json: dict[str, Any],
     values_schema_json: dict[str, Any] | None,

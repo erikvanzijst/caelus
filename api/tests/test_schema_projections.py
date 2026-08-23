@@ -186,13 +186,13 @@ def test_a_runtime_property_submitted_as_a_chart_value_is_rejected():
 
 def test_a_chart_property_submitted_as_a_var_is_rejected():
     projection = derive_projections(VAULTWARDEN).vars
-    with pytest.raises(IntegrityException) as exc:
+    with pytest.raises(ValidationException) as exc:
         validate_vars({"host": "example.test"}, projection)
     assert "host" in str(exc.value)
 
 
 def test_a_template_with_no_schema_rejects_vars():
-    with pytest.raises(IntegrityException) as exc:
+    with pytest.raises(ValidationException) as exc:
         validate_vars({"ANYTHING": "1"}, derive_projections(None).vars)
     assert "not supported" in str(exc.value)
 
@@ -210,7 +210,7 @@ def test_booleans_are_coerced_from_their_wire_spelling(value, expected_ok):
     if expected_ok:
         validate_vars({"SIGNUPS_ALLOWED": value}, projection)
     else:
-        with pytest.raises(IntegrityException):
+        with pytest.raises(ValidationException):
             validate_vars({"SIGNUPS_ALLOWED": value}, projection)
 
 
@@ -237,7 +237,7 @@ def test_numeric_vars_are_coerced_before_validation(declared, value, expected_ok
     if expected_ok:
         validate_vars({"COUNT": value}, projection)
     else:
-        with pytest.raises(IntegrityException):
+        with pytest.raises(ValidationException):
             validate_vars({"COUNT": value}, projection)
 
 
@@ -259,7 +259,7 @@ def test_a_validation_failure_never_echoes_the_value():
         }
     ).vars
 
-    with pytest.raises(IntegrityException) as exc:
+    with pytest.raises(ValidationException) as exc:
         validate_vars({"ADMIN_TOKEN": secret}, projection)
 
     message = str(exc.value)

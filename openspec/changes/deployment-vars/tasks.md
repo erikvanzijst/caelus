@@ -61,35 +61,35 @@
 
 ## 4. Vars service
 
-- [ ] 4.1 New `api/app/services/vars.py` with head resolution (the `distinct on` query in
+- [x] 4.1 New `api/app/services/vars.py` with head resolution (the `distinct on` query in
       design.md D4, tombstones filtered) in exactly one function.
-- [ ] 4.2 Write path: take `select ... for update` on the deployment first (D4), diff
+- [x] 4.2 Write path: take `select ... for update` on the deployment first (D4), diff
       against head, and insert rows only where the value or `sensitive` actually differs
       (D9 step 4). Tombstone on delete.
-- [ ] 4.3 Merge (`PATCH`) and replace (`PUT`) semantics, `null` as delete, and an absent
+- [x] 4.3 Merge (`PATCH`) and replace (`PUT`) semantics, `null` as delete, and an absent
       `value` meaning "leave unchanged" — rejecting an absent `value` for a key not in
       head.
-- [ ] 4.4 Sensitivity resolution: schema-authoritative where declared, 400 on
+- [x] 4.4 Sensitivity resolution: schema-authoritative where declared, 400 on
       contradiction, caller-declared on an open projection defaulting to `false`. Flipping
       to non-sensitive requires a new value (design.md E6).
-- [ ] 4.5 Enforce the limits and reserved names in design.md D12.
-- [ ] 4.6 `snapshot_release(session, release_id, deployment_id)` inserting `release_var`
+- [x] 4.5 Enforce the limits and reserved names in design.md D12.
+- [x] 4.6 `snapshot_release(session, release_id, deployment_id)` inserting `release_var`
       for every non-tombstone head row.
-- [ ] 4.7 `pending(deployment)` comparing head against the **applied** release's snapshot
+- [x] 4.7 `pending(deployment)` comparing head against the **applied** release's snapshot
       — never the desired one (design.md D8).
-- [ ] 4.8 Tests covering edge cases E1–E6 and E9–E10 from design.md by name.
+- [x] 4.8 Tests covering edge cases E1–E6 and E9–E10 from design.md by name.
 
 ## 5. Vars API
 
-- [ ] 5.1 Routes under `/api/users/{user_id}/deployments/{deployment_id}/vars`: `GET`,
+- [x] 5.1 Routes under `/api/users/{user_id}/deployments/{deployment_id}/vars`: `GET`,
       `PATCH`, `PUT` on the collection; `GET`, `DELETE` on `.../vars/{key}`. Owner and
       admin only, with the existing authorization guards.
-- [ ] 5.2 Response serialization in one place, omitting `value` entirely for a sensitive
+- [x] 5.2 Response serialization in one place, omitting `value` entirely for a sensitive
       var — not a mask, not a null, no digest (design.md D7). Every read of vars uses it.
-- [ ] 5.3 Status codes per `deployment-vars-api`: 400, 403, 404, 409.
-- [ ] 5.4 OpenAPI documentation for each endpoint, matching the docstring style already
+- [x] 5.3 Status codes per `deployment-vars-api`: 400, 403, 404, 409.
+- [x] 5.4 OpenAPI documentation for each endpoint, matching the docstring style already
       used in `api/app/api/users.py`.
-- [ ] 5.5 Tests: the round-trip property (reading the collection and submitting it back
+- [x] 5.5 Tests: the round-trip property (reading the collection and submitting it back
       unchanged deletes nothing and alters nothing); an admin reading another user's vars
       gets no sensitive values; a non-owner is refused; every limit and reserved name is
       rejected.

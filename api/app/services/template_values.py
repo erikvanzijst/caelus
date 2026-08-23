@@ -186,13 +186,25 @@ def validate_user_values(
         raise IntegrityException(f"user_values_json is invalid: {exc.message}") from exc
 
 
-def _reserved_reason(name: str) -> str | None:
+def check_var_name(name: str) -> None:
+    """Reject a var key that cannot be an environment variable, or is ours.
+
+    Applied both to a schema's runtime properties and to a caller's keys on an
+    open projection, so `custom` -- whose schema declares no keys at all --
+    gets the same rules as a curated product.
+    """
+    if not VAR_NAME_RE.match(name):
+        raise ValidationException(
+            f"{name}: a var's name is an environment variable name and must "
+            "match ^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+        )
     if name in RESERVED_VAR_NAMES:
-        return f"{name} is reserved by the platform"
+        raise ValidationException(f"{name}: {name} is reserved by the platform")
     for prefix in RESERVED_VAR_PREFIXES:
         if name.startswith(prefix):
-            return f"the {prefix}* namespace is reserved by the platform"
-    return None
+            raise ValidationException(
+                f"{name}: the {prefix}* namespace is reserved by the platform"
+            )
 
 
 def _marked_nodes(node: Any, path: str) -> list[tuple[str, dict[str, Any]]]:
@@ -255,17 +267,9 @@ def check_var_markers(values_schema_json: dict[str, Any] | None) -> None:
                 f"{name}: a {TARGET_RUNTIME} property must be one of "
                 + ", ".join(SCALAR_TYPES)
             )
-        if not VAR_NAME_RE.match(name):
-            # Including the dotted name a chart value would have used: the
-            # property name *is* the environment variable name, so there is no
-            # spelling of `signups.allowed` that reaches a pod.
-            raise ValidationException(
-                f"{name}: a {TARGET_RUNTIME} property's name is an environment "
-                "variable name and must match ^[A-Za-z_][A-Za-z0-9_]{0,63}$"
-            )
-        reserved = _reserved_reason(name)
-        if reserved:
-            raise ValidationException(f"{name}: {reserved}")
+        # The property name *is* the environment variable name -- there is no
+        # spelling of `signups.allowed` that reaches a pod.
+        check_var_name(name)
 
 
 _INTEGER_RE = re.compile(r"^[+-]?[0-9]+$")
@@ -316,11 +320,21 @@ def validate_vars(
 
     `vars_projection` is `None` only when the template declares no schema at
     all, which rejects vars outright -- mirroring `validate_user_values`.
+
+    Raises `ValidationException` (400) rather than the `IntegrityException`
+    (409) its chart-side sibling raises: a var that fails its schema is a
+    malformed request, not a conflict with stored state, and the vars API
+    contract answers 400 for it.
+
+    An empty `vars` is still validated when the template has a projection, so
+    that emptying a deployment's vars cannot slip past a `required` the schema
+    declares. Only a template with no schema at all short-circuits -- exactly
+    the shape of `validate_user_values`.
     """
-    if not vars:
+    if not vars and not vars_projection:
         return
     if not vars_projection:
-        raise IntegrityException("vars are not supported on this product template")
+        raise ValidationException("vars are not supported on this product template")
 
     declared = vars_projection.get("properties") or {}
     if not vars_projection.get("additionalProperties", False):
@@ -330,7 +344,7 @@ def validate_vars(
         # not secret; values are, and none appears here.
         undeclared = sorted(set(vars) - set(declared))
         if undeclared:
-            raise IntegrityException(
+            raise ValidationException(
                 "vars not declared by this product template: " + ", ".join(undeclared)
             )
 
@@ -342,7 +356,7 @@ def validate_vars(
             f"product template has an invalid values_schema_json: {exc.message}"
         ) from exc
     except ValidationError as exc:
-        raise IntegrityException(_var_error(exc)) from exc
+        raise ValidationException(_var_error(exc)) from exc
 
 
 def merge_values_scoped(

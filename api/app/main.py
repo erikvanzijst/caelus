@@ -19,6 +19,7 @@ from app.api import (
     plans,
     releases,
     subscriptions,
+    vars,
     webhooks,
 )
 from app.api.util import register_exception_handlers
@@ -94,6 +95,7 @@ app.include_router(subscriptions.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/api")
 app.include_router(artifacts.router, prefix="/api")
 app.include_router(builds.router, prefix="/api")
+app.include_router(vars.router, prefix="/api")
 
 _init_static_dir()
 app.mount("/api/static", StaticFiles(directory=str(_settings.static_path)), name="static")

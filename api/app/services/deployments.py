@@ -396,6 +396,19 @@ def _require_readable_deployment(
     return deployment
 
 
+def get_deployment_orm(
+    session: Session, *, deployment_id: UUID, user_id: int | None = None
+) -> DeploymentORM:
+    """The deployment row itself, for callers that need more than a read model.
+
+    Same visibility rules as every other read: missing, not yours, and deleted
+    are indistinguishable to the caller.
+    """
+    return _require_readable_deployment(
+        session, deployment_id=deployment_id, user_id=user_id
+    )
+
+
 def list_releases(
     session: Session, *, deployment_id: UUID, user_id: int | None = None
 ) -> list[DeploymentReleaseWithBuildRead]:

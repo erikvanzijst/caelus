@@ -4,6 +4,7 @@ import importlib
 from pathlib import Path
 from uuid import uuid4
 
+from cryptography.fernet import Fernet
 from starlette.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
@@ -29,6 +30,29 @@ from app.services.mollie import FakePaymentProvider
 # (which now require prior acceptance) work without threading acceptance through
 # every case. Tests that specifically exercise the acceptance flow opt out.
 CURRENT_TOS_VERSION = get_settings().current_tos_version
+
+
+# A keyring for the whole suite. Every process that reads or writes vars needs
+# one, and a template that declares vars refuses to start without it, so the
+# realistic default is "configured" rather than "empty". Tests that exercise
+# the keyring itself override this.
+TEST_VAR_ENCRYPTION_KEY = Fernet.generate_key().decode()
+
+
+@pytest.fixture(autouse=True)
+def _var_encryption_keyring(monkeypatch):
+    from app.config import CaelusSettings
+    from app.services import var_crypto
+
+    monkeypatch.setattr(
+        "app.services.var_crypto.get_settings",
+        lambda: CaelusSettings(
+            var_encryption_keys=[TEST_VAR_ENCRYPTION_KEY], _env_file=None
+        ),
+    )
+    var_crypto.get_keyring.cache_clear()
+    yield
+    var_crypto.get_keyring.cache_clear()
 
 
 @pytest.fixture(autouse=True)

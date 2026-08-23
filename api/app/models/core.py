@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Optional, Any
 from uuid import UUID, uuid4
 
-from pydantic import ConfigDict, field_validator, model_validator
+from pydantic import ConfigDict, field_validator, model_serializer, model_validator
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import (
     BigInteger,
@@ -785,6 +785,63 @@ class ReleaseVarORM(SQLModel, table=True):
             nullable=False,
         )
     )
+
+
+class VarWrite(SQLModel):
+    """One entry in a var write.
+
+    `value` is deliberately three-valued, and the three states are all
+    distinct: a string sets it, an explicit `null` deletes the key, and the
+    field being **absent** means "leave this key's value unchanged". The last
+    is what makes a read's output safely writable -- a sensitive var is read
+    back without its `value`, so a client that round-trips the response
+    neither wipes nor re-submits a secret it cannot see.
+
+    Absence is read from `model_fields_set`, so this model must not be
+    constructed with `value=None` to mean "unchanged".
+    """
+
+    value: Optional[str] = None
+    sensitive: Optional[bool] = None
+
+
+class VarsWrite(SQLModel):
+    """The body of a vars write: the same shape every read returns."""
+
+    vars: dict[str, VarWrite] = Field(default_factory=dict)
+
+
+class VarRead(SQLModel):
+    """One var as it is reported. A sensitive var carries no `value`."""
+
+    value: Optional[str] = None
+    sensitive: bool = False
+    updated_at: datetime
+    updated_by: int
+
+    @model_serializer(mode="wrap")
+    def _omit_sensitive_value(self, handler):  # type: ignore[no-untyped-def]
+        """Drop `value` for a sensitive var, structurally.
+
+        Not a mask, which invites a caller to write it back verbatim, and not
+        a null, which is how a caller *deletes* a key -- a client that
+        round-tripped a read would delete every secret it could not read.
+
+        Enforced in the serializer rather than at each call site because the
+        rule has to hold on every read there will ever be: the collection, a
+        single var, a deployment read, a release read.
+        """
+        data = handler(self)
+        if self.sensitive:
+            data.pop("value", None)
+        return data
+
+
+class VarsRead(SQLModel):
+    """A deployment's vars, with whether a rollout would change the pod."""
+
+    vars: dict[str, VarRead] = Field(default_factory=dict)
+    pending: bool = False
 
 
 class DeploymentReconcileJobBase(SQLModel):

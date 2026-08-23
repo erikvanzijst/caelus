@@ -10,10 +10,11 @@ table; what is here is what the commands wired up so far need.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import click
 
@@ -26,6 +27,7 @@ from . import project
 from . import releases as releases_module
 from . import skill as skill_module
 from . import tos
+from . import vars as vars_module
 from .api import ApiClient
 from .auth import Session, forget_environment, format_claims, log
 from .config import (
@@ -323,8 +325,14 @@ def init(context: Context, force: bool) -> None:
     is_flag=True,
     help="pack the tree without applying .gitignore rules",
 )
+@click.option(
+    "--no-build",
+    "no_build",
+    is_flag=True,
+    help="release the image already running, without packing or building",
+)
 @click.pass_obj
-def deploy(context: Context, recreate: bool, no_gitignore: bool) -> None:
+def deploy(context: Context, recreate: bool, no_gitignore: bool, no_build: bool) -> None:
     """Build the current project and release it to its deployment.
 
     Preflight, pack, upload, build, release — in that order, so that everything
@@ -336,8 +344,23 @@ def deploy(context: Context, recreate: bool, no_gitignore: bool) -> None:
     the kind of default that fails by packing more than the user asked for.
     `tests/test_cli.py` pins it.
     """
+    if no_build and recreate:
+        raise UsageError("--no-build releases an existing deployment; --recreate makes a new one")
+
     session = context.session()
     session.authenticate(interactive=False)
+
+    if no_build:
+        with context.client(session) as api:
+            address = deploy_module.release_current(
+                api,
+                context.env.name,
+                interactive=sys.stdin.isatty(),
+                timeout=wait_seconds(context.timeout, ROLLOUT_WAIT_SECONDS),
+            )
+        click.echo(address)
+        context.say(f"Released. Live at {address}")
+        return
 
     with context.client(session) as api:
         address = deploy_module.deploy(
@@ -540,14 +563,231 @@ def _join(labels: list) -> str:
     return f"{', '.join(labels[:-1])} and {labels[-1]}"
 
 
+def _project_deployment(context: Context) -> project.Project:
+    """The project's recorded deployment, refusing the ways it can be wrong."""
+    project_file = project.require_project()
+    if project_file.env != context.env.name and project_file.deployment_id:
+        raise UsageError(
+            f"{project_file.path} records deployment "
+            f"'{project_file.deployment_name}' on '{project_file.env}', not on "
+            f"'{context.env.name}'.\n"
+            f"  Re-run without --env (or with --env {project_file.env})."
+        )
+    if not project_file.deployment_id:
+        raise UsageError(
+            f"{project_file.path} records no deployment, so it has no vars.\n"
+            f"  Run `freepod deploy` to create one."
+        )
+    return project_file
+
+
+@cli.group()
+def var() -> None:
+    """Read and change the environment your application runs with.
+
+    A var is one environment variable in the running container. Setting one
+    rolls the deployment, because that is what makes it take effect; `--stage`
+    records it for the next rollout instead.
+
+    A var marked secret is write-only: the platform never returns it, so it
+    lists with its value hidden and no command can print it back.
+    """
+
+
+@var.command("list")
+@click.option("--json", "as_json", is_flag=True, help="emit the platform's wire shape")
+@click.pass_obj
+def var_list(context: Context, as_json: bool) -> None:
+    """List this deployment's vars.
+
+    `--json` prints exactly what the platform returned, which is what makes it
+    safe to pipe back into `freepod var set -f -`: a secret comes back with no
+    value, and an entry with no value leaves that var alone.
+    """
+    project_file = _project_deployment(context)
+    session = context.session()
+    session.authenticate(interactive=False)
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        payload = vars_module.read(api, user_id, project_file.deployment_id)
+
+    if as_json:
+        click.echo(json.dumps(payload, indent=2))
+        return
+    table = vars_module.render_table(payload)
+    if table:
+        click.echo(table)
+    else:
+        context.say("No vars are set.")
+    if payload.get("pending"):
+        context.say("Some vars are not running yet. Apply them with `freepod deploy --no-build`.")
+
+
+@var.command("get")
+@click.argument("key")
+@click.pass_obj
+def var_get(context: Context, key: str) -> None:
+    """Print one var's value.
+
+    A secret has no value to print, and the command says so rather than
+    printing something that could be mistaken for one.
+    """
+    project_file = _project_deployment(context)
+    session = context.session()
+    session.authenticate(interactive=False)
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        payload = vars_module.read(api, user_id, project_file.deployment_id)
+
+    entry = (payload.get("vars") or {}).get(key)
+    if entry is None:
+        raise UsageError(f"{key} is not set on this deployment")
+    if "value" not in entry:
+        raise UsageError(f"{key} is secret, so the platform does not return its value")
+    click.echo(entry["value"])
+
+
+@var.command("set")
+@click.argument("assignments", nargs=-1)
+@click.option("--secret", is_flag=True, help="store these vars write-only")
+@click.option(
+    "-f",
+    "--file",
+    "source",
+    metavar="FILE",
+    help="read vars from FILE (wire shape or KEY=VALUE lines); '-' is stdin",
+)
+@click.option("--stage", is_flag=True, help="record the vars without rolling the deployment")
+@click.pass_obj
+def var_set(
+    context: Context,
+    assignments: tuple,
+    secret: bool,
+    source: Optional[str],
+    stage: bool,
+) -> None:
+    """Set vars and roll the deployment so they take effect.
+
+    Accepts `KEY=VALUE` pairs, a bare `KEY` to be prompted for without echo,
+    or `-f FILE`. Several vars in one invocation produce one rollout.
+
+    `--stage` records them for the next rollout instead, which is the only
+    form that works while a rollout is already in flight.
+    """
+    if not assignments and not source:
+        raise UsageError("give KEY=VALUE pairs, a bare KEY to be prompted for, or -f FILE")
+
+    entries: Dict[str, Any] = {}
+    if source:
+        entries.update(vars_module.load_entries(source))
+    if assignments:
+        entries.update(
+            {
+                key: {"value": value}
+                for key, value in vars_module.parse_assignments(
+                    list(assignments), interactive=sys.stdin.isatty()
+                ).items()
+            }
+        )
+
+    session = context.session()
+    session.authenticate(interactive=False)
+    project_file = _project_deployment(context)
+
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        deployment = deploy_module.read_deployment(api, user_id, project_file.deployment_id)
+        if secret:
+            entries, declared = vars_module.mark_sensitive(entries, deployment)
+            if declared:
+                context.say(
+                    f"--secret ignored for {', '.join(sorted(declared))}: this "
+                    f"product's schema decides which of its vars are secret."
+                )
+        payload = vars_module.write(api, user_id, project_file.deployment_id, entries)
+        _finish_var_write(context, api, len(entries), payload, deployment, stage=stage)
+
+
+@var.command("rm")
+@click.argument("keys", nargs=-1, required=True)
+@click.option("--stage", is_flag=True, help="record the removal without rolling the deployment")
+@click.pass_obj
+def var_rm(context: Context, keys: tuple, stage: bool) -> None:
+    """Remove vars and roll the deployment.
+
+    Removing a var that is not set succeeds and changes nothing.
+    """
+    project_file = _project_deployment(context)
+    session = context.session()
+    session.authenticate(interactive=False)
+
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        deployment = deploy_module.read_deployment(api, user_id, project_file.deployment_id)
+        vars_module.remove(api, user_id, project_file.deployment_id, list(keys))
+        payload = vars_module.read(api, user_id, project_file.deployment_id)
+        _finish_var_write(context, api, len(keys), payload, deployment, stage=stage)
+
+
+def _finish_var_write(
+    context: Context,
+    api,
+    count: int,
+    payload: Dict[str, Any],
+    deployment: Dict[str, Any],
+    *,
+    stage: bool,
+) -> None:
+    """Report the write, then roll unless the caller asked to stage it.
+
+    A deployment mid-rollout is refused rather than waited on: the vars are
+    already recorded, so waiting would hold the terminal for a rollout the
+    caller did not ask for.
+    """
+    subject = "var" if count == 1 else "vars"
+    if stage:
+        context.say(f"Recorded {count} {subject}, not applied yet.")
+        context.say("Apply them with `freepod deploy --no-build`.")
+        return
+    if not payload.get("pending"):
+        context.say(f"Recorded {count} {subject}; nothing changed, so nothing to roll.")
+        return
+
+    if deployment.get("status") not in deploy_module.SETTLED_STATUSES:
+        raise FreepodError(
+            f"deployment '{deployment.get('name')}' is {deployment.get('status')}, "
+            f"so it cannot be rolled right now.\n"
+            f"  The {subject} {'is' if count == 1 else 'are'} recorded. Apply "
+            f"{'it' if count == 1 else 'them'} with `freepod deploy --no-build` "
+            f"once the rollout finishes, or pass --stage to skip this step."
+        )
+
+    context.say(f"Recorded {count} {subject}. Rolling the deployment...")
+    try:
+        address = deploy_module.release_current(
+            api,
+            context.env.name,
+            interactive=sys.stdin.isatty(),
+            timeout=wait_seconds(context.timeout, ROLLOUT_WAIT_SECONDS),
+        )
+    except FreepodError as error:
+        raise FreepodError(
+            f"{error}\n"
+            f"  The vars are recorded. Re-run with --stage to skip the rollout, "
+            f"or apply them later with `freepod deploy --no-build`."
+        ) from error
+    click.echo(address)
+
+
 @cli.group()
 def skill() -> None:
     """Install the deployment instructions for your coding agents.
 
     The client ships a skill file describing this platform's contract — bind
-    `$PORT`, no disk, no environment variables, S3 for state — which is what a
-    coding agent needs before it can deploy anything here successfully. It is
-    packaged with the client so the two versions cannot drift apart.
+    `$PORT`, no disk, no database, S3 for state, configuration through
+    `freepod var` — which is what a coding agent needs before it can deploy
+    anything here successfully. It is packaged with the client so the two
+    versions cannot drift apart.
 
     `SKILL.md` is a format every supported agent reads, so one file serves all
     of them and only the destination differs.

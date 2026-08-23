@@ -141,21 +141,21 @@
 
 ## 9. CLI
 
-- [ ] 9.1 `freepod var list|get|set|rm` in `cli/`, with `--json` emitting the wire shape
+- [x] 9.1 `freepod var list|get|set|rm` in `cli/`, with `--json` emitting the wire shape
       verbatim and sensitive values shown as hidden in human output.
-- [ ] 9.2 `freepod deploy --no-build`: mint a release from the applied release's image,
+- [x] 9.2 `freepod deploy --no-build`: mint a release from the applied release's image,
       passing its `build_id` through explicitly (design.md D11). Refuse when there is no
       applied release.
-- [ ] 9.3 `var set`/`rm` apply by default over `--no-build`, with `--stage` to defer;
+- [x] 9.3 `var set`/`rm` apply by default over `--no-build`, with `--stage` to defer;
       several vars in one invocation produce one release; a write that would roll a
       deployment which is not ready fails and suggests `--stage`.
-- [ ] 9.4 `--secret`, `-f FILE` (wire shape or `KEY=VALUE` lines, `-` for stdin), and a
+- [x] 9.4 `--secret`, `-f FILE` (wire shape or `KEY=VALUE` lines, `-` for stdin), and a
       no-echo prompt for a bare `KEY` on a TTY.
-- [ ] 9.5 `freepod deploy` reports pending vars before rolling.
-- [ ] 9.6 Tests: the `list --json` → `set -f -` round trip changes nothing; batching
+- [x] 9.5 `freepod deploy` reports pending vars before rolling.
+- [x] 9.6 Tests: the `list --json` → `set -f -` round trip changes nothing; batching
       produces one release; the staged path works against a provisioning deployment while
       the applying path returns 409.
-- [ ] 9.7 Update `cli/README.md` and `cli/DEVELOPMENT.md`, and bump `__version__`.
+- [x] 9.7 Update `cli/README.md` and `cli/DEVELOPMENT.md`, and bump `__version__`.
 
 ## 10. UI
 

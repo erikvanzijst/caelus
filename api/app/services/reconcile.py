@@ -426,10 +426,10 @@ class DeploymentReconciler:
             labels=vars_secret_labels(deployment),
         )
         logger.debug(
-            "Published %d vars for deployment_id=%s secret=%s",
+            "Published %d vars for deployment_id=%s release=%s",
             len(string_data),
             deployment.id,
-            name,
+            release.number,
         )
         return name
 

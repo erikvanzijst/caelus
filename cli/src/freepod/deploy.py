@@ -40,6 +40,7 @@ from . import tos
 from .api import ApiClient, _json_detail
 from .archive import packed_archive, report
 from .build import build_image
+from . import vars as vars_module
 from .config import BUILD_WAIT_SECONDS, CUSTOM_PRODUCT_SLUG, ROLLOUT_WAIT_SECONDS
 from .project import PROJECT_FILE, Project, require_project
 from .values import (
@@ -842,6 +843,65 @@ def release(
     return live
 
 
+def announce_pending_vars(
+    api: ApiClient, state: "Preflight", *, echo: Callable[[str], None] = _log
+) -> None:
+    """Report configuration this rollout will apply along with the code."""
+    deployment = state.deployment
+    if not deployment or not deployment.get("pending"):
+        return
+    count = vars_module.pending_count(api, state.user_id, deployment)
+    if count == 0:
+        return
+    subject = "var" if count == 1 else "vars"
+    measured = "some" if count is None else str(count)
+    echo(f"This rollout will also apply {measured} pending {subject}.")
+
+
+def applied_image(deployment: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    """The image the deployment is running, and the build that produced it."""
+    applied = deployment.get("applied_release") or {}
+    values = applied.get("values_json") or {}
+    image = values.get(IMAGE_KEY)
+    return (image if isinstance(image, str) and image else None), applied.get("build_id")
+
+
+def release_current(
+    api: ApiClient,
+    env_name: str,
+    *,
+    root: Optional[Path] = None,
+    interactive: bool = True,
+    timeout: int = ROLLOUT_WAIT_SECONDS,
+    poll: float = POLL_SECONDS,
+    echo: Callable[[str], None] = _log,
+) -> str:
+    """Roll the deployment again on the image it already runs. Returns the address.
+
+    The build reference is carried forward explicitly: an update omitting it
+    writes a release with no link to the build that produced the image. See
+    design D11.
+    """
+    state = preflight(api, env_name, root=root, interactive=interactive, echo=echo)
+    if state.deployment is None:
+        raise FreepodError(
+            "this project has no deployment yet, so there is nothing to roll.\n"
+            "  Run `freepod deploy` to create one."
+        )
+    image, build_id = applied_image(state.deployment)
+    if image is None:
+        raise FreepodError(
+            f"deployment '{state.deployment.get('name')}' has never completed a "
+            f"rollout, so there is no image to release.\n"
+            f"  Run `freepod deploy` to build and release one."
+        )
+    announce_pending_vars(api, state, echo=echo)
+    echo(f"Releasing {image} again.")
+    return release(
+        api, state, image, build_id=build_id, timeout=timeout, poll=poll, echo=echo
+    )
+
+
 def deploy(
     api: ApiClient,
     env_name: str,
@@ -882,6 +942,7 @@ def deploy(
         interactive=interactive,
         echo=echo,
     )
+    announce_pending_vars(api, state, echo=echo)
 
     with packed_archive(
         state.project.root,

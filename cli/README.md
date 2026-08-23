@@ -40,6 +40,7 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 | `freepod login`    | Sign in, and remember the credential.                                                |
 | `freepod init`     | Set the current directory up as a project: choose a hostname, write `.freepod.json`. |
 | `freepod deploy`   | Pack, build and release the current project.                                         |
+| `freepod var`      | Read and change the environment your application runs with.                          |
 | `freepod log`      | Stream your application's pod output.                                                |
 | `freepod builds`   | List your builds, most recent first.                                                 |
 | `freepod releases` | List this project's rollouts, most recent first; the live one is marked.             |
@@ -65,6 +66,25 @@ own filesystem is gone when it restarts, and at every release.
 Instead, each pod has its own private S3-compatible bucket for object storage.
 Use with any aws-s3 client. `S3_BUCKET`, `BUCKET_NAME` and `AWS_*` environment
 variables and access keys are already set.
+
+## Environment variables
+
+Inject environment variables in to your pod.
+
+```bash
+freepod var set LOG_LEVEL=debug        # sets it and rolls the deployment
+freepod var set ADMIN_TOKEN --secret   # prompts without echo; write-only
+freepod var list
+freepod var rm LOG_LEVEL
+```
+
+Setting a var rolls the deployment, because that is what makes it take effect.
+Several in one command produce one rollout. `--stage` records them for your
+next deploy instead, and `freepod deploy --no-build` applies staged vars
+without rebuilding your entire project.
+
+A var marked `--secret` is **write-only**: the platform never returns it, so
+`var list` shows its key with the value hidden and nothing can print it back.
 
 ## .freepod.json
 

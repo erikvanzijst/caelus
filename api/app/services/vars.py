@@ -351,6 +351,11 @@ def read_vars(session: Session, deployment: DeploymentORM) -> VarsRead:
     )
 
 
+def read_snapshot(session: Session, release_id: UUID) -> dict[str, VarRead]:
+    """One release's frozen vars, through the same serializer every read uses."""
+    return {row.key: _read_entry(row) for row in snapshot(session, release_id)}
+
+
 def read_var(session: Session, deployment: DeploymentORM, key: str) -> VarsRead:
     """One var, in the same shape as the collection."""
     row = head(session, deployment.id).get(key)

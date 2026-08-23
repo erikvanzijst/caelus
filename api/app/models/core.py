@@ -302,6 +302,71 @@ class ProductTemplateVersionRead(ProductTemplateVersionBase):
 
 
 # ---------------------------------------------------------------------------
+# Deployment vars: the wire shape
+# ---------------------------------------------------------------------------
+#
+# Declared ahead of the deployment models because the deployment and release
+# read models both carry vars. The tables themselves are further down.
+
+
+class VarWrite(SQLModel):
+    """One entry in a var write.
+
+    `value` is deliberately three-valued, and the three states are all
+    distinct: a string sets it, an explicit `null` deletes the key, and the
+    field being **absent** means "leave this key's value unchanged". The last
+    is what makes a read's output safely writable -- a sensitive var is read
+    back without its `value`, so a client that round-trips the response
+    neither wipes nor re-submits a secret it cannot see.
+
+    Absence is read from `model_fields_set`, so this model must not be
+    constructed with `value=None` to mean "unchanged".
+    """
+
+    value: Optional[str] = None
+    sensitive: Optional[bool] = None
+
+
+class VarsWrite(SQLModel):
+    """The body of a vars write: the same shape every read returns."""
+
+    vars: dict[str, VarWrite] = Field(default_factory=dict)
+
+
+class VarRead(SQLModel):
+    """One var as it is reported. A sensitive var carries no `value`."""
+
+    value: Optional[str] = None
+    sensitive: bool = False
+    updated_at: datetime
+    updated_by: int
+
+    @model_serializer(mode="wrap")
+    def _omit_sensitive_value(self, handler):  # type: ignore[no-untyped-def]
+        """Drop `value` for a sensitive var, structurally.
+
+        Not a mask, which invites a caller to write it back verbatim, and not
+        a null, which is how a caller *deletes* a key -- a client that
+        round-tripped a read would delete every secret it could not read.
+
+        Enforced in the serializer rather than at each call site because the
+        rule has to hold on every read there will ever be: the collection, a
+        single var, a deployment read, a release read.
+        """
+        data = handler(self)
+        if self.sensitive:
+            data.pop("value", None)
+        return data
+
+
+class VarsRead(SQLModel):
+    """A deployment's vars, with whether a rollout would change the pod."""
+
+    vars: dict[str, VarRead] = Field(default_factory=dict)
+    pending: bool = False
+
+
+# ---------------------------------------------------------------------------
 # Deployment
 # ---------------------------------------------------------------------------
 
@@ -477,6 +542,14 @@ _BUILD_ID_FIELD_DESCRIPTION = (
 )
 
 
+_VARS_FIELD_DESCRIPTION = (
+    "Runtime configuration for the pod, in the same shape the vars endpoints "
+    "use. Write-only: it appears on no read model, and a sensitive value "
+    "cannot be read back through any endpoint. Merged into the deployment's "
+    "existing vars, never replacing them."
+)
+
+
 class DeploymentCreate(DeploymentBase):
     model_config = ConfigDict(extra="forbid")
     plan_template_id: int
@@ -484,6 +557,9 @@ class DeploymentCreate(DeploymentBase):
     user_id: Optional[int] = None
     build_id: Optional[UUID] = Field(
         default=None, description=_BUILD_ID_FIELD_DESCRIPTION
+    )
+    vars: dict[str, VarWrite] = Field(
+        default_factory=dict, description=_VARS_FIELD_DESCRIPTION
     )
 
 
@@ -495,6 +571,9 @@ class DeploymentUpdate(SQLModel):
     user_values_json: Optional[dict[str, Any]] = Field(default=None)
     build_id: Optional[UUID] = Field(
         default=None, description=_BUILD_ID_FIELD_DESCRIPTION
+    )
+    vars: dict[str, VarWrite] = Field(
+        default_factory=dict, description=_VARS_FIELD_DESCRIPTION
     )
 
 
@@ -514,6 +593,18 @@ class DeploymentRead(DeploymentBase):
     generation: int = Field(default=1)
     last_error: Optional[str] = None
     last_reconcile_at: Optional[datetime] = None
+    # Head -- the deployment's *desired* runtime configuration, which is what
+    # `user_values_json` beside it reports too. Not the applied release's
+    # snapshot: one response mixing desired chart values with applied runtime
+    # values is the confusion `pending` exists to expose.
+    #
+    # `None` means "not reported", which is what the deployment *list*
+    # returns: head is a query per deployment and no caller reads vars from a
+    # listing. An empty object means the deployment genuinely has none.
+    vars: Optional[dict[str, VarRead]] = None
+    # True when rolling out would change the running pod's environment,
+    # measured against the *applied* release and never the desired one.
+    pending: Optional[bool] = None
 
 
 class SftpCredentialsRead(SQLModel):
@@ -667,6 +758,12 @@ class DeploymentReleaseRead(DeploymentReleaseBase):
     id: UUID
     build_id: Optional[UUID] = None
     values_json: Optional[dict[str, Any]] = None
+    # The vars frozen onto this release when it was created, which is what
+    # makes it reproducible: later writes and deletions do not change it.
+    # `None` means "not reported" -- the release listing answers in one
+    # statement whatever the number of releases, and does not fan out into
+    # each release's snapshot.
+    vars: Optional[dict[str, VarRead]] = None
     created_at: datetime
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
@@ -785,63 +882,6 @@ class ReleaseVarORM(SQLModel, table=True):
             nullable=False,
         )
     )
-
-
-class VarWrite(SQLModel):
-    """One entry in a var write.
-
-    `value` is deliberately three-valued, and the three states are all
-    distinct: a string sets it, an explicit `null` deletes the key, and the
-    field being **absent** means "leave this key's value unchanged". The last
-    is what makes a read's output safely writable -- a sensitive var is read
-    back without its `value`, so a client that round-trips the response
-    neither wipes nor re-submits a secret it cannot see.
-
-    Absence is read from `model_fields_set`, so this model must not be
-    constructed with `value=None` to mean "unchanged".
-    """
-
-    value: Optional[str] = None
-    sensitive: Optional[bool] = None
-
-
-class VarsWrite(SQLModel):
-    """The body of a vars write: the same shape every read returns."""
-
-    vars: dict[str, VarWrite] = Field(default_factory=dict)
-
-
-class VarRead(SQLModel):
-    """One var as it is reported. A sensitive var carries no `value`."""
-
-    value: Optional[str] = None
-    sensitive: bool = False
-    updated_at: datetime
-    updated_by: int
-
-    @model_serializer(mode="wrap")
-    def _omit_sensitive_value(self, handler):  # type: ignore[no-untyped-def]
-        """Drop `value` for a sensitive var, structurally.
-
-        Not a mask, which invites a caller to write it back verbatim, and not
-        a null, which is how a caller *deletes* a key -- a client that
-        round-tripped a read would delete every secret it could not read.
-
-        Enforced in the serializer rather than at each call site because the
-        rule has to hold on every read there will ever be: the collection, a
-        single var, a deployment read, a release read.
-        """
-        data = handler(self)
-        if self.sensitive:
-            data.pop("value", None)
-        return data
-
-
-class VarsRead(SQLModel):
-    """A deployment's vars, with whether a rollout would change the pod."""
-
-    vars: dict[str, VarRead] = Field(default_factory=dict)
-    pending: bool = False
 
 
 class DeploymentReconcileJobBase(SQLModel):

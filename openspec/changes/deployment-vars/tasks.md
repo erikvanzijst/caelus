@@ -96,24 +96,24 @@
 
 ## 6. Deployment create/update and the release snapshot
 
-- [ ] 6.1 Add write-only `vars` to `DeploymentCreate` and `DeploymentUpdate`. It must not
+- [x] 6.1 Add write-only `vars` to `DeploymentCreate` and `DeploymentUpdate`. It must not
       appear on any read model.
-- [ ] 6.2 Wire the transaction in `create_deployment` and `update_deployment` in the order
+- [x] 6.2 Wire the transaction in `create_deployment` and `update_deployment` in the order
       given in design.md D9: lock, validate both halves, diff-insert vars, mint the
       release, bind the snapshot, enqueue. `vars` merges on update; it never replaces.
-- [ ] 6.3 Confirm `update_deployment` never derives vars from `user_values_json`
+- [x] 6.3 Confirm `update_deployment` never derives vars from `user_values_json`
       (design.md D3) — assert it in a test, since the failure mode is silent.
-- [ ] 6.4 Tests: creating with vars gives the first release a non-empty snapshot; an update
+- [x] 6.4 Tests: creating with vars gives the first release a non-empty snapshot; an update
       omitting `vars` leaves head intact and the new release captures it; a redeploy
       submitting values identical to head writes no new rows; a failed rollout leaves head
       unchanged and `pending` true (design.md D9).
 
 ## 7. Read models
 
-- [ ] 7.1 `DeploymentRead.vars` (head) and `DeploymentRead.pending`, on the
+- [x] 7.1 `DeploymentRead.vars` (head) and `DeploymentRead.pending`, on the
       single-deployment read only. Do not add vars to the list response (design.md D8).
-- [ ] 7.2 `DeploymentReleaseRead.vars` reporting that release's snapshot.
-- [ ] 7.3 Tests: a deployment read reports head, not the applied snapshot; a release read
+- [x] 7.2 `DeploymentReleaseRead.vars` reporting that release's snapshot.
+- [x] 7.3 Tests: a deployment read reports head, not the applied snapshot; a release read
       reports its own snapshot and stays correct after head changes; the list response
       carries no vars and issues no per-row query.
 

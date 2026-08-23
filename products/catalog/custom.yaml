@@ -13,7 +13,7 @@ upstream:
   version_path: template.system_values.placeholderImage
 template:
   chart_ref: oci://registry.home/helm/custom
-  chart_version: 0.5.0
+  chart_version: 0.6.0
   system_values:
     placeholderImage: registry.home/caelus/custom-placeholder:0.1.0
     objectStorage:

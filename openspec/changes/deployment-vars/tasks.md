@@ -119,18 +119,18 @@
 
 ## 8. Reconciler and chart
 
-- [ ] 8.1 `vars_secret_name(deployment)` returning `f"{deployment.name}-vars"` — derived
+- [x] 8.1 `vars_secret_name(deployment)` returning `f"{deployment.name}-vars"` — derived
       from the deployment, stable across releases. Read the caution in design.md D10 before
       naming it from anything else.
-- [ ] 8.2 In `reconcile.py`, decrypt the desired release's snapshot and `upsert_secret` it
+- [x] 8.2 In `reconcile.py`, decrypt the desired release's snapshot and `upsert_secret` it
       into the tenant namespace before Helm runs, following `_ensure_object_storage`.
       Fail the reconcile naming the missing fingerprint if any row cannot be decrypted;
       never write a partial Secret (design.md E11).
-- [ ] 8.3 `_build_vars_overrides` projecting only `{"caelus": {"vars": {"secretName": ...}}}`,
+- [x] 8.3 `_build_vars_overrides` projecting only `{"caelus": {"vars": {"secretName": ...}}}`,
       returning `None` for an empty snapshot so no block and no Secret are produced.
-- [ ] 8.4 In `products/custom/chart`, consume `caelus.vars.secretName` with `envFrom`,
+- [x] 8.4 In `products/custom/chart`, consume `caelus.vars.secretName` with `envFrom`,
       ordered **before** the object-storage source, and bump the chart version.
-- [ ] 8.5 Tests: merged values contain the Secret name and no var value; a known plaintext
+- [x] 8.5 Tests: merged values contain the Secret name and no var value; a known plaintext
       appears in no captured log record from a full reconcile; an empty snapshot yields no
       Secret and no block; a var named like a platform credential does not reach the pod
       ahead of the platform's value.

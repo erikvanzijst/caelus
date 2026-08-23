@@ -10,7 +10,8 @@ from sqlmodel import Session
 from app.config import get_settings
 from app.models import DeploymentORM, DeploymentReleaseORM, ProductTemplateVersionORM
 from app.provisioner import Provisioner, provisioner as default_provisioner
-from app.services import deployment_logs, object_storage, template_values
+from app.services import deployment_logs, object_storage, template_values, var_crypto
+from app.services import vars as vars_service
 from app.services.loki import DIRECTION_BACKWARD, LokiQueryClient
 from app.services.template_values import bytes_to_k8s_size
 from app.services.deployments import _get_deployment_orm
@@ -37,6 +38,24 @@ def storage_secret_name(deployment: DeploymentORM) -> str:
     is updated in place rather than churned) and unique within the namespace.
     """
     return f"{deployment.name}-object-storage"
+
+
+def vars_secret_name(deployment: DeploymentORM) -> str:
+    """Name of the Secret holding a deployment's runtime vars.
+
+    Derived from the **deployment**, so it is stable across reconciles *and
+    across releases*: the Secret is updated in place rather than one being
+    accumulated per release, which would litter the tenant's namespace and need
+    a garbage collector.
+
+    Note that `storage_secret_name` above says "derived from the release name",
+    where *release* means the **Helm** release -- whose name is
+    `deployment.name`. It does not mean `deployment_release`, which is what a
+    release is everywhere in the vars design. Naming this one per
+    `deployment_release` would change the rollout semantics, not just the
+    string.
+    """
+    return f"{deployment.name}-vars"
 
 
 @dataclass(frozen=True)
@@ -268,7 +287,13 @@ class DeploymentReconciler:
         # there yet. The values depend on what provisioning returns, so they are
         # built here rather than at the top.
         storage = self._ensure_object_storage(deployment)
-        merged_values = self._build_merged_values(deployment, template, storage=storage)
+        # Same reasoning as the credentials Secret above: after the namespace
+        # and the isolation jail, and before Helm, so no pod ever starts
+        # expecting a Secret that is not there yet.
+        has_vars = self._ensure_vars_secret(deployment)
+        merged_values = self._build_merged_values(
+            deployment, template, storage=storage, has_vars=has_vars
+        )
 
         outcome = self._provisioner.helm_upgrade_install(
             release_name=deployment.name,
@@ -363,15 +388,61 @@ class DeploymentReconciler:
         )
         return credentials
 
+    def _ensure_vars_secret(self, deployment: DeploymentORM) -> bool:
+        """Publish the desired release's vars as a Secret. Returns whether one exists.
+
+        The *release's snapshot*, not head: a reconcile applies the release it
+        was asked to apply, so a var written after that release was created
+        waits for the release that captures it.
+
+        Every value is decrypted before anything is written, so a keyring that
+        cannot read one row leaves the previous Secret untouched rather than
+        replacing it with a partial one. A pod holding some of its variables is
+        worse than a pod that does not start, and far harder to diagnose.
+
+        Like the object-storage credentials, the plaintext goes straight into
+        the Secret and never into the Helm values -- see `_ensure_object_storage`
+        for why that distinction is load-bearing.
+        """
+        snapshot = vars_service.snapshot(self._session, deployment.desired_release_id)
+        if not snapshot:
+            # No block, no Secret: a chart that requires vars then fails
+            # visibly instead of rendering an empty `envFrom`.
+            return False
+
+        string_data = {
+            row.key: var_crypto.decrypt(row.value_encrypted, row.key_id) for row in snapshot
+        }
+        self._provisioner.upsert_secret(
+            namespace=deployment.namespace,
+            name=vars_secret_name(deployment),
+            string_data=string_data,
+            labels={
+                "app.kubernetes.io/managed-by": "caelus",
+                "app.kubernetes.io/instance": deployment.name,
+                "caelus.dev/component": "vars",
+            },
+        )
+        logger.debug(
+            "Published %d vars for deployment_id=%s secret=%s",
+            len(string_data),
+            deployment.id,
+            vars_secret_name(deployment),
+        )
+        return True
+
     def _build_merged_values(
         self,
         deployment: DeploymentORM,
         template: ProductTemplateVersionORM,
         *,
         storage: object_storage.ObjectStorageCredentials | None = None,
+        has_vars: bool = False,
     ) -> dict:
         template_values.validate_user_values(deployment.user_values_json, template.values_schema_json)
-        system_overrides = self._build_system_overrides(deployment, storage=storage)
+        system_overrides = self._build_system_overrides(
+            deployment, storage=storage, has_vars=has_vars
+        )
         return template_values.merge_values_scoped(
             template.system_values_json,
             deployment.user_values_json,
@@ -384,6 +455,7 @@ class DeploymentReconciler:
         deployment: DeploymentORM,
         *,
         storage: object_storage.ObjectStorageCredentials | None = None,
+        has_vars: bool = False,
     ) -> dict | None:
         """Combine all system-controlled value overrides under the ``caelus`` namespace.
 
@@ -397,11 +469,29 @@ class DeploymentReconciler:
             cls._build_ingress_overrides(deployment),
             cls._build_owner_overrides(deployment),
             cls._build_object_storage_overrides(deployment, storage),
+            cls._build_vars_overrides(deployment, has_vars),
             cls._build_release_overrides(deployment),
         ):
             if part:
                 overrides = template_values.deep_merge(overrides, part)
         return overrides or None
+
+    @staticmethod
+    def _build_vars_overrides(deployment: DeploymentORM, has_vars: bool) -> dict | None:
+        """Project the vars Secret's **name**, and nothing else.
+
+        No value may travel through the values document: merged values are
+        logged in full at INFO by the provisioner and are persisted by Helm
+        into a release object in the tenant's own namespace, so a value routed
+        through here would reach the log aggregator on every reconcile.
+
+        Emits no block at all when the release carries no vars, mirroring
+        `_build_object_storage_overrides`, so a chart that requires them fails
+        loudly rather than rendering an `envFrom` that provides nothing.
+        """
+        if not has_vars:
+            return None
+        return {"caelus": {"vars": {"secretName": vars_secret_name(deployment)}}}
 
     @staticmethod
     def _build_release_overrides(deployment: DeploymentORM) -> dict | None:

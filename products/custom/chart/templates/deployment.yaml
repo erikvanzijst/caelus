@@ -65,19 +65,35 @@ spec:
             - name: PORT
               value: {{ .Values.containerPort | quote }}
           {{- /*
-          Object storage credentials. The Secret carries the conventional AWS_* names, so a tenant's
-          `boto3.client("s3")` works with no configuration at all.
-          */}}
-          {{- /*
+          Order is load-bearing. A later `envFrom` source overrides an earlier
+          one, and an explicit `env` entry beats every `envFrom`, so the
+          tenant's own vars go FIRST and everything the platform provides comes
+          after them: a var named like an injected credential cannot displace
+          it, and `PORT` above is safe by being explicit. The API also rejects
+          those names outright, but the two protections fail differently and
+          neither is load-bearing on its own — a tenant shadowing their own
+          pod's variables harms only their own pod, it is just confusing and
+          hard to diagnose.
+
+          Object storage second. The Secret carries the conventional AWS_*
+          names, so a tenant's `boto3.client("s3")` works with no configuration
+          at all.
+
           Two namespaces on purpose. `objectStorage.enabled` is the product's
           own static declaration — a system value from the catalog, the same for
           every deployment of this product. `caelus.objectStorage.*` are the
           per-deployment facts the reconciler injects after provisioning.
           */}}
-          {{- if .Values.objectStorage.enabled }}
+          {{- if or .Values.caelus.vars.secretName .Values.objectStorage.enabled }}
           envFrom:
+            {{- with .Values.caelus.vars.secretName }}
+            - secretRef:
+                name: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.objectStorage.enabled }}
             - secretRef:
                 name: {{ required "custom: caelus.objectStorage.secretName is required when object storage is enabled" .Values.caelus.objectStorage.secretName | quote }}
+            {{- end }}
           {{- end }}
           {{- with .Values.resources }}
           resources:

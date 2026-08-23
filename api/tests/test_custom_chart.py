@@ -48,6 +48,7 @@ BASE = {
     "hostname": "app.example.test",
     "caelus__owner__id": "1",
 }
+VARS = {"caelus__vars__secretName": "custom-user-app-abc123-vars"}
 STORAGE = {
     "objectStorage__enabled": "true",
     "caelus__objectStorage__bucket": "dep-11115310-fc46-4ef4-8808-654a6b7a68f6",
@@ -81,6 +82,39 @@ def test_storage_enabled_without_a_secret_name_fails_loudly():
     result = subprocess.run(args, capture_output=True, text=True)
     assert result.returncode != 0
     assert "caelus.objectStorage.secretName is required" in result.stderr
+
+
+def test_renders_without_vars_and_projects_nothing():
+    """No vars, no `envFrom` source: a chart that needs them fails visibly
+    rather than rendering an environment that silently provides nothing."""
+    assert "envFrom" not in _app_container(_render(**BASE))
+
+
+def test_renders_with_vars_and_projects_the_secret():
+    container = _app_container(_render(**BASE, **VARS))
+    assert container["envFrom"] == [
+        {"secretRef": {"name": "custom-user-app-abc123-vars"}}
+    ]
+
+
+def test_a_var_cannot_displace_a_platform_injected_variable():
+    """Ordering, not trust: a later `envFrom` source overrides an earlier one,
+    and an explicit `env` entry beats every `envFrom`. So the tenant's vars go
+    first and the platform's sources after them.
+
+    Defense in depth beside the API's reserved-name rejection. Neither is a
+    privilege boundary -- a tenant shadowing their own pod's variables harms
+    only their own pod -- but the failure it prevents is hard to diagnose.
+    """
+    container = _app_container(_render(**BASE, **VARS, **STORAGE, image=f"1@{DIGEST}"))
+
+    assert container["envFrom"] == [
+        {"secretRef": {"name": "custom-user-app-abc123-vars"}},
+        {"secretRef": {"name": "custom-user-app-abc123-object-storage"}},
+    ]
+    # PORT is set explicitly, which outranks every envFrom source whatever
+    # order they are in.
+    assert {"name": "PORT", "value": "8080"} in container["env"]
 
 
 def test_no_service_account_token_is_mounted():

@@ -1053,8 +1053,8 @@ From `api/`:
 
 - Install deps: `uv sync`
 - Run API: `uv run python3 app/main.py`
-- Run CLI help: `caelus --help`
-- Run tests: `pytest`
+- Run CLI help: `uv run caelus --help`
+- Run tests: `uv run pytest`
 
 Docs UI:
 - `GET /` redirects to `/docs`.

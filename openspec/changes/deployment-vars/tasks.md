@@ -155,15 +155,15 @@
 
 ## 10. UI
 
-- [ ] 10.1 Carry `target` and `sensitive` through `flattenSchema` onto `SchemaField` in
+- [x] 10.1 Carry `target` and `sensitive` through `flattenSchema` onto `SchemaField` in
       `ui/src/components/UserValuesForm.tsx`.
-- [ ] 10.2 Partition the submission by `target` into `user_values_json` and `vars`.
-- [ ] 10.3 Render a sensitive field as a `password` input that starts empty with an
+- [x] 10.2 Partition the submission by `target` into `user_values_json` and `vars`.
+- [x] 10.3 Render a sensitive field as a `password` input that starts empty with an
       "unchanged" affordance and submits **no** `value` when untouched — an empty string
       would wipe the secret. No reveal control.
-- [ ] 10.4 Show a pending indicator and an apply action on a deployment whose `pending` is
+- [x] 10.4 Show a pending indicator and an apply action on a deployment whose `pending` is
       true.
-- [ ] 10.5 Tests: a schema with mixed targets produces two correctly partitioned payloads;
+- [x] 10.5 Tests: a schema with mixed targets produces two correctly partitioned payloads;
       an untouched sensitive field submits no `value`; an unmarked schema still submits
       everything as chart values.
 

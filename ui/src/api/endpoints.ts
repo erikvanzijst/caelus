@@ -1,5 +1,5 @@
 import { requestJson, requestMultipart } from './client'
-import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplateVersion, Product, ProductTemplate, ProductVisibility, SftpCredentials, TosAcceptance, User } from './types'
+import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplateVersion, Product, ProductTemplate, ProductVisibility, SftpCredentials, TosAcceptance, User, VarWrite } from './types'
 
 export function getMe() {
   return requestJson<User>('/me')
@@ -157,6 +157,7 @@ export function createDeployment(
     desired_template_id: number
     user_values_json?: object
     plan_template_id?: number
+    vars?: Record<string, VarWrite>
   },
 ) {
   return requestJson<DeploymentCreateResponse>(`/users/${userId}/deployments`, {
@@ -168,7 +169,14 @@ export function createDeployment(
 export function updateDeployment(
   userId: number,
   deploymentId: string,
-  payload: { desired_template_id: number; user_values_json?: object },
+  payload: {
+    desired_template_id: number
+    user_values_json?: object
+    // Passed through explicitly: an update that omits it drops the release's
+    // link to the build that produced the running image.
+    build_id?: string | null
+    vars?: Record<string, VarWrite>
+  },
 ) {
   return requestJson<Deployment>(`/users/${userId}/deployments/${deploymentId}`, {
     method: 'PUT',

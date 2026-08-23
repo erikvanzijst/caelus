@@ -1,9 +1,10 @@
 import { Dialog, DialogContent } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo, useState } from 'react'
-import { createDeployment, updateDeployment, listTemplates, listPlans, getTosAcceptance, recordTosAcceptance } from '../api/endpoints'
+import { createDeployment, updateDeployment, listTemplates, listPlans, getDeployment, getTosAcceptance, recordTosAcceptance } from '../api/endpoints'
 import type { Deployment, Plan, Product, ProductTemplate } from '../api/types'
 import { validateUserValues } from './UserValuesForm'
+import type { VarSubmission } from './UserValuesForm'
 import { DeployDialogContent } from './DeployDialogContent'
 import { LEGAL_DOCS } from '../content/legal'
 
@@ -22,6 +23,7 @@ interface DeployDialogProps {
 export function DeployDialog({ product, userId, onClose, deployment }: DeployDialogProps) {
   const queryClient = useQueryClient()
   const [userValues, setUserValues] = useState<Record<string, unknown> | null>(null)
+  const [vars, setVars] = useState<Record<string, VarSubmission>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [userValuesErrors, setUserValuesErrors] = useState<string[]>([])
   const [hostnameValid, setHostnameValid] = useState(true)
@@ -51,6 +53,18 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
   })
   const hasAcceptedTos = tosAcceptanceQuery.data?.version != null
 
+  // The deployment's own read, which the listing cannot answer: vars and
+  // `pending` are reported per deployment, not inlined into a list. Needed
+  // here to prefill the form -- a sensitive var arrives with no value, which
+  // is what tells the field to render as "currently set".
+  const deploymentQuery = useQuery({
+    queryKey: ['deployment', userId, deployment?.id],
+    queryFn: () => getDeployment(userId, deployment!.id),
+    enabled: isEditMode && Boolean(deployment?.id),
+  })
+  const currentVars = deploymentQuery.data?.vars ?? null
+  const varsPending = deploymentQuery.data?.pending === true
+
   const canonicalTemplate: ProductTemplate | undefined = useMemo(() => {
     return templatesQuery.data?.find((t) => t.id === product.template_id)
   }, [templatesQuery.data, product.template_id])
@@ -77,7 +91,12 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
   }, [isEditMode, selectedPlanTemplateId, plans])
 
   const createMutation = useMutation({
-    mutationFn: async (payload: { templateId: number; userValuesJson?: object; planTemplateId?: number }) => {
+    mutationFn: async (payload: {
+      templateId: number
+      userValuesJson?: object
+      planTemplateId?: number
+      vars?: Record<string, VarSubmission>
+    }) => {
       // First launch: record ToS acceptance (a separate user-level resource)
       // before creating the deployment. Already-accepted users skip this. If
       // acceptance fails (e.g. the terms changed -> 409), the error surfaces and
@@ -90,6 +109,7 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
         desired_template_id: payload.templateId,
         user_values_json: payload.userValuesJson,
         plan_template_id: payload.planTemplateId,
+        vars: payload.vars,
       })
     },
     onSuccess: (data) => {
@@ -115,13 +135,23 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
   })
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { templateId: number; userValuesJson?: object }) =>
+    mutationFn: (payload: {
+      templateId: number
+      userValuesJson?: object
+      vars?: Record<string, VarSubmission>
+    }) =>
       updateDeployment(userId, deployment!.id, {
         desired_template_id: payload.templateId,
         user_values_json: payload.userValuesJson,
+        vars: payload.vars,
+        // Passed through explicitly. The platform does not yet infer it, so an
+        // update that omits it drops the new release's link to the build that
+        // produced the image it is running.
+        build_id: deploymentQuery.data?.applied_release?.build_id ?? undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
+      queryClient.invalidateQueries({ queryKey: ['deployment', userId, deployment?.id] })
       onClose()
     },
     onError: (error: Error) => {
@@ -159,19 +189,33 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
 
     setUserValuesErrors([])
     const valuesToSend = userValues ?? {}
+    // Omitted rather than sent empty, so a product whose schema marks nothing
+    // runtime submits exactly the payload it always did.
+    const varsToSend = Object.keys(vars).length > 0 ? vars : undefined
     if (isEditMode) {
       updateMutation.mutate({
         templateId,
         userValuesJson: valuesToSend,
+        vars: varsToSend,
       })
     } else {
       createMutation.mutate({
         templateId,
         userValuesJson: valuesToSend,
         planTemplateId: effectivePlanTemplateId ?? undefined,
+        vars: varsToSend,
       })
     }
-  }, [product.template_id, deployment, isEditMode, activeTemplate, userValues, effectivePlanTemplateId, createMutation, updateMutation])
+  }, [product.template_id, deployment, isEditMode, activeTemplate, userValues, vars, effectivePlanTemplateId, createMutation, updateMutation])
+
+  // Applying staged vars is an ordinary redeploy: the release the platform
+  // mints captures whatever the deployment's vars currently are. Nothing about
+  // the form is submitted, so a half-edited field cannot ride along.
+  const handleApplyPendingVars = useCallback(() => {
+    const templateId = deployment?.desired_template_id
+    if (!templateId) return
+    updateMutation.mutate({ templateId })
+  }, [deployment, updateMutation])
 
   const initialValuesJson = isEditMode
     ? (deployment!.user_values_json as Record<string, unknown> | null) ?? null
@@ -190,6 +234,11 @@ export function DeployDialog({ product, userId, onClose, deployment }: DeployDia
           }
           initialValuesJson={initialValuesJson}
           onChange={setUserValues}
+          onVarsChange={setVars}
+          initialVars={currentVars}
+          varsPending={varsPending}
+          onApplyPendingVars={isEditMode ? handleApplyPendingVars : undefined}
+          applyingPendingVars={updateMutation.isPending}
           onHostnameValidationChange={setHostnameValid}
           onLaunch={handleLaunch}
           onCancel={onClose}

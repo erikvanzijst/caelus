@@ -48,6 +48,10 @@ This repository is a monorepo with:
   `CAELUS_USER_EMAIL` env var with optional `--as-user` override.
 
 ## Quick Start
+Each project owns its own `.venv`, which uv resolves from the working
+directory. There is no shared environment: run tooling through `uv run` from
+the directory it belongs to.
+
 ### API (`api/`)
 - `cd api/`
 - Install deps: `uv sync`

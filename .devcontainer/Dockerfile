@@ -62,20 +62,16 @@ RUN mkdir /workspace && chown vscode:vscode /workspace
 ENV LANG="en_US.UTF-8"
 ENV PATH=/home/vscode/.local/bin:$PATH
 ENV COLORTERM=truecolor
-ENV UV_PROJECT_ENVIRONMENT="/home/vscode/venv"
 ENV DOCKER_BUILDKIT=1
 # https://opencode.ai/docs/tools/#websearch
 ENV OPENCODE_ENABLE_EXA=1
 
 USER vscode
 WORKDIR /workspace
-RUN mkdir -p ~/.local/bin ~/.ssh ~/venv ~/.docker
+RUN mkdir -p ~/.local/bin ~/.ssh ~/.docker
 RUN chmod 700 ~/.ssh ~/.docker
 RUN ssh-keyscan github.com >> ~/.ssh/known_hosts
 RUN echo '' >> ~/.bashrc && \
-    echo '# Auto-activate Caelus virtualenv' >> ~/.bashrc && \
-    echo 'if [ -f $UV_PROJECT_ENVIRONMENT/bin/activate ]; then source $UV_PROJECT_ENVIRONMENT/bin/activate; fi' >> ~/.bashrc && \
-    echo '' >> ~/.bashrc && \
     echo '# Export individual PG* vars from CAELUS_DATABASE_URL' >> ~/.bashrc && \
     echo 'eval $(echo $CAELUS_DATABASE_URL | awk -F'"'"'[/:@]'"'"' '"'"'{' >> ~/.bashrc && \
     echo '  print "export PGUSER="$4' >> ~/.bashrc && \

@@ -96,6 +96,51 @@ def test_create_template_honors_declared_2020_12_dialect(db_session):
         create_template(db_session, _payload(product_id, bad, version="2.0.0"))
 
 
+def test_create_template_rejects_an_illegal_routing_marker(db_session):
+    """A bad marker has to fail in front of its author. By the time a tenant
+    deploys, the template is the one their deployment already points at."""
+    product_id = _make_product(db_session, name="markerprod")
+    with pytest.raises(ValidationException) as exc_info:
+        create_template(
+            db_session,
+            _payload(
+                product_id,
+                {
+                    "type": "object",
+                    "properties": {
+                        "PORT": {"type": "integer", "x-caelus-target": "runtime"}
+                    },
+                },
+            ),
+        )
+    assert "PORT" in str(exc_info.value)
+
+
+def test_create_template_accepts_a_legal_routing_marker(db_session):
+    product_id = _make_product(db_session, name="markerokprod")
+    template = create_template(
+        db_session,
+        _payload(
+            product_id,
+            {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                    "host": {"type": "string"},
+                    "ADMIN_TOKEN": {
+                        "type": "string",
+                        "x-caelus-target": "runtime",
+                        "x-caelus-sensitive": True,
+                    },
+                },
+            },
+        ),
+    )
+    assert template.values_schema_json["properties"]["ADMIN_TOKEN"][
+        "x-caelus-sensitive"
+    ] is True
+
+
 def test_create_template_rest_returns_400_for_malformed_schema(client):
     prod_resp = client.post("/api/products", json={"name": "restschema", "description": "d"})
     assert prod_resp.status_code == 201

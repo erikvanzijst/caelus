@@ -17,6 +17,7 @@ from app.models import (
     UserORM,
 )
 from app.services.errors import NotFoundException, IntegrityException, ValidationException
+from app.services.template_values import check_var_markers
 from app.services.products import _assert_deletable, _assert_mutable
 
 
@@ -43,7 +44,9 @@ def _check_values_schema(schema: dict[str, Any] | None) -> None:
 
     Without this check a malformed schema is stored happily and only blows up
     later, in `validate_user_values`, for whichever tenant next tries to create
-    a deployment.
+    a deployment. The routing markers are checked for the same reason: an
+    illegal one fails here rather than at the next deployment of a template
+    that tenants are, by then, already pointing at.
     """
     if schema is None:
         return
@@ -52,6 +55,7 @@ def _check_values_schema(schema: dict[str, Any] | None) -> None:
         cls.check_schema(schema)
     except SchemaError as exc:
         raise ValidationException(f"values_schema_json is not a valid JSON Schema: {exc.message}") from exc
+    check_var_markers(schema)
 
 
 def create_template(

@@ -38,22 +38,22 @@
 
 ## 3. Schema projections and marker validation
 
-- [ ] 3.1 In `api/app/services/template_values.py`, add `derive_projections(schema)`
+- [x] 3.1 In `api/app/services/template_values.py`, add `derive_projections(schema)`
       returning the chart and vars projections by partitioning the root's `properties` and
       `required` on `x-caelus-target`, with the vars half's `additionalProperties` taken
       from the root's `x-caelus-vars-additional` (default `false`) — design.md D1.
-- [ ] 3.2 Add `validate_vars(vars, vars_projection)`: coerce string values to the declared
+- [x] 3.2 Add `validate_vars(vars, vars_projection)`: coerce string values to the declared
       type per the table in design.md D7, then validate. Build error messages from
       `exc.json_path` and `exc.validator` only — **never** `exc.message`, which embeds the
       submitted value (design.md D13).
-- [ ] 3.3 Point the existing `validate_user_values` at the chart projection so a runtime
+- [x] 3.3 Point the existing `validate_user_values` at the chart projection so a runtime
       property is not also validated as a chart value.
-- [ ] 3.4 Marker meta-validation in `api/app/services/templates.py` and
+- [x] 3.4 Marker meta-validation in `api/app/services/templates.py` and
       `api/app/services/catalog.py`: `x-caelus-target: runtime` only on a top-level scalar
       property; name matching `^[A-Za-z_][A-Za-z0-9_]{0,63}$`; not a reserved name (D12);
       `x-caelus-sensitive` only on a runtime property. Reject at template creation and at
       catalog load.
-- [ ] 3.5 Tests: the worked vaultwarden and `custom` examples in design.md derive exactly
+- [x] 3.5 Tests: the worked vaultwarden and `custom` examples in design.md derive exactly
       the projections shown; an unmarked schema derives an empty closed vars projection; a
       template with no schema rejects vars; each illegal marker is rejected with an error
       naming the property; a validation failure on a sensitive var yields a message

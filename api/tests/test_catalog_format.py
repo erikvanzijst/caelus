@@ -193,6 +193,61 @@ def test_invalid_values_schema_is_rejected(tmp_path):
     )
 
 
+def test_illegal_routing_marker_is_rejected(tmp_path):
+    """Same rules the API applies to a hand-made template, so `catalog lint`
+    catches a bad marker in CI rather than on rollout."""
+    _expect_error(
+        tmp_path,
+        document(
+            **{
+                "template.values_schema": {
+                    "type": "object",
+                    "properties": {
+                        "signups": {
+                            "type": "object",
+                            "properties": {
+                                "allowed": {
+                                    "type": "boolean",
+                                    "x-caelus-target": "runtime",
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        ),
+        "top-level property",
+    )
+
+
+def test_a_legal_routing_marker_loads(tmp_path):
+    catalog_dir = write_catalog(
+        tmp_path,
+        {
+            "immich.yaml": document(
+                **{
+                    "template.values_schema": {
+                        "type": "object",
+                        "properties": {
+                            "ADMIN_TOKEN": {
+                                "type": "string",
+                                "x-caelus-target": "runtime",
+                                "x-caelus-sensitive": True,
+                            }
+                        },
+                    }
+                }
+            )
+        },
+    )
+
+    entries = load_catalog(catalog_dir)
+
+    assert entries[0].document.template.values_schema["properties"]["ADMIN_TOKEN"][
+        "x-caelus-target"
+    ] == "runtime"
+
+
 def test_values_schema_dialect_comes_from_the_document(tmp_path):
     """`validator_for` honors the document's own `$schema`, not a hardcoded draft."""
     catalog_dir = write_catalog(

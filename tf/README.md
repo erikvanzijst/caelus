@@ -96,6 +96,82 @@ key (`dev` / `prod`), so mixing these up does not fail loudly — it points one
 environment at the other's objects. See `tf/deps/README.md` § Garage object
 store.
 
+### Deployment var encryption keyring
+
+`var_encryption_keys` carries the Fernet keys that encrypt every deployment
+var. It is a **map of lists** keyed by workspace — one keyring per
+environment, so a dev key cannot decrypt a prod tenant's secrets:
+
+```hcl
+var_encryption_keys = {
+  default = ["<newest>", "<previous>"]   # NOTE: the dev workspace is `default`
+  prod    = ["<newest>"]
+}
+```
+
+Generate a key with:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+**Newest first. Only the first key encrypts; every key in the list decrypts.**
+Each stored row records the *fingerprint* of the key that encrypted it, not its
+position, so adding a key renumbers nothing and leaves history readable.
+
+#### Introducing a key is two-phase
+
+The API and the `caelus worker` share this keyring: the API encrypts a var when
+it is written, and the worker decrypts the release's snapshot into the tenant's
+namespace on every rollout. They are separate Deployments and roll
+independently, so a key must be readable everywhere before it is written
+anywhere.
+
+**Phase A — distribute.** Append the new key to the **end** of the list and
+apply. Every process can now decrypt with it; none encrypts with it, so restart
+order does not matter.
+
+```hcl
+var_encryption_keys = {
+  prod = ["<current>", "<new>"]   # new key last: decrypt-only
+}
+```
+
+**Phase B — promote.** Move it to the front and apply again. Encryption
+switches over, and by now every process can read what any other writes.
+
+```hcl
+var_encryption_keys = {
+  prod = ["<new>", "<current>"]   # new key first: now it encrypts
+}
+```
+
+**Skipping phase A breaks the reconciler**, and it breaks it late. The API would
+encrypt with a key the worker does not hold, so the write succeeds and the
+*rollout* fails — after the release row already exists — with every deployment
+that touches a var stuck in `error` until the keyring is fixed. The failure
+names the missing fingerprint, but it surfaces in a tenant's rollout rather
+than in front of whoever edited the list.
+
+The very first key is phase B with an empty prior list. That is safe only
+because no encrypted row exists yet; every subsequent key needs both phases.
+
+#### Retiring a key
+
+After phase B, existing rows still name the old key. Sweep them onto the
+current one, in batches, with the API image's own CLI:
+
+```bash
+# `caelus` in prod, `caelus-dev` in dev.
+kubectl -n caelus exec deploy/caelus-worker -- caelus vars-rotate
+```
+
+It is resumable and safe to interrupt: a half-swept table is fully readable
+because every row names its own key. The old key can be dropped from the list
+once the sweep reports nothing left to rotate — the API refuses to start if any
+stored fingerprint is not configured, so a premature removal fails loudly at
+the next rollout rather than silently losing data.
+
 ## Keycloak configuration is Terraform-owned
 
 The `freepod` realm and its clients, client scopes and groups are declared in

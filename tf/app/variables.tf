@@ -93,9 +93,7 @@ variable "var_encryption_keys" {
         prod = ["<newest>"]
       }
 
-    Keyed by workspace like the Garage keys and Keycloak clients: dev and prod
-    must NOT share a keyring, so a dev key cannot decrypt a prod tenant's
-    secrets. Generate one with:
+    Generate one with:
 
       python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
   EOT

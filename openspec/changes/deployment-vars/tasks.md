@@ -169,9 +169,9 @@
 
 ## 11. Deployment wiring
 
-- [ ] 11.1 Add the keyring to `secrets.auto.tfvars` and render it into a Kubernetes Secret
+- [x] 11.1 Add the keyring to `secrets.auto.tfvars` and render it into a Kubernetes Secret
       in `tf/`, mounted into **both** the API and `caelus worker` (not `build-worker`).
-- [ ] 11.2 Document the two-phase key introduction (distribute, then promote) in the
+- [x] 11.2 Document the two-phase key introduction (distribute, then promote) in the
       runbook, including why skipping phase A breaks the reconciler (design.md § Migration
       Plan).
 - [ ] 11.3 Deploy in the order given in the migration plan: migration → keyring → API and
@@ -179,12 +179,12 @@
 
 ## 12. Documentation
 
-- [ ] 12.1 `api/README.md`: a "Deployment vars" section covering the two tables, head vs
+- [x] 12.1 `api/README.md`: a "Deployment vars" section covering the two tables, head vs
       snapshot, the markers, and the write-only rule.
-- [ ] 12.2 `AGENTS.md`: note that vars are the single channel into a pod's environment and
+- [x] 12.2 `AGENTS.md`: note that vars are the single channel into a pod's environment and
       that `user_values_json` configures the chart, not the process.
-- [ ] 12.3 `products/catalog/catalog.schema.json`: regenerate so the markers are accepted,
+- [x] 12.3 `products/catalog/catalog.schema.json`: regenerate so the markers are accepted,
       and verify with `openspec`-adjacent catalog checks that existing files still load.
-- [ ] 12.4 Record in the repo's todo the two prerequisites this change deliberately leaves
+- [x] 12.4 Record in the repo's todo the two prerequisites this change deliberately leaves
       open: `caelus.releaseId` adoption in curated charts, and server-side `build_id`
       inheritance (design.md § Deferred work).

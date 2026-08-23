@@ -37,6 +37,18 @@ This repository is a monorepo with:
   owner — `/api/users/{user_id}/builds*` — like every other user-owned
   resource; there is no root-level `/api/builds`, and no `user_id` query
   parameter. See `api/README.md` § Builds.
+- **Vars are the single channel into a pod's environment.** A deployment's
+  `vars` become environment variables in its container;
+  `deployment.user_values_json` configures the **chart**, not the process, and
+  nothing fans one out into the other. Which channel a property takes is a
+  marker on the *one* template schema (`x-caelus-target: chart | runtime`,
+  defaulting to `chart`), from which the server derives a chart projection and
+  a vars projection — there is no second schema and no second namespace. A var
+  marked `x-caelus-sensitive` is write-only: reads omit its `value` entirely,
+  for everyone including administrators. Values are encrypted at rest under a
+  rotatable keyring that the API and `caelus worker` must both hold; both
+  refuse to start when theirs cannot cover what is stored. See
+  `api/README.md` § Deployment Vars.
 - Products are either **curated** (declared in `products/catalog/<slug>.yaml`,
   reconciled into the database on rollout, and read-only through the API, CLI,
   and admin UI apart from `visibility`) or **non-curated** (database-authored).
@@ -122,6 +134,11 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
     `/users/{user_id}/deployments/{deployment_id}/releases`, addressed by the
     per-deployment release **number** rather than the `uuid4`
   - Builds under users: `/users/{user_id}/builds`
+  - Vars under deployments, by **phase** and key:
+    `/users/{user_id}/deployments/{deployment_id}/vars/{phase}[/{key}]`. The
+    phase (`runtime`, the only one so far) is a path segment because it is part
+    of a var's identity, not a filter over a set — and it is a phase, never an
+    environment: a staging app is its own deployment.
 
 ## Database & Migrations
 - Prod DB: Postgres via `DATABASE_URL`.
@@ -130,7 +147,7 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
 ## Testing
 - API tests use FastAPI `TestClient` with sqlite temp DB.
 - CLI tests use `typer.testing.CliRunner`.
-- UI uses Vite; no tests are configured yet.
+- UI uses Vite with Vitest + Testing Library (`cd ui && npm test`).
 
 ## Quality
 - Validate inputs; return stable errors.
@@ -158,6 +175,10 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
 - Schema-driven fields in `UserValuesForm` can be overridden by matching on
   `field.title` (case-insensitive) and rendering a custom component instead
   of the default `<TextField>`.
+- `UserValuesForm` partitions its submission by each field's `target`:
+  chart values through `onChange`, runtime vars through `onVarsChange`. A
+  sensitive field renders empty and submits **no entry at all** when untouched
+  — an empty string is a real value and would wipe the stored secret.
 
 ## Contribution Checklist
 - Update or add tests for new behavior.

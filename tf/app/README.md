@@ -109,6 +109,16 @@ oauth2_proxy_cookie_secret = "replace-with-oauth2-cookie-secret"
 garage_admin_token = "replace-with-garage-admin-token"
 ```
 
+```hcl
+# Fernet keys for deployment vars, newest first, per workspace. Introducing a
+# key is two-phase (distribute, then promote) — see tf/README.md § Deployment
+# var encryption keyring before editing this.
+var_encryption_keys = {
+  default = ["replace-with-a-fernet-key"]
+  prod    = ["replace-with-a-different-fernet-key"]
+}
+```
+
 The S3 credential maps (`s3_access_key_ids`, `s3_secret_access_keys`,
 `s3_buckets`) also live here — see `tf/deps/README.md` § Reading the S3
 credentials for how to obtain them and why they are workspace-keyed while

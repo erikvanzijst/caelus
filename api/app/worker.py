@@ -6,6 +6,7 @@ import os
 import signal
 import time
 
+from app import db
 from app.db import session_scope
 from app.services import (
     reconcile as reconcile_service,
@@ -72,6 +73,11 @@ def _worker_loop(
     base_worker_id: str, result_queue: multiprocessing.Queue, poll_seconds: float
 ) -> None:
     """Run in a worker process. Claims and processes jobs until signaled."""
+    # A forked child inherits the parent's pool, sockets included. Sharing one
+    # connection between processes desyncs the wire protocol; `close=False`
+    # drops them without closing sockets the parent still owns.
+    db.engine.dispose(close=False)
+
     shutdown = False
 
     def _handle_signal(signum: int, frame: object) -> None:

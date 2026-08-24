@@ -1,13 +1,9 @@
-"""The mutual deployment/release reference, against a real Postgres.
+"""The mutual deployment/release reference: deferred foreign keys at COMMIT.
 
-Everything here is invisible on SQLite. `api/app/db.py` never sets
-`PRAGMA foreign_keys=ON`, so SQLite enforces no foreign keys at all: an
-insert-order mistake, a dangling pointer, or a constraint that was never
-created passes the rest of the suite green and fails in production. These
-assertions only mean something where the constraints are real.
-
-Set `POSTGRES_TEST_DATABASE_URL` to run them, e.g.
-`postgresql+psycopg://caelus:caelus@postgres:5432/caelus_pgtest`.
+The `deployment.desired_release_id` foreign key is DEFERRABLE INITIALLY
+DEFERRED, so its check fires at COMMIT rather than at INSERT. That is what lets
+production insert a deployment naming a release that does not exist yet, and it
+is why an insert-order mistake or a dangling pointer has to be caught here.
 
 Self-contained on purpose: rows are built with plain SQL against a schema this
 module creates itself, so nothing here depends on the service layer's current
@@ -23,22 +19,17 @@ import pytest
 from sqlalchemy import text
 from sqlmodel import Session, create_engine
 
-from app.db import init_db
 
 
-PG_TEST_DATABASE_URL = os.getenv("POSTGRES_TEST_DATABASE_URL")
 
-pytestmark = pytest.mark.skipif(
-    not PG_TEST_DATABASE_URL,
-    reason="POSTGRES_TEST_DATABASE_URL is not set",
-)
+@pytest.fixture
+def engine(test_database, db_session):
+    """The shared test database: already migrated, and empty for this test.
 
-
-@pytest.fixture(scope="module")
-def engine():
-    eng = create_engine(PG_TEST_DATABASE_URL)
-    init_db(eng)
-    return eng
+    `db_session` is requested purely for its reset -- this file talks to the
+    database through its own short-lived sessions.
+    """
+    return test_database.engine
 
 
 @pytest.fixture
@@ -65,8 +56,33 @@ def parents(engine):
                 "VALUES (:pid, 'oci://example/chart', '1.0.0', now()) RETURNING id"
             ).bindparams(pid=product_id)
         ).one()[0]
+        plan_id = session.exec(
+            text(
+                "INSERT INTO plan (product_id, name, created_at) "
+                "VALUES (:pid, :name, now()) RETURNING id"
+            ).bindparams(pid=product_id, name=f"free-{token}")
+        ).one()[0]
+        plan_template_id = session.exec(
+            text(
+                "INSERT INTO plan_template_version "
+                "(plan_id, price_cents, billing_interval, storage_bytes, created_at) "
+                "VALUES (:plid, 0, 'monthly', 0, now()) RETURNING id"
+            ).bindparams(plid=plan_id)
+        ).one()[0]
+        subscription_id = session.exec(
+            text(
+                "INSERT INTO subscription "
+                "(plan_template_id, user_id, status, payment_status, created_at) "
+                "VALUES (:ptid, :uid, 'active', 'current', now()) RETURNING id"
+            ).bindparams(ptid=plan_template_id, uid=user_id)
+        ).one()[0]
         session.commit()
-        return {"user_id": user_id, "template_id": template_id, "token": token}
+        return {
+            "user_id": user_id,
+            "template_id": template_id,
+            "subscription_id": subscription_id,
+            "token": token,
+        }
 
 
 def _insert_deployment(session, parents, *, deployment_id, desired_release_id, suffix=""):
@@ -74,12 +90,14 @@ def _insert_deployment(session, parents, *, deployment_id, desired_release_id, s
         text(
             "INSERT INTO deployment "
             "(id, user_id, desired_template_id, hostname, name, namespace, status, "
-            " generation, created_at, desired_release_id) "
-            "VALUES (:id, :uid, :tid, :host, :name, :ns, 'provisioning', 1, now(), :rid)"
+            " generation, created_at, desired_release_id, subscription_id) "
+            "VALUES (:id, :uid, :tid, :host, :name, :ns, 'provisioning', 1, now(), "
+            "        :rid, :sid)"
         ).bindparams(
             id=deployment_id,
             uid=parents["user_id"],
             tid=parents["template_id"],
+            sid=parents["subscription_id"],
             host=f"{parents['token']}{suffix}.example.test",
             name=f"app-{parents['token']}{suffix}",
             ns=f"ns-{parents['token']}{suffix}",

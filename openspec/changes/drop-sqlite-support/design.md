@@ -31,7 +31,8 @@ See `proposal.md` § Why for the motivation. What shapes the design:
   runners give a pristine server every run.
 - `psycopg[binary]` is already a hard dependency of `api/`. SQLAlchemy 2.0.46 /
   SQLModel 0.0.32.
-- Eight test files gate on `POSTGRES_TEST_DATABASE_URL` today. Three of them
+- Eight test files gate on `POSTGRES_TEST_DATABASE_URL` today (the change
+  renames it to `CAELUS_TEST_DATABASE_URL`). Three of them
   (`test_migration_advisory_lock.py`, `test_migration_product_visibility.py`,
   `test_migration_deployment_vars.py`) already isolate correctly using
   throwaway schemas via `PGOPTIONS=-csearch_path=…`. The other five
@@ -340,7 +341,7 @@ Phased so that the discovery run has a clean signal:
 
 1. **Plumbing.** Session fixture (create database, subprocess-migrate, snapshot
    `public` tables and `pg_sequences`), per-test cleanup, lazy `get_engine()`,
-   `cli_runner` on the test URL, `POSTGRES_TEST_DATABASE_URL` in compose,
+   `cli_runner` on the test URL, `CAELUS_TEST_DATABASE_URL` in compose,
    `runCmd` cleanup, dev-URL assertion. Nothing deleted yet.
 2. **Schema truth.** Land decision 6 — the hostname revision and the
    `subscription_id` model tightening, plus the `make_deployment_with_release`

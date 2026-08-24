@@ -1,29 +1,20 @@
-"""The `deployment_var` table, on both backends the project supports.
+"""The `deployment_var` table.
 
-Run against SQLite always, and against Postgres when
-``POSTGRES_TEST_DATABASE_URL`` is set -- because the two things asserted here
-are exactly the ones a single-backend suite gets wrong:
-
-  * the tombstone check constraint, which SQLite *does* enforce (unlike
-    foreign keys, see `test_deployment_vars_postgres.py`), and
-  * head resolution, which the design writes as Postgres `DISTINCT ON` and
-    SQLite has no such thing. The portable spelling below is what
-    `app/services/vars.py` will own; the last test pins it against the
-    design's own query on the backend that can run both.
+Covers the tombstone check constraint and head resolution. The head query is
+spelled two ways -- the portable form `app/services/vars.py` owns, and the
+`DISTINCT ON` form the design describes -- and the last test pins them to each
+other.
 """
 
 from __future__ import annotations
 
-import os
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
-from app.db import init_db
 from app.models import (
     DeploymentVarORM,
     ProductORM,
@@ -32,11 +23,9 @@ from app.models import (
 )
 from app.models.core import _utcnow
 
-PG_TEST_DATABASE_URL = os.getenv("POSTGRES_TEST_DATABASE_URL")
-
-# The newest row per key, tombstones excluded. Spelled portably: SQLite has no
-# `DISTINCT ON`, and a head query that only runs in production is a head query
-# nothing tests.
+# The newest row per key, tombstones excluded. Spelled portably rather than as
+# `DISTINCT ON`, because this is the form `app/services/vars.py` owns; the two
+# are pinned to each other below.
 HEAD_SQL = """
 SELECT v.key, v.value_encrypted, v.sensitive
   FROM deployment_var v
@@ -61,29 +50,10 @@ SELECT key, value_encrypted, sensitive
 """
 
 
-def _engine(backend: str):
-    if backend == "sqlite":
-        return create_engine(
-            "sqlite:///:memory:",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-    return create_engine(PG_TEST_DATABASE_URL)
-
-
-BACKENDS = ["sqlite"] + (["postgres"] if PG_TEST_DATABASE_URL else [])
-
-
-@pytest.fixture(params=BACKENDS)
-def backend(request) -> str:
-    return request.param
-
-
 @pytest.fixture
-def session(backend):
-    engine = _engine(backend)
-    init_db(engine)
-    with Session(engine) as session:
+def session(test_database, db_session):
+    """A session on the shared test database, empty for this test."""
+    with Session(test_database.engine) as session:
         yield session
 
 
@@ -211,30 +181,38 @@ def test_a_re_created_key_is_back_in_head_with_the_tombstone_kept(session, fixtu
     assert [r[0] for r in rows] == ["info", None, "trace"]
 
 
-def test_head_is_scoped_to_its_own_deployment(session, fixtures, backend):
+def test_head_is_scoped_to_its_own_deployment(session, fixtures):
+    """A var on a *different* deployment must not surface in this one's head."""
+    from tests.conftest import make_deployment_with_release
+
     _set(session, fixtures, "LOG_LEVEL", "debug")
-    other = DeploymentVarORM(
-        deployment_id=uuid4() if backend == "sqlite" else fixtures["deployment"].id,
-        key="LOG_LEVEL",
-        value_encrypted="other",
-        key_id="1a2b3c4d",
-        created_by=fixtures["user"].id,
+
+    token = uuid4().hex[:8]
+    other_deployment = make_deployment_with_release(
+        session,
+        user_id=fixtures["user"].id,
+        desired_template_id=fixtures["template"].id,
+        hostname=f"{token}.example.test",
+        name=f"other-{token}",
+        namespace=f"ns-{token}",
     )
-    if backend == "sqlite":
-        # Postgres would reject the dangling deployment id, and building a
-        # second deployment says nothing SQLite cannot already show here.
-        session.add(other)
-        session.commit()
+    session.commit()
+    session.add(
+        DeploymentVarORM(
+            deployment_id=other_deployment.id,
+            key="LOG_LEVEL",
+            value_encrypted="other",
+            key_id="1a2b3c4d",
+            created_by=fixtures["user"].id,
+        )
+    )
+    session.commit()
+
     assert _head(session, fixtures) == [("LOG_LEVEL", "debug")]
 
 
-@pytest.mark.skipif(
-    not PG_TEST_DATABASE_URL, reason="POSTGRES_TEST_DATABASE_URL is not set"
-)
-def test_distinct_on_and_the_portable_head_query_agree(session, fixtures, backend):
-    """The design writes head as `DISTINCT ON`; only Postgres can run both."""
-    if backend != "postgres":
-        pytest.skip("DISTINCT ON is Postgres-only")
+def test_distinct_on_and_the_portable_head_query_agree(session, fixtures):
+    """The design writes head as `DISTINCT ON`; both spellings must agree."""
     _set(session, fixtures, "LOG_LEVEL", "info")
     _set(session, fixtures, "LOG_LEVEL", "debug")
     _set(session, fixtures, "GONE", "value")

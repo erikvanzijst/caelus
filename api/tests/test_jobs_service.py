@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app.models import DeploymentReconcileJobORM, ProductORM
 from app.services import deployments, products, templates, users
@@ -82,7 +84,7 @@ def test_enqueue_and_list_jobs_with_filters(db_session):
     assert all(job.status == "queued" for job in queued_only)
 
 
-def test_claim_next_job_uses_sqlite_fallback_and_handles_empty_queue(db_session):
+def test_claim_next_job_claims_one_then_reports_an_empty_queue(db_session):
     jobs = JobService(db_session)
     deployment_id = _seed_deployment(db_session)
     claimed = jobs.claim_next_job(worker_id="worker-a")
@@ -173,11 +175,6 @@ def test_list_jobs_multi_status_applies_global_limit_and_order(db_session):
 # job at status='running' with locked_by naming a process that never comes back.
 # The tests below cover the lease that lets a healthy worker take that work
 # back.
-#
-# NOTE: db_session is SQLite, so these exercise
-# ``JobService._claim_next_job_sqlite``. The Postgres path is covered separately
-# in test_jobs_service_postgres.py, which only runs when
-# POSTGRES_TEST_DATABASE_URL is set.
 
 
 def _strand_job(db_session, job_id: int, *, worker_id: str, age: timedelta) -> None:
@@ -245,7 +242,6 @@ def test_expired_lease_is_reclaimed_and_bumps_attempt(db_session, caplog):
     assert "worker_id=worker-live" in reclaim_logs[0]
     assert "previous_locked_by=worker-dead" in reclaim_logs[0]
     assert "previous_locked_at=" in reclaim_logs[0]
-    assert "(sqlite)" in reclaim_logs[0]
 
     # A second expiry keeps retrying rather than giving up: only a completed
     # reconcile can move the deployment out of provisioning/deleting.
@@ -399,3 +395,74 @@ def test_mark_job_without_worker_id_stays_unconditional(db_session):
     assert failed.status == "failed"
     assert failed.last_error == "boom"
     assert failed.locked_by is None
+
+
+# ── Concurrency ────────────────────────────────────────────────────────────
+# Everything above drives the claim from one session. `FOR UPDATE SKIP LOCKED`
+# only earns its keep under real parallelism, which needs its own engine-level
+# seeding rather than the per-test session.
+
+
+def _seed_deployments_on_engine(engine, *, count: int) -> None:
+    """`count` deployments, and therefore `count` queued create jobs."""
+    token = uuid4().hex[:8]
+    with Session(engine) as session:
+        user = make_accepted_user(session, f"par-user-{token}@example.com")
+        product = products.create_product(
+            session,
+            payload=products.ProductCreate(name=f"par-product-{token}", description="desc"),
+        )
+        template = templates.create_template(
+            session,
+            payload=templates.ProductTemplateVersionCreate(
+                product_id=product.id,
+                chart_ref="oci://example/chart",
+                chart_version="1.0.0",
+                values_schema_json={
+                    "type": "object",
+                    "properties": {"domain": {"type": "string", "title": "hostname"}},
+                },
+            ),
+        )
+        product_orm = session.get(ProductORM, product.id)
+        product_orm.template_id = template.id
+        session.add(product_orm)
+        session.commit()
+
+        # One queued "create" job per deployment: `uq_open_reconcile_job_per_
+        # deployment` permits only one open job at a time, so N claimable jobs
+        # means N deployments, not N jobs on one.
+        plan_template_id = create_free_plan_template(session, product.id)
+        for n in range(count):
+            deployments.create_deployment(
+                session,
+                payload=deployments.DeploymentCreate(
+                    user_id=user.id,
+                    desired_template_id=template.id,
+                    user_values_json={"domain": f"par-{token}-{n}.example.test"},
+                    plan_template_id=plan_template_id,
+                ),
+            )
+
+
+def _claim_once(engine, worker_id: str) -> int | None:
+    with Session(engine) as session:
+        job = JobService(session).claim_next_job(worker_id=worker_id)
+        return None if job is None else job.id
+
+
+def test_claim_next_job_never_double_claims_under_parallel_workers(
+    test_database, db_session
+):
+    """Sixteen workers, eight jobs: every job claimed exactly once."""
+    engine = test_database.engine
+    expected_claims = 8
+    _seed_deployments_on_engine(engine, count=expected_claims)
+
+    worker_ids = [f"par-worker-{i}" for i in range(16)]
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        claimed_ids = list(executor.map(lambda w: _claim_once(engine, w), worker_ids))
+
+    non_null_claims = [job_id for job_id in claimed_ids if job_id is not None]
+    assert len(non_null_claims) == expected_claims
+    assert len(set(non_null_claims)) == expected_claims

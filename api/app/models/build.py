@@ -43,18 +43,10 @@ class BuildORM(BuildBase, table=True):
         # idempotent over the window in which client retries actually happen
         # without forbidding a rebuild of the same source once the previous
         # attempt is terminal.
-        #
-        # Both `sqlite_where` and `postgresql_where` are declared on purpose:
-        # tests run on SQLite and production on Postgres, and a partial index
-        # declared for only one of them is a constraint that silently does not
-        # exist in the other. This repo has already had to repair exactly that
-        # asymmetry once — see `uq_open_reconcile_job_per_deployment` in
-        # core.py and the `cross-database-partial-index-parity` change.
         Index(
             "uq_open_build_per_artifact",
             "artifact_id",
             unique=True,
-            sqlite_where=Column("status").in_(BUILD_STATUSES_OPEN),
             postgresql_where=Column("status").in_(BUILD_STATUSES_OPEN),
         ),
     )

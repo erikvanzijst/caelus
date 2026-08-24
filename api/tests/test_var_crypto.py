@@ -1,13 +1,13 @@
 """The var encryption keyring: fingerprints, rotation, and the startup checks.
 
-Var rows here are inserted with a bare `uuid4()` deployment id. SQLite
-enforces no foreign keys (see `tests/test_deployment_release_postgres.py`), and
-nothing in this module depends on the parent rows -- the referential behavior
-is covered against a real Postgres in `test_deployment_vars_postgres.py`.
+Nothing here depends on the parent rows, but `deployment_var.deployment_id` is
+a real foreign key, so the `author` fixture builds a deployment to hang the
+vars off.
 """
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -25,7 +25,7 @@ from app.services.var_crypto import (
     rotate_vars,
     verify_keyring,
 )
-from tests.conftest import db_session  # noqa: F401
+from tests.conftest import db_session, make_deployment_with_release  # noqa: F401
 
 
 KEY_A = Fernet.generate_key().decode()
@@ -35,11 +35,34 @@ KEY_C = Fernet.generate_key().decode()
 
 @pytest.fixture
 def author(db_session):
-    user = UserORM(email=f"vars-{uuid4().hex[:8]}@example.com")
+    """The user writing the vars, plus a deployment for them to belong to."""
+    token = uuid4().hex[:8]
+    user = UserORM(email=f"vars-{token}@example.com")
+    product = ProductORM(name=f"vars-product-{token}", created_at=_utcnow())
     db_session.add(user)
+    db_session.add(product)
     db_session.commit()
     db_session.refresh(user)
-    return user
+    db_session.refresh(product)
+
+    template = ProductTemplateVersionORM(
+        product_id=product.id, chart_ref="oci://example/chart", chart_version="1.0.0"
+    )
+    db_session.add(template)
+    db_session.commit()
+    db_session.refresh(template)
+
+    deployment = make_deployment_with_release(
+        db_session,
+        user_id=user.id,
+        desired_template_id=template.id,
+        hostname=f"{token}.example.test",
+        name=f"app-{token}",
+        namespace=f"ns-{token}",
+    )
+    db_session.commit()
+    db_session.refresh(deployment)
+    return SimpleNamespace(id=user.id, user=user, deployment_id=deployment.id)
 
 
 @pytest.fixture
@@ -59,7 +82,7 @@ def keyring_settings(monkeypatch):
 
 def _add_var(session, author, *, key, value_encrypted, key_id, deployment_id=None):
     row = DeploymentVarORM(
-        deployment_id=deployment_id or uuid4(),
+        deployment_id=deployment_id or author.deployment_id,
         key=key,
         value_encrypted=value_encrypted,
         key_id=key_id,
@@ -137,25 +160,43 @@ def test_verify_passes_on_an_empty_store(db_session, keyring_settings):
     verify_keyring(db_session)
 
 
-def test_verify_names_the_migration_when_the_table_is_missing(keyring_settings):
-    """The first thing anyone pulling this branch hits is a stale database."""
-    from sqlalchemy import create_engine
+def test_verify_names_the_migration_when_the_table_is_missing(
+    test_database, keyring_settings
+):
+    """The first thing anyone pulling this branch hits is a stale database.
+
+    A throwaway schema holding every table *except* the var tables stands in
+    for a database that has not been migrated far enough. Same
+    `search_path` trick the migration tests use.
+    """
+    from sqlalchemy import create_engine, text
     from sqlmodel import SQLModel
 
-    engine = create_engine("sqlite://")
-    SQLModel.metadata.create_all(
-        engine,
-        tables=[
-            table
-            for name, table in SQLModel.metadata.tables.items()
-            if name not in ("deployment_var", "release_var")
-        ],
+    schema = f"stale_{uuid4().hex[:8]}"
+    with test_database.engine.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    stale = create_engine(
+        test_database.engine.url,
+        connect_args={"options": f"-csearch_path={schema}"},
     )
-    keyring_settings([KEY_A])
-    with Session(engine) as session:
-        with pytest.raises(VarEncryptionException) as exc:
-            verify_keyring(session)
-    assert "alembic upgrade head" in str(exc.value)
+    try:
+        SQLModel.metadata.create_all(
+            stale,
+            tables=[
+                table
+                for name, table in SQLModel.metadata.tables.items()
+                if name not in ("deployment_var", "release_var")
+            ],
+        )
+        keyring_settings([KEY_A])
+        with Session(stale) as session:
+            with pytest.raises(VarEncryptionException) as exc:
+                verify_keyring(session)
+        assert "alembic upgrade head" in str(exc.value)
+    finally:
+        stale.dispose()
+        with test_database.engine.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
 
 
 def test_verify_fails_on_a_fingerprint_collision(db_session, keyring_settings):

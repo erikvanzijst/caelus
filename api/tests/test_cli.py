@@ -1283,9 +1283,9 @@ def test_cli_worker_parallel_processes_multiple_jobs(cli_runner, monkeypatch):
             ).deployment
             deployment_ids.append(deployment.id)
 
-    # Use process_one_job directly (multiprocessing.Process workers can't
-    # share the test SQLite DB across processes, so we verify the function
-    # works correctly for sequential invocations over multiple jobs)
+    # Use process_one_job directly: this test is about the function handling a
+    # sequence of jobs correctly, not about process management. Genuine
+    # multi-worker concurrency is covered in test_jobs_service.py.
     from app.worker import process_one_job
     results = []
     while True:

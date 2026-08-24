@@ -8,18 +8,18 @@ production instead of a permissive stand-in.
 
 ### Requirement: The test suite runs against a real PostgreSQL database
 The API test suite SHALL execute every database-backed test against a real
-PostgreSQL database, addressed by the `POSTGRES_TEST_DATABASE_URL` environment
+PostgreSQL database, addressed by the `CAELUS_TEST_DATABASE_URL` environment
 variable. There SHALL be no alternative backend and no in-memory mode.
 
 #### Scenario: Test suite starts with a reachable PostgreSQL
-- **WHEN** `pytest` starts and `POSTGRES_TEST_DATABASE_URL` names a reachable
+- **WHEN** `pytest` starts and `CAELUS_TEST_DATABASE_URL` names a reachable
   PostgreSQL server
 - **THEN** the suite SHALL run all database-backed tests against that server
 
 #### Scenario: Developer runs the suite inside the devcontainer
 - **WHEN** a developer runs the suite in the devcontainer or CI, where the
   compose stack already provides PostgreSQL
-- **THEN** `POSTGRES_TEST_DATABASE_URL` SHALL already be set by the environment
+- **THEN** `CAELUS_TEST_DATABASE_URL` SHALL already be set by the environment
 - **AND** no additional service, credential, or manual setup step SHALL be
   required
 
@@ -29,7 +29,7 @@ with a message naming the variable and the expected server. It SHALL NOT skip
 the affected tests, and it SHALL NOT report a passing run.
 
 #### Scenario: The environment variable is unset
-- **WHEN** `pytest` starts and `POSTGRES_TEST_DATABASE_URL` is unset
+- **WHEN** `pytest` starts and `CAELUS_TEST_DATABASE_URL` is unset
 - **THEN** the run SHALL fail with an error explaining that a PostgreSQL test
   database is required and how to provide one
 

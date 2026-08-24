@@ -75,20 +75,19 @@ def run_migrations_online() -> None:
             # lock cover every revision. Enabling `transaction_per_migration`
             # would silently narrow the lock to one migration at a time and
             # reopen the race between revisions.
-            if connection.dialect.name == "postgresql":
-                logger.info(
-                    "Acquiring migration advisory lock %s (waits for any "
-                    "concurrent migration runner to finish)",
-                    MIGRATION_ADVISORY_LOCK_KEY,
-                )
-                # Transaction-scoped: released on commit *or* rollback, so a
-                # failed upgrade cannot strand the lock. pg_advisory_lock()
-                # would need an explicit unlock and leaks on failure.
-                connection.execute(
-                    text("SELECT pg_advisory_xact_lock(:key)"),
-                    {"key": MIGRATION_ADVISORY_LOCK_KEY},
-                )
-                logger.info("Migration advisory lock acquired")
+            logger.info(
+                "Acquiring migration advisory lock %s (waits for any "
+                "concurrent migration runner to finish)",
+                MIGRATION_ADVISORY_LOCK_KEY,
+            )
+            # Transaction-scoped: released on commit *or* rollback, so a
+            # failed upgrade cannot strand the lock. pg_advisory_lock()
+            # would need an explicit unlock and leaks on failure.
+            connection.execute(
+                text("SELECT pg_advisory_xact_lock(:key)"),
+                {"key": MIGRATION_ADVISORY_LOCK_KEY},
+            )
+            logger.info("Migration advisory lock acquired")
 
             context.run_migrations()
 

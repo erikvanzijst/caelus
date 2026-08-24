@@ -122,7 +122,6 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
   on live in `api/app/services/`, so REST, CLI, and the admin UI still enforce
   identical rules and no parity gap is introduced.
 - Put all DB/ORM logic in `api/app/services/` and call from API + CLI (DRY).
-- Use `api/app/db.py:init_db()` to create tables for dev/test.
 - Build logs are stored as `bytea`, not text, and served as raw bytes:
   container output is tenant-controlled and may contain invalid UTF-8 or NUL
   bytes, which Postgres `text` cannot store at all. Do not decode it on the
@@ -141,11 +140,15 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
     environment: a staging app is its own deployment.
 
 ## Database & Migrations
-- Prod DB: Postgres via `DATABASE_URL`.
 - Migrations: Alembic in `api/alembic/` with `alembic.ini`.
 
 ## Testing
-- API tests use FastAPI `TestClient` with sqlite temp DB.
+- API tests use FastAPI `TestClient` against a real Postgres database that
+  `tests/conftest.py` creates and migrates with the Alembic chain, then
+  empties before every test. It needs `CAELUS_TEST_DATABASE_URL` (already
+  set by `docker-compose.yml`) and a user holding `CREATEDB`; a run without
+  a reachable Postgres fails rather than skipping. See `api/README.md`
+  § Testing.
 - CLI tests use `typer.testing.CliRunner`.
 - UI uses Vite with Vitest + Testing Library (`cd ui && npm test`).
 

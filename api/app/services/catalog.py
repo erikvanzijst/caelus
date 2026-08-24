@@ -690,10 +690,6 @@ class CatalogReconciler:
 
     def _lock(self) -> None:
         """Serialize concurrent runs for the duration of the transaction."""
-        if self._session.get_bind().dialect.name != "postgresql":
-            # SQLite has no advisory locks, and the single-process test and dev
-            # paths have nothing to contend with.
-            return
         self._session.execute(
             text("SELECT pg_advisory_xact_lock(:key)"), {"key": CATALOG_ADVISORY_LOCK_KEY}
         )

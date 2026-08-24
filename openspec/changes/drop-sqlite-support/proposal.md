@@ -37,7 +37,11 @@ nullable.
 - **BREAKING (developer-facing):** SQLite is no longer a supported database for
   Caelus. `pytest` requires a reachable Postgres; there is no non-Postgres mode
   and no skip path — the session fixture fails fast with a clear message when
-  `POSTGRES_TEST_DATABASE_URL` is unset or unreachable.
+  `CAELUS_TEST_DATABASE_URL` is unset or unreachable.
+- **The test-database variable is renamed** from `POSTGRES_TEST_DATABASE_URL`
+  to `CAELUS_TEST_DATABASE_URL`, matching `CAELUS_DATABASE_URL`. It is read
+  directly from the environment, not through `CaelusSettings`, so it does not
+  become a settings field despite sharing the prefix.
 - **Test suite runs on Postgres.** `conftest.py` creates the test database
   itself (idempotent `CREATE DATABASE`), migrates it once per session with the
   **real Alembic chain** (as a subprocess — `api/alembic/` shadows the
@@ -123,7 +127,7 @@ hand-builds a `DeploymentORM` now runs under enforced foreign keys — the
 volume of resulting breakage is the change's main unknown.
 
 **CI / environment** — `docker-compose.yml` gains
-`POSTGRES_TEST_DATABASE_URL`; `.github/workflows/ci.yml` `api-test` loses its
+`CAELUS_TEST_DATABASE_URL`; `.github/workflows/ci.yml` `api-test` loses its
 alembic step. `ui-test`, `catalog-lint`, `cli` and `publish-images` are
 untouched. Contributors running outside the devcontainer need a reachable
 Postgres whose user holds `CREATEDB`.

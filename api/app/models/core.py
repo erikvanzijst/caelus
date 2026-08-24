@@ -333,13 +333,19 @@ class VarsWrite(SQLModel):
     vars: dict[str, VarWrite] = Field(default_factory=dict)
 
 
+class VarWriter(SQLModel):
+    """Who last wrote a var."""
+    id: int
+    email: Optional[str] = None
+
+
 class VarRead(SQLModel):
     """One var as it is reported. A sensitive var carries no `value`."""
 
     value: Optional[str] = None
     sensitive: bool = False
     updated_at: datetime
-    updated_by: int
+    updated_by: VarWriter
 
     @model_serializer(mode="wrap")
     def _omit_sensitive_value(self, handler):  # type: ignore[no-untyped-def]

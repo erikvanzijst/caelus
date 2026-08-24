@@ -29,7 +29,11 @@ SECRET = "hunter2-swordfish"
 
 def entry(value=None, sensitive=False, updated_at="2026-08-20T09:12:44"):
     """One var as the platform reports it. A secret carries no value."""
-    body = {"sensitive": sensitive, "updated_at": updated_at, "updated_by": 7}
+    body = {
+        "sensitive": sensitive,
+        "updated_at": updated_at,
+        "updated_by": {"id": 7, "email": "dev@example.com"},
+    }
     if not sensitive:
         body["value"] = value
     return body
@@ -232,6 +236,21 @@ def test_a_secret_lists_by_key_with_no_value():
     assert "A" in table and "1" in table
     assert HIDDEN in table
     assert SECRET not in table
+
+
+def test_the_listing_reports_when_and_by_whom():
+    table = render_table({"vars": {"A": entry("1")}})
+
+    assert "UPDATED" in table and "BY" in table
+    assert "dev@example.com" in table
+    # The account id identifies an account to a program, not to a person.
+    assert " 7" not in table
+
+
+def test_an_author_the_platform_cannot_name_renders_blank():
+    orphan = {**entry("1"), "updated_by": {"id": 9}}
+
+    assert render_table({"vars": {"A": orphan}}).splitlines()[-1].endswith("-")
 
 
 # --------------------------------------------------------------------------

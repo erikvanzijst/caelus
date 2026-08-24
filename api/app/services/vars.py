@@ -17,6 +17,7 @@ Two invariants this module exists to keep:
 from __future__ import annotations
 
 import logging
+from typing import Iterable
 from uuid import UUID
 
 from sqlmodel import Session, func, select
@@ -29,6 +30,7 @@ from app.models import (
     UserORM,
     VarRead,
     VarWrite,
+    VarWriter,
     VarsRead,
 )
 from app.services import var_crypto
@@ -333,27 +335,47 @@ def pending(session: Session, deployment: DeploymentORM) -> bool:
     return head_ids != applied_ids
 
 
-def _read_entry(row: DeploymentVarORM) -> VarRead:
+def _writers(
+    session: Session, rows: Iterable[DeploymentVarORM]
+) -> dict[int, VarWriter]:
+    """Resolve every author in one query, whatever the number of vars."""
+    ids = {row.created_by for row in rows}
+    if not ids:
+        return {}
+    found = session.exec(
+        select(UserORM.id, UserORM.email).where(UserORM.id.in_(ids))  # type: ignore[attr-defined]
+    ).all()
+    writers = {user_id: VarWriter(id=user_id, email=email) for user_id, email in found}
+    # A missing row leaves the id, which is the identity; the email is the
+    # part that may be unavailable.
+    return {uid: writers.get(uid, VarWriter(id=uid)) for uid in ids}
+
+
+def _read_entry(row: DeploymentVarORM, writers: dict[int, VarWriter]) -> VarRead:
     """One row as it is reported. `VarRead` drops the value when sensitive."""
     return VarRead(
         value=None if row.sensitive else _plaintext(row),
         sensitive=row.sensitive,
         updated_at=row.created_at,
-        updated_by=row.created_by,
+        updated_by=writers.get(row.created_by, VarWriter(id=row.created_by)),
     )
 
 
 def read_vars(session: Session, deployment: DeploymentORM) -> VarsRead:
     """A deployment's head, with `pending`. The one read path for vars."""
+    rows = head(session, deployment.id)
+    writers = _writers(session, rows.values())
     return VarsRead(
-        vars={key: _read_entry(row) for key, row in head(session, deployment.id).items()},
+        vars={key: _read_entry(row, writers) for key, row in rows.items()},
         pending=pending(session, deployment),
     )
 
 
 def read_snapshot(session: Session, release_id: UUID) -> dict[str, VarRead]:
     """One release's frozen vars, through the same serializer every read uses."""
-    return {row.key: _read_entry(row) for row in snapshot(session, release_id)}
+    rows = snapshot(session, release_id)
+    writers = _writers(session, rows)
+    return {row.key: _read_entry(row, writers) for row in rows}
 
 
 def read_var(session: Session, deployment: DeploymentORM, key: str) -> VarsRead:
@@ -361,4 +383,7 @@ def read_var(session: Session, deployment: DeploymentORM, key: str) -> VarsRead:
     row = head(session, deployment.id).get(key)
     if row is None:
         raise NotFoundException("Var not found")
-    return VarsRead(vars={key: _read_entry(row)}, pending=pending(session, deployment))
+    return VarsRead(
+        vars={key: _read_entry(row, _writers(session, [row]))},
+        pending=pending(session, deployment),
+    )

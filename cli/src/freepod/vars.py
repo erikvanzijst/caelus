@@ -17,7 +17,7 @@ import click
 
 from . import FreepodError, UsageError
 from .api import ApiClient
-from .table import GAP
+from .table import BLANK, format_time, render
 
 #: The only phase that currently exists. Leaves room for build vars.
 PHASE = "runtime"
@@ -25,7 +25,7 @@ PHASE = "runtime"
 #: Stands in for a value the platform will not return.
 HIDDEN = "<hidden>"
 
-COLUMNS = ("KEY", "VALUE")
+COLUMNS = ("KEY", "VALUE", "UPDATED", "BY")
 
 
 def _base(user_id: int, deployment_id: str) -> str:
@@ -199,10 +199,24 @@ def mark_sensitive(
 # --------------------------------------------------------------------------
 
 
-def rows(payload: Dict[str, Any]) -> List[Tuple[str, str]]:
+def author(entry: Dict[str, Any]) -> str:
+    """Who last wrote it, by email. The id is in `--json` and not here: it
+    identifies an account to a program, not to a person."""
+    writer = entry.get("updated_by")
+    if not isinstance(writer, dict):
+        return BLANK
+    return writer.get("email") or BLANK
+
+
+def rows(payload: Dict[str, Any]) -> List[Tuple[str, str, str, str]]:
     entries = payload.get("vars") or {}
     return [
-        (key, HIDDEN if "value" not in entry else str(entry.get("value", "")))
+        (
+            key,
+            HIDDEN if "value" not in entry else str(entry.get("value", "")),
+            format_time(entry.get("updated_at")),
+            author(entry),
+        )
         for key, entry in sorted(entries.items())
     ]
 
@@ -211,13 +225,7 @@ def render_table(payload: Dict[str, Any]) -> str:
     body = rows(payload)
     if not body:
         return ""
-    widths = [max(len(str(cell)) for cell in column) for column in zip(COLUMNS, *body)]
-    lines = [GAP.join(head.ljust(width) for head, width in zip(COLUMNS, widths)).rstrip()]
-    lines += [
-        GAP.join(str(cell).ljust(width) for cell, width in zip(row, widths)).rstrip()
-        for row in body
-    ]
-    return "\n".join(lines)
+    return render([COLUMNS, *body])
 
 
 def pending_count(

@@ -95,7 +95,12 @@ export interface VarEntry {
   value?: string
   sensitive: boolean
   updated_at: IsoDate
-  updated_by: number
+  updated_by: VarWriter
+}
+
+export interface VarWriter {
+  id: number
+  email?: string | null
 }
 
 /** One entry in a vars write. Omitting `value` leaves the var unchanged. */

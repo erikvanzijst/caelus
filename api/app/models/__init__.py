@@ -50,6 +50,7 @@ from app.models.core import (  # noqa: F401
     UserORM,
     UserRead,
     VarRead,
+    VarWriter,
     VarWrite,
     VarsRead,
     VarsWrite,

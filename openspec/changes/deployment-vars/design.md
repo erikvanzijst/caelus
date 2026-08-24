@@ -332,7 +332,8 @@ creates it, since the image is built first. And a release only ever carries runt
 — a release rolls an image, and anything consumed at build time was consumed when that
 image was built.
 
-A read of a sensitive var returns `{"sensitive": true, "updated_at": ..., "updated_by": ...}`
+A read of a sensitive var returns
+`{"sensitive": true, "updated_at": ..., "updated_by": {"id": ..., "email": ...}}`
 with **no `value` key**:
 
 - A mask (`"xxxxx"`) invites a caller to write it back verbatim as the new value.
@@ -733,11 +734,13 @@ GET /api/users/7/deployments/{id}/vars/runtime
   "vars": {
     "SIGNUPS_ALLOWED": {
       "value": "false", "sensitive": false,
-      "updated_at": "2026-08-20T09:12:44Z", "updated_by": 7
+      "updated_at": "2026-08-20T09:12:44Z",
+      "updated_by": {"id": 7, "email": "dev@example.com"}
     },
     "ADMIN_TOKEN": {
       "sensitive": true,
-      "updated_at": "2026-08-21T16:03:02Z", "updated_by": 7
+      "updated_at": "2026-08-21T16:03:02Z",
+      "updated_by": {"id": 7, "email": "dev@example.com"}
     }
   },
   "pending": true

@@ -61,12 +61,16 @@ spec:
         {{- include "lemmy.componentSelector" (dict "root" . "name" "pictrs") | nindent 8 }}
     spec:
       securityContext:
-        # The image's own uid/gid. fsGroup so the PVC is writable on first mount.
-        runAsUser: 991
-        runAsGroup: 991
+        # fsGroup only. runAsUser/runAsGroup are set on the pict-rs container
+        # rather than here because a pod-level value would also apply to the
+        # SFTP sidecar, and atmoz/sftp must start as root to run sshd.
         fsGroup: 991
       containers:
         - name: pictrs
+          securityContext:
+            # The image's own uid/gid; fsGroup above makes the PVC writable.
+            runAsUser: 991
+            runAsGroup: 991
           image: {{ .Values.pictrs.image.repository }}:{{ .Values.pictrs.image.tag }}
           imagePullPolicy: {{ .Values.pictrs.image.pullPolicy }}
           ports:
@@ -110,7 +114,16 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+        # Read-only SFTP over the media volume. Rides here because the PVC is
+        # RWO and can only be shared inside one pod. The whole volume is
+        # exposed: /mnt holds the blob store, the sled index that maps aliases
+        # to it, and exports -- together a restorable copy, where the blobs
+        # alone would be unusable. It carries no credentials (the pict-rs API
+        # key arrives by env).
+        {{- include "caelus-sftp.sidecar" (dict "root" . "mounts" (list
+             (dict "volume" "data" "path" "media"))) | nindent 8 }}
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-pictrs
+        {{- include "caelus-sftp.volumes" (dict "root" .) | nindent 8 }}

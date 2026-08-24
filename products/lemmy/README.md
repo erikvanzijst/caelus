@@ -20,6 +20,7 @@ this is a bespoke Caelus-native chart in the same style as `nextcloud` and
 | PostgreSQL | StatefulSet `<release>-postgresql` on `postgres:17-alpine` + headless Service; data on PVC `data-<release>-postgresql-0`; in-memory `/dev/shm`                      |
 | Secrets    | Secret `<release>-secrets` — DB credentials, pict-rs API key, and `config.json` (the config minus the admin password)                                              |
 | Ingress    | `<release>-ingress` -> the proxy (per-deployment TLS via `caelus.ingress.tls`)                                                                                     |
+| SFTP       | Secret + ConfigMap + Service + sshpiper Pipe (`caelus-sftp`), sidecar in the pict-rs pod at uid 991, read-only over the media volume                                |
 
 Five workloads, one replica each: the backend's federation workers and pict-rs's
 sled index both assume a single writer, so nothing here scales horizontally.
@@ -176,13 +177,35 @@ initialised instance.
 - **`postgresql.enabled: false` requires `postgresql.host`.** The flag alone
   would leave the config pointing at a Service the release never creates; set
   the host to an external Postgres alongside it.
-- **No SFTP sidecar.** Unlike `nextcloud` or `immich`, Lemmy exposes no browsable
-  user file tree: pict-rs stores content-addressed blobs behind a sled index, and
-  the rest is Postgres rows. There is nothing an SFTP client could usefully show.
+- **SFTP exposes the media volume only** — see below.
 
 The platform's tenant NetworkPolicy already accommodates this chart: it allows
 free traffic within the namespace (proxy → backend → Postgres/pict-rs) and public
 egress, which federation requires.
+
+## SFTP
+
+Read-only SFTP over the pict-rs media volume, via the `caelus-sftp` library
+chart. The sidecar rides in the **pict-rs** pod because an RWO PVC can only be
+shared between containers of one pod, and pict-rs is what mounts the volume.
+
+### What a client actually sees
+
+The whole volume, under `media/`:
+
+```
+media/files/01/a0/33/db/1e/9a/77/10/94/e2/60039c1f4605.png
+media/sled-repo/v0.5.0/{conf,db}
+```
+
+Both halves are exposed on purpose. `files/` alone is unusable — the sled repo
+is what maps aliases to those hashes — so together they are a restorable copy of
+pict-rs state, while either alone is not. The volume carries no credentials: the
+pict-rs API key arrives by environment.
+
+The copy is only as consistent as the moment it was taken. sled is live while
+the instance runs, so treat a pull as crash-consistent, not as a coordinated
+backup.
 
 ## Manual install
 
@@ -208,20 +231,22 @@ curl -H 'Accept: application/activity+json' https://lemmy.example.com/
 ## Build and publish
 
 Caelus deploys charts by OCI reference, so the chart must be packaged and pushed
-to the registry before a product template can point at it. There are no chart
-dependencies, so no `helm dependency build` step.
+to the registry before a product template can point at it. `helm dependency
+build` vendors the `caelus-sftp` library into `charts/`; skipping it fails the
+package with a missing-dependency error.
 
 ```bash
 cd products/lemmy/chart
+helm dependency build .        # vendor caelus-sftp-*.tgz into charts/
 helm lint .
-helm package .                 # -> lemmy-0.3.0.tgz
-helm push lemmy-0.3.0.tgz oci://registry.home/helm --insecure-skip-tls-verify
+helm package .                 # -> lemmy-0.4.0.tgz
+helm push lemmy-0.4.0.tgz oci://registry.home/helm --insecure-skip-tls-verify
 ```
 
 Optionally verify the push:
 
 ```bash
-helm pull oci://registry.home/helm/lemmy --version 0.3.0 \
+helm pull oci://registry.home/helm/lemmy --version 0.4.0 \
   --insecure-skip-tls-verify --destination /tmp
 ```
 
@@ -230,7 +255,7 @@ The published chart is then referenced from a Caelus product template:
 | Field               | Value                                   |
 |---------------------|-----------------------------------------|
 | Chart ref           | `oci://registry.home/helm/lemmy`        |
-| Chart version       | `0.3.0`                                 |
+| Chart version       | `0.4.0`                                 |
 | User values schema  | `chart/user.schema.json` (see below)    |
 | Default Helm values | `chart/default_values.json` (see below) |
 
@@ -343,6 +368,11 @@ being committed:
 - emptyDir writability was checked **on the dev cluster**, not just in Docker: a
   pod running the frontend image as its own non-root user writes the file and
   the backend image reads it (both uid 1000, file mode 0644).
+- SFTP was exercised end to end on the dev cluster in a PSA `baseline` namespace:
+  both containers reach Ready, a real pict-rs upload lands on the volume, the
+  release-name user logs in, `ls` works at uid 991, and the downloaded blob is
+  byte-identical to what was uploaded. `put`, `mkdir` and `rm` are all refused
+  with "Permission denied", and the volume is unchanged afterwards.
 - Reconciler injection was rendered both ways: wildcard TLS (no `tls` block, no
   issuer annotation) and a custom domain (cert-manager issuer + `tls` block),
   and `caelus.plan.storageSize` was confirmed to size the pict-rs PVC while the

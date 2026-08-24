@@ -19,6 +19,13 @@ First admin login:
     -o jsonpath='{.data.admin-password}' | base64 -d; echo
 {{- end }}
 
+SFTP (read-only, media only):
+- host: the platform SFTP endpoint; username: {{ .Release.Name }}
+- password: kubectl -n {{ .Release.Namespace }} get secret {{ .Release.Name }}-sftp-credentials \
+    -o jsonpath='{.data.password}' | base64 -d; echo
+- Exposes media/ (pict-rs blobs + sled index) only. The database volume is not
+  exposed; blobs are content-addressed, so paths are hashes, not filenames.
+
 Notes:
 - `host` is baked into every federated actor URL. Changing it after the instance
   has federated orphans the old identity; treat it as permanent.

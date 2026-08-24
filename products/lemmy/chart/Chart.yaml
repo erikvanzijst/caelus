@@ -5,7 +5,7 @@ description: >-
   Rust backend, the SSR frontend, pict-rs media storage, and a bundled
   PostgreSQL StatefulSet. No upstream chart dependency.
 type: application
-version: 0.3.0
+version: 0.4.0
 appVersion: "0.19.20"
 keywords:
   - lemmy
@@ -14,3 +14,10 @@ keywords:
   - forum
 maintainers:
   - name: Caelus Team
+
+# Only dependency is Freepod's own SFTP library chart (renders no resources on
+# its own; provides the sidecar + Pipe/Service/Secret helpers).
+dependencies:
+  - name: caelus-sftp
+    version: "0.1.0"
+    repository: "file://../../_lib/caelus-sftp"

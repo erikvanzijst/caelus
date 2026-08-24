@@ -83,6 +83,25 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "var_encryption_keys" {
+  description = <<-EOT
+    Fernet keys for deployment vars, per workspace, newest first. Set in
+    secrets.auto.tfvars, e.g.
+
+      var_encryption_keys = {
+        dev  = ["<newest>", "<previous>"]
+        prod = ["<newest>"]
+      }
+
+    Generate one with:
+
+      python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  EOT
+  type        = map(list(string))
+  default     = {}
+  sensitive   = true
+}
+
 variable "mollie_api_key" {
   description = "Mollie API Key"
   type        = string

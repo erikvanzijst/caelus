@@ -42,3 +42,28 @@ resource "kubernetes_secret" "s3" {
     CAELUS_GARAGE_ADMIN_TOKEN   = var.garage_admin_token
   }
 }
+
+# The keyring that encrypts every deployment var, mounted into the API (which
+# writes vars) and the worker (which decrypts a release's snapshot into the
+# tenant's namespace before Helm runs). Deliberately NOT the build worker: no
+# var reaches a build, so a key there would be exposure with no use.
+#
+# A Secret rather than the ConfigMap next door, because this is the one value
+# that can decrypt everything a tenant marked sensitive.
+#
+# Comma-separated, which is what the API parses: a Fernet key is urlsafe
+# base64 and never contains a comma. An empty list yields an empty variable,
+# which is legal exactly while no product template declares vars -- the API
+# refuses to start otherwise.
+resource "kubernetes_secret" "var_keys" {
+  metadata {
+    name      = "caelus-var-keys"
+    namespace = var.namespace
+  }
+
+  type = "Opaque"
+
+  data = {
+    CAELUS_VAR_ENCRYPTION_KEYS = join(",", var.var_encryption_keys)
+  }
+}

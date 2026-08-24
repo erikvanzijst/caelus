@@ -30,7 +30,8 @@ from app.models import (
 from app.services.jobs import JobService
 from app.services import subscriptions as subscription_service
 from app.services import template_values
-from app.services.errors import DeploymentInProgressException, IntegrityException, NotFoundException, ValidationException
+from app.services import vars as vars_service
+from app.services.errors import CaelusException, DeploymentInProgressException, IntegrityException, NotFoundException, ValidationException
 from app.services.hostnames import require_valid_hostname_for_deployment
 from app.util import set_value_at_path, value_for_path
 from app.config import get_settings
@@ -280,10 +281,11 @@ def create_deployment(
             status=DEPLOYMENT_STATUS_PENDING if is_paid else DEPLOYMENT_STATUS_PROVISIONING,
             subscription_id=sub.id,
             desired_release_id=release_id,
-            # `build_id` joins `plan_template_id` here: both are request-only
-            # fields that the deployment does not store. The build lands on the
-            # release below instead.
-            **payload.model_dump(exclude={"plan_template_id", "build_id"}),
+            # `build_id` and `vars` join `plan_template_id` here: all three are
+            # request-only fields that the deployment row does not store. The
+            # build lands on the release below; the vars land in their own
+            # table, and `vars` never comes back out on a read model.
+            **payload.model_dump(exclude={"plan_template_id", "build_id", "vars"}),
         )
     )
     session.add(deployment)
@@ -303,6 +305,25 @@ def create_deployment(
         )
     )
     session.flush()  # ensure deployment.subscription_id is available
+
+    # Vars, and the release's snapshot of them, in this same transaction --
+    # which is what stops a first release from rolling out with an empty
+    # environment when the caller supplied one. Ahead of the payment call
+    # below on purpose: a var the template rejects must not leave a real
+    # Mollie payment behind.
+    try:
+        vars_service.write_vars(
+            session, deployment=deployment, actor=user, entries=payload.vars
+        )
+        vars_service.snapshot_release(
+            session, release_id=release_id, deployment_id=deployment_id
+        )
+    except CaelusException:
+        # Explicit rather than relying on the session being closed for us: the
+        # deployment and its subscription are already flushed by this point,
+        # and a rejected create must leave neither behind.
+        session.rollback()
+        raise
 
     if is_paid:
         settings = get_settings()
@@ -351,7 +372,7 @@ def create_deployment(
             is_paid,
         )
         return DeploymentCreateResult(
-            deployment=DeploymentRead.model_validate(deployment),
+            deployment=_read_with_vars(session, deployment),
             checkout_url=checkout_url,
         )
     except DeploymentInProgressException:
@@ -362,6 +383,20 @@ def create_deployment(
         session.rollback()
         logger.warning("Deployment create failed due to integrity conflict for user_id=%s", payload.user_id)
         raise IntegrityException("Deployment already exists") from exc
+
+
+def _read_with_vars(session: Session, deployment: DeploymentORM) -> DeploymentRead:
+    """A single-deployment read, carrying head and `pending`.
+
+    Only for reads *of one deployment*. The listing deliberately leaves both
+    `None`: head is a query per deployment, and no caller reads vars from a
+    listing.
+    """
+    read = DeploymentRead.model_validate(deployment)
+    reported = vars_service.read_vars(session, deployment)
+    read.vars = reported.vars
+    read.pending = reported.pending
+    return read
 
 
 def list_deployments(session: Session, *, user_id: int | None = None) -> list[DeploymentRead]:
@@ -380,7 +415,7 @@ def get_deployment(session: Session, *, deployment_id: UUID, user_id: int | None
     )
     if deployment.status == DEPLOYMENT_STATUS_DELETED:
         raise NotFoundException("Deployment not found")
-    return DeploymentRead.model_validate(deployment)
+    return _read_with_vars(session, deployment)
 
 
 def _require_readable_deployment(
@@ -394,6 +429,19 @@ def _require_readable_deployment(
     if deployment.status == DEPLOYMENT_STATUS_DELETED:
         raise NotFoundException("Deployment not found")
     return deployment
+
+
+def get_deployment_orm(
+    session: Session, *, deployment_id: UUID, user_id: int | None = None
+) -> DeploymentORM:
+    """The deployment row itself, for callers that need more than a read model.
+
+    Same visibility rules as every other read: missing, not yours, and deleted
+    are indistinguishable to the caller.
+    """
+    return _require_readable_deployment(
+        session, deployment_id=deployment_id, user_id=user_id
+    )
 
 
 def list_releases(
@@ -430,7 +478,9 @@ def get_release(
     ).one_or_none()
     if release is None:
         raise NotFoundException("Release not found")
-    return DeploymentReleaseWithBuildRead.model_validate(release)
+    read = DeploymentReleaseWithBuildRead.model_validate(release)
+    read.vars = vars_service.read_snapshot(session, release.id)
+    return read
 
 
 def get_sftp_credentials(
@@ -582,6 +632,27 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
         )
     )
 
+    # Vars merge; they never replace. An update that says nothing about vars
+    # leaves head exactly as it was, and the release below still captures it --
+    # which is why the snapshot is taken after this rather than from the
+    # request. Nothing here is derived from `user_values_json`: the two halves
+    # are routed by the client against the schema's projections, and a runtime
+    # property submitted as a chart value is rejected by
+    # `_validate_user_values` above rather than quietly re-routed.
+    #
+    # Attributed to the deployment's owner: this path does not receive the
+    # acting user, and an administrator updating someone else's deployment is
+    # writing that user's configuration.
+    vars_service.write_vars(
+        session,
+        deployment=deployment,
+        actor=session.get(UserORM, deployment.user_id),
+        entries=update.vars,
+    )
+    vars_service.snapshot_release(
+        session, release_id=release_id, deployment_id=deployment.id
+    )
+
     # Expire the ORM instance so subsequent reads see the updated row
     session.expire(deployment)
 
@@ -599,4 +670,4 @@ def update_deployment(session: Session, update: DeploymentUpdate) -> DeploymentR
         deployment.user_id,
         deployment.desired_template_id,
     )
-    return DeploymentRead.model_validate(deployment)
+    return _read_with_vars(session, deployment)

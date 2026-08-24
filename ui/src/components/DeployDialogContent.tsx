@@ -14,6 +14,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import { resolveApiPath } from '../api/client'
 import type { Plan, Product } from '../api/types'
 import { UserValuesForm } from './UserValuesForm'
+import type { VarSubmission } from './UserValuesForm'
+import { PendingVarsNotice } from './PendingVarsNotice'
 import { PlanCardContent } from './PlanCardContent'
 import { TosAgreement } from './TosAgreement'
 
@@ -22,6 +24,12 @@ interface DeployDialogContentProps {
   valuesSchemaJson: Record<string, unknown> | null
   initialValuesJson: Record<string, unknown> | null
   onChange: (userValues: Record<string, unknown> | null) => void
+  onVarsChange?: (vars: Record<string, VarSubmission>) => void
+  initialVars?: Record<string, { value?: string; sensitive: boolean }> | null
+  /** Whether a rollout would change the running pod's environment. */
+  varsPending?: boolean
+  onApplyPendingVars?: () => void
+  applyingPendingVars?: boolean
   onHostnameValidationChange?: (valid: boolean) => void
   onLaunch?: () => void
   onCancel?: () => void
@@ -47,6 +55,11 @@ export function DeployDialogContent({
   valuesSchemaJson,
   initialValuesJson,
   onChange,
+  onVarsChange,
+  initialVars,
+  varsPending,
+  onApplyPendingVars,
+  applyingPendingVars,
   onHostnameValidationChange,
   onLaunch,
   onCancel,
@@ -153,6 +166,14 @@ export function DeployDialogContent({
 
       <Stack spacing={2}>
         {formError && <Alert severity="error">{formError}</Alert>}
+        {varsPending && onApplyPendingVars && (
+          <PendingVarsNotice
+            pending
+            onApply={onApplyPendingVars}
+            applying={applyingPendingVars}
+            disabled={readOnly}
+          />
+        )}
         {loading ? (
           <Typography color="text.secondary">Loading...</Typography>
         ) : noTemplateWarning ? (
@@ -163,7 +184,9 @@ export function DeployDialogContent({
           <UserValuesForm
             valuesSchemaJson={valuesSchemaJson}
             initialValuesJson={initialValuesJson}
+            initialVars={initialVars}
             onChange={onChange}
+            onVarsChange={onVarsChange}
             onHostnameValidationChange={onHostnameValidationChange}
             errors={userValuesErrors}
             initialHostname={initialHostname}

@@ -95,6 +95,17 @@
           },
           "additionalProperties": true
         },
+        "vars": {
+          "type": "object",
+          "description": "Runtime configuration injected by the Caelus reconciler, as a reference only. The values live in the Secret named by secretName and never in values, which are logged and persisted. Absent entirely when the applied release carries no vars, so no envFrom source is rendered.",
+          "properties": {
+            "secretName": {
+              "type": "string",
+              "description": "Name of the Secret holding this deployment's vars, written into its namespace before Helm runs and projected into the app container with envFrom, ahead of every platform-provided source."
+            }
+          },
+          "additionalProperties": true
+        },
         "ingress": {
           "type": "object",
           "description": "Ingress and per-app TLS settings injected by the Caelus reconciler",

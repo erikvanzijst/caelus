@@ -106,6 +106,23 @@ variable "s3_secret_access_key" {
   sensitive   = true
 }
 
+variable "var_encryption_keys" {
+  description = <<-EOT
+    Fernet keys for deployment vars, newest first. Only the first encrypts;
+    every key in the list can decrypt, and each stored row names the key that
+    produced it by fingerprint, so prepending one leaves history readable.
+
+    Introducing a key is two-phase: append it to the END everywhere and apply,
+    then move it to the front and apply again. Skipping the first phase breaks
+    the reconciler -- the API would encrypt with a key the worker does not
+    hold, and every rollout would fail while building its Secret, after the
+    release row already exists.
+  EOT
+  type        = list(string)
+  default     = []
+  sensitive   = true
+}
+
 variable "garage_admin_url" {
   description = "In-cluster Garage admin API URL, for per-deployment bucket provisioning"
   type        = string

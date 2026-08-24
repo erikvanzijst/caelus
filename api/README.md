@@ -374,6 +374,113 @@ back the secret of any access key it can see**, so compromise of this process is
 compromise of every tenant bucket. That is inherent to automated provisioning
 and is stated here rather than left to be discovered.
 
+## Deployment Vars (Runtime Configuration)
+
+A **var** is one entry in a deployment's process environment. Vars are the
+single channel into a pod's environment; `user_values_json` configures the
+*chart*, not the process.
+
+### Two tables, and the difference between them
+
+```
+deployment_var   append-only history. Setting a key inserts a row; deleting one
+                 inserts a tombstone (a row with no value). Nothing is ever
+                 updated in place except the re-encryption sweep, which rewrites
+                 a row's representation and never its plaintext.
+
+release_var      the snapshot: which var rows a release was created with. That
+                 binding never changes, which is what makes a release
+                 reproducible after later writes and deletions.
+```
+
+**Head** is the effective set: the newest row per key, tombstones excluded.
+
+- A **deployment read** reports head — desired state, matching
+  `user_values_json` beside it.
+- A **release read** reports that release's snapshot.
+
+### Routing markers
+
+There is no second schema. `values_schema_json` gains a per-property marker and
+the server derives two projections from it by partitioning the root's
+`properties` and `required`:
+
+```yaml
+properties:
+  host:                              # unmarked -> chart value
+    type: string
+  ADMIN_TOKEN:
+    type: string
+    x-caelus-target: runtime         # -> environment variable
+    x-caelus-sensitive: true         # -> write-only
+```
+
+`x-caelus-target` defaults to `chart`, so every existing catalog schema keeps
+working with no edit. `x-caelus-vars-additional: true` at the root opens the
+vars projection to undeclared keys — `custom` is its only expected user, since
+it runs tenant-supplied code and cannot enumerate that code's environment.
+
+Runtime markers are legal only on a **top-level scalar** property whose name
+matches `^[A-Za-z_][A-Za-z0-9_]{0,63}$` and is not reserved (`CAELUS_`, `AWS_`,
+`S3_`, `RAILPACK_`, `BUCKET_NAME`, `PORT`). The property name *is* the
+environment variable name; nothing flattens or renames it. Bad markers are
+rejected at template creation and at catalog load, so they fail in front of
+their author rather than at some tenant's next deployment.
+
+### Write-only, and what that costs
+
+A var marked sensitive is **never readable again through any endpoint, by
+anyone, including an administrator**. Reads omit the `value` field entirely —
+not a mask.
+
+Omission gives a third state and the rule that follows from it: **an absent
+`value` on write means "leave unchanged"**, which is what makes
+`freepod var list --json` output safely writable.
+
+Every value is encrypted at rest, sensitive or not — one column, one code path,
+no per-row branch on where the plaintext lives. Each row records the
+*fingerprint* of the key that encrypted it (`services/var_crypto.py`).
+
+The API and the reconcile worker both refuse to start when their keyring cannot
+cover what is stored. See `tf/README.md` § Deployment var encryption keyring
+for the two-phase procedure for introducing a key.
+
+### How a var reaches a pod
+
+```
+_reconcile_apply
+    ensure_namespace
+    ensure_tenant_isolation
+    ensure_object_storage
+    ensure_vars_secret       ← the applied release's snapshot, decrypted
+    helm_upgrade_install     ← values carry only the Secret's name
+    reap_vars_secrets        ← superseded releases' Secrets, on success only
+```
+
+The Secret is named per **release** (`{deployment}-vars-{number}`). A shared
+Secret updated in place would be written before Helm runs and would not be
+rolled back when Helm fails, leaving the reverted pod spec paired with the
+failed release's values — harmless until the next pod starts, then silently
+wrong. Per-release naming makes a rollback land on a Secret this apply never
+touched, and makes a var-only change alter the pod template so the rollout
+restarts the pod. Superseded Secrets are deleted after a *successful* apply
+only (`_reap_vars_secrets`), scoped by the deployment's instance label; a
+failure there is logged, since litter is cheaper than a wrong pod.
+
+Only `caelus.vars.secretName` is projected into the values, for the same reason
+the object-storage credential is not: merged values are logged in full at INFO
+and persisted by Helm into a tenant-namespace object. Every row is decrypted
+before anything is written, so a keyring that cannot read one row leaves the
+previous Secret untouched — a pod holding some of its variables is worse than
+one that does not start.
+
+An empty snapshot produces no Secret and no values block at all, so a chart
+that requires vars fails visibly instead of rendering an empty `envFrom`. In
+`products/custom/chart` the vars Secret is the **first** `envFrom` source with
+platform sources after it, because a later source overrides an earlier one and
+an explicit `env` entry beats them all — a var named like a platform credential
+cannot displace it.
+
 ## API and CLI Parity
 
 Parity is achieved by sharing service functions, not by duplicating logic.

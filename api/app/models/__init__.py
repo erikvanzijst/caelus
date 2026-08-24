@@ -28,6 +28,7 @@ from app.models.core import (  # noqa: F401
     DeploymentReleaseRead,
     DeploymentReleaseWithBuildRead,
     DeploymentUpdate,
+    DeploymentVarORM,
     ProductBase,
     ProductCreate,
     ProductORM,
@@ -39,6 +40,7 @@ from app.models.core import (  # noqa: F401
     ProductTemplateVersionRead,
     ProductUpdate,
     ProductVisibility,
+    ReleaseVarORM,
     SftpCredentialsRead,
     SQLModel,
     TosAcceptanceCreate,
@@ -47,6 +49,10 @@ from app.models.core import (  # noqa: F401
     UserCreate,
     UserORM,
     UserRead,
+    VarRead,
+    VarWrite,
+    VarsRead,
+    VarsWrite,
 )
 
 from app.models.build import (  # noqa: F401

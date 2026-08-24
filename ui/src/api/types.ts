@@ -84,6 +84,26 @@ export interface Subscription {
   plan_template?: PlanTemplateVersion | null
 }
 
+/**
+ * One runtime variable as the API reports it.
+ *
+ * `value` is **absent** for a sensitive var — not masked, not null. A null
+ * would be indistinguishable from the delete gesture, so a client that read a
+ * deployment and submitted it back would wipe every secret it could not read.
+ */
+export interface VarEntry {
+  value?: string
+  sensitive: boolean
+  updated_at: IsoDate
+  updated_by: number
+}
+
+/** One entry in a vars write. Omitting `value` leaves the var unchanged. */
+export interface VarWrite {
+  value?: string | null
+  sensitive?: boolean
+}
+
 export interface Deployment {
   desired_template_id: number
   hostname: string | null
@@ -102,6 +122,22 @@ export interface Deployment {
   generation?: number
   last_error?: string | null
   last_reconcile_at?: IsoDate | null
+  /**
+   * The deployment's desired runtime configuration. Present only on a
+   * single-deployment read: the listing omits it (`undefined`), which is not
+   * the same as a deployment having none (`{}`).
+   */
+  vars?: Record<string, VarEntry> | null
+  /** Whether a rollout would change the running pod's environment. */
+  pending?: boolean | null
+  applied_release?: DeploymentRelease | null
+}
+
+/** The subset of a release this UI reads. */
+export interface DeploymentRelease {
+  id: string
+  number: number
+  build_id?: string | null
 }
 
 export interface DeploymentCreateResponse {

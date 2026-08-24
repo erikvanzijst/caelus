@@ -51,6 +51,12 @@ module "caelus" {
   garage_admin_url   = var.garage_admin_url
   garage_admin_token = var.garage_admin_token
 
+  # Per workspace, like the Garage key above and for the same reason: a dev key
+  # must not decrypt a prod tenant's secrets. Defaults to empty so a workspace
+  # that has not been given one still plans -- legal only while no product
+  # template declares vars.
+  var_encryption_keys = lookup(var.var_encryption_keys, terraform.workspace, [])
+
   # Loki, like Garage above, is a tf/deps singleton shared by both workspaces.
   loki_base_url         = var.loki_base_url
   log_keepalive_seconds = var.log_keepalive_seconds

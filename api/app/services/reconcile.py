@@ -10,7 +10,8 @@ from sqlmodel import Session
 from app.config import get_settings
 from app.models import DeploymentORM, DeploymentReleaseORM, ProductTemplateVersionORM
 from app.provisioner import Provisioner, provisioner as default_provisioner
-from app.services import deployment_logs, object_storage, template_values
+from app.services import deployment_logs, object_storage, template_values, var_crypto
+from app.services import vars as vars_service
 from app.services.loki import DIRECTION_BACKWARD, LokiQueryClient
 from app.services.template_values import bytes_to_k8s_size
 from app.services.deployments import _get_deployment_orm
@@ -37,6 +38,34 @@ def storage_secret_name(deployment: DeploymentORM) -> str:
     is updated in place rather than churned) and unique within the namespace.
     """
     return f"{deployment.name}-object-storage"
+
+
+VARS_SECRET_COMPONENT = "vars"
+
+
+def vars_secret_labels(deployment: DeploymentORM) -> dict[str, str]:
+    return {
+        "app.kubernetes.io/managed-by": "caelus",
+        "app.kubernetes.io/instance": deployment.name,
+        "caelus.dev/component": VARS_SECRET_COMPONENT,
+    }
+
+
+def vars_secret_selector(deployment: DeploymentORM) -> str:
+    """Scoped by instance too: a namespace may hold more than one deployment."""
+    return (
+        f"caelus.dev/component={VARS_SECRET_COMPONENT},"
+        f"app.kubernetes.io/instance={deployment.name}"
+    )
+
+
+def vars_secret_name(deployment: DeploymentORM, release: DeploymentReleaseORM) -> str:
+    """Name of the Secret holding one release's vars.
+
+    Per `deployment_release`, not per deployment, so a Helm rollback lands on a
+    Secret this apply never touched. See design.md D10.
+    """
+    return f"{deployment.name}-vars-{release.number}"
 
 
 @dataclass(frozen=True)
@@ -77,7 +106,8 @@ class DeploymentReconciler:
             if deployment.deleted_at is not None:
                 result = self._reconcile_delete(deployment)
             else:
-                result = self._reconcile_apply(deployment)
+                assert release is not None
+                result = self._reconcile_apply(deployment, release)
         except Exception as exc:
             logger.exception("Reconcile failed for deployment_id=%s", deployment_id)
             last_error = str(exc)
@@ -245,7 +275,9 @@ class DeploymentReconciler:
         if template.product is None:
             raise IntegrityException("Desired template is missing loaded product relationship")
 
-    def _reconcile_apply(self, deployment: DeploymentORM) -> ReconcileResult:
+    def _reconcile_apply(
+        self, deployment: DeploymentORM, release: DeploymentReleaseORM
+    ) -> ReconcileResult:
         template = deployment.desired_template
         assert template is not None
 
@@ -268,7 +300,10 @@ class DeploymentReconciler:
         # there yet. The values depend on what provisioning returns, so they are
         # built here rather than at the top.
         storage = self._ensure_object_storage(deployment)
-        merged_values = self._build_merged_values(deployment, template, storage=storage)
+        vars_secret = self._ensure_vars_secret(deployment, release)
+        merged_values = self._build_merged_values(
+            deployment, template, storage=storage, vars_secret=vars_secret
+        )
 
         outcome = self._provisioner.helm_upgrade_install(
             release_name=deployment.name,
@@ -281,6 +316,10 @@ class DeploymentReconciler:
             atomic=True,
             wait=True,
         )
+
+        # After Helm succeeds only: a rollback leaves the previous release's
+        # Secret live, and reaping here would delete it.
+        self._reap_vars_secrets(deployment, keep=vars_secret)
 
         return ReconcileResult(
             status=DEPLOYMENT_STATUS_READY,
@@ -363,15 +402,64 @@ class DeploymentReconciler:
         )
         return credentials
 
+    def _ensure_vars_secret(
+        self, deployment: DeploymentORM, release: DeploymentReleaseORM
+    ) -> str | None:
+        """Publish a release's vars as a Secret. Returns its name, or None.
+
+        The release's snapshot, not head. Decrypts everything before writing
+        anything, so an unreadable row writes no Secret rather than a partial
+        one. Values never enter the Helm values -- see `_ensure_object_storage`.
+        """
+        snapshot = vars_service.snapshot(self._session, release.id)
+        if not snapshot:
+            return None
+
+        name = vars_secret_name(deployment, release)
+        string_data = {
+            row.key: var_crypto.decrypt(row.value_encrypted, row.key_id) for row in snapshot
+        }
+        self._provisioner.upsert_secret(
+            namespace=deployment.namespace,
+            name=name,
+            string_data=string_data,
+            labels=vars_secret_labels(deployment),
+        )
+        logger.debug(
+            "Published %d vars for deployment_id=%s release=%s",
+            len(string_data),
+            deployment.id,
+            release.number,
+        )
+        return name
+
+    def _reap_vars_secrets(self, deployment: DeploymentORM, keep: str | None) -> None:
+        """Drop superseded vars Secrets. Best-effort: leftovers are only litter."""
+        try:
+            self._provisioner.delete_secrets_by_label(
+                namespace=deployment.namespace,
+                selector=vars_secret_selector(deployment),
+                except_name=keep,
+            )
+        except Exception:  # noqa: BLE001 - never fail a good rollout over cleanup
+            logger.warning(
+                "Failed to reap superseded vars Secrets for deployment_id=%s",
+                deployment.id,
+                exc_info=True,
+            )
+
     def _build_merged_values(
         self,
         deployment: DeploymentORM,
         template: ProductTemplateVersionORM,
         *,
         storage: object_storage.ObjectStorageCredentials | None = None,
+        vars_secret: str | None = None,
     ) -> dict:
         template_values.validate_user_values(deployment.user_values_json, template.values_schema_json)
-        system_overrides = self._build_system_overrides(deployment, storage=storage)
+        system_overrides = self._build_system_overrides(
+            deployment, storage=storage, vars_secret=vars_secret
+        )
         return template_values.merge_values_scoped(
             template.system_values_json,
             deployment.user_values_json,
@@ -384,6 +472,7 @@ class DeploymentReconciler:
         deployment: DeploymentORM,
         *,
         storage: object_storage.ObjectStorageCredentials | None = None,
+        vars_secret: str | None = None,
     ) -> dict | None:
         """Combine all system-controlled value overrides under the ``caelus`` namespace.
 
@@ -397,11 +486,23 @@ class DeploymentReconciler:
             cls._build_ingress_overrides(deployment),
             cls._build_owner_overrides(deployment),
             cls._build_object_storage_overrides(deployment, storage),
+            cls._build_vars_overrides(vars_secret),
             cls._build_release_overrides(deployment),
         ):
             if part:
                 overrides = template_values.deep_merge(overrides, part)
         return overrides or None
+
+    @staticmethod
+    def _build_vars_overrides(vars_secret: str | None) -> dict | None:
+        """Project the Secret's name only; values never enter the Helm values.
+
+        No block at all when the release carries no vars, so a chart that
+        requires them fails loudly instead of rendering an empty `envFrom`.
+        """
+        if vars_secret is None:
+            return None
+        return {"caelus": {"vars": {"secretName": vars_secret}}}
 
     @staticmethod
     def _build_release_overrides(deployment: DeploymentORM) -> dict | None:

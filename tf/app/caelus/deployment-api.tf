@@ -130,6 +130,17 @@ resource "kubernetes_deployment" "api" {
             }
           }
 
+          # The var keyring. The API is where vars are written, and it verifies
+          # this keyring covers everything already stored before it will serve
+          # a single request -- a row whose key is gone can never be decrypted
+          # again, and that has to surface here rather than inside a tenant's
+          # later rollout.
+          env_from {
+            secret_ref {
+              name = kubernetes_secret.var_keys.metadata[0].name
+            }
+          }
+
           volume_mount {
             name       = "sqlite-data"
             mount_path = "/app/db"

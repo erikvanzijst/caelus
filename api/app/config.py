@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class CaelusSettings(BaseSettings):
@@ -196,9 +198,28 @@ class CaelusSettings(BaseSettings):
     # Sleep between worker passes.
     build_worker_interval_seconds: float = 1
 
+    # ── Deployment var encryption ─────────────────────────────────────────
+    # Fernet keys, newest first. Only the first key encrypts; every key in the
+    # list can decrypt, and each stored row names the key that produced it by
+    # fingerprint (app/services/var_crypto.py), so prepending a key leaves
+    # history readable and renumbers nothing.
+    #
+    # Comma-separated rather than JSON like the other list fields above: this
+    # arrives from a Kubernetes Secret an operator edits by hand, where a
+    # mistyped bracket or quote costs the readability of every stored value.
+    # A Fernet key is urlsafe base64, so it never contains a comma.
+    var_encryption_keys: Annotated[list[str], NoDecode] = []
+
     mollie_api_key: str | None = None
     mollie_redirect_url: str | None = None
     mollie_webhook_base_url: str | None = None
+
+    @field_validator("var_encryption_keys", mode="before")
+    @classmethod
+    def _split_var_encryption_keys(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [k.strip() for k in v.split(",") if k.strip()]
+        return v
 
 
 @lru_cache

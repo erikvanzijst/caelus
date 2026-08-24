@@ -79,6 +79,7 @@ that locks users out until they upgrade.
 | `delete.py`   | The teardown: confirming it, requesting it, and following it to gone.                       |
 | `history.py`  | The build history: reading the account's builds and rendering the table.                    |
 | `releases.py` | The release history: this project's deployment's rollouts, and the live mark.               |
+| `vars.py`     | `freepod var`: the vars sub-resource, input parsing, and the hidden-value table.             |
 | `table.py`    | Shared listing rendering: timestamps, durations, digest abbreviation, columns. A leaf.      |
 | `logs.py`     | `freepod log`: SSE parsing, the resume cursor, and reconnection.                            |
 | `tos.py`      | Terms acceptance: the gate, the prompt, and recording an acceptance.                        |
@@ -494,6 +495,56 @@ deployment's history as this one's.
 - **Every outcome is listed**, including `queued`, `abandoned` and `failed`.
   A failed release's recorded error goes to stderr, per row, so the table's
   columns stay aligned and a redirected listing still carries only rows.
+
+## Vars
+
+`freepod var` is the client half of the platform's runtime configuration. The
+resource is `/api/users/{u}/deployments/{d}/vars/runtime` — the phase is a path
+segment because it is part of a var's identity, not a filter.
+
+- **A secret is write-only, and the client never pretends otherwise.** The
+  platform returns a sensitive var with **no `value` key at all** — not a mask,
+  not a null. `var list` renders `<hidden>`, `var get` refuses rather than
+  printing something that could be mistaken for the value, and no flag reveals
+  it. The client cannot show what it was never sent.
+- **That omission is what makes `--json` round-trippable.** An entry with no
+  `value` means "leave this one unchanged", so
+  `freepod var list --json | freepod var set -f -` deletes nothing and alters
+  nothing. `load_entries` keeps only `value` and `sensitive` from each entry;
+  `updated_at`/`updated_by` are the platform's and are dropped rather than
+  echoed back.
+- **Setting applies by default, because a recorded var that is not running is
+  a trap.** `var set` writes and then rolls, which is Fly's ergonomics and what
+  someone arriving from Heroku expects. `--stage` records without rolling.
+  Several vars in one invocation produce **one** rollout: the write is a single
+  `PATCH` and the release follows it.
+- **A deployment mid-rollout is refused, not waited on.** The vars are already
+  recorded by then, so waiting would hold the terminal for a rollout the caller
+  did not ask for. The error names `--stage` and `deploy --no-build`.
+- **`--secret` defers to the schema.** Where the product's template declares the
+  property, the platform decides its sensitivity and rejects a caller that
+  contradicts it — so the client drops the flag and says why, rather than
+  sending a request it knows will 400.
+- **A bare `KEY` prompts without echo**, which is the point: a secret passed as
+  `KEY=VALUE` is in the shell history forever. Off a terminal it is a usage
+  error rather than an empty value.
+
+### `deploy --no-build`
+
+Vars take effect on the next release, and nothing else mints one without other
+changes. `deploy --no-build` is that primitive: it preflights, reads the
+**applied** release's image, and releases it again.
+
+It passes that release's `build_id` through explicitly. The platform writes
+`build_id` from the request unconditionally, so an update omitting it produces
+a release running built code with no link back to the build. Server-side
+inheritance is the general fix and is not this client's to make; until it
+lands, omitting it here would quietly empty the build column of every release
+`var set` creates.
+
+Refused when the deployment has never completed a rollout: there is no image to
+re-release, and inventing one from the desired release would ship something
+that has never run.
 
 ## The project file
 

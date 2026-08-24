@@ -3,16 +3,20 @@ from enum import StrEnum
 from typing import Optional, Any
 from uuid import UUID, uuid4
 
-from pydantic import ConfigDict, field_validator, model_validator
+from pydantic import ConfigDict, field_validator, model_serializer, model_validator
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import (
+    BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     Enum as SAEnum,
     ForeignKey,
+    Identity,
     Integer,
     Index,
     JSON,
+    PrimaryKeyConstraint,
     Text,
     String,
     UniqueConstraint,
@@ -298,6 +302,71 @@ class ProductTemplateVersionRead(ProductTemplateVersionBase):
 
 
 # ---------------------------------------------------------------------------
+# Deployment vars: the wire shape
+# ---------------------------------------------------------------------------
+#
+# Declared ahead of the deployment models because the deployment and release
+# read models both carry vars. The tables themselves are further down.
+
+
+class VarWrite(SQLModel):
+    """One entry in a var write.
+
+    `value` is deliberately three-valued, and the three states are all
+    distinct: a string sets it, an explicit `null` deletes the key, and the
+    field being **absent** means "leave this key's value unchanged". The last
+    is what makes a read's output safely writable -- a sensitive var is read
+    back without its `value`, so a client that round-trips the response
+    neither wipes nor re-submits a secret it cannot see.
+
+    Absence is read from `model_fields_set`, so this model must not be
+    constructed with `value=None` to mean "unchanged".
+    """
+
+    value: Optional[str] = None
+    sensitive: Optional[bool] = None
+
+
+class VarsWrite(SQLModel):
+    """The body of a vars write: the same shape every read returns."""
+
+    vars: dict[str, VarWrite] = Field(default_factory=dict)
+
+
+class VarRead(SQLModel):
+    """One var as it is reported. A sensitive var carries no `value`."""
+
+    value: Optional[str] = None
+    sensitive: bool = False
+    updated_at: datetime
+    updated_by: int
+
+    @model_serializer(mode="wrap")
+    def _omit_sensitive_value(self, handler):  # type: ignore[no-untyped-def]
+        """Drop `value` for a sensitive var, structurally.
+
+        Not a mask, which invites a caller to write it back verbatim, and not
+        a null, which is how a caller *deletes* a key -- a client that
+        round-tripped a read would delete every secret it could not read.
+
+        Enforced in the serializer rather than at each call site because the
+        rule has to hold on every read there will ever be: the collection, a
+        single var, a deployment read, a release read.
+        """
+        data = handler(self)
+        if self.sensitive:
+            data.pop("value", None)
+        return data
+
+
+class VarsRead(SQLModel):
+    """A deployment's vars, with whether a rollout would change the pod."""
+
+    vars: dict[str, VarRead] = Field(default_factory=dict)
+    pending: bool = False
+
+
+# ---------------------------------------------------------------------------
 # Deployment
 # ---------------------------------------------------------------------------
 
@@ -473,6 +542,14 @@ _BUILD_ID_FIELD_DESCRIPTION = (
 )
 
 
+_VARS_FIELD_DESCRIPTION = (
+    "Runtime configuration for the pod, in the same shape the vars endpoints "
+    "use. Write-only: it appears on no read model, and a sensitive value "
+    "cannot be read back through any endpoint. Merged into the deployment's "
+    "existing vars, never replacing them."
+)
+
+
 class DeploymentCreate(DeploymentBase):
     model_config = ConfigDict(extra="forbid")
     plan_template_id: int
@@ -480,6 +557,9 @@ class DeploymentCreate(DeploymentBase):
     user_id: Optional[int] = None
     build_id: Optional[UUID] = Field(
         default=None, description=_BUILD_ID_FIELD_DESCRIPTION
+    )
+    vars: dict[str, VarWrite] = Field(
+        default_factory=dict, description=_VARS_FIELD_DESCRIPTION
     )
 
 
@@ -491,6 +571,9 @@ class DeploymentUpdate(SQLModel):
     user_values_json: Optional[dict[str, Any]] = Field(default=None)
     build_id: Optional[UUID] = Field(
         default=None, description=_BUILD_ID_FIELD_DESCRIPTION
+    )
+    vars: dict[str, VarWrite] = Field(
+        default_factory=dict, description=_VARS_FIELD_DESCRIPTION
     )
 
 
@@ -510,6 +593,18 @@ class DeploymentRead(DeploymentBase):
     generation: int = Field(default=1)
     last_error: Optional[str] = None
     last_reconcile_at: Optional[datetime] = None
+    # Head -- the deployment's *desired* runtime configuration, which is what
+    # `user_values_json` beside it reports too. Not the applied release's
+    # snapshot: one response mixing desired chart values with applied runtime
+    # values is the confusion `pending` exists to expose.
+    #
+    # `None` means "not reported", which is what the deployment *list*
+    # returns: head is a query per deployment and no caller reads vars from a
+    # listing. An empty object means the deployment genuinely has none.
+    vars: Optional[dict[str, VarRead]] = None
+    # True when rolling out would change the running pod's environment,
+    # measured against the *applied* release and never the desired one.
+    pending: Optional[bool] = None
 
 
 class SftpCredentialsRead(SQLModel):
@@ -663,6 +758,12 @@ class DeploymentReleaseRead(DeploymentReleaseBase):
     id: UUID
     build_id: Optional[UUID] = None
     values_json: Optional[dict[str, Any]] = None
+    # The vars frozen onto this release when it was created, which is what
+    # makes it reproducible: later writes and deletions do not change it.
+    # `None` means "not reported" -- the release listing answers in one
+    # statement whatever the number of releases, and does not fan out into
+    # each release's snapshot.
+    vars: Optional[dict[str, VarRead]] = None
     created_at: datetime
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
@@ -681,6 +782,106 @@ class DeploymentReleaseWithBuildRead(DeploymentReleaseRead):
     """
 
     build: Optional["BuildRead"] = None
+
+
+# ---------------------------------------------------------------------------
+# Deployment vars
+# ---------------------------------------------------------------------------
+#
+# A var is one entry in a deployment's process environment. The table is
+# append-only: setting a key inserts a row, deleting it inserts a *tombstone*
+# -- a row with no value -- and nothing is ever updated in place except the
+# re-encryption sweep, which rewrites a row's representation and never its
+# plaintext.
+#
+# The effective set ("head") is the newest row per key with the tombstones
+# filtered out (`app/services/vars.py`).
+#
+# `release_var` freezes head onto a release at the moment it is created, which
+# is what makes a release reproducible after later writes and deletions.
+
+
+class DeploymentVarORM(SQLModel, table=True):
+    __tablename__ = "deployment_var"
+    __table_args__ = (
+        CheckConstraint(
+            "(value_encrypted IS NULL) = (key_id IS NULL)",
+            name="ck_deployment_var_tombstone",
+        ),
+        # Head resolution: newest row per key within one deployment.
+        Index("ix_deployment_var_head", "deployment_id", "key", text("id DESC")),
+        # Serves key retirement and the re-encryption sweep.
+        Index("ix_deployment_var_key_id", "key_id"),
+    )
+
+    # `Identity(always=True)` because nothing may choose an id here: head
+    # resolution and the release snapshot both order by it, so the sequence is
+    # the record of what was written after what. SQLite ignores Identity, and
+    # only auto-increments a column typed exactly INTEGER -- hence the variant.
+    id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger().with_variant(Integer, "sqlite"),
+            Identity(always=True),
+            primary_key=True,
+            autoincrement=True,
+        ),
+    )
+    deployment_id: UUID = Field(
+        sa_column=Column(
+            Uuid,
+            ForeignKey("deployment.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    key: str = Field(sa_column=Column(String(64), nullable=False))
+    # NULL is meaningful: it is the tombstone. Never plaintext -- non-sensitive
+    # values are encrypted by the same code path as sensitive ones.
+    value_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text(), nullable=True)
+    )
+    # The fingerprint of the encrypting key (8 hex chars), not its position in
+    # the configured list: keys are introduced by prepending, which would
+    # silently renumber every historical row.
+    key_id: Optional[str] = Field(default=None, sa_column=Column(String(8), nullable=True))
+    # Per row rather than per key, which is what lets a key be flipped to
+    # sensitive by writing a new row.
+    sensitive: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=text("false"))
+    )
+    created_by: int = Field(
+        sa_column=Column(Integer, ForeignKey("user.id"), nullable=False)
+    )
+    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
+
+
+class ReleaseVarORM(SQLModel, table=True):
+    """The var rows a release was created with. Immutable once written.
+
+    No `key` column: it is reachable through the join, and denormalizing it
+    would create a second place for a key name to be wrong.
+    """
+
+    __tablename__ = "release_var"
+    __table_args__ = (
+        PrimaryKeyConstraint("release_id", "var_id"),
+        Index("ix_release_var_var", "var_id"),
+    )
+
+    release_id: UUID = Field(
+        sa_column=Column(
+            Uuid,
+            ForeignKey("deployment_release.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    var_id: int = Field(
+        sa_column=Column(
+            BigInteger().with_variant(Integer, "sqlite"),
+            ForeignKey("deployment_var.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
 
 
 class DeploymentReconcileJobBase(SQLModel):

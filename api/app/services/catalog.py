@@ -37,12 +37,13 @@ from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.models import ProductORM, ProductTemplateVersionORM, ProductVisibility
-from app.services.errors import CaelusException
+from app.services.errors import CaelusException, ValidationException
 from app.services.images import (
     generate_icon_filename,
     process_icon,
     save_icon,
 )
+from app.services.template_values import check_var_markers
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +205,12 @@ class TemplateBlock(CatalogModel):
         # must be caught explicitly or a malformed schema escapes as a crash.
         except SchemaError as exc:
             raise ValueError(f"values_schema is not a valid JSON Schema: {exc.message}") from exc
+        try:
+            # Same rules the API applies to a hand-made template, so a bad
+            # marker fails `catalog lint` in CI rather than on rollout.
+            check_var_markers(v)
+        except ValidationException as exc:
+            raise ValueError(f"values_schema: {exc}") from exc
         return v
 
 

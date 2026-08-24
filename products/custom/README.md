@@ -105,6 +105,29 @@ flag:
 new S3Client({ forcePathStyle: true })     // endpoint/region come from the env
 ```
 
+## Runtime configuration
+
+Whatever vars the deployment has set arrive in the container as environment
+variables. The platform writes them into a Secret named
+`<release>-vars-<number>` in the deployment's own namespace before Helm runs,
+and passes the chart only the Secret's *name* under `caelus.vars.secretName` —
+values never travel through the Helm values, which are logged in full and
+persisted into a tenant-namespace object.
+
+One Secret per rollout, so a failed deploy that rolls back leaves the previous
+one intact; superseded Secrets are removed after the next successful deploy.
+
+A deployment with no vars gets no Secret and no `envFrom` source at all, rather
+than an empty one.
+
+**The platform's variables win.** The vars Secret is the *first* `envFrom`
+source, with the object-storage credentials after it, and `PORT` is set as an
+explicit `env` entry — which outranks every `envFrom` source. So a var that
+happens to be named `AWS_SECRET_ACCESS_KEY` cannot displace the real
+credential. The API also refuses to store a var under the `CAELUS_`, `AWS_`,
+`S3_` or `RAILPACK_` prefixes, or named `BUCKET_NAME` or `PORT`; the ordering
+is the second line of defense, because the two fail differently.
+
 ## The ownership assertion
 
 `custom.imageRef` in

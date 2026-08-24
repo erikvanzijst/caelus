@@ -85,6 +85,16 @@ resource "kubernetes_deployment" "worker" {
             }
           }
 
+          # The same keyring the API holds, and it must be the same: the worker
+          # decrypts the release snapshot the API encrypted. A worker missing a
+          # key the API is already writing with fails every rollout -- which is
+          # what makes introducing a key two-phase (see variables.tf).
+          env_from {
+            secret_ref {
+              name = kubernetes_secret.var_keys.metadata[0].name
+            }
+          }
+
           volume_mount {
             name       = "sqlite-data"
             mount_path = "/app/db"

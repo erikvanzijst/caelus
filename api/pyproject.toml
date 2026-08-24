@@ -16,6 +16,7 @@ dependencies = [
   "uvicorn[standard]>=0.27",
   "alembic>=1.13",
   "jsonschema>=4.0",
+  "cryptography>=43.0",
   "psycopg[binary]>=3.1",
   "asyncpg>=0.29",
   "pydantic-settings>=2.0",

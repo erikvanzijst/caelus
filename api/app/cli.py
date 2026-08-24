@@ -281,6 +281,9 @@ def update_product(
         "--visibility",
         help="Publish the product to end users ('public') or withdraw it ('admin').",
     ),
+    icon: Path | None = typer.Option(
+        None, "--icon", help="Path to a product icon image. Replaces any existing icon."
+    ),
     force: bool = typer.Option(
         False,
         "--force",
@@ -290,6 +293,7 @@ def update_product(
     with session_scope() as session:
         actor = _require_cli_user(session)
         try:
+            icon_data = icon.read_bytes() if icon is not None else None
             product = product_service.update_product(
                 session,
                 product=ProductUpdate(
@@ -300,6 +304,7 @@ def update_product(
                     replaces=replaces,
                     visibility=visibility,
                 ),
+                icon_data=icon_data,
                 actor=actor,
                 force=force,
             )

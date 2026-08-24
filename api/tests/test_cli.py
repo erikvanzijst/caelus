@@ -1421,3 +1421,73 @@ def test_cli_list_deployments_all_forbidden_for_non_admin(cli_runner):
     result = runner.invoke(app, ["list-deployments", "--all"])
     assert result.exit_code == 1
     assert "admin" in result.output.lower()
+
+
+def test_cli_update_product_sets_icon(cli_runner, tmp_path):
+    """`update-product --icon` sets an icon on a product created without one.
+
+    Mirrors PUT /api/products/{id}/icon, which the CLI previously had no
+    equivalent for.
+    """
+    runner, app = cli_runner
+
+    create_res = runner.invoke(app, ["create-product", "late-icon", "no icon yet"])
+    assert create_res.exit_code == 0
+    product = _parse_yaml_stdout(create_res)
+    assert product["icon_url"] is None
+
+    icon_path = tmp_path / "late_icon.png"
+    Image.new("RGB", (100, 100), color="blue").save(icon_path)
+
+    update_res = runner.invoke(
+        app, ["update-product", str(product["id"]), "--icon", str(icon_path)]
+    )
+    assert update_res.exit_code == 0
+    updated = _parse_yaml_stdout(update_res)
+    assert updated["icon_url"] is not None
+    assert "/api/static/icons/" in updated["icon_url"]
+
+
+def test_cli_update_product_replaces_icon(cli_runner, tmp_path):
+    """A second `--icon` replaces the first: the icon_url is content-addressed."""
+    runner, app = cli_runner
+
+    first = tmp_path / "first.png"
+    Image.new("RGB", (100, 100), color="red").save(first)
+    create_res = runner.invoke(
+        app, ["create-product", "swap-icon", "desc", "--icon", str(first)]
+    )
+    assert create_res.exit_code == 0
+    product = _parse_yaml_stdout(create_res)
+    original_url = product["icon_url"]
+    assert original_url is not None
+
+    second = tmp_path / "second.png"
+    Image.new("RGB", (100, 100), color="green").save(second)
+    update_res = runner.invoke(
+        app, ["update-product", str(product["id"]), "--icon", str(second)]
+    )
+    assert update_res.exit_code == 0
+    assert _parse_yaml_stdout(update_res)["icon_url"] != original_url
+
+
+def test_cli_update_product_without_icon_keeps_existing(cli_runner, tmp_path):
+    """Omitting --icon leaves the existing icon alone rather than clearing it."""
+    runner, app = cli_runner
+
+    icon_path = tmp_path / "keep.png"
+    Image.new("RGB", (100, 100), color="red").save(icon_path)
+    create_res = runner.invoke(
+        app, ["create-product", "keep-icon", "desc", "--icon", str(icon_path)]
+    )
+    assert create_res.exit_code == 0
+    product = _parse_yaml_stdout(create_res)
+    original_url = product["icon_url"]
+
+    update_res = runner.invoke(
+        app, ["update-product", str(product["id"]), "--description", "new desc"]
+    )
+    assert update_res.exit_code == 0
+    updated = _parse_yaml_stdout(update_res)
+    assert updated["description"] == "new desc"
+    assert updated["icon_url"] == original_url

@@ -222,7 +222,7 @@ describe('a sensitive var field', () => {
     })
   })
 
-  it('offers no reveal control', () => {
+  it('offers no reveal control while empty', () => {
     render(
       <UserValuesForm
         valuesSchemaJson={MIXED_SCHEMA}
@@ -234,7 +234,53 @@ describe('a sensitive var field', () => {
       { wrapper: Wrapper },
     )
 
-    // The value was never sent to the browser, so there is nothing to reveal.
+    // The stored value was never sent to the browser, so there is nothing to
+    // reveal until the user types something of their own.
+    expect(screen.queryByLabelText(/show|reveal/i)).toBeNull()
+  })
+
+  it('reveals what the user typed, and hides it again', () => {
+    render(
+      <UserValuesForm
+        valuesSchemaJson={MIXED_SCHEMA}
+        initialValuesJson={{ host: 'app.example.test' }}
+        initialVars={currentVars}
+        onChange={vi.fn()}
+        onVarsChange={vi.fn()}
+      />,
+      { wrapper: Wrapper },
+    )
+
+    const input = screen.getByLabelText('Admin token') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'rotated' } })
+
+    fireEvent.click(screen.getByLabelText('Show password'))
+    expect(input.type).toBe('text')
+    expect(input.value).toBe('rotated')
+
+    fireEvent.click(screen.getByLabelText('Hide password'))
+    expect(input.type).toBe('password')
+  })
+
+  it('re-masks a field that is cleared after being revealed', () => {
+    render(
+      <UserValuesForm
+        valuesSchemaJson={MIXED_SCHEMA}
+        initialValuesJson={{ host: 'app.example.test' }}
+        initialVars={currentVars}
+        onChange={vi.fn()}
+        onVarsChange={vi.fn()}
+      />,
+      { wrapper: Wrapper },
+    )
+
+    const input = screen.getByLabelText('Admin token') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'rotated' } })
+    fireEvent.click(screen.getByLabelText('Show password'))
+    fireEvent.change(input, { target: { value: '' } })
+
+    // Whatever is typed next starts masked again.
+    expect(input.type).toBe('password')
     expect(screen.queryByLabelText(/show|reveal/i)).toBeNull()
   })
 

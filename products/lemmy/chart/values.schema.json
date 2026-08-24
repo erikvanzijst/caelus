@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Caelus Lemmy chart values",
+  "type": "object",
+  "properties": {
+    "host": { "type": "string", "title": "hostname", "minLength": 1, "maxLength": 253 },
+    "siteName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "description": "Instance name. Lemmy rejects anything longer than 20 characters."
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      },
+      "additionalProperties": false
+    },
+    "lemmy": {
+      "type": "object",
+      "properties": {
+        "poolSize": { "type": "integer", "minimum": 1 },
+        "rustLog": { "type": "string" },
+        "concurrentSendsPerInstance": { "type": "integer", "minimum": 1 },
+        "resources": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          },
+          "additionalProperties": false
+        },
+        "resources": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "admin": {
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "minLength": 3, "maxLength": 20 },
+        "password": {
+          "type": "string",
+          "description": "Empty auto-generates a stable password; Lemmy requires 10-60 characters when set."
+        },
+        "email": { "type": "string" }
+      },
+      "required": ["username"],
+      "additionalProperties": false
+    },
+    "pictrs": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          },
+          "required": ["repository", "tag", "pullPolicy"],
+          "additionalProperties": false
+        },
+        "apiKey": { "type": "string", "description": "Empty auto-generates a stable key" },
+        "imageMode": { "type": "string", "enum": ["None", "StoreLinkPreviews", "ProxyAllImages"] },
+        "media": {
+          "type": "object",
+          "properties": {
+            "videoEnabled": { "type": "boolean" },
+            "maxAnimationWidth": { "type": "integer", "minimum": 1 },
+            "maxAnimationHeight": { "type": "integer", "minimum": 1 },
+            "maxAnimationArea": { "type": "integer", "minimum": 1 },
+            "maxAnimationFrameCount": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] },
+            "size": { "type": "string", "minLength": 1 },
+            "storageClassName": { "type": "string" }
+          },
+          "required": ["accessMode", "size", "storageClassName"],
+          "additionalProperties": false
+        },
+        "resources": { "type": "object" }
+      },
+      "required": ["image", "persistence"],
+      "additionalProperties": false
+    },
+    "proxy": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          },
+          "required": ["repository", "tag", "pullPolicy"],
+          "additionalProperties": false
+        },
+        "maxUploadSize": { "type": "string", "pattern": "^[0-9]+[kKmMgG]?$" },
+        "trustedProxies": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Reverse-proxy source IPs/CIDRs trusted for X-Forwarded-For"
+        },
+        "resources": { "type": "object" }
+      },
+      "required": ["image"],
+      "additionalProperties": false
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "required": ["enabled", "className"],
+      "additionalProperties": false
+    },
+    "smtp": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer" },
+        "fromAddress": { "type": "string" },
+        "tlsType": { "type": "string", "enum": ["none", "tls", "starttls"] },
+        "username": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "postgresql": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "host": { "type": "string", "description": "Empty uses the bundled StatefulSet's Service" },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          },
+          "required": ["repository", "tag", "pullPolicy"],
+          "additionalProperties": false
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "username": { "type": "string", "minLength": 1 },
+            "password": { "type": "string", "description": "Empty auto-generates a stable password; set a value to pin one" },
+            "database": { "type": "string", "minLength": 1 }
+          },
+          "required": ["username", "password", "database"],
+          "additionalProperties": false
+        },
+        "shmSize": { "type": "string", "minLength": 1 },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] },
+            "size": { "type": "string", "minLength": 1 },
+            "storageClassName": { "type": "string" }
+          },
+          "required": ["accessMode", "size", "storageClassName"],
+          "additionalProperties": false
+        },
+        "resources": { "type": "object" }
+      },
+      "required": ["enabled", "image", "auth", "persistence"],
+      "additionalProperties": false
+    },
+    "caelus": {
+      "type": "object",
+      "description": "Reconciler-injected values. Open by design (additionalProperties: true throughout): this namespace is written by the platform, never by a tenant, so new reconciler fields can land without a schema bump in every chart.",
+      "properties": {
+        "plan": {
+          "type": "object",
+          "properties": {
+            "storageBytes": { "type": "integer" },
+            "storageSize": { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "owner": {
+          "type": "object",
+          "description": "Deployment owner, injected by the Caelus reconciler",
+          "properties": { "email": { "type": "string" } },
+          "additionalProperties": true
+        },
+        "vars": {
+          "type": "object",
+          "description": "Per-release runtime vars Secret, injected by the reconciler",
+          "properties": { "secretName": { "type": "string" } },
+          "additionalProperties": true
+        },
+        "ingress": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "host": { "type": "string" },
+            "tls": {
+              "type": "object",
+              "properties": {
+                "wildcard": { "type": "boolean" },
+                "issuer": { "type": "string" },
+                "secretName": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["host", "pictrs", "proxy", "postgresql"],
+  "additionalProperties": false
+}

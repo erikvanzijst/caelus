@@ -1,0 +1,28 @@
+Lemmy has been installed.
+
+Public host: https://{{ .Values.host }}
+
+Quick checks:
+- curl https://{{ .Values.host }}/.well-known/nodeinfo
+- curl -H 'Accept: application/activity+json' https://{{ .Values.host }}/
+  (must return JSON from the backend, not HTML -- if you get HTML, federation is broken)
+
+First admin login:
+- username: {{ .Values.admin.username }}
+{{- if .Values.caelus.vars.secretName }}
+- password: the one supplied at deploy time as the LEMMY_ADMIN_PASSWORD var.
+  It is write-only and cannot be read back from the platform or the cluster.
+  If it is lost, reset it from Lemmy's own settings page while still logged in,
+  or through the database.
+{{- else }}
+- password: kubectl -n {{ .Release.Namespace }} get secret {{ .Release.Name }}-secrets \
+    -o jsonpath='{.data.admin-password}' | base64 -d; echo
+{{- end }}
+
+Notes:
+- `host` is baked into every federated actor URL. Changing it after the instance
+  has federated orphans the old identity; treat it as permanent.
+- The admin password seeds the account on first start only. Changing it later
+  has no effect on an initialised instance -- use Lemmy's settings page.
+- Single replica per component by design: the backend's federation workers and
+  pict-rs's sled index both assume one writer.

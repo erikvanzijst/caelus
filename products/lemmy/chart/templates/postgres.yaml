@@ -1,0 +1,114 @@
+{{- if .Values.postgresql.enabled }}
+{{- /*
+Lean bundled PostgreSQL on the official postgres image: a headless Service and a
+StatefulSet with a volumeClaimTemplate. Credentials come from the shared
+<release>-secrets Secret (see secrets.yaml). A StatefulSet is the right
+controller for a stateful datastore (stable identity + PVC lifecycle).
+
+Upstream's lemmy-ansible ships pgautoupgrade so a major-version bump migrates
+itself. This chart deliberately uses the stock image instead, matching the other
+Caelus charts: the operator pins the tag, and a major bump is a dump/restore
+rather than something that happens silently on a pod restart.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgresql
+  labels:
+    {{- include "lemmy.labels" . | nindent 4 }}
+spec:
+  # Headless: the StatefulSet's governing service and the backend's DB endpoint.
+  # A single replica needs no separate ClusterIP.
+  clusterIP: None
+  selector:
+    {{- include "lemmy.componentSelector" (dict "root" . "name" "postgresql") | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgresql
+  labels:
+    {{- include "lemmy.componentLabels" (dict "root" . "name" "postgresql") | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ .Release.Name }}-postgresql
+  selector:
+    matchLabels:
+      {{- include "lemmy.componentSelector" (dict "root" . "name" "postgresql") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "lemmy.componentSelector" (dict "root" . "name" "postgresql") | nindent 8 }}
+    spec:
+      containers:
+        - name: postgresql
+          image: {{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: {{ .Release.Name }}-secrets, key: POSTGRES_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Release.Name }}-secrets, key: POSTGRES_PASSWORD }
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef: { name: {{ .Release.Name }}-secrets, key: POSTGRES_DB }
+            # PGDATA is a subdir of the mount so the PVC root (with lost+found) is
+            # never PGDATA directly.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: dshm
+              mountPath: /dev/shm
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          {{- with .Values.postgresql.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        # Kubernetes gives a container a 64Mi /dev/shm, which is too small for
+        # Postgres's parallel query workers under Lemmy's load ("could not resize
+        # shared memory segment"). An in-memory emptyDir is the standard fix and
+        # the equivalent of compose's shm_size.
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.postgresql.shmSize }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - {{ .Values.postgresql.persistence.accessMode }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.persistence.size }}
+        {{- if .Values.postgresql.persistence.storageClassName }}
+        storageClassName: {{ .Values.postgresql.persistence.storageClassName }}
+        {{- end }}
+{{- end }}

@@ -1,0 +1,142 @@
+# Bespoke Lemmy chart values.
+
+# Public hostname. Becomes the ingress rule host, Lemmy's `hostname` (which is
+# baked into every federated actor URL and is NOT safe to change after the first
+# federated activity), and the UI's external host.
+host: "lemmy.local"
+
+# Instance name shown in the UI. Lemmy caps this at 20 characters.
+siteName: "Lemmy"
+
+# Lemmy backend (Rust API + federation worker).
+image:
+  repository: docker.io/dessalines/lemmy
+  # Tag defaults to the chart appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+lemmy:
+  # Postgres connections held by the backend. Upstream defaults to 30; 10 suits
+  # a single-tenant instance and keeps the shared-memory footprint modest.
+  poolSize: 10
+  rustLog: "warn"
+  # Concurrent outgoing federation requests per target instance. Upstream advises
+  # raising this above 1 only for instances doing >10 activities/second.
+  concurrentSendsPerInstance: 1
+  resources: {}
+
+# Server-side-rendered frontend.
+ui:
+  image:
+    repository: docker.io/dessalines/lemmy-ui
+    # Tag defaults to the chart appVersion; keep it in lockstep with the backend.
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources: {}
+
+# Admin account seeded on first start only (Lemmy's `setup` block). Changing
+# these after the instance is initialised has no effect.
+admin:
+  username: lemmy
+  # Standalone installs only. Under Caelus the tenant supplies the password as
+  # the LEMMY_ADMIN_PASSWORD runtime var, which never reaches Helm values.
+  # Empty = generate a strong password on first install and reuse it from the
+  # <release>-secrets Secret on upgrade. Lemmy requires 10-60 characters.
+  password: ""
+  email: ""
+
+# pict-rs: the media/thumbnail store. Owns its own PVC and is the volume the
+# plan storage quota applies to.
+pictrs:
+  image:
+    repository: docker.io/asonix/pictrs
+    tag: "0.5.24"
+    pullPolicy: IfNotPresent
+  # Empty = generate on first install and reuse from the Secret. Shared with the
+  # backend, which needs it to delete images.
+  apiKey: ""
+  # None | StoreLinkPreviews | ProxyAllImages. ProxyAllImages hides tenant IPs
+  # from remote hosts at the cost of bandwidth and storage.
+  imageMode: StoreLinkPreviews
+  media:
+    videoEnabled: true
+    maxAnimationWidth: 256
+    maxAnimationHeight: 256
+    maxAnimationArea: 65536
+    maxAnimationFrameCount: 400
+  persistence:
+    accessMode: ReadWriteOnce
+    size: 20Gi
+    storageClassName: ""
+  resources: {}
+
+# nginx routing proxy. Mandatory: Lemmy splits a single hostname across two
+# backends by HTTP verb and Accept header, which a plain Ingress cannot express.
+proxy:
+  image:
+    repository: docker.io/library/nginx
+    tag: "1.29-alpine"
+    pullPolicy: IfNotPresent
+  # Upload ceiling. Keep at or below pict-rs's own 40MB per-file limit.
+  maxUploadSize: "20M"
+  # Source ranges whose X-Forwarded-For is trusted (the cluster pod CIDR).
+  trustedProxies:
+    - "10.42.0.0/16"
+  resources: {}
+
+# Wrapper ingress. TLS injected per-deployment by the Caelus reconciler.
+ingress:
+  enabled: true
+  className: traefik
+  annotations: {}
+
+# Cluster-internal SMTP relay. Leave host empty to disable mail entirely
+# (Lemmy then cannot send verification or password-reset messages).
+smtp:
+  host: "smtp.mailer.svc.cluster.local"
+  port: 25
+  fromAddress: "noreply@freepod.eu"
+  # none | tls | starttls
+  tlsType: "none"
+  username: ""
+  password: ""
+
+# Bundled PostgreSQL: a lean StatefulSet on the official postgres image.
+postgresql:
+  # Render the bundled StatefulSet. Set to false only together with `host`
+  # below, pointing at an external Postgres.
+  enabled: true
+  # Database host. Empty = the bundled StatefulSet's Service.
+  host: ""
+  image:
+    repository: docker.io/library/postgres
+    tag: "17-alpine"
+    pullPolicy: IfNotPresent
+  auth:
+    username: lemmy
+    # Empty = auto-generate a strong password on first install and reuse it from
+    # the <release>-secrets Secret on upgrade. Set a literal value only to pin one.
+    password: ""
+    database: lemmy
+  # /dev/shm for Postgres. The 64Mi Kubernetes default provokes "could not resize
+  # shared memory segment" under Lemmy's parallel queries; upstream sets 2g on
+  # large instances. Counts against the pod's memory.
+  shmSize: 256Mi
+  persistence:
+    accessMode: ReadWriteOnce
+    size: 16Gi
+    storageClassName: ""
+  resources: {}
+
+# Plan- and TLS-related values are injected per-deployment by the Caelus reconciler
+# (caelus.plan.*, caelus.ingress.tls). These defaults let the chart render standalone
+# (helm template / lint): plan is empty so the PVC falls back to the storage size above.
+caelus:
+  plan: {}
+  ingress:
+    enabled: false
+    tls: {}
+  # Name of the per-release Secret holding the deployment's runtime vars. The
+  # platform injects it; empty here so a standalone install falls back to the
+  # chart-generated admin password.
+  vars: {}

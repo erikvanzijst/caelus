@@ -44,7 +44,6 @@ class UserORM(UserBase, table=True):
             "uq_user_active",
             func.lower(Column("email")),
             unique=True,
-            sqlite_where=Column("deleted_at").is_(None),
             postgresql_where=Column("deleted_at").is_(None),
         ),
     )
@@ -140,14 +139,12 @@ class ProductORM(ProductBase, table=True):
             "uq_product_name_active",
             func.lower(Column("name")),
             unique=True,
-            sqlite_where=Column("deleted_at").is_(None),
             postgresql_where=Column("deleted_at").is_(None),
         ),
         Index(
             "uq_product_slug_active",
             "slug",
             unique=True,
-            sqlite_where=Column("deleted_at").is_(None),
             postgresql_where=Column("deleted_at").is_(None),
         ),
     )
@@ -392,14 +389,12 @@ class DeploymentORM(DeploymentBase, table=True):
             func.lower(Column("hostname")),
             "desired_template_id",
             unique=True,
-            sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
             postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
         ),
         Index(
             "uq_hostname_active",
             func.lower(Column("hostname")),
             unique=True,
-            sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
             postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
         ),
         Index(
@@ -407,7 +402,6 @@ class DeploymentORM(DeploymentBase, table=True):
             "namespace",
             "name",
             unique=True,
-            sqlite_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
             postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
         ),
     )
@@ -521,12 +515,14 @@ class DeploymentORM(DeploymentBase, table=True):
     applied_template: Optional[ProductTemplateVersionORM] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "DeploymentORM.applied_template_id", "lazy": "joined"}
     )
-    subscription_id: Optional[int] = Field(
-        default=None,
+    # NOT NULL since the pricing/billing revision: every deployment is billed
+    # through a subscription. The model said Optional for a long time, which
+    # only ever described the old test schema, never the real one.
+    subscription_id: int = Field(
         sa_column=Column(
             Integer,
             ForeignKey("subscription.id"),
-            nullable=True,
+            nullable=False,
             index=True,
         ),
     )
@@ -822,12 +818,11 @@ class DeploymentVarORM(SQLModel, table=True):
 
     # `Identity(always=True)` because nothing may choose an id here: head
     # resolution and the release snapshot both order by it, so the sequence is
-    # the record of what was written after what. SQLite ignores Identity, and
-    # only auto-increments a column typed exactly INTEGER -- hence the variant.
+    # the record of what was written after what.
     id: Optional[int] = Field(
         default=None,
         sa_column=Column(
-            BigInteger().with_variant(Integer, "sqlite"),
+            BigInteger(),
             Identity(always=True),
             primary_key=True,
             autoincrement=True,
@@ -883,7 +878,7 @@ class ReleaseVarORM(SQLModel, table=True):
     )
     var_id: int = Field(
         sa_column=Column(
-            BigInteger().with_variant(Integer, "sqlite"),
+            BigInteger(),
             ForeignKey("deployment_var.id", ondelete="CASCADE"),
             nullable=False,
         )
@@ -911,7 +906,6 @@ class DeploymentReconcileJobORM(DeploymentReconcileJobBase, table=True):
             "uq_open_reconcile_job_per_deployment",
             "deployment_id",
             unique=True,
-            sqlite_where=Column("status").in_(("queued", "running")),
             postgresql_where=Column("status").in_(("queued", "running")),
         ),
     )

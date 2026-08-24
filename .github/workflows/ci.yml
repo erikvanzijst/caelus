@@ -94,9 +94,7 @@ jobs:
           # Image name for caching; not pushed
           imageName: ghcr.io/${{ github.repository }}-devcontainer
           push: never
-          # Command to install dependencies and run tests inside container
           runCmd: |
             cd api
             uv sync
-            uv run alembic upgrade head
             uv run pytest -s

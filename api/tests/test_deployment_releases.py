@@ -3,9 +3,8 @@
 Covers the write-path half — that every create and update mints exactly one
 release, that a rejected write mints none, how a named build is validated, and
 how status derives. The reconciler's half lives in the reconcile tests, and the
-insert ordering the deferred foreign key permits is exercised against a real
-Postgres in test_deployment_release_postgres.py, because SQLite enforces no
-foreign keys at all and would pass either way.
+insert ordering the deferred foreign key permits is exercised in
+test_deployment_release_ledger.py.
 """
 
 from datetime import UTC, datetime, timedelta

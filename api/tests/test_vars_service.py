@@ -260,9 +260,9 @@ def test_e6_the_reverse_flip_requires_a_new_value(open_env):
 def test_e9_a_var_write_during_a_rollout_is_staged_for_the_next_release(env):
     """E9: a staged write while a rollout is in flight is legal.
 
-    Ordering is the deployment row lock's job, which SQLite cannot exercise;
-    what is asserted here is the consequence -- the write lands, the in-flight
-    release's snapshot does not change, and the next release picks it up.
+    Ordering is the deployment row lock's job; what is asserted here is the
+    consequence -- the write lands, the in-flight release's snapshot does not
+    change, and the next release picks it up.
     """
     session = env["session"]
     _write(env, {"LOG_LEVEL": VarWrite(value="info")})

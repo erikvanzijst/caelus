@@ -1,30 +1,248 @@
-import pytest
+"""Suite-wide fixtures, and the PostgreSQL test database the suite owns.
+
+The suite runs against a real PostgreSQL database -- there is no in-memory
+mode and no skip path. The database is created if missing, migrated once per
+session with the real Alembic chain (so model/migration drift is a hard
+failure rather than an invisible one), and reset to empty before every test.
+
+See openspec/changes/drop-sqlite-support/design.md for why the reset is
+DELETE rather than TRUNCATE, and why isolation is not rollback-per-test.
+"""
+
+import os
+import subprocess
 import sys
-import importlib
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from cryptography.fernet import Fernet
-from starlette.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session
-from typer.testing import CliRunner
+import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from app.config import get_settings
-from app.db import get_session, init_db
-from app.deps import get_payment_provider
-from app.main import app
-from app.models import (
+API_ROOT = Path(__file__).resolve().parents[1]
+ALEMBIC_BIN = str(Path(sys.executable).parent / "alembic")
+
+_NO_URL = """\
+CAELUS_TEST_DATABASE_URL is not set.
+
+The API test suite requires a reachable PostgreSQL server; it has no
+in-memory mode. Inside the devcontainer the variable is set for you by
+docker-compose.yml. Outside it:
+
+    docker compose up -d postgres
+    export CAELUS_TEST_DATABASE_URL=postgresql+psycopg://caelus:caelus@localhost:5432/caelus_test
+
+The connecting user must hold CREATEDB (or be a superuser): the suite
+creates and migrates the test database itself.
+"""
+
+
+def _resolve_test_database_url() -> str:
+    """Resolve the test database URL, or fail the run with an explanation."""
+    raw = os.environ.get("CAELUS_TEST_DATABASE_URL")
+    if not raw:
+        raise pytest.UsageError(_NO_URL)
+    if not make_url(raw).database:
+        raise pytest.UsageError(
+            f"CAELUS_TEST_DATABASE_URL names no database: {raw!r}"
+        )
+    return raw
+
+
+TEST_DATABASE_URL = _resolve_test_database_url()
+
+# Point every engine in the process at the test database *before* any app
+# module is imported. `app.db.get_engine()`, the `caelus` CLI, and the Alembic
+# subprocess all resolve their URL from this one variable, so this single
+# assignment is what keeps the suite off the dev database -- and what removed
+# the `importlib.reload(app.db)` ritual the CLI fixture used to need.
+os.environ["CAELUS_DATABASE_URL"] = TEST_DATABASE_URL
+
+from cryptography.fernet import Fernet  # noqa: E402
+from starlette.testclient import TestClient  # noqa: E402
+from sqlmodel import Session  # noqa: E402
+from typer.testing import CliRunner  # noqa: E402
+
+from app.config import get_settings  # noqa: E402
+from app.db import get_session  # noqa: E402
+from app.deps import get_payment_provider  # noqa: E402
+from app.main import app  # noqa: E402
+from app.models import (  # noqa: E402
     UserORM,
     PlanORM,
     PlanTemplateVersionORM,
+    ProductTemplateVersionORM,
+    SubscriptionORM,
     BillingInterval,
     DeploymentORM,
     DeploymentReleaseORM,
 )
-from app.models.core import _utcnow
-from app.services.mollie import FakePaymentProvider
+from app.models.core import _utcnow  # noqa: E402
+from app.services.mollie import FakePaymentProvider  # noqa: E402
+
+# ── The test database ──────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class TestDatabase:
+    """The migrated test database, plus what has to be emptied between tests."""
+
+    engine: Engine
+    tables: tuple[str, ...]
+    sequences: tuple[str, ...]
+
+
+def _admin_url(url: str) -> str:
+    """The same server, addressed through the always-present `postgres` db."""
+    return make_url(url).set(database="postgres").render_as_string(hide_password=False)
+
+
+def _ensure_database_exists(url: str) -> None:
+    """Create the test database if it is not there yet. Idempotent."""
+    target = make_url(url).database
+    admin = create_engine(_admin_url(url), isolation_level="AUTOCOMMIT")
+    try:
+        with admin.connect() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :name"),
+                {"name": target},
+            ).scalar()
+            if not exists:
+                conn.execute(text(f'CREATE DATABASE "{target}"'))
+    except OperationalError as exc:
+        raise pytest.UsageError(
+            f"Cannot reach the PostgreSQL server for {url!r}.\n\n{exc}\n\n"
+            "Is it running? Inside the devcontainer: `docker compose up -d postgres`."
+        ) from exc
+    except ProgrammingError as exc:
+        raise pytest.UsageError(
+            f"Cannot create the test database {target!r}.\n\n{exc}\n\n"
+            "The connecting user needs CREATEDB (or superuser)."
+        ) from exc
+    finally:
+        admin.dispose()
+
+
+def _migrate(url: str) -> None:
+    """Bring the test database to head with the real chain, as a subprocess.
+
+    Not `alembic.command.upgrade`: the repo's own `alembic/` package shadows
+    the installed distribution whenever `api/` is on `sys.path`, which it
+    always is under pytest. Running the console script from `api/` is the
+    pattern the migration tests already use.
+    """
+    result = subprocess.run(
+        [ALEMBIC_BIN, "upgrade", "head"],
+        cwd=API_ROOT,
+        env={**os.environ, "CAELUS_DATABASE_URL": url},
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise pytest.UsageError(
+            "`alembic upgrade head` failed against the test database.\n\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
+
+
+def _snapshot(engine: Engine) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """List what the per-test reset has to empty.
+
+    Restricted to the `public` schema: the migration tests create throwaway
+    schemas in this same database and manage them themselves. `alembic_version`
+    is excluded so migration state survives between tests.
+
+    Sequences come from `pg_sequences` rather than a hand-written list because
+    `deployment_var.id` is GENERATED ALWAYS AS IDENTITY, not a serial, and a
+    serial-only list would silently miss it.
+    """
+    with engine.connect() as conn:
+        tables = tuple(
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_type = 'BASE TABLE' "
+                    "AND table_name <> 'alembic_version' "
+                    "ORDER BY table_name"
+                )
+            )
+        )
+        sequences = tuple(
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT sequencename FROM pg_sequences "
+                    "WHERE schemaname = 'public' ORDER BY sequencename"
+                )
+            )
+        )
+    if not tables:
+        raise pytest.UsageError(
+            "The test database has no tables after migrating -- the Alembic "
+            "chain did not apply."
+        )
+    return tables, sequences
+
+
+def _assert_not_dev_database() -> None:
+    """Fail loudly if anything in this run would reach the dev database.
+
+    Every engine resolves its URL from `CAELUS_DATABASE_URL`, which this module
+    pins to the test database at import time. If settings still disagree, some
+    other source won -- and CI no longer migrates the dev database, so the
+    failure would otherwise surface as an obscure "relation does not exist".
+    """
+    get_settings.cache_clear()
+    resolved = get_settings().database_url
+    if make_url(resolved).database != make_url(TEST_DATABASE_URL).database:
+        raise pytest.UsageError(
+            "Database settings do not resolve to the test database.\n"
+            f"  expected: {TEST_DATABASE_URL}\n"
+            f"  resolved: {resolved}\n"
+            "Something is overriding CAELUS_DATABASE_URL after conftest set it."
+        )
+
+
+def _reset(db: TestDatabase) -> None:
+    """Return the database to empty, on its own connection.
+
+    `session_replication_role = replica` suppresses FK triggers for this
+    connection, which is what makes the DELETEs order-independent. That is not
+    a nicety: the metadata has an unresolvable cycle among plan /
+    plan_template_version / product / product_template_version, so no
+    topological order exists to sort by.
+    """
+    with db.engine.connect() as conn:
+        conn.execute(text("SET session_replication_role = replica"))
+        for table in db.tables:
+            conn.execute(text(f'DELETE FROM "{table}"'))
+        for sequence in db.sequences:
+            conn.execute(text(f'ALTER SEQUENCE "{sequence}" RESTART'))
+        conn.execute(text("SET session_replication_role = origin"))
+        conn.commit()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def test_database() -> TestDatabase:
+    """Create, migrate and snapshot the test database once for the whole run.
+
+    Autouse so that a run with no reachable PostgreSQL fails immediately and
+    for the whole session, rather than only when the first database-backed
+    test happens to be collected.
+    """
+    _ensure_database_exists(TEST_DATABASE_URL)
+    _migrate(TEST_DATABASE_URL)
+    _assert_not_dev_database()
+    engine = create_engine(TEST_DATABASE_URL)
+    tables, sequences = _snapshot(engine)
+    try:
+        yield TestDatabase(engine=engine, tables=tables, sequences=sequences)
+    finally:
+        engine.dispose()
+
 
 # The current ToS version, used to pre-accept test users so deployment tests
 # (which now require prior acceptance) work without threading acceptance through
@@ -76,44 +294,59 @@ def _hermetic_hostname_settings(monkeypatch):
 
 
 @pytest.fixture
-def db_session():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        echo=True,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    init_db(engine)
-    with Session(engine) as session:
+def db_session(test_database):
+    """A session on the shared test database, which starts this test empty."""
+    _reset(test_database)
+    with Session(test_database.engine) as session:
         yield session
 
 
 @pytest.fixture()
-def cli_runner(tmp_path, monkeypatch):
-    project_root = Path(__file__).resolve().parents[1]
-    sys.path.append(str(project_root))
-    # Use a temporary file-based SQLite DB for isolation
-    # TODO: Refactor this to use sqlite:///:memory:
-    db_path = tmp_path / "test_cli.db"
-    # Ensure a clean DB file
-    if db_path.exists():
-        db_path.unlink()
-    monkeypatch.setenv("CAELUS_DATABASE_URL", f"sqlite:///{db_path}")
+def cli_runner(test_database, monkeypatch):
+    """The `caelus` CLI, pointed at the same clean test database.
+
+    No `importlib.reload(app.db)` any more: `CAELUS_DATABASE_URL` is pinned to
+    the test database for the whole process at conftest import, and the engine
+    is built lazily, so the CLI resolves the right database on its own.
+    """
+    _reset(test_database)
     monkeypatch.setenv("CAELUS_USER_EMAIL", "cli-test@example.com")
-
-    from app.config import get_settings
-    get_settings.cache_clear()
-
-    import app.db as db
-
-    importlib.reload(db)
-    init_db(db.engine)
 
     import app.cli as cli
 
-    importlib.reload(cli)
-
     return CliRunner(), cli.app
+
+
+def make_free_subscription(session: Session, *, user_id: int, product_id: int) -> int:
+    """A free plan + subscription to hang a hand-built deployment off.
+
+    `deployment.subscription_id` is NOT NULL -- every deployment is billed
+    through a subscription, and `create_deployment` always makes one. Tests
+    that hand-build a deployment rarely care *which* subscription, only that
+    there is one, so this builds the cheapest valid pair. Flushes rather than
+    commits, so the caller keeps control of the transaction.
+    """
+    plan = PlanORM(
+        name=f"free-{uuid4().hex[:8]}", product_id=product_id, created_at=_utcnow()
+    )
+    session.add(plan)
+    session.flush()
+    ptv = PlanTemplateVersionORM(
+        plan_id=plan.id,
+        price_cents=0,
+        billing_interval=BillingInterval.MONTHLY,
+        storage_bytes=0,
+        created_at=_utcnow(),
+    )
+    session.add(ptv)
+    session.flush()
+    plan.template_id = ptv.id
+    subscription = SubscriptionORM(
+        plan_template_id=ptv.id, user_id=user_id, created_at=_utcnow()
+    )
+    session.add(subscription)
+    session.flush()
+    return subscription.id
 
 
 def make_deployment_with_release(session: Session, **kwargs) -> DeploymentORM:
@@ -124,13 +357,20 @@ def make_deployment_with_release(session: Session, **kwargs) -> DeploymentORM:
     `DeploymentORM` directly has to build both. It does so in the order
     production uses: the deployment first, already naming a release that does
     not exist yet, then the release. The reverse FK is DEFERRABLE INITIALLY
-    DEFERRED, so Postgres checks it at COMMIT; SQLite enforces no foreign keys
-    at all here, which is exactly why the ordering wants a Postgres test of its
-    own (see tests/test_deployment_release_postgres.py).
+    DEFERRED, so Postgres checks it at COMMIT -- which is the whole reason the
+    suite runs on Postgres.
+
+    `subscription_id` is NOT NULL too, so one is built here when the caller
+    does not name it, deriving the product from `desired_template_id`.
 
     Tests that go through `deployments.create_deployment` need none of this --
-    the service creates the release itself.
+    the service creates the release and the subscription itself.
     """
+    if kwargs.get("subscription_id") is None:
+        template = session.get(ProductTemplateVersionORM, kwargs["desired_template_id"])
+        kwargs["subscription_id"] = make_free_subscription(
+            session, user_id=kwargs["user_id"], product_id=template.product_id
+        )
     release_id = uuid4()
     deployment = DeploymentORM(desired_release_id=release_id, **kwargs)
     session.add(deployment)

@@ -302,11 +302,18 @@ def test_template_versions_allow_duplicates_when_active(db_session):
     assert template_a.id != template_b.id
 
 
-def test_partial_indexes_with_sqlite_where_define_postgres_where():
+def test_partial_indexes_declare_a_postgres_predicate_and_no_other():
+    """Partial predicates are Postgres-only now that no second dialect exists.
+
+    A predicate declared for another dialect is a constraint that silently does
+    not exist on the database we actually run.
+    """
     for table in SQLModel.metadata.tables.values():
         for index in table.indexes:
-            sqlite_where = index.dialect_options["sqlite"].get("where")
-            if sqlite_where is None:
-                continue
-            postgresql_where = index.dialect_options["postgresql"].get("where")
-            assert postgresql_where is not None, f"Index {index.name} is missing postgresql_where"
+            for dialect in index.dialect_options:
+                if dialect == "postgresql":
+                    continue
+                assert index.dialect_options[dialect].get("where") is None, (
+                    f"Index {index.name} declares a {dialect} predicate; "
+                    "partial indexes are Postgres-only"
+                )

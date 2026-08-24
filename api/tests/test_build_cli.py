@@ -17,6 +17,7 @@ import pytest
 from sqlmodel import Session, select
 
 from app.models import BuildORM, UserORM
+from app.db import get_engine
 from app.services.build_constants import (
     BUILD_STATUS_FAILED,
     BUILD_STATUS_QUEUED,
@@ -49,9 +50,8 @@ def _project(tmp_path):
 @pytest.fixture
 def acting_user(cli_runner):
     """The user the CLI acts as, created the way the CLI would create it."""
-    import app.db as db
 
-    with Session(db.engine) as session:
+    with Session(get_engine()) as session:
         user = UserORM(email=CLI_EMAIL)
         session.add(user)
         session.commit()
@@ -60,9 +60,8 @@ def acting_user(cli_runner):
 
 
 def _seed_build(user_id: int, **kwargs) -> BuildORM:
-    import app.db as db
 
-    with Session(db.engine) as session:
+    with Session(get_engine()) as session:
         build = BuildORM(user_id=user_id, artifact_id=kwargs.pop("artifact_id", "a" * 32), **kwargs)
         session.add(build)
         session.commit()
@@ -86,10 +85,9 @@ def test_build_list_returns_the_callers_builds(cli_runner, acting_user):
 
 
 def test_build_list_excludes_other_users_builds(cli_runner, acting_user):
-    import app.db as db
 
     runner, app = cli_runner
-    with Session(db.engine) as session:
+    with Session(get_engine()) as session:
         other = UserORM(email="someone-else@example.com")
         session.add(other)
         session.commit()
@@ -116,10 +114,9 @@ def test_build_show_reports_status_and_image(cli_runner, acting_user):
 
 
 def test_build_show_refuses_another_users_build(cli_runner, acting_user):
-    import app.db as db
 
     runner, app = cli_runner
-    with Session(db.engine) as session:
+    with Session(get_engine()) as session:
         other = UserORM(email="nope@example.com")
         session.add(other)
         session.commit()
@@ -219,7 +216,6 @@ def test_submit_performs_all_three_phases_in_order(cli_runner, acting_user, fake
 def test_submit_creates_a_queued_build_for_the_uploaded_artifact(
     cli_runner, acting_user, fake_upload, tmp_path
 ):
-    import app.db as db
 
     runner, app = cli_runner
     project = _project(tmp_path)
@@ -227,7 +223,7 @@ def test_submit_creates_a_queued_build_for_the_uploaded_artifact(
     result = runner.invoke(app, ["build", "submit", str(project), "--no-wait"])
 
     assert result.exit_code == 0, _stdout(result)
-    with Session(db.engine) as session:
+    with Session(get_engine()) as session:
         build = session.exec(select(BuildORM)).one()
     assert build.artifact_id == fake_upload.artifact_id
     assert build.user_id == acting_user
@@ -298,7 +294,6 @@ def test_submit_reports_the_resulting_image_on_success(
     """The whole point of --wait: the last line is the value you paste into a
     deployment's `image` user value."""
     import app.cli as cli
-    import app.db as db
 
     runner, app = cli_runner
     project = _project(tmp_path)
@@ -307,7 +302,7 @@ def test_submit_reports_the_resulting_image_on_success(
     real_sleep = cli.time.sleep
 
     def _advance(_seconds):
-        with Session(db.engine) as session:
+        with Session(get_engine()) as session:
             build = session.exec(select(BuildORM)).one()
             if build.status == BUILD_STATUS_QUEUED:
                 build.status = BUILD_STATUS_SUCCEEDED
@@ -329,14 +324,13 @@ def test_submit_exits_non_zero_when_the_build_fails(
     cli_runner, acting_user, fake_upload, monkeypatch, tmp_path
 ):
     import app.cli as cli
-    import app.db as db
 
     runner, app = cli_runner
     project = _project(tmp_path)
     real_sleep = cli.time.sleep
 
     def _advance(_seconds):
-        with Session(db.engine) as session:
+        with Session(get_engine()) as session:
             build = session.exec(select(BuildORM)).one()
             if build.status == BUILD_STATUS_QUEUED:
                 build.status = BUILD_STATUS_FAILED

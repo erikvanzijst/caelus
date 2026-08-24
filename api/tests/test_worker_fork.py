@@ -4,10 +4,6 @@
 pool with its sockets. Two processes talking over one connection desync the
 wire protocol, which surfaces as `ResourceClosedError` on an ordinary SELECT.
 
-Invisible on SQLite, which is why this is Postgres-gated: the rest of the suite
-never forks and never holds a real socket.
-
-Set `POSTGRES_TEST_DATABASE_URL` to run it.
 """
 
 from __future__ import annotations
@@ -18,13 +14,7 @@ import os
 import pytest
 from sqlalchemy import create_engine, text
 from sqlmodel import Session
-
-PG_TEST_DATABASE_URL = os.getenv("POSTGRES_TEST_DATABASE_URL")
-
-pytestmark = pytest.mark.skipif(
-    not PG_TEST_DATABASE_URL,
-    reason="POSTGRES_TEST_DATABASE_URL is not set",
-)
+from tests.conftest import TEST_DATABASE_URL
 
 
 def _query(engine, dispose: bool, results) -> None:
@@ -41,7 +31,7 @@ def _query(engine, dispose: bool, results) -> None:
 
 
 def _run_children(dispose: bool, count: int = 4) -> list[str]:
-    engine = create_engine(PG_TEST_DATABASE_URL)
+    engine = create_engine(TEST_DATABASE_URL)
     # The parent touches the database first, exactly as the keyring check does
     # before `run_worker` forks. The connection returns to the pool still open.
     with Session(engine) as session:
@@ -53,12 +43,18 @@ def _run_children(dispose: bool, count: int = 4) -> list[str]:
         context.Process(target=_query, args=(engine, dispose, results))
         for _ in range(count)
     ]
-    for child in children:
-        child.start()
-    outcomes = [results.get(timeout=30) for _ in children]
-    for child in children:
-        child.join(timeout=30)
-    return outcomes
+    try:
+        for child in children:
+            child.start()
+        outcomes = [results.get(timeout=30) for _ in children]
+        for child in children:
+            child.join(timeout=30)
+        return outcomes
+    finally:
+        # This engine is this test's own -- the whole point is to fork across a
+        # pool it built. Dispose it so it does not leak connections into the
+        # shared test database.
+        engine.dispose()
 
 
 def test_disposing_the_inherited_pool_keeps_forked_children_working():

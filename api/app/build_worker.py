@@ -31,8 +31,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import bindparam, text
-from sqlalchemy.types import DateTime
 from sqlmodel import Session, select
 
 from app.config import CaelusSettings, get_settings
@@ -127,41 +125,12 @@ def _running_count(session: Session) -> int:
 def _claim_next_build(session: Session, *, now: datetime) -> BuildORM | None:
     """Atomically move the oldest queued build to `running`, or return None.
 
-    Mirrors ``JobService.claim_next_job``: Postgres uses ``FOR UPDATE SKIP
-    LOCKED`` so concurrent workers step over each other's rows rather than
-    blocking, and SQLite (tests) uses ``UPDATE ... WHERE id = (SELECT ...)
-    RETURNING``, which is atomic within its write lock.
+    Mirrors ``JobService.claim_next_job``: ``FOR UPDATE SKIP LOCKED`` so
+    concurrent workers step over each other's rows rather than blocking.
 
-    The claim is a single statement in both dialects because two workers each
-    reading "oldest queued" and then writing would hand the same build to both.
+    The claim is a single statement because two workers each reading "oldest
+    queued" and then writing would hand the same build to both.
     """
-    if session.get_bind().dialect.name == "sqlite":
-        row = session.execute(
-            text(
-                """
-                UPDATE build
-                SET status = :running, started_at = :now_ts
-                WHERE id = (
-                    SELECT id FROM build
-                    WHERE status = :queued
-                    ORDER BY created_at, id
-                    LIMIT 1
-                )
-                RETURNING id
-                """
-            ).bindparams(bindparam("now_ts", type_=DateTime)),
-            {"running": BUILD_STATUS_RUNNING, "queued": BUILD_STATUS_QUEUED, "now_ts": now},
-        ).first()
-        session.commit()
-        if row is None:
-            return None
-        # SQLite stores the UUID primary key as a hex string, and RETURNING
-        # hands it back raw; `session.get` needs the UUID itself.
-        claimed_id = row[0]
-        if isinstance(claimed_id, str):
-            claimed_id = UUID(claimed_id)
-        return session.get(BuildORM, claimed_id)
-
     build = session.exec(
         select(BuildORM)
         .where(BuildORM.status == BUILD_STATUS_QUEUED)

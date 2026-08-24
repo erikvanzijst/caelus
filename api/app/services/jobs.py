@@ -21,18 +21,6 @@ from app.services.reconcile_constants import (
 
 logger = logging.getLogger(__name__)
 
-# Claimable-job predicate for the raw SQLite path, kept as a single string so
-# the pre-read and the claiming UPDATE below cannot drift apart. Mirrors
-# ``JobService._claimable_clause()``.
-_SQLITE_CLAIMABLE_PREDICATE = """
-                     (status = :queued_status AND run_after <= :now_ts)
-                  OR (
-                        status = :running_status
-                        AND (locked_at IS NULL OR locked_at < :lease_cutoff_ts)
-                     )
-"""
-
-
 class JobService:
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -122,7 +110,6 @@ class JobService:
         job: DeploymentReconcileJobORM,
         *,
         worker_id: str,
-        dialect: str,
         reclaimed: bool,
         previous_locked_by: str | None = None,
         previous_locked_at: datetime | None = None,
@@ -131,7 +118,7 @@ class JobService:
         if reclaimed:
             logger.warning(
                 "Reclaimed expired reconcile job lease id=%s deployment_id=%s worker_id=%s "
-                "attempt=%s previous_locked_by=%s previous_locked_at=%s lease_seconds=%s (%s)",
+                "attempt=%s previous_locked_by=%s previous_locked_at=%s lease_seconds=%s",
                 job.id,
                 job.deployment_id,
                 worker_id,
@@ -139,19 +126,17 @@ class JobService:
                 previous_locked_by,
                 previous_locked_at,
                 int(self.lease_interval().total_seconds()),
-                dialect,
             )
         else:
             logger.info(
-                "Claimed reconcile job id=%s deployment_id=%s worker_id=%s (%s)",
+                "Claimed reconcile job id=%s deployment_id=%s worker_id=%s",
                 job.id,
                 job.deployment_id,
                 worker_id,
-                dialect,
             )
 
-    def _claim_next_job_postgres(self, *, worker_id: str) -> DeploymentReconcileJobORM | None:
-        """Claim the next runnable job using Postgres row locking with SKIP LOCKED."""
+    def claim_next_job(self, *, worker_id: str) -> DeploymentReconcileJobORM | None:
+        """Claim one runnable job for a worker, using row locking with SKIP LOCKED."""
         now = datetime.now(UTC)
         lease_cutoff = now - self.lease_interval()
         # TODO: Write a more sophisticated query that groups by deployment_id, selects the deployment that has the
@@ -186,93 +171,11 @@ class JobService:
         self._log_claim(
             job,
             worker_id=worker_id,
-            dialect="postgres",
             reclaimed=reclaimed,
             previous_locked_by=previous_locked_by,
             previous_locked_at=previous_locked_at,
         )
         return job
-
-    def _claim_next_job_sqlite(self, *, worker_id: str) -> DeploymentReconcileJobORM | None:
-        """Claim the next runnable job atomically using SQLite UPDATE ... RETURNING fallback."""
-        now = datetime.now(UTC)
-        lease_cutoff = now - self.lease_interval()
-        params = {
-            "running_status": JOB_STATUS_RUNNING,
-            "queued_status": JOB_STATUS_QUEUED,
-            "worker_id": worker_id,
-            "now_ts": now,
-            "lease_cutoff_ts": lease_cutoff,
-        }
-        # Advisory pre-read: SQLite's RETURNING reports post-update values, so the
-        # lock we are about to overwrite has to be read before the UPDATE runs if
-        # the reclaim log line is to name the dead worker. This read never decides
-        # anything — the UPDATE below re-evaluates the same predicate in its own
-        # subquery and remains the sole, atomic claim — its result is only trusted
-        # for logging when it agrees with the row the UPDATE actually took.
-        previous = self._session.execute(
-            text(
-                f"""
-                SELECT id, status, locked_by, locked_at
-                FROM deployment_reconcile_job
-                WHERE {_SQLITE_CLAIMABLE_PREDICATE}
-                ORDER BY run_after, id
-                LIMIT 1
-                """
-            ).bindparams(
-                bindparam("now_ts", type_=DateTime),
-                bindparam("lease_cutoff_ts", type_=DateTime),
-            ),
-            params,
-        ).first()
-        stmt = text(
-            f"""
-            UPDATE deployment_reconcile_job
-            SET status = :running_status,
-                locked_by = :worker_id,
-                locked_at = :now_ts,
-                updated_at = :now_ts,
-                attempt = attempt + CASE WHEN status = :running_status THEN 1 ELSE 0 END
-            WHERE id = (
-                SELECT id
-                FROM deployment_reconcile_job
-                WHERE {_SQLITE_CLAIMABLE_PREDICATE}
-                ORDER BY run_after, id
-                LIMIT 1
-            )
-            RETURNING id
-            """
-        ).bindparams(
-            bindparam("now_ts", type_=DateTime),
-            bindparam("lease_cutoff_ts", type_=DateTime),
-        )
-        row = self._session.execute(stmt, params).first()
-        if row is None:
-            self._session.commit()
-            # logger.debug("No runnable reconcile job available for worker_id=%s", worker_id)
-            return None
-        job_id = int(row[0])
-        self._session.commit()
-        job = self._session.get(DeploymentReconcileJobORM, job_id)
-        if job is not None:
-            matched = previous is not None and int(previous[0]) == job_id
-            reclaimed = matched and previous[1] == JOB_STATUS_RUNNING
-            self._log_claim(
-                job,
-                worker_id=worker_id,
-                dialect="sqlite",
-                reclaimed=reclaimed,
-                previous_locked_by=previous[2] if matched else None,
-                previous_locked_at=previous[3] if matched else None,
-            )
-        return job
-
-    def claim_next_job(self, *, worker_id: str) -> DeploymentReconcileJobORM | None:
-        """Claim one runnable job for a worker, using a dialect-appropriate strategy."""
-        dialect_name = self._session.get_bind().dialect.name
-        if dialect_name == "sqlite":
-            return self._claim_next_job_sqlite(worker_id=worker_id)
-        return self._claim_next_job_postgres(worker_id=worker_id)
 
     def _complete_job(
         self,

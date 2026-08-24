@@ -1,11 +1,5 @@
 """Migration coverage for `deployment_var` and `release_var`.
 
-The migration chain only runs on PostgreSQL (SQLite cannot ALTER the
-constructs earlier revisions use), so this carries the same
-``POSTGRES_TEST_DATABASE_URL`` gate as the other migration tests. SQLite gets
-its schema from ``init_db``/``create_all`` instead, which
-``test_deployment_vars_model.py`` exercises directly.
-
 Each run migrates a throwaway schema (via ``PGOPTIONS=-csearch_path=...``) so
 it never touches a local dev database.
 
@@ -24,13 +18,8 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, text
+from tests.conftest import TEST_DATABASE_URL
 
-PG_TEST_DATABASE_URL = os.getenv("POSTGRES_TEST_DATABASE_URL")
-
-pytestmark = pytest.mark.skipif(
-    not PG_TEST_DATABASE_URL,
-    reason="POSTGRES_TEST_DATABASE_URL is not set",
-)
 
 API_ROOT = Path(__file__).resolve().parents[1]
 BEFORE_VARS = "e1f2a3b4c5d6"
@@ -43,7 +32,7 @@ def _alembic(*args: str, schema: str) -> None:
         cwd=API_ROOT,
         env={
             **os.environ,
-            "CAELUS_DATABASE_URL": PG_TEST_DATABASE_URL,
+            "CAELUS_DATABASE_URL": TEST_DATABASE_URL,
             "PGOPTIONS": f"-csearch_path={schema}",
         },
         capture_output=True,
@@ -56,13 +45,13 @@ def _alembic(*args: str, schema: str) -> None:
 def migrated_schema():
     """A throwaway schema migrated to the revision *before* the var tables."""
     schema = f"mig_vars_{uuid4().hex[:8]}"
-    engine = create_engine(PG_TEST_DATABASE_URL)
+    engine = create_engine(TEST_DATABASE_URL)
     with engine.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
     try:
         _alembic("upgrade", BEFORE_VARS, schema=schema)
         yield schema, create_engine(
-            PG_TEST_DATABASE_URL, connect_args={"options": f"-csearch_path={schema}"}
+            TEST_DATABASE_URL, connect_args={"options": f"-csearch_path={schema}"}
         )
     finally:
         with engine.begin() as conn:

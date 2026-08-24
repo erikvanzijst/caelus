@@ -20,11 +20,11 @@ def test_default_values(monkeypatch):
 
 
 def test_env_var_loading(monkeypatch):
-    monkeypatch.setenv("CAELUS_DATABASE_URL", "sqlite:///test.db")
+    monkeypatch.setenv("CAELUS_DATABASE_URL", "postgresql+psycopg://user:pw@example:5432/other")
     monkeypatch.setenv("CAELUS_LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("CAELUS_DOMAIN", "freepod.eu")
     settings = CaelusSettings(_env_file=None)
-    assert settings.database_url == "sqlite:///test.db"
+    assert settings.database_url == "postgresql+psycopg://user:pw@example:5432/other"
     assert settings.log_level == "DEBUG"
     assert settings.domain == "freepod.eu"
 

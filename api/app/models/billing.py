@@ -56,7 +56,6 @@ class PlanORM(PlanBase, table=True):
             "product_id",
             func.lower(Column("name")),
             unique=True,
-            sqlite_where=Column("deleted_at").is_(None),
             postgresql_where=Column("deleted_at").is_(None),
         ),
     )

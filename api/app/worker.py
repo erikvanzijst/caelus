@@ -76,7 +76,7 @@ def _worker_loop(
     # A forked child inherits the parent's pool, sockets included. Sharing one
     # connection between processes desyncs the wire protocol; `close=False`
     # drops them without closing sockets the parent still owns.
-    db.engine.dispose(close=False)
+    db.get_engine().dispose(close=False)
 
     shutdown = False
 

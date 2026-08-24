@@ -21,8 +21,9 @@ from app.models import (
     ProductTemplateVersionORM,
     UserORM,
 )
+from app.db import get_engine
 from app.services.build_constants import BUILD_STATUS_SUCCEEDED
-from tests.conftest import cli_runner  # noqa: F401
+from tests.conftest import cli_runner, make_free_subscription  # noqa: F401
 
 CLI_EMAIL = "cli-test@example.com"
 IMAGE = "reg/app@sha256:" + "e" * 64
@@ -35,9 +36,8 @@ def _stdout(result) -> str:
 @pytest.fixture
 def world(cli_runner):
     """The acting user, a deployment, and releases 1 (succeeded) and 2 (queued)."""
-    import app.db as db
 
-    with Session(db.engine) as session:
+    with Session(get_engine()) as session:
         user = UserORM(email=CLI_EMAIL)
         session.add(user)
         product = ProductORM(name="p", description="d")
@@ -73,6 +73,9 @@ def world(cli_runner):
             user_id=user.id,
             desired_template_id=template.id,
             desired_release_id=release_id,
+            subscription_id=make_free_subscription(
+                session, user_id=user.id, product_id=product.id
+            ),
             name="dep",
             namespace="ns",
         )
@@ -136,10 +139,9 @@ def test_get_release_exits_for_a_number_never_reached(cli_runner, world):
 
 
 def test_a_non_admin_cannot_read_another_users_releases(cli_runner, world):
-    import app.db as db
 
     runner, app = cli_runner
-    with Session(db.engine) as session:
+    with Session(get_engine()) as session:
         other = UserORM(email="someone-else@example.com")
         session.add(other)
         session.commit()
@@ -155,10 +157,9 @@ def test_a_non_admin_cannot_read_another_users_releases(cli_runner, world):
 
 
 def test_an_admin_may_read_another_users_releases(cli_runner, world):
-    import app.db as db
 
     runner, app = cli_runner
-    with Session(db.engine) as session:
+    with Session(get_engine()) as session:
         acting = session.get(UserORM, world["user_id"])
         acting.is_admin = True
         other = UserORM(email="someone-else@example.com")

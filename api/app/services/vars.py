@@ -92,8 +92,7 @@ def _lock_deployment(session: Session, deployment_id: UUID) -> None:
 
     `id` is monotonic per insert, but transactions commit out of order, so
     concurrent writers to one key could otherwise produce a head reflecting
-    neither intent. SQLite ignores `FOR UPDATE` and needs no lock: the test
-    backend serializes writers itself.
+    neither intent.
     """
     session.exec(
         select(DeploymentORM.id)

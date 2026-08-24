@@ -835,10 +835,9 @@ The two tables reference each other, so both foreign keys on `deployment` are
 `DEFERRABLE INITIALLY DEFERRED` and declared with `use_alter`. Both primary
 keys are Python-generated `uuid4`, so the deployment is inserted already naming
 a release that does not exist yet, the release second, and the check happens at
-COMMIT. **`api/app/db.py` never sets `PRAGMA foreign_keys=ON`, so SQLite
-enforces no foreign keys at all** — an insert-order mistake passes the whole
-test suite and fails on Postgres, which is why
-`tests/test_deployment_release_postgres.py` exists.
+COMMIT. `tests/test_deployment_release_ledger.py` exercises that ordering
+directly, including the commit-time rejection of a dangling
+`desired_release_id`.
 
 ### DeploymentReconcileJob
 
@@ -911,11 +910,10 @@ test suite and fails on Postgres, which is why
 ## Reconcile Queue Semantics
 
 - Enqueue runs inside same transaction as deployment mutation.
-- Claiming strategy on Postgres uses `FOR UPDATE SKIP LOCKED`.
-- Claiming strategy on SQLite uses `UPDATE ... RETURNING` fallback.
-- Guarantees no double claim for same job under parallel workers (covered by
-  tests, including Postgres integration test when `POSTGRES_TEST_DATABASE_URL`
-  is set).
+- Claiming uses `FOR UPDATE SKIP LOCKED`.
+- Guarantees no double claim for the same job under parallel workers, covered
+  by `test_claim_next_job_never_double_claims_under_parallel_workers` (sixteen
+  threads against eight jobs).
 - A job is claimable when it is `queued` and due (`run_after <= now`), **or**
   when it is still `running` but its lease has expired.
 
@@ -1168,8 +1166,11 @@ Docs UI:
 
 ## Database and Migrations
 
-- Runtime DB URL: `DATABASE_URL` (defaults to local SQLite file).
-- Create tables for dev/test: `app.db.init_db(engine)`.
+- Runtime DB URL: `CAELUS_DATABASE_URL`. Postgres is the only supported
+  database — in production, in dev, and under test.
+- Schema comes from Alembic, always. There is no `create_all` helper: the test
+  suite migrates its database with the real chain, so drift between the models
+  and the migrations fails the suite instead of hiding.
 - Alembic config: `alembic.ini`, scripts in `alembic/versions/`.
 
 Migration commands:
@@ -1178,12 +1179,47 @@ Migration commands:
 
 ## Testing Strategy
 
+### Running the suite
+
+The suite runs against a real PostgreSQL database. Inside the devcontainer
+everything is already in place — `docker-compose.yml` sets
+`CAELUS_TEST_DATABASE_URL` and the compose `postgres` service is running, so
+`uv run --no-sync pytest` is all it takes.
+
+Outside the devcontainer, start a Postgres and point the suite at it:
+
+```bash
+docker compose up -d postgres
+export CAELUS_TEST_DATABASE_URL=postgresql+psycopg://caelus:caelus@localhost:5432/caelus_test
+cd api && uv run --no-sync pytest
+```
+
+The connecting user must hold `CREATEDB` (or be a superuser): `conftest.py`
+creates the test database itself if it is missing, migrates it with
+`alembic upgrade head`, and resets it between tests — which also needs
+`session_replication_role`, a superuser setting. The compose image's `caelus`
+user is a superuser, so dev and CI are both covered.
+
+There is no in-memory or SQLite mode. A run without a reachable Postgres fails
+with an explanatory error rather than skipping tests or reporting a false pass.
+The test database is separate from the dev `caelus` database and is wiped
+constantly, so never point the variable at a database you care about.
+
+Test execution is serial: one shared test database, one cleaner. `pytest-xdist`
+is not supported as-is.
+
+### What lives where
+
 - `tests/test_api.py`: REST behavior and validation.
 - `tests/test_cli.py`: CLI parity and error handling.
 - `tests/test_deployments.py`: deployment mutation semantics.
 - `tests/test_reconcile_service.py`: reconcile state transitions.
-- `tests/test_jobs_service.py`: queue/claim/mark semantics.
-- `tests/test_jobs_service_postgres.py`: concurrent claim behavior on Postgres.
+- `tests/test_jobs_service.py`: queue/claim/mark semantics, including
+  concurrent claiming under sixteen parallel workers.
+- `tests/test_deployment_release_ledger.py`: the deferred foreign keys between
+  `deployment` and `deployment_release`, checked at COMMIT.
+- `tests/test_schema_drift.py`: the migration chain and the models must
+  describe the same schema.
 - `tests/test_platform_adapters.py`: Kubernetes/Helm adapter behavior.
 
 ## Conventions for Contributors
@@ -1201,7 +1237,6 @@ Migration commands:
   make install/uninstall manage namespaces transparently.
 - API create-deployment route has a TODO note to tighten product/template scope
   validation at facade level (service already validates template existence).
-- Test setup currently uses file-backed SQLite in `tests/conftest.py`.
 
 ## First 30 Minutes for a New Agent
 

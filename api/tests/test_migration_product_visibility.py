@@ -1,8 +1,6 @@
 """Migration coverage for `product.visibility`.
 
-The migration chain uses constructs SQLite cannot ALTER, so it only runs on
-PostgreSQL — hence the same ``POSTGRES_TEST_DATABASE_URL`` gate the other
-Postgres-only tests use. Each run migrates a throwaway schema (via
+Each run migrates a throwaway schema (via
 ``PGOPTIONS=-csearch_path=...``) so it never touches the tables the rest of the
 suite or a local dev database relies on.
 
@@ -21,13 +19,8 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, text
+from tests.conftest import TEST_DATABASE_URL
 
-PG_TEST_DATABASE_URL = os.getenv("POSTGRES_TEST_DATABASE_URL")
-
-pytestmark = pytest.mark.skipif(
-    not PG_TEST_DATABASE_URL,
-    reason="POSTGRES_TEST_DATABASE_URL is not set",
-)
 
 API_ROOT = Path(__file__).resolve().parents[1]
 BEFORE_VISIBILITY = "a7b8c9d0e1f2"
@@ -40,7 +33,7 @@ def _alembic(*args: str, schema: str) -> None:
         cwd=API_ROOT,
         env={
             **os.environ,
-            "CAELUS_DATABASE_URL": PG_TEST_DATABASE_URL,
+            "CAELUS_DATABASE_URL": TEST_DATABASE_URL,
             "PGOPTIONS": f"-csearch_path={schema}",
         },
         capture_output=True,
@@ -53,13 +46,13 @@ def _alembic(*args: str, schema: str) -> None:
 def migrated_schema():
     """A throwaway schema migrated to the revision *before* visibility."""
     schema = f"mig_visibility_{uuid4().hex[:8]}"
-    engine = create_engine(PG_TEST_DATABASE_URL)
+    engine = create_engine(TEST_DATABASE_URL)
     with engine.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
     try:
         _alembic("upgrade", BEFORE_VISIBILITY, schema=schema)
         yield schema, create_engine(
-            PG_TEST_DATABASE_URL, connect_args={"options": f"-csearch_path={schema}"}
+            TEST_DATABASE_URL, connect_args={"options": f"-csearch_path={schema}"}
         )
     finally:
         with engine.begin() as conn:

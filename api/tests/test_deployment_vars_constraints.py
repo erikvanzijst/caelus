@@ -1,12 +1,8 @@
-"""Referential behavior of the var tables, against a real Postgres.
+"""Referential behavior of the var tables.
 
-None of this is visible on SQLite: `api/app/db.py` never sets
-`PRAGMA foreign_keys=ON`, so SQLite enforces no foreign keys at all and a
-missing `ON DELETE CASCADE` would pass the rest of the suite green and fail
-when someone deletes a deployment in production.
-
-Set `POSTGRES_TEST_DATABASE_URL` to run them, e.g.
-`postgresql+psycopg://caelus:caelus@postgres:5432/caelus_pgtest`.
+A missing `ON DELETE CASCADE` here would only surface when someone deletes a
+deployment in production, so the cascade is asserted directly against the
+constraints the migration chain creates.
 """
 
 from __future__ import annotations
@@ -19,7 +15,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DatabaseError
 from sqlmodel import Session, select
 
-from app.db import init_db
 from app.models import (
     DeploymentReleaseORM,
     DeploymentVarORM,
@@ -30,19 +25,15 @@ from app.models import (
 )
 from app.models.core import _utcnow
 
-PG_TEST_DATABASE_URL = os.getenv("POSTGRES_TEST_DATABASE_URL")
 
-pytestmark = pytest.mark.skipif(
-    not PG_TEST_DATABASE_URL,
-    reason="POSTGRES_TEST_DATABASE_URL is not set",
-)
+@pytest.fixture
+def engine(test_database, db_session):
+    """The shared test database: already migrated, and empty for this test.
 
-
-@pytest.fixture(scope="module")
-def engine():
-    eng = create_engine(PG_TEST_DATABASE_URL)
-    init_db(eng)
-    return eng
+    `db_session` is requested purely for its reset -- this file talks to the
+    database through its own short-lived sessions.
+    """
+    return test_database.engine
 
 
 @pytest.fixture

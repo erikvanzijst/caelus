@@ -3,8 +3,8 @@
 The fake stands in for the cluster at the `BuildJobClient` seam, so every
 decision the worker makes — claiming, log mirroring, outcome adoption,
 recovery, the deadline backstop — is exercised without a cluster. The database
-is real (SQLite), because the claim is a database-level atomicity property and
-faking it would test nothing.
+is real, because the claim is a database-level atomicity property and faking it
+would test nothing.
 """
 
 from __future__ import annotations
@@ -201,10 +201,10 @@ def test_the_in_flight_limit_is_honored_above_one(db_session, cluster, settings)
 def test_a_claim_is_atomic_under_concurrency(db_session, cluster, settings):
     """Two claims must never hand out the same build.
 
-    Driven directly at the claim rather than through a thread pool: SQLite
-    serializes writers anyway, so concurrency here would test the driver, not
-    the statement. What matters is that the statement selects and updates in
-    one shot, which repeated calls expose.
+    Driven directly at the claim rather than through a thread pool: what
+    matters here is that the statement selects and updates in one shot, which
+    repeated calls expose. Genuine concurrency against the claim is covered by
+    the parallel-worker test in test_jobs_service.py.
     """
     user = _user(db_session)
     builds = {_queued(db_session, user.id).id for _ in range(4)}

@@ -21,6 +21,11 @@ template:
   values_schema:
     $schema: https://json-schema.org/draft/2020-12/schema
     type: object
+    # `custom` runs tenant-supplied code and cannot enumerate that code's
+    # environment in advance, so its vars projection accepts undeclared keys
+    # while its chart values stay closed. This is the one product the marker
+    # exists for (design.md D1).
+    x-caelus-vars-additional: true
     properties:
       hostname:
         type: string

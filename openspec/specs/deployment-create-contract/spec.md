@@ -1,8 +1,14 @@
 # deployment-create-contract Specification
 
 ## Purpose
-TBD - created by archiving change drop-deployment-domainname. Update Purpose after archive.
+Defines the contract for creating and updating a deployment: which fields the
+API and CLI accept and return, how the hostname is derived from the template
+schema rather than supplied by the client, how vars are accepted as write-only
+input, and the preconditions — ToS acceptance, and checkout for paid plans —
+that a create must satisfy.
+
 ## Requirements
+
 ### Requirement: Deployment write contracts exclude hostname across API and CLI
 The system MUST define deployment write inputs without a top-level `hostname` field for REST API `POST /deployments`, REST API `PUT /deployments`, and equivalent CLI create/update commands.
 
@@ -268,3 +274,30 @@ per-row lookup and would fatten a payload that no caller reads vars from.
 #### Scenario: Listing deployments
 - **WHEN** a caller lists deployments
 - **THEN** no deployment in the list carries vars
+
+### Requirement: The stored hostname column permits no value
+The `deployment.hostname` column SHALL permit NULL. A deployment whose desired
+template declares no hostname-titled field is a valid deployment, and storing
+it MUST NOT be rejected by the database.
+
+This closes a contradiction between the schema and the requirement "Create and
+update services derive hostname from template schema and user values", whose
+scenario "Template schema has no hostname-titled field" already requires the
+service to persist `DeploymentORM.hostname` as `null`.
+
+#### Scenario: Creating a deployment from a template with no hostname field
+- **WHEN** a deployment is created from a desired template whose schema
+  contains no field titled `hostname`
+- **THEN** the deployment SHALL be persisted with `hostname` set to `null`
+- **AND** the database SHALL accept the insert
+
+#### Scenario: Updating a deployment onto a template with no hostname field
+- **WHEN** a deployment is updated so that its re-derived hostname is `null`
+- **THEN** the deployment SHALL be persisted with `hostname` set to `null`
+- **AND** the database SHALL accept the update
+
+#### Scenario: A deployment that does have a hostname
+- **WHEN** a deployment is created from a template that does declare a
+  hostname-titled field
+- **THEN** the derived hostname SHALL be persisted as before, and the relaxed
+  constraint SHALL change nothing about validation or uniqueness

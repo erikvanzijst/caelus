@@ -1,14 +1,18 @@
 # cross-database-partial-index-parity Specification
 
 ## Purpose
-TBD - created by archiving change fix-partial-unique-indexes. Update Purpose after archive.
-## Requirements
-### Requirement: Partial unique indexes MUST define backend parity
-The system MUST define equivalent partial unique index predicates for SQLite and Postgres wherever partial index behavior is used for data integrity.
+Governs the partial unique indexes that enforce "at most one active row" rules
+— one active deployment per uniqueness key, and the deliberate absence of such
+a rule on product template versions — along with how the migrations that change
+them are produced.
 
-#### Scenario: Model declares a partial unique index
-- **WHEN** a model table uses a partial unique index
-- **THEN** the index declaration SHALL include both `sqlite_where` and `postgresql_where` predicates with equivalent filtering intent
+The capability was named when these predicates had to be declared twice, once
+per dialect. PostgreSQL is now the only backend, and the parity requirement was
+removed by the `drop-sqlite-support` change; predicate declaration itself now
+lives in `postgres-only-persistence`. The name is retained so the requirement
+history stays traceable.
+
+## Requirements
 
 ### Requirement: Deployment active uniqueness MUST be status-based
 The system MUST enforce deployment active uniqueness using `status` predicates, and `uq_deployment_active` MUST use a status-based partial predicate rather than `deleted_at`.
@@ -34,4 +38,3 @@ The migration generated for this change MUST be produced from Alembic autogenera
 #### Scenario: Reviewing migration contents
 - **WHEN** the new Alembic revision is finalized
 - **THEN** it SHALL contain only the index drop/create/remove operations required for this change and exclude unrelated schema modifications
-

@@ -1,0 +1,76 @@
+{{- /*
+lemmy-ui: the server-side-rendered frontend. Stateless -- every request is
+rendered by calling the backend over the cluster network.
+
+LEMMY_UI_LEMMY_INTERNAL_HOST is what the SSR process calls; the *external* host
+is what it writes into the markup for the browser to call, which is why both are
+needed and why HTTPS is declared separately (TLS terminates at the edge, so the
+UI cannot infer the public scheme from its own listener).
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-lemmy-ui
+  labels:
+    {{- include "lemmy.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "lemmy.componentSelector" (dict "root" . "name" "lemmy-ui") | nindent 4 }}
+  ports:
+    - name: http
+      port: 1234
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-lemmy-ui
+  labels:
+    {{- include "lemmy.componentLabels" (dict "root" . "name" "lemmy-ui") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "lemmy.componentSelector" (dict "root" . "name" "lemmy-ui") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "lemmy.componentSelector" (dict "root" . "name" "lemmy-ui") | nindent 8 }}
+    spec:
+      containers:
+        - name: lemmy-ui
+          image: {{ .Values.ui.image.repository }}:{{ include "lemmy.uiImageTag" . }}
+          imagePullPolicy: {{ .Values.ui.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 1234
+              protocol: TCP
+          env:
+            - name: LEMMY_UI_LEMMY_INTERNAL_HOST
+              value: {{ printf "%s-lemmy:8536" .Release.Name | quote }}
+            - name: LEMMY_UI_LEMMY_EXTERNAL_HOST
+              value: {{ .Values.host | quote }}
+            - name: LEMMY_UI_HTTPS
+              value: "true"
+          livenessProbe:
+            # A plain TCP check: the SSR renderer returns an error *page* (still
+            # HTTP 200) when the backend is unavailable, so an httpGet here would
+            # not distinguish a wedged Node process from a backend outage -- and
+            # restarting the UI never fixes the latter.
+            tcpSocket: { port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            tcpSocket: { port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- with .Values.ui.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

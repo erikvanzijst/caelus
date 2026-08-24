@@ -1,0 +1,98 @@
+{{- /*
+Routing proxy workload. The nginx.conf it serves, and the reasoning behind the
+routing rules, live in proxy-config.yaml -- kept in a separate file so this
+Deployment can checksum it without including itself.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-proxy
+  labels:
+    {{- include "lemmy.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "lemmy.componentSelector" (dict "root" . "name" "proxy") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8536
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-proxy
+  labels:
+    {{- include "lemmy.componentLabels" (dict "root" . "name" "proxy") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "lemmy.componentSelector" (dict "root" . "name" "proxy") | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # A volume-mounted ConfigMap does not alter the pod-template hash, so
+        # roll the pod explicitly when the routing config changes.
+        checksum/config: {{ include (print $.Template.BasePath "/proxy-config.yaml") . | sha256sum }}
+      labels:
+        {{- include "lemmy.componentSelector" (dict "root" . "name" "proxy") | nindent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
+        runAsNonRoot: true
+      containers:
+        - name: nginx
+          image: {{ .Values.proxy.image.repository }}:{{ .Values.proxy.image.tag }}
+          imagePullPolicy: {{ .Values.proxy.image.pullPolicy }}
+          # Bypass the image entrypoint: its /docker-entrypoint.d/ scripts exist
+          # to template a config and tune workers as root, and this config is
+          # already complete and static.
+          command: ["nginx", "-g", "daemon off;"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8536
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            # pid file and the temp paths declared above.
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            tcpSocket: { port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            # Proxied through to the backend: the release is only ready to take
+            # public traffic once the path that actually matters answers.
+            httpGet:
+              path: /.well-known/nodeinfo
+              port: http
+              httpHeaders:
+                - { name: Host, value: {{ .Values.host | quote }} }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          {{- with .Values.proxy.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-proxy
+        - name: tmp
+          emptyDir: {}

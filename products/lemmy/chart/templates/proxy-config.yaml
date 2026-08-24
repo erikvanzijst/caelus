@@ -1,0 +1,120 @@
+{{- /*
+The nginx routing proxy. This component is NOT optional scaffolding.
+
+Lemmy serves one hostname from two different processes, and which one must
+answer depends on the HTTP verb and the Accept header, not just the path:
+
+  * GET/HEAD with an ActivityPub/JSON-LD Accept -> backend. This is how remote
+    instances resolve actors and objects; send it to the UI and federation
+    silently breaks while a browser sees nothing wrong.
+  * any non-GET/HEAD -> backend (form posts, API writes, inbox deliveries).
+  * /api, /pictrs, /feeds, /nodeinfo, /version, /sitemap.xml, /.well-known
+    -> backend, by path.
+  * everything else -> the SSR frontend.
+
+A Kubernetes Ingress can express the path rules and nothing else, so the header
+and verb routing has to live in a proxy inside the release. The map below is
+upstream's (lemmy-ansible nginx_internal.conf), retargeted at Services.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-proxy
+  labels:
+    {{- include "lemmy.labels" . | nindent 4 }}
+data:
+  nginx.conf: |
+    worker_processes auto;
+    # Writable locations only: the container runs read-only as uid 101.
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+        access_log    /dev/stdout;
+
+        client_body_temp_path /tmp/client_body;
+        proxy_temp_path       /tmp/proxy;
+        fastcgi_temp_path     /tmp/fastcgi;
+        uwsgi_temp_path       /tmp/uwsgi;
+        scgi_temp_path        /tmp/scgi;
+
+        # Named upstream groups, resolved once at startup against the cluster
+        # DNS. Naming them lets the map below hand proxy_pass a variable without
+        # needing a `resolver`: nginx matches the variable against these groups
+        # before it would attempt a runtime DNS lookup.
+        upstream lemmy {
+            server {{ .Release.Name }}-lemmy:8536;
+        }
+        upstream lemmy-ui {
+            server {{ .Release.Name }}-lemmy-ui:1234;
+        }
+
+        # Recover the real client IP from the edge proxy's X-Forwarded-For so
+        # Lemmy's rate limiting buckets per client rather than per Traefik pod.
+        {{- range .Values.proxy.trustedProxies }}
+        set_real_ip_from {{ . }};
+        {{- end }}
+        real_ip_header X-Forwarded-For;
+        real_ip_recursive on;
+
+        # Build "<method>:<accept>" and pick an upstream from it. Example inputs:
+        #   "GET:text/html"                        -> lemmy-ui
+        #   "GET:application/activity+json"        -> lemmy
+        #   "POST:application/json"                -> lemmy
+        map "$request_method:$http_accept" $proxpass {
+            default "http://lemmy-ui";
+
+            # GET/HEAD asking for ActivityPub or JSON-LD: a federation peer.
+            "~^(?:GET|HEAD):.*?application\/(?:activity|ld)\+json" "http://lemmy";
+
+            # Everything that is not GET/HEAD, whatever it accepts. Negating the
+            # verb beats enumerating POST/PUT/PATCH/DELETE/... by hand.
+            "~^(?!(GET|HEAD)).*:" "http://lemmy";
+        }
+
+        server {
+            listen 8536;
+            server_name _;
+            server_tokens off;
+
+            # Uploads flow through here to pict-rs.
+            client_max_body_size {{ .Values.proxy.maxUploadSize }};
+
+            # Emit relative Location headers. TLS terminates at the edge, so
+            # nginx sees plain HTTP and would otherwise send the trailing-slash
+            # redirect below to an absolute http:// URL -- bouncing the browser
+            # out of TLS. A relative Location resolves against the origin the
+            # browser is already on.
+            absolute_redirect off;
+
+            gzip on;
+            gzip_types text/css application/javascript application/json image/svg+xml;
+            gzip_vary on;
+
+            # $http_host, not $host: Lemmy builds absolute URLs from it.
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            location / {
+                proxy_pass $proxpass;
+                rewrite ^(.+)/+$ $1 permanent;
+            }
+
+            # Served by the frontend, even though the backend owns the rest of
+            # /.well-known (webfinger, nodeinfo). Must precede the regex below --
+            # an exact-match location wins over any regex.
+            location = /.well-known/security.txt {
+                proxy_pass "http://lemmy-ui";
+            }
+
+            location ~ ^/(api|pictrs|feeds|nodeinfo|\.well-known|version|sitemap\.xml) {
+                proxy_pass "http://lemmy";
+            }
+        }
+    }

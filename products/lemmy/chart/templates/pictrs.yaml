@@ -1,0 +1,116 @@
+{{- /*
+pict-rs: Lemmy's media server. Stores uploads, remote thumbnails and (under
+ProxyAllImages) proxied remote images.
+
+The image ships uid/gid 991 and declares /mnt as its volume; pict-rs's compiled
+defaults put the sled index at /mnt/sled-repo and the file store at /mnt/files,
+so mounting the PVC at /mnt covers both and no path overrides are needed.
+
+This is the volume that grows with tenant activity, so caelus.plan.storageSize
+sizes it. The database PVC stays operator-sized.
+*/}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-pictrs
+  labels:
+    {{- include "lemmy.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.pictrs.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.caelus.plan.storageSize | default .Values.pictrs.persistence.size }}
+  {{- if .Values.pictrs.persistence.storageClassName }}
+  storageClassName: {{ .Values.pictrs.persistence.storageClassName }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-pictrs
+  labels:
+    {{- include "lemmy.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "lemmy.componentSelector" (dict "root" . "name" "pictrs") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-pictrs
+  labels:
+    {{- include "lemmy.componentLabels" (dict "root" . "name" "pictrs") | nindent 4 }}
+spec:
+  replicas: 1
+  # Single RWO volume holding a sled database: never two pods at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "lemmy.componentSelector" (dict "root" . "name" "pictrs") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "lemmy.componentSelector" (dict "root" . "name" "pictrs") | nindent 8 }}
+    spec:
+      securityContext:
+        # The image's own uid/gid. fsGroup so the PVC is writable on first mount.
+        runAsUser: 991
+        runAsGroup: 991
+        fsGroup: 991
+      containers:
+        - name: pictrs
+          image: {{ .Values.pictrs.image.repository }}:{{ .Values.pictrs.image.tag }}
+          imagePullPolicy: {{ .Values.pictrs.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: PICTRS__SERVER__API_KEY
+              valueFrom:
+                secretKeyRef: { name: {{ .Release.Name }}-secrets, key: PICTRS__SERVER__API_KEY }
+            # Animation limits: upstream's defaults allow 1920x1920x900 frames,
+            # which is a cheap way for a remote instance to burn CPU and disk.
+            - name: PICTRS__MEDIA__ANIMATION__MAX_WIDTH
+              value: {{ .Values.pictrs.media.maxAnimationWidth | quote }}
+            - name: PICTRS__MEDIA__ANIMATION__MAX_HEIGHT
+              value: {{ .Values.pictrs.media.maxAnimationHeight | quote }}
+            - name: PICTRS__MEDIA__ANIMATION__MAX_AREA
+              value: {{ .Values.pictrs.media.maxAnimationArea | quote }}
+            - name: PICTRS__MEDIA__ANIMATION__MAX_FRAME_COUNT
+              value: {{ .Values.pictrs.media.maxAnimationFrameCount | quote }}
+            - name: PICTRS__MEDIA__VIDEO__ENABLE
+              value: {{ .Values.pictrs.media.videoEnabled | quote }}
+          volumeMounts:
+            - name: data
+              mountPath: /mnt
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            # /healthz also verifies the sled repo and the backing store, so a
+            # pict-rs that cannot reach its data never receives uploads.
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          {{- with .Values.pictrs.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-pictrs

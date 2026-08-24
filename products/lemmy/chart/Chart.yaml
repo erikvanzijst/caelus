@@ -1,0 +1,16 @@
+apiVersion: v2
+name: lemmy
+description: >-
+  Self-contained Caelus-native chart for Lemmy: the nginx routing proxy, the
+  Rust backend, the SSR frontend, pict-rs media storage, and a bundled
+  PostgreSQL StatefulSet. No upstream chart dependency.
+type: application
+version: 0.3.0
+appVersion: "0.19.20"
+keywords:
+  - lemmy
+  - fediverse
+  - activitypub
+  - forum
+maintainers:
+  - name: Caelus Team

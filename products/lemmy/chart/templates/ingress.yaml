@@ -1,0 +1,40 @@
+{{- if .Values.ingress.enabled }}
+{{- /*
+Single rule to the nginx proxy, which fans out to the backend and the frontend.
+Routing must not be split across Ingress paths: the ActivityPub and verb-based
+rules cannot be expressed here (see proxy-config.yaml).
+
+When TLS is a wildcard (terminated upstream) the tls block and issuer annotation
+are omitted.
+*/}}
+{{- $tlsCustom := and .Values.caelus.ingress.enabled (not .Values.caelus.ingress.tls.wildcard) }}
+{{- $annotations := merge (dict) (.Values.ingress.annotations | default dict) }}
+{{- if $tlsCustom }}{{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.caelus.ingress.tls.issuer }}{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  labels:
+    {{- include "lemmy.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml $annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if $tlsCustom }}
+  tls:
+    - hosts:
+        - {{ .Values.host | quote }}
+      secretName: {{ .Values.caelus.ingress.tls.secretName | quote }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-proxy
+                port:
+                  number: 8536
+{{- end }}

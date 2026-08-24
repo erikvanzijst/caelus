@@ -325,6 +325,31 @@ def test_applying_against_a_provisioning_deployment_fails_and_suggests_stage(
     assert "--stage" in capsys.readouterr().err
 
 
+def test_a_failed_rollout_keeps_its_exit_code(run_var, capsys):
+    """The vars-are-recorded hint must not flatten RolloutFailed into the
+    generic failure code: a script that distinguishes "the rollout failed"
+    from "something else went wrong" reads the exit code to do it."""
+    from freepod import EXIT_ROLLOUT_FAILED, RolloutFailed
+    import freepod.cli as cli_module
+
+    platform = VarPlatform()
+
+    def explode(*_args, **_kwargs):
+        raise RolloutFailed("the rollout failed for deployment x")
+
+    original = cli_module.deploy_module.release_current
+    cli_module.deploy_module.release_current = explode
+    try:
+        code = run_var(platform, ["var", "set", "A=1"])
+    finally:
+        cli_module.deploy_module.release_current = original
+
+    assert code == EXIT_ROLLOUT_FAILED
+    err = capsys.readouterr().err
+    assert "the rollout failed" in err
+    assert "--stage" in err
+
+
 def test_rm_removes_and_rolls(run_var):
     platform = VarPlatform(vars_={"A": entry("1")})
 

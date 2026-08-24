@@ -771,7 +771,9 @@ def _finish_var_write(
             timeout=wait_seconds(context.timeout, ROLLOUT_WAIT_SECONDS),
         )
     except FreepodError as error:
-        raise FreepodError(
+        # Same class, so a failed rollout still exits 5 rather than being
+        # flattened into the generic failure code by this re-raise.
+        raise type(error)(
             f"{error}\n"
             f"  The vars are recorded. Re-run with --stage to skip the rollout, "
             f"or apply them later with `freepod deploy --no-build`."

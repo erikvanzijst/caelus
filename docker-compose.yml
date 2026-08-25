@@ -18,9 +18,13 @@ services:
     # Allow Chrome sandboxing:
     cap_add:
       - SYS_ADMIN
+    group_add:
+      - audio
     security_opt:
       - seccomp=unconfined
       - apparmor=unconfined
+    devices:
+      - /dev/snd:/dev/snd
     shm_size: "1gb"
     ports:
       - "5173:5173" # ui

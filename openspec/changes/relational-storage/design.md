@@ -500,8 +500,19 @@ couple enforcement to Helm timeouts.
 
 ### D11. Deletion revokes now; destruction is deferred
 
-Delete reconcile: `ALTER ROLE <role> NOLOGIN`, record `purge_after`. One statement,
-bounded, fast, and tenant data untouched during the grace window. The purge tick later
+Delete reconcile: `ALTER ROLE <role> NOLOGIN`, terminate the role's backends, record
+`purge_after`. Bounded, fast, and tenant data untouched during the grace window.
+
+The termination is there for the same reason it is part of the hard block (D7):
+`NOLOGIN` does not close connections that are already authenticated, and under
+transaction pooling the pooler reuses them — so without it a lingering pod could keep
+writing to a deleted deployment's database through the grace window. Two statements
+rather than one, both cheap, neither irreversible.
+
+A second consequence of the row outliving the deployment: `evaluate_quota_state` returns
+early once `purge_after` is set. Its below-threshold branch re-asserts `LOGIN`, so a
+quota sweep over a deleted deployment's row would otherwise hand back the access this
+step just took away. The purge tick later
 runs `DROP DATABASE ... WITH (FORCE)` — which takes every object with it — then
 `DROP ROLE`, by then dependency-free. The drop is owner-scoped, so it runs under
 `SET ROLE <tenant>`; the subsequent `DROP ROLE` runs after `RESET ROLE`. Order matters

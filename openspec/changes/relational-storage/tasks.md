@@ -39,16 +39,16 @@
 
 ## 6. Provisioning service
 
-- [ ] 6.1 Add a PostgreSQL admin client module (connection handling, statement execution, autocommit for `CREATE`/`DROP DATABASE`), mirroring `garage.py`'s role as transport; verify its unit tests cover the non-transactional statements
-- [ ] 6.2 Add `relational_storage.py` with `is_enabled` reading the template's system values only; verify a tenant-supplied user value cannot enable it
-- [ ] 6.3 Implement `resolve_quota_bytes` fail-closed against `database_bytes`; verify it raises for a missing, zero or negative allowance
-- [ ] 6.4 Implement `database_name`/`role_name` from the deployment UUID with hyphens removed; verify the result is <= 63 bytes and valid unquoted in a real `CREATE ROLE`
-- [ ] 6.5 Implement `ensure_database` following design D6's ordered steps — including `GRANT <role> TO caelus_admin WITH SET TRUE, INHERIT FALSE` before the database is created — each reading before writing; verify tests cover a clean provision, a re-run, a role-without-database, and a database-without-role
-- [ ] 6.6 Store the password encrypted via `var_crypto` **before** applying it to the role; verify a test that interrupts after the store and asserts the next run repairs the credential
-- [ ] 6.7 Assert `SET ROLE <tenant>; REVOKE ALL ON DATABASE ... FROM PUBLIC` on every provision, followed by design D6 step 5b's post-condition — read `has_database_privilege('public', <db>, 'CONNECT')` back and raise when it is true, because the revoke fails without erroring when it is not owner-scoped; verify a test where a second provisioned role is refused connection to the first's database, and one that the post-condition raises when the revoke did not take effect
-- [ ] 6.8 Apply `temp_file_limit`, `statement_timeout` and `idle_in_transaction_session_timeout` on every provision; verify a test that clears them and asserts re-assertion on the next run
-- [ ] 6.9 Implement `teardown_database` as `NOLOGIN` plus `purge_after`, dropping nothing; verify it is idempotent and tolerates a deployment that never had a database
-- [ ] 6.10 Implement `evaluate_quota_state(deployment)` returning and applying the state, assuming the tenant role via `SET ROLE` for the owner-scoped `ALTER DATABASE`, with a flag to suppress notification; verify tests cover each threshold transition in both directions
+- [x] 6.1 Add a PostgreSQL admin client module (connection handling, statement execution, autocommit for `CREATE`/`DROP DATABASE`), mirroring `garage.py`'s role as transport; verify its unit tests cover the non-transactional statements
+- [x] 6.2 Add `relational_storage.py` with `is_enabled` reading the template's system values only; verify a tenant-supplied user value cannot enable it
+- [x] 6.3 Implement `resolve_quota_bytes` fail-closed against `database_bytes`; verify it raises for a missing, zero or negative allowance
+- [x] 6.4 Implement `database_name`/`role_name` from the deployment UUID with hyphens removed; verify the result is <= 63 bytes and valid unquoted in a real `CREATE ROLE`
+- [x] 6.5 Implement `ensure_database` following design D6's ordered steps — including `GRANT <role> TO caelus_admin WITH SET TRUE, INHERIT FALSE` before the database is created — each reading before writing; verify tests cover a clean provision, a re-run, a role-without-database, and a database-without-role
+- [x] 6.6 Store the password encrypted via `var_crypto` **before** applying it to the role; verify a test that interrupts after the store and asserts the next run repairs the credential
+- [x] 6.7 Assert `SET ROLE <tenant>; REVOKE ALL ON DATABASE ... FROM PUBLIC` on every provision, followed by design D6 step 5b's post-condition — read `has_database_privilege('public', <db>, 'CONNECT')` back and raise when it is true, because the revoke fails without erroring when it is not owner-scoped; verify a test where a second provisioned role is refused connection to the first's database, and one that the post-condition raises when the revoke did not take effect
+- [x] 6.8 Apply `temp_file_limit`, `statement_timeout` and `idle_in_transaction_session_timeout` on every provision; verify a test that clears them and asserts re-assertion on the next run
+- [x] 6.9 Implement `teardown_database` as `NOLOGIN` plus `purge_after`, dropping nothing; verify it is idempotent and tolerates a deployment that never had a database
+- [x] 6.10 Implement `evaluate_quota_state(deployment)` returning and applying the state, assuming the tenant role via `SET ROLE` for the owner-scoped `ALTER DATABASE`, with a flag to suppress notification; verify tests cover each threshold transition in both directions
 
 ## 7. Reconcile integration
 

@@ -140,6 +140,13 @@ class CaelusSettings(BaseSettings):
     tenant_db_pooler_host: str = ""
     tenant_db_pooler_port: int = 6432
 
+    # How long a deleted deployment's database survives before the purge tick
+    # drops it. Deliberately the same number as
+    # `deployment_bucket_expiry_days`: a tenant reads one retention period in
+    # `legal/`, and two subsystems reclaiming on different days would make that
+    # statement false for one of them.
+    deployment_database_purge_grace_days: int = 1
+
     # ── Deployment logs (Loki) ────────────────────────────────────────────
     loki_base_url: str = ""
     loki_query_timeout_seconds: float = 30.0

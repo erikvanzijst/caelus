@@ -17,6 +17,7 @@ from sqlalchemy import (
     Index,
     JSON,
     PrimaryKeyConstraint,
+    SmallInteger,
     Text,
     String,
     UniqueConstraint,
@@ -922,3 +923,88 @@ class DeploymentReconcileJobORM(DeploymentReconcileJobBase, table=True):
     deployment: DeploymentORM = Relationship(back_populates="reconcile_jobs")
     created_at: datetime = Field(default_factory=_utcnow, nullable=False)
     updated_at: datetime = Field(default_factory=_utcnow, nullable=False)
+
+
+class DeploymentDatabaseORM(SQLModel, table=True):
+    """One row per deployment that has a database on the tenant cluster.
+
+    **Its absence means "not provisioned."** That is the whole state model: no
+    nullable columns on `deployment`, and nothing added to the platform's
+    hottest, most-joined table for a subsystem most deployments never touch.
+
+    No `deleted_at`. A soft-delete column would make "deleted" a third state
+    alongside present and absent, and the row must outlive the deployment's own
+    deletion anyway -- it is what `purge_after` is recorded on, and what the
+    purge tick reads to know there is still a database to drop.
+    """
+
+    __tablename__ = "deployment_database"
+    __table_args__ = (
+        # Read by the housekeeping worker's quota sweep.
+        Index("ix_deployment_database_quota_state", "quota_state"),
+        # Partial: only rows awaiting a purge are of interest, and a deployment
+        # that was never deleted must not sit in this index at all.
+        Index(
+            "ix_deployment_database_purge_after",
+            "purge_after",
+            postgresql_where=Column("purge_after").isnot(None),
+        ),
+    )
+
+    id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger(),
+            Identity(always=True),
+            primary_key=True,
+            autoincrement=True,
+        ),
+    )
+    # No `ondelete="CASCADE"`, unlike `deployment_var`: this row records a
+    # database that still exists on another server, so it must not vanish with
+    # the deployment row. Deletion is a soft delete plus `purge_after`, and the
+    # purge tick is what finally drops both the objects and this row.
+    deployment_id: UUID = Field(
+        sa_column=Column(
+            Uuid,
+            ForeignKey("deployment.id"),
+            nullable=False,
+            unique=True,
+        )
+    )
+
+    # D2: both are the deployment UUID with its hyphens removed, so one string
+    # identifies the tenant across pg_database, pg_roles, pg_stat_activity, the
+    # pooler and here. Stored rather than derived so that changing the
+    # derivation rule cannot orphan an existing database, and so operator SQL
+    # joins without recomputing a hex transform.
+    db_name: str = Field(sa_column=Column(String(63), nullable=False))
+    role_name: str = Field(sa_column=Column(String(63), nullable=False))
+
+    # PostgreSQL keeps only a SCRAM verifier, so the platform must hold the
+    # password to re-assert it. Same shape as `deployment_var`: ciphertext as
+    # text under the rotatable keyring, naming its key by fingerprint.
+    password_encrypted: str = Field(sa_column=Column(Text(), nullable=False))
+    key_id: str = Field(sa_column=Column(String(8), nullable=False))
+
+    # 'ok' | 'warned' | 'readonly' | 'blocked'. Deliberately not projected onto
+    # `deployment.status`: a deployment over its quota still has a healthy
+    # rollout, and conflating the two would make the rollout state lie.
+    quota_state: str = Field(
+        sa_column=Column(String(16), nullable=False, server_default=text("'ok'"))
+    )
+
+    size_bytes: Optional[int] = Field(default=None, sa_column=Column(BigInteger, nullable=True))
+    measured_at: Optional[datetime] = Field(default=None)
+    # 80 | 90 | 100 -- which threshold the owner was last mailed about, so a
+    # deployment hovering above one is not mailed on every sweep.
+    warned_threshold: Optional[int] = Field(
+        default=None, sa_column=Column(SmallInteger, nullable=True)
+    )
+    warned_at: Optional[datetime] = Field(default=None)
+    readonly_at: Optional[datetime] = Field(default=None)
+    blocked_at: Optional[datetime] = Field(default=None)
+
+    # Set on the delete reconcile; the purge tick refuses a null or future one.
+    purge_after: Optional[datetime] = Field(default=None)
+    created_at: datetime = Field(default_factory=_utcnow, nullable=False)

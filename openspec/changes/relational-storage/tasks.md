@@ -25,9 +25,9 @@
 
 ## 4. Data model
 
-- [ ] 4.1 Add the `DeploymentDatabaseORM` model exactly as declared in design D12, following `deployment_var`'s column types; verify the model imports and `SQLModel.metadata` includes the table
-- [ ] 4.2 Write the Alembic migration for `deployment_database` including both indexes; verify `alembic upgrade head` then `downgrade -1` runs clean and the partial index predicate is present in `pg_indexes`
-- [ ] 4.3 Add a test asserting the row's absence means "not provisioned" and that `deployment_database` has no `deleted_at`
+- [x] 4.1 Add the `DeploymentDatabaseORM` model exactly as declared in design D12, following `deployment_var`'s column types; verify the model imports and `SQLModel.metadata` includes the table
+- [x] 4.2 Write the Alembic migration for `deployment_database` including both indexes; verify `alembic upgrade head` then `downgrade -1` runs clean and the partial index predicate is present in `pg_indexes`
+- [x] 4.3 Add a test asserting the row's absence means "not provisioned" and that `deployment_database` has no `deleted_at`
 
 ## 5. Provisioning service
 

@@ -63,6 +63,14 @@ class CaelusSettings(BaseSettings):
     ]
     sshpiper_namespace: str = "sshpiper"
     sshpiper_pod_label: str = "sshpiper"
+    # The shared database pooler. Its allowance is part of the one fleet-wide
+    # policy, so it is present in every tenant namespace -- including those
+    # whose product has no relational storage, because reachability is not
+    # authorization: a deployment without credentials cannot authenticate.
+    # Empty until an environment deploys a tenant cluster, which renders a rule
+    # whose namespaceSelector matches nothing -- no egress, not free egress.
+    tenant_db_pooler_namespace: str = ""
+    tenant_db_pooler_pod_label: str = "caelus-tenant-pooler"
     sftp_sidecar_port: int = 2222
     sftp_host: str = "freepod.eu"
     sftp_port: int = 22
@@ -126,7 +134,9 @@ class CaelusSettings(BaseSettings):
 
     # What a tenant's own DATABASE_URL points at. Never the server: the tenant
     # NetworkPolicy permits the pooler's port and nothing else, which is what
-    # makes the pooler unbypassable.
+    # makes the pooler unbypassable. Delivered through the ConfigMap rather
+    # than the admin Secret -- these are addresses, not credentials, and the
+    # NetworkPolicy needs the port in processes that hold no admin password.
     tenant_db_pooler_host: str = ""
     tenant_db_pooler_port: int = 6432
 

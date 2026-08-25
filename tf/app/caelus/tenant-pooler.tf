@@ -82,7 +82,7 @@ resource "kubernetes_deployment" "tenant_pooler" {
     name      = "caelus-tenant-pooler"
     namespace = var.namespace
     labels = {
-      app = "caelus-tenant-pooler"
+      app = local.tenant_pooler_app_label
     }
   }
 
@@ -91,7 +91,7 @@ resource "kubernetes_deployment" "tenant_pooler" {
 
     selector {
       match_labels = {
-        app = "caelus-tenant-pooler"
+        app = local.tenant_pooler_app_label
       }
     }
 
@@ -106,7 +106,7 @@ resource "kubernetes_deployment" "tenant_pooler" {
     template {
       metadata {
         labels = {
-          app = "caelus-tenant-pooler"
+          app = local.tenant_pooler_app_label
         }
         annotations = {
           "checksum/config" = sha256(jsonencode(kubernetes_config_map.tenant_pooler.data))
@@ -198,7 +198,7 @@ resource "kubernetes_service" "tenant_pooler" {
 
   spec {
     selector = {
-      app = "caelus-tenant-pooler"
+      app = local.tenant_pooler_app_label
     }
 
     port {

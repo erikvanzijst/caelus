@@ -19,9 +19,9 @@
 
 ## 3. Network isolation
 
-- [ ] 3.1 Add the pooler egress rule (namespaceSelector + podSelector, client port only) to `build_tenant_baseline_policy`; verify the rendered policy in `api/tests` matches the expected document
-- [ ] 3.2 Verify from a scratch pod in a tenant namespace that the pooler port is reachable and the PostgreSQL port is not
-- [ ] 3.3 Re-apply the policy fleet-wide with `caelus sync-network-policies`; verify every tenant namespace carries the new rule
+- [x] 3.1 Add the pooler egress rule (namespaceSelector + podSelector, client port only) to `build_tenant_baseline_policy`; verify the rendered policy in `api/tests` matches the expected document
+- [x] 3.2 Verify from a scratch pod in a tenant namespace that the pooler port is reachable and the PostgreSQL port is not
+- [x] 3.3 Re-apply the policy fleet-wide with `caelus sync-network-policies`; verify every tenant namespace carries the new rule
 
 ## 4. Data model
 

@@ -18,6 +18,17 @@ resource "kubernetes_config_map" "api" {
     CAELUS_SFTP_HOST = var.sftp_host
     CAELUS_SFTP_PORT = tostring(var.sftp_port)
 
+    # The tenant database pooler. Addresses, not credentials -- the admin
+    # credential rides in the caelus-tenant-db Secret, on the worker only.
+    # These are here because two different things need them and neither is a
+    # secret: the published DATABASE_URL points a tenant pod at the pooler, and
+    # the tenant NetworkPolicy scopes its one database egress rule to that
+    # namespace, pod label and port.
+    CAELUS_TENANT_DB_POOLER_HOST      = "${kubernetes_service.tenant_pooler.metadata[0].name}.${var.namespace}.svc.cluster.local"
+    CAELUS_TENANT_DB_POOLER_PORT      = "6432"
+    CAELUS_TENANT_DB_POOLER_NAMESPACE = var.namespace
+    CAELUS_TENANT_DB_POOLER_POD_LABEL = local.tenant_pooler_app_label
+
     CAELUS_BUILDER_IMAGE = var.builder_image
     CAELUS_BUILDS_NAMESPACE    = var.builds_namespace
     CAELUS_BUILD_MAX_IN_FLIGHT = tostring(var.build_max_in_flight)

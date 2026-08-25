@@ -4,8 +4,20 @@ from app.config import CaelusSettings
 from app.network_policy import TENANT_NAMESPACE_LABELS, build_tenant_baseline_policy
 
 
-def _policy(namespace: str = "tenant-abc"):
-    return build_tenant_baseline_policy(namespace=namespace, settings=CaelusSettings(_env_file=None))
+def _policy(namespace: str = "tenant-abc", **overrides):
+    # Every deployed environment sets the pooler namespace; the default is
+    # empty, which is its own case below.
+    fields = {"tenant_db_pooler_namespace": "caelus-dev", **overrides}
+    settings = CaelusSettings(_env_file=None, **fields)
+    return build_tenant_baseline_policy(namespace=namespace, settings=settings)
+
+
+def _pooler_rule(policy):
+    return next(
+        r
+        for r in policy["spec"]["egress"]
+        if r.get("ports") == [{"port": 6432, "protocol": "TCP"}]
+    )
 
 
 def test_policy_is_namespaced_and_default_deny_both_directions() -> None:
@@ -73,6 +85,47 @@ def test_egress_allows_intra_namespace_dns_and_mailer_only_internally() -> None:
     mailer = next(r for r in egress if r.get("ports") == [{"port": 25, "protocol": "TCP"}])
     assert mailer["to"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] == "mailer"
     assert mailer["to"][0]["podSelector"]["matchLabels"]["app"] == "smtp"
+
+
+def test_pooler_egress_is_namespace_pod_and_port_scoped() -> None:
+    """The one route to a database. Scoped three ways so it opens nothing else:
+    the platform namespace, the pooler's own pods, and its client port."""
+    rule = _pooler_rule(_policy())
+    to = rule["to"][0]
+    assert to["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] == "caelus-dev"
+    assert to["podSelector"]["matchLabels"]["app"] == "caelus-tenant-pooler"
+    assert rule["ports"] == [{"port": 6432, "protocol": "TCP"}]
+    # One selector peer, so the namespace and the pod label are ANDed rather
+    # than opening the whole platform namespace.
+    assert len(rule["to"]) == 1
+
+
+def test_postgres_itself_is_not_reachable() -> None:
+    """What makes the pooler unbypassable: nothing permits 5432, and the
+    server's address is inside the ranges the internet rule excludes."""
+    egress = _policy()["spec"]["egress"]
+    ports = [p for rule in egress for p in rule.get("ports", [])]
+    assert {"port": 5432, "protocol": "TCP"} not in ports
+
+
+def test_pooler_rule_is_present_for_every_tenant() -> None:
+    """The policy is byte-identical fleet-wide, so the rule does not depend on
+    the deployment's product having relational storage. Reachability is not
+    authorization -- a deployment with no credentials cannot authenticate."""
+    assert _policy("tenant-with-db") == _policy("tenant-with-db")
+    a = _policy("tenant-a")
+    b = _policy("tenant-b")
+    a["metadata"]["namespace"] = b["metadata"]["namespace"]
+    assert a == b
+
+
+def test_unconfigured_pooler_yields_a_rule_that_matches_nothing() -> None:
+    """An environment with no tenant cluster renders a selector matching no
+    namespace, which permits no egress rather than permitting it broadly."""
+    rule = _pooler_rule(_policy(tenant_db_pooler_namespace=""))
+    assert rule["to"][0]["namespaceSelector"]["matchLabels"] == {
+        "kubernetes.io/metadata.name": ""
+    }
 
 
 def test_internet_egress_excludes_all_private_ranges_and_metadata() -> None:

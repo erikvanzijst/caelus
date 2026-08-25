@@ -71,12 +71,6 @@ resource "kubernetes_secret" "tenant_db" {
     CAELUS_TENANT_DB_ADMIN_USER     = "caelus_admin"
     CAELUS_TENANT_DB_ADMIN_PASSWORD = random_password.tenant_db_admin.result
     CAELUS_TENANT_DB_MAINTENANCE_DB = "postgres"
-
-    # What a tenant's DATABASE_URL points at. Fully qualified: the pod reading
-    # it lives in its own namespace, where a bare service name resolves to
-    # nothing.
-    CAELUS_TENANT_DB_POOLER_HOST = "caelus-tenant-pooler.${var.namespace}.svc.cluster.local"
-    CAELUS_TENANT_DB_POOLER_PORT = "6432"
   }
 }
 

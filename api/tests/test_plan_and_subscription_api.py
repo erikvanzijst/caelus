@@ -185,6 +185,7 @@ class TestPlanAPI:
                 "price_cents": 1999,
                 "billing_interval": "annual",
                 "storage_bytes": 107374182400,
+                "database_bytes": 1073741824,
             },
         )
         assert tmpl_resp.status_code == 201
@@ -193,6 +194,31 @@ class TestPlanAPI:
         assert data["price_cents"] == 1999
         assert data["billing_interval"] == "annual"
         assert data["storage_bytes"] == 107374182400
+        assert data["database_bytes"] == 1073741824
+
+        # The allowance survives the read path as well as the create response.
+        read_resp = client.get(f"/api/plans/{plan_id}/templates")
+        assert read_resp.status_code == 200
+        assert [t["database_bytes"] for t in read_resp.json()] == [1073741824]
+
+    def test_plan_template_allowances_are_independent(self, client):
+        """A plan may bound one subsystem without bounding the other."""
+        product_id, _ = _setup_product_and_template(client)
+
+        plan_id = client.post(
+            f"/api/products/{product_id}/plans", json={"name": "Storage only"}
+        ).json()["id"]
+
+        data = client.post(
+            f"/api/plans/{plan_id}/templates",
+            json={
+                "price_cents": 0,
+                "billing_interval": "monthly",
+                "storage_bytes": 1073741824,
+            },
+        ).json()
+        assert data["storage_bytes"] == 1073741824
+        assert data["database_bytes"] is None
 
     def test_get_nonexistent_plan_returns_404(self, client):
         resp = client.get("/api/plans/99999")

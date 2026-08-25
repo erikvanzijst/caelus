@@ -13,7 +13,7 @@ import StarIcon from '@mui/icons-material/Star'
 import AddIcon from '@mui/icons-material/Add'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPlanTemplate, updatePlan } from '../api/endpoints'
-import type { Plan, PlanTemplateVersion } from '../api/types'
+import type { Plan, PlanTemplatePayload, PlanTemplateVersion } from '../api/types'
 import { SplitPane } from './SplitPane'
 import { PlanCardPreview } from './PlanCardPreview'
 
@@ -21,7 +21,7 @@ function formatPrice(cents: number): string {
   return cents === 0 ? 'Free' : `€${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
 }
 
-function formatStorage(bytes: number | null | undefined): string {
+function formatBytes(bytes: number | null | undefined): string {
   if (!bytes) return 'None'
   if (bytes >= 1024 ** 4) return `${(bytes / 1024 ** 4).toFixed(1)} TB`
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
@@ -66,8 +66,7 @@ export function PlanTemplateTabs({ plan, templates, onError }: PlanTemplateTabsP
   })
 
   const createMutation = useMutation({
-    mutationFn: (payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null; description?: string | null }) =>
-      createPlanTemplate(plan.id, payload),
+    mutationFn: (payload: PlanTemplatePayload) => createPlanTemplate(plan.id, payload),
     onSuccess: (tmpl) => {
       queryClient.invalidateQueries({ queryKey: ['plan-templates', plan.id] })
       if (!plan.template_id) {
@@ -155,7 +154,11 @@ function PlanTemplateReadOnly({ plan, template, isCanonical, onMakeCanonical }: 
             </Box>
             <Box>
               <Typography variant="caption" color="text.secondary">Storage</Typography>
-              <Typography variant="h6">{formatStorage(template.storage_bytes)}</Typography>
+              <Typography variant="h6">{formatBytes(template.storage_bytes)}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Database</Typography>
+              <Typography variant="h6">{formatBytes(template.database_bytes)}</Typography>
             </Box>
           </Stack>
           {template.description && (
@@ -209,7 +212,7 @@ function PlanTemplateReadOnly({ plan, template, isCanonical, onMakeCanonical }: 
 interface NewPlanTemplateFormProps {
   plan: Plan
   lastTemplate?: PlanTemplateVersion
-  onSave: (payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null; description?: string | null }) => void
+  onSave: (payload: PlanTemplatePayload) => void
   saving: boolean
 }
 
@@ -219,20 +222,28 @@ function NewPlanTemplateForm({ plan, lastTemplate, onSave, saving }: NewPlanTemp
   const [storageGb, setStorageGb] = useState(
     lastTemplate?.storage_bytes ? String(lastTemplate.storage_bytes / 1024 ** 3) : '',
   )
+  // Database allowances are entered in MB: the smallest tier is 100 MB, which
+  // as a fraction of a GB is unreadable.
+  const [databaseMb, setDatabaseMb] = useState(
+    lastTemplate?.database_bytes ? String(lastTemplate.database_bytes / 1024 ** 2) : '',
+  )
   const [description, setDescription] = useState(lastTemplate?.description ?? '')
 
   function handleSubmit() {
     const cents = Math.round(parseFloat(priceEuros) * 100)
     if (isNaN(cents) || cents < 0) return
     const storageBytes = storageGb ? Math.round(parseFloat(storageGb) * 1024 ** 3) : null
+    const databaseBytes = databaseMb ? Math.round(parseFloat(databaseMb) * 1024 ** 2) : null
     onSave({
       price_cents: cents,
       billing_interval: billingInterval,
       storage_bytes: storageBytes,
+      database_bytes: databaseBytes,
       description: description.trim() || null,
     })
     setPriceEuros('')
     setStorageGb('')
+    setDatabaseMb('')
     setDescription('')
   }
 
@@ -272,6 +283,15 @@ function NewPlanTemplateForm({ plan, lastTemplate, onSave, saving }: NewPlanTemp
             type="number"
             size="small"
             helperText="Leave empty for no storage limit"
+            slotProps={{ htmlInput: { min: 0 } }}
+          />
+          <TextField
+            label="Database (MB)"
+            value={databaseMb}
+            onChange={(e) => setDatabaseMb(e.target.value)}
+            type="number"
+            size="small"
+            helperText="Leave empty for no database"
             slotProps={{ htmlInput: { min: 0 } }}
           />
           <TextField

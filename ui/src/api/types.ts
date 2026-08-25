@@ -68,9 +68,19 @@ export interface PlanTemplateVersion {
   price_cents: number
   billing_interval: 'monthly' | 'annual'
   storage_bytes?: number | null
+  database_bytes?: number | null
   description?: string | null
   created_at: IsoDate
   plan?: Plan | null
+}
+
+/** The commercial terms accepted when creating a new plan template version. */
+export interface PlanTemplatePayload {
+  price_cents: number
+  billing_interval: string
+  storage_bytes?: number | null
+  database_bytes?: number | null
+  description?: string | null
 }
 
 export interface Subscription {

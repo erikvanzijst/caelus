@@ -41,7 +41,7 @@ def list_plans(
 
     Plans are returned ordered by ``sort_order`` (ascending) and then by ``id``.
     Each plan embeds its current template version (``template``), which carries
-    the price, billing interval, storage quota, and description.
+    the price, billing interval, storage and database quotas, and description.
 
     ## Authorization
     Public — no authentication required.
@@ -78,7 +78,8 @@ def get_plan(
 
     The embedded ``template`` (when present) supplies the plan's commercial
     terms: ``price_cents`` (``0`` denotes a free plan), ``billing_interval``
-    (``monthly`` or ``annual``), ``storage_bytes`` and a Markdown ``description``.
+    (``monthly`` or ``annual``), ``storage_bytes``, ``database_bytes`` and a
+    Markdown ``description``.
 
     ## Authorization
     Public — no authentication required.
@@ -275,7 +276,7 @@ def list_plan_templates(
     """List the template versions of a plan.
 
     Template versions are immutable commercial-terms records (price, billing
-    interval, storage quota, description).
+    interval, storage and database quotas, description).
 
     ## Authorization
     Public — no authentication required.
@@ -334,8 +335,11 @@ def create_plan_template(
       plan.
     - **billing_interval** (body, required) — exactly ``monthly`` or ``annual``;
       any other value is a 422. A product offering both is modeled as two plans.
-    - **storage_bytes** (body, optional) — storage quota in bytes; when omitted,
-      the deployment uses its default storage size.
+    - **storage_bytes** (body, optional) — object storage quota in bytes; when
+      omitted, the deployment uses its default storage size.
+    - **database_bytes** (body, optional) — relational database quota in bytes.
+      A separate allowance from ``storage_bytes``, bounding a separate
+      subsystem; when omitted, the plan grants no relational storage.
     - **description** (body, optional) — Markdown summary of the terms.
 
     ## Behavior

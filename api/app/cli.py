@@ -998,6 +998,7 @@ def create_plan_template(
     price_cents: int = typer.Option(..., "--price-cents"),
     billing_interval: BillingInterval = typer.Option(..., "--billing-interval"),
     storage_bytes: int | None = typer.Option(None, "--storage-bytes"),
+    database_bytes: int | None = typer.Option(None, "--database-bytes"),
     description: str | None = typer.Option(None, "--description"),
 ) -> None:
     with session_scope() as session:
@@ -1010,6 +1011,7 @@ def create_plan_template(
                     price_cents=price_cents,
                     billing_interval=billing_interval,
                     storage_bytes=storage_bytes,
+                    database_bytes=database_bytes,
                     description=description,
                 ),
             )

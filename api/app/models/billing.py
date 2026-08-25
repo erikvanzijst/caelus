@@ -110,6 +110,7 @@ class PlanTemplateVersionBase(SQLModel):
     price_cents: int
     billing_interval: BillingInterval
     storage_bytes: Optional[int] = None
+    database_bytes: Optional[int] = None
     description: Optional[str] = None
 
 
@@ -128,6 +129,11 @@ class PlanTemplateVersionORM(PlanTemplateVersionBase, table=True):
         )
     )
     storage_bytes: Optional[int] = Field(
+        default=None, sa_column=Column(BigInteger, nullable=True)
+    )
+    # The relational-database allowance, bounding a different subsystem than
+    # `storage_bytes`: neither is derived from the other.
+    database_bytes: Optional[int] = Field(
         default=None, sa_column=Column(BigInteger, nullable=True)
     )
     # Uses Markdown for formatting:
@@ -150,6 +156,7 @@ class PlanTemplateVersionCreate(SQLModel):
     price_cents: int
     billing_interval: BillingInterval
     storage_bytes: Optional[int] = None
+    database_bytes: Optional[int] = None
     description: Optional[str] = None
 
 

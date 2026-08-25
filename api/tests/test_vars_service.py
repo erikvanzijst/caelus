@@ -513,7 +513,7 @@ def test_rotation_does_not_make_a_deployment_look_pending(env):
         var_encryption_keys=[new_key, TEST_VAR_ENCRYPTION_KEY], _env_file=None
     )
     var_crypto.get_keyring.cache_clear()
-    assert var_crypto.rotate_vars(session) == 1
+    assert var_crypto.rotate_encrypted_values(session) == 1
 
     assert vars_service.pending(session, env["deployment"]) is False
     assert _plaintext(env, "LOG_LEVEL") == "info"

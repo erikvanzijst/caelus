@@ -104,6 +104,20 @@ already refuse to start without.
 between the two leaves a stored password that does not yet work, which the next
 reconcile fixes. The reverse order leaves a live credential nobody holds.
 
+**This is the keyring's second encrypted column, and the keyring machinery is written
+for one.** `verify_keyring` checks stored `key_id`s only in `deployment_var`, and the
+rotation sweep re-encrypts only that table — so without expanding both, a retired key
+still named by `deployment_database` rows passes startup and surfaces inside a reconcile
+instead, and `caelus vars-rotate` reports nothing left to rotate while telling the
+operator it is safe to retire a key that is still in use. Following the documented
+rotation procedure correctly would then leave every tenant password unreadable: not
+permanent loss, since this decision's repair path covers an unreadable stored password
+as well as a missing one, but a fleet-wide outage that clears only as each deployment
+next rolls out. Both functions become generic over a registry of encrypted columns
+rather than gaining a second hardcoded branch — this is the second such column and will
+not be the last, and the registry is what makes "what is encrypted under this keyring"
+answerable in one place before an operator retires a key.
+
 Reconcile re-asserts unconditionally. A tenant *can* change their own password
 (verified), which desynchronizes the stored copy — and since the credential reaches the
 app as an environment variable, a tenant who rotates has already broken their own app
@@ -472,6 +486,15 @@ What the quota poll is *for* is worth stating: customer-facing quota state, not 
 safety. A tenant can write gigabytes inside any interval, so the poll is not and cannot
 be what protects the volume — D13 is.
 
+**The db-worker does not verify the keyring at startup**, unlike the API and
+`caelus worker`. All three ticks connect as `caelus_admin` and act on cluster state; not
+one of them decrypts a tenant password, so the check would gate quota enforcement,
+purges and orphan sweeps on a keyring problem this process has no stake in. The two
+processes that *do* read ciphertext already fail loudly, and both must be running for
+the platform to function at all, so a third gate adds a failure mode without adding
+coverage. If a tick ever needs a stored password — connecting *as* a tenant, which
+nothing here does — it gains the check then.
+
 **Alternative rejected:** folding quota work into the reconcile worker, which would
 couple enforcement to Helm timeouts.
 
@@ -681,6 +704,10 @@ k3s Traefik, so any TCP exposure needs a port at both.
 - **No tenant-reachable backups exist** → an accidental `DROP TABLE` is unrecoverable
   for the tenant. `legal/` must state this plainly rather than implying a restore
   capability.
+- **A retired encryption key would strand every tenant password** → the keyring's
+   coverage checks and rotation sweep are made generic before the column is populated
+   (migration step 5). Untreated, the failure is triggered by following the documented
+   rotation procedure correctly, which is the worst way to find a gap.
 - **The pooler is a new shared dependency** → two instances reduce blast radius but do
   not eliminate reconnects, since PgBouncer has no connection handoff. Applications
   must tolerate reconnects, which every client pool already does.
@@ -705,17 +732,21 @@ Ordered so each step is independently verifiable and separately revertable.
 3. **NetworkPolicy** — the egress rule plus a fleet-wide re-apply via
    `caelus sync-network-policies`. Safe before anything consumes it.
 4. **Data model** — the `deployment_database` migration.
-5. **Provisioning service** — `relational_storage.py` beside `object_storage.py`, over
+5. **Keyring coverage** — make `verify_keyring` and the rotation sweep generic over the
+   registry of encrypted columns, before any `deployment_database` row exists. Ships
+   alone, changes no behavior for vars, and is a prerequisite for the next step being
+   safe to operate rather than merely correct.
+6. **Provisioning service** — `relational_storage.py` beside `object_storage.py`, over
    a PostgreSQL admin client, with `is_enabled`, `resolve_quota_bytes`,
    `ensure_database`, `teardown_database`, `evaluate_quota_state`.
-6. **Reconcile integration** — provisioning and Secret publication on apply, teardown
+7. **Reconcile integration** — provisioning and Secret publication on apply, teardown
    on delete, `caelus.database` overrides, chart schema and catalog opt-in.
-7. **`caelus db-worker`, quota tick** — thresholds, email with suppression, read-only
+8. **`caelus db-worker`, quota tick** — thresholds, email with suppression, read-only
    assert and lift, suspension. Shipping the process with one tick keeps its first
    deployment small.
-8. **`caelus db-worker`, purge and orphan ticks** — same process, added once the quota
+9. **`caelus db-worker`, purge and orphan ticks** — same process, added once the quota
    tick is proven.
-9. **Documentation** — see `tasks.md`.
+10. **Documentation** — see `tasks.md`.
 
 **Rollback.** Steps 1–4 are additive and safe to leave in place. From step 6 onward,
 reverting means removing the catalog opt-in, which stops new provisioning; existing

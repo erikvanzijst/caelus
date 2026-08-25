@@ -163,14 +163,21 @@ current one, in batches, with the API image's own CLI:
 
 ```bash
 # `caelus` in prod, `caelus-dev` in dev.
-kubectl -n caelus exec deploy/caelus-worker -- caelus vars-rotate
+kubectl -n caelus exec deploy/caelus-worker -- caelus keyring-rotate
 ```
 
-It is resumable and safe to interrupt: a half-swept table is fully readable
-because every row names its own key. The old key can be dropped from the list
-once the sweep reports nothing left to rotate — the API refuses to start if any
-stored fingerprint is not configured, so a premature removal fails loudly at
-the next rollout rather than silently losing data.
+The sweep covers every column encrypted under the keyring — deployment vars
+and tenant database passwords — not vars alone, which is why it is no longer
+called `vars-rotate`.
+
+It is resumable and safe to interrupt: a half-swept store is fully readable
+because every row names its own key. Drop the old key from the list only after
+every process has been rolled onto the new key list *and* a re-run reports
+nothing left to rotate: the count is a snapshot, and a process still running
+with the old key at the front keeps writing rows under it. The API and the
+workers refuse to start if any stored fingerprint is not configured, so a
+premature removal fails loudly at the next rollout rather than silently losing
+data.
 
 ## Keycloak configuration is Terraform-owned
 

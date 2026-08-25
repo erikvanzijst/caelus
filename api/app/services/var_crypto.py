@@ -1,7 +1,12 @@
-"""Encryption of deployment var values under a rotatable Fernet keyring.
+"""Encryption of stored secrets under a rotatable Fernet keyring.
 
-Every var value is encrypted, including the ones not marked sensitive: one
-column, one code path, no per-row branch on where the plaintext lives.
+Every column encrypted under it is declared
+in ``ENCRYPTED_COLUMNS`` below, and the two operator-facing sweeps -- the
+startup check and the rotation -- iterate that registry. That is what makes
+"what is encrypted under this keyring" answerable in
+one place, which is the question an operator is really asking before retiring a
+key: a column the checks do not know about passes startup and then strands its
+plaintext the moment the key it names is dropped.
 
 Each row records the *fingerprint* of the key that encrypted it -- the first
 4 bytes of ``sha256`` over the decoded key material, as lowercase hex -- and
@@ -21,20 +26,60 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable
+from typing import Any, Callable
 
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import inspect as sa_inspect
 from sqlmodel import Session, select
 
 from app.config import get_settings
-from app.models.core import DeploymentVarORM, ProductTemplateVersionORM
+from app.models.core import (
+    DeploymentDatabaseORM,
+    DeploymentVarORM,
+    ProductTemplateVersionORM,
+)
 from app.services.errors import CaelusException
 from app.services.template_values import schema_declares_vars
 
 KEY_ID_BYTES = 4
 KEY_ID_LEN = KEY_ID_BYTES * 2
+
+
+@dataclass(frozen=True)
+class EncryptedColumn:
+    """One ciphertext column and the column naming the key that produced it."""
+
+    model: type
+    ciphertext_attr: str
+    key_id_attr: str
+
+    @property
+    def table(self) -> str:
+        return self.model.__tablename__
+
+    @property
+    def label(self) -> str:
+        """How this column is named in operator-facing errors."""
+        return f"{self.table}.{self.ciphertext_attr}"
+
+    @property
+    def ciphertext(self) -> Any:
+        return getattr(self.model, self.ciphertext_attr)
+
+    @property
+    def key_id(self) -> Any:
+        return getattr(self.model, self.key_id_attr)
+
+
+# Every column encrypted under this keyring. Adding one here is what makes the
+# startup check refuse to serve it and the rotation sweep re-encrypt it;
+# forgetting to is a silent gap that only shows up when a key is retired.
+ENCRYPTED_COLUMNS: tuple[EncryptedColumn, ...] = (
+    EncryptedColumn(DeploymentVarORM, "value_encrypted", "key_id"),
+    EncryptedColumn(DeploymentDatabaseORM, "password_encrypted", "key_id"),
+)
 
 
 class VarEncryptionException(CaelusException):
@@ -128,20 +173,56 @@ def decrypt(ciphertext: str, key_id: str) -> str:
     return get_keyring().decrypt(ciphertext, key_id)
 
 
+def _stored_key_ids(session: Session) -> dict[str, set[str]]:
+    """The key fingerprints present in each registered column.
+
+    Checked for the table's existence before querying, so a database that has
+    not been migrated says so in one line instead of surfacing as an
+    UndefinedTable traceback out of the ASGI lifespan, where the actionable
+    part is a hundred lines up.
+    """
+    inspector = sa_inspect(session.get_bind())
+    found: dict[str, set[str]] = {}
+    for column in ENCRYPTED_COLUMNS:
+        if not inspector.has_table(column.table):
+            raise VarEncryptionException(
+                f"table {column.table} does not exist; "
+                "run `alembic upgrade head` against this database"
+            )
+        found[column.label] = {
+            key_id
+            for key_id in session.exec(
+                select(column.key_id).where(column.key_id.is_not(None))
+            ).all()
+            if key_id is not None
+        }
+    return found
+
+
 def verify_keyring(session: Session) -> None:
-    """Verify this process can serve the vars already in storage.
+    """Verify this process can serve the secrets already in storage.
 
     Every failure here is fatal rather than a warning. A row whose key is no
-    longer configured can never be decrypted again, and that has to surface in
-    front of whoever edited the key list -- not months later, inside a tenant's
-    failed rollout, with the release row already written.
+    longer configured can never be decrypted again, and that has to surface
+    now -- not months later, inside a tenant's failed rollout, with the release
+    row already written.
     """
     settings = get_settings()
     # A fingerprint collision between two configured keys raises here: it makes
     # `key_id` ambiguous, so nothing downstream can be trusted.
     keyring = Keyring(settings.var_encryption_keys)
 
+    stored = _stored_key_ids(session)
+
     if not keyring:
+        holding = sorted(label for label, key_ids in stored.items() if key_ids)
+        if holding:
+            raise VarEncryptionException(
+                "no encryption key is configured (CAELUS_VAR_ENCRYPTION_KEYS is empty) "
+                f"while encrypted values are stored in {', '.join(holding)}; "
+                "restore the key that encrypted them"
+            )
+
         declaring = [
             t.id
             for t in session.exec(
@@ -157,33 +238,20 @@ def verify_keyring(session: Session) -> None:
                 f"while product template(s) {declaring} declare vars"
             )
 
-    # Checked before querying, so a database that has not been migrated says so
-    # in one line instead of surfacing as an UndefinedTable traceback out of
-    # the ASGI lifespan, where the actionable part is a hundred lines up.
-    if not sa_inspect(session.get_bind()).has_table(DeploymentVarORM.__tablename__):
-        raise VarEncryptionException(
-            f"table {DeploymentVarORM.__tablename__} does not exist; "
-            "run `alembic upgrade head` against this database"
-        )
-
-    stored = {
-        key_id
-        for key_id in session.exec(
-            select(DeploymentVarORM.key_id).where(
-                DeploymentVarORM.key_id.is_not(None)  # type: ignore[union-attr]
-            )
-        ).all()
-        if key_id is not None
+    configured = set(keyring.key_ids)
+    unreadable = {
+        label: sorted(key_ids - configured)
+        for label, key_ids in stored.items()
+        if key_ids - configured
     }
-    missing = sorted(stored - set(keyring.key_ids))
-    if missing:
+    if unreadable:
         raise VarEncryptionException(
-            "stored deployment vars name encryption key(s) that are not configured: "
-            + ", ".join(missing)
+            "stored values name encryption key(s) that are not configured: "
+            + "; ".join(f"{label}: {', '.join(ids)}" for label, ids in sorted(unreadable.items()))
         )
 
 
-def rotate_vars(
+def rotate_encrypted_values(
     session: Session,
     *,
     batch_size: int = 200,
@@ -191,10 +259,11 @@ def rotate_vars(
 ) -> int:
     """Re-encrypt every row not already under the current key.
 
-    Each batch is committed on its own, which is what makes the sweep
-    resumable and safe to interrupt: a row names the key that encrypted it, so
-    a half-swept table is fully readable and a re-run simply picks up the rows
-    that are left. Tombstones carry no value and are skipped by the filter.
+    Each batch is committed on its own, which is what makes the sweep resumable
+    and safe to interrupt: a row names the key that encrypted it, so a
+    half-swept store is fully readable and a re-run simply picks up the rows
+    that are left. Rows carrying no ciphertext (a var tombstone) name no key
+    and are skipped by the filter.
 
     Returns the number of rows re-encrypted.
     """
@@ -203,24 +272,30 @@ def rotate_vars(
     keyring = get_keyring()
     current = keyring.current_key_id()
     rotated = 0
-    while True:
-        rows = session.exec(
-            select(DeploymentVarORM)
-            .where(
-                DeploymentVarORM.key_id.is_not(None),  # type: ignore[union-attr]
-                DeploymentVarORM.key_id != current,
-            )
-            .order_by(DeploymentVarORM.id)  # type: ignore[arg-type]
-            .limit(batch_size)
-        ).all()
-        if not rows:
-            return rotated
-        for row in rows:
-            assert row.value_encrypted is not None and row.key_id is not None
-            plaintext = keyring.decrypt(row.value_encrypted, row.key_id)
-            row.value_encrypted, row.key_id = keyring.encrypt(plaintext)
-            session.add(row)
-        session.commit()
-        rotated += len(rows)
-        if on_batch is not None:
-            on_batch(rotated)
+    for column in ENCRYPTED_COLUMNS:
+        while True:
+            rows = session.exec(
+                select(column.model)
+                .where(
+                    column.key_id.is_not(None),
+                    column.key_id != current,
+                )
+                .order_by(column.model.id)  # type: ignore[arg-type]
+                .limit(batch_size)
+            ).all()
+            if not rows:
+                break
+            for row in rows:
+                ciphertext = getattr(row, column.ciphertext_attr)
+                key_id = getattr(row, column.key_id_attr)
+                assert ciphertext is not None and key_id is not None
+                plaintext = keyring.decrypt(ciphertext, key_id)
+                new_ciphertext, new_key_id = keyring.encrypt(plaintext)
+                setattr(row, column.ciphertext_attr, new_ciphertext)
+                setattr(row, column.key_id_attr, new_key_id)
+                session.add(row)
+            session.commit()
+            rotated += len(rows)
+            if on_batch is not None:
+                on_batch(rotated)
+    return rotated

@@ -804,23 +804,28 @@ def build_worker(
     run_build_worker(settings=settings, emit=_echo_yaml_stream_item)
 
 
-@app.command("vars-rotate")
-def vars_rotate(
+@app.command("keyring-rotate")
+def keyring_rotate(
     batch_size: int = typer.Option(
         200, "--batch-size", help="Rows re-encrypted per committed batch"
     ),
 ) -> None:
-    """Re-encrypt deployment vars under the current encryption key.
+    """Re-encrypt every value the keyring covers under the current key.
 
     Run after promoting a new key to the front of CAELUS_VAR_ENCRYPTION_KEYS.
     Every batch commits on its own, so the sweep can be interrupted and
-    re-run: a row names the key that encrypted it, and a half-swept table
-    stays fully readable throughout. The old key may be retired once this
-    reports nothing left to rotate.
+    re-run: a row names the key that encrypted it, and a half-swept store
+    stays fully readable throughout.
+
+    Retiring the old key takes more than this reporting zero. That count is a
+    snapshot: a process still running with the old key at the front keeps
+    writing rows under it. Roll every process onto the new key list first,
+    re-run this until it reports zero, and let the startup check be the gate --
+    it refuses to serve while any stored value names a key that is gone.
     """
     with session_scope() as session:
         try:
-            rotated = var_crypto.rotate_vars(
+            rotated = var_crypto.rotate_encrypted_values(
                 session,
                 batch_size=batch_size,
                 on_batch=lambda n: logger.info("Re-encrypted %d rows so far", n),

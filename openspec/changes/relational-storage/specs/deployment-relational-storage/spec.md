@@ -56,10 +56,14 @@ the superuser, createdb, createrole, replication and bypassrls attributes.
 - **WHEN** the deployment role attempts to alter its own login attribute
 - **THEN** PostgreSQL denies the operation
 
-### Requirement: Cross-tenant access is revoked explicitly
+### Requirement: Cross-tenant access is revoked explicitly and the revocation is verified
 Because PostgreSQL grants CONNECT to PUBLIC on every new database, provisioning SHALL
-revoke CONNECT from PUBLIC on each tenant database, and the tenant cluster's
+revoke PUBLIC's privileges on each tenant database, and the tenant cluster's
 maintenance databases SHALL have the same revocation applied.
+
+Because that revocation can fail without raising an error, provisioning SHALL read the
+resulting privilege back and SHALL fail when PUBLIC still holds CONNECT, rather than
+reporting a successful provision.
 
 #### Scenario: One tenant cannot connect to another's database
 - **WHEN** deployment A's role attempts to connect to deployment B's database
@@ -72,6 +76,10 @@ maintenance databases SHALL have the same revocation applied.
 #### Scenario: The owner is unaffected
 - **WHEN** a deployment role connects to its own database after the revocation
 - **THEN** the connection succeeds
+
+#### Scenario: A revocation that did not take effect fails the provision
+- **WHEN** provisioning revokes PUBLIC's access to a tenant database and PUBLIC is still able to connect afterwards
+- **THEN** provisioning fails rather than reporting success
 
 #### Scenario: A tenant cannot exhaust another tenant's connection allowance
 - **WHEN** deployment A opens connections against deployment B's database

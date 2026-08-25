@@ -14,6 +14,14 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
+    # Generates the tenant cluster's three passwords (tf/app/caelus/tenant-db.tf).
+    # They live only in Terraform state, which is gitignored -- restoring an
+    # environment from a lost state file means resetting them by hand against
+    # the surviving PGDATA.
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 }
 

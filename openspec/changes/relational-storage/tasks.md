@@ -1,19 +1,21 @@
 ## 1. Plan allowance
 
-- [ ] 1.1 Add `database_bytes` (nullable `BigInteger`) to `PlanTemplateVersionORM` and its Create/Read models; verify `PlanTemplateVersionRead` round-trips the field in `api/tests/test_plan_and_subscription_api.py`
-- [ ] 1.2 Write the Alembic migration adding the column; verify `alembic upgrade head` then `downgrade -1` runs clean against a scratch database
-- [ ] 1.3 Add `--database-bytes` to the `caelus plan` template-version commands; verify the CLI test creates a template version carrying the value
-- [ ] 1.4 Add the field to the admin UI plan form; verify `cd ui && npm test` passes and the value survives a create/edit round trip
-- [ ] 1.5 Seed the Free (100 MB) and Basic (1 GB, EUR 3/month) tiers for the `custom` product; verify `caelus plan list` shows both allowances
+- [x] 1.1 Add `database_bytes` (nullable `BigInteger`) to `PlanTemplateVersionORM` and its Create/Read models; verify `PlanTemplateVersionRead` round-trips the field in `api/tests/test_plan_and_subscription_api.py`
+- [x] 1.2 Write the Alembic migration adding the column; verify `alembic upgrade head` then `downgrade -1` runs clean against a scratch database
+- [x] 1.3 Add `--database-bytes` to the `caelus plan` template-version commands; verify the CLI test creates a template version carrying the value
+- [x] 1.4 Add the field to the admin UI plan form; verify `cd ui && npm test` passes and the value survives a create/edit round trip
+- [x] 1.5 Seed the Free (100 MB) and Basic (1 GB, EUR 3/month) tiers for the `custom` product; verify `caelus plan list` shows both allowances
 
 ## 2. Tenant database cluster
 
-- [ ] 2.1 Add PostgreSQL 18 to `tf/app` with its own PVC, per workspace, using design D13's `postgresql.conf` values and resource bounds; verify `kubectl exec ... psql -c 'select version()'` reports 18 and the pod's limits match
-- [ ] 2.2 Bootstrap the cluster: `REVOKE CONNECT` on `postgres` and `template1`, and create the platform admin role; verify a non-privileged role cannot connect to either maintenance database
-- [ ] 2.3 Create the platform-owned `auth_dbname` database and the `auth_query` view that filters suspended deployments; verify the view returns a row for an active deployment and none for a suspended one
-- [ ] 2.4 Add PgBouncer >= 1.21 (2 replicas) behind a ClusterIP Service, transaction pooling, wildcard database routing, `auth_dbname` pinned, `max_prepared_statements` set, with design D13's resource bounds; verify `SHOW CONFIG` reports the intended pool mode and version
-- [ ] 2.5 Confirm a driver using prepared statements by default connects and queries through the pooler; verify with an asyncpg or SQLAlchemy round trip against a hand-provisioned test database
-- [ ] 2.6 Add the admin connection settings and secret wiring to `CaelusSettings` and the API/worker deployments, following the Garage admin credential pattern; verify the API starts with them absent for products that have not opted in
+- [x] 2.1 Add PostgreSQL 18 to `tf/app` with its own PVC, per workspace, using design D13's `postgresql.conf` values (including `reserved_connections`) and resource bounds; verify `kubectl exec ... psql -c 'select version()'` reports 18 and the pod's limits match
+- [x] 2.2 Write the idempotent bootstrap SQL script (guarded `DO $$` blocks for roles, `CREATE OR REPLACE FUNCTION`, `REVOKE`/`GRANT`): revoke `CONNECT` on `postgres` and `template1` from `PUBLIC`; create `caelus_admin` with `CREATEDB CREATEROLE` plus `pg_read_all_stats` and `pg_signal_backend`; create `pgbouncer_auth` and the superuser-owned `pgbouncer.user_lookup` `SECURITY DEFINER` function in the tenant cluster's `postgres` database, granting `pgbouncer_auth` `EXECUTE` on it and `pg_use_reserved_connections`; verify running it twice against a scratch cluster succeeds both times and leaves identical state
+- [x] 2.3 Load the script into a ConfigMap and apply it from an ordered init container running `psql` from `postgres:18-alpine` on the reconcile worker Deployment, with the `pgbouncer_auth` password passed as a `psql` variable from a Terraform-generated Secret and a hash of the script on the pod template; verify `terraform apply` against an empty cluster produces a bootstrapped one with no manual step, that editing the script forces a rollout, and that an unreachable cluster crashloops the init container rather than starting the worker
+- [x] 2.4 Verify `caelus_admin` needs no superuser by exercising the full lifecycle under it: create role and database owned by the tenant, read `pg_database_size` with `CONNECT` revoked, set and clear `default_transaction_read_only` via `SET ROLE`, terminate a tenant backend, and `DROP DATABASE WITH (FORCE)` then `DROP ROLE`
+- [x] 2.5 Add PgBouncer >= 1.21 (2 replicas) behind a ClusterIP Service, transaction pooling, wildcard database routing, `auth_dbname` pinned to the tenant cluster's `postgres` database, `auth_user = pgbouncer_auth`, `max_prepared_statements` set, **no `admin_users`**, with design D13's resource bounds; verify `SHOW CONFIG` reports the intended pool mode and version, and that a tenant set to `NOLOGIN` is refused at the pooler
+- [x] 2.6 Confirm a driver using prepared statements by default connects and queries through the pooler; verify with an asyncpg or SQLAlchemy round trip against a hand-provisioned test database
+- [x] 2.7 Verify authentication still succeeds while the tenant cluster is at `max_connections`, confirming the reserved slot works; and record PgBouncer's observed `auth_query` cache-invalidation behavior for design.md's open question
+- [x] 2.8 Add the admin connection settings and secret wiring to `CaelusSettings` and the API/worker deployments, following the Garage admin credential pattern; verify the API starts with them absent for products that have not opted in
 
 ## 3. Network isolation
 
@@ -33,12 +35,12 @@
 - [ ] 5.2 Add `relational_storage.py` with `is_enabled` reading the template's system values only; verify a tenant-supplied user value cannot enable it
 - [ ] 5.3 Implement `resolve_quota_bytes` fail-closed against `database_bytes`; verify it raises for a missing, zero or negative allowance
 - [ ] 5.4 Implement `database_name`/`role_name` from the deployment UUID with hyphens removed; verify the result is <= 63 bytes and valid unquoted in a real `CREATE ROLE`
-- [ ] 5.5 Implement `ensure_database` following design D6's ordered steps, each reading before writing; verify tests cover a clean provision, a re-run, a role-without-database, and a database-without-role
+- [ ] 5.5 Implement `ensure_database` following design D6's ordered steps — including `GRANT <role> TO caelus_admin WITH SET TRUE, INHERIT FALSE` before the database is created — each reading before writing; verify tests cover a clean provision, a re-run, a role-without-database, and a database-without-role
 - [ ] 5.6 Store the password encrypted via `var_crypto` **before** applying it to the role; verify a test that interrupts after the store and asserts the next run repairs the credential
-- [ ] 5.7 Assert `REVOKE CONNECT ... FROM PUBLIC` on every provision; verify a test where a second provisioned role is refused connection to the first's database
+- [ ] 5.7 Assert `SET ROLE <tenant>; REVOKE ALL ON DATABASE ... FROM PUBLIC` on every provision, followed by design D6 step 5b's post-condition — read `has_database_privilege('public', <db>, 'CONNECT')` back and raise when it is true, because the revoke fails without erroring when it is not owner-scoped; verify a test where a second provisioned role is refused connection to the first's database, and one that the post-condition raises when the revoke did not take effect
 - [ ] 5.8 Apply `temp_file_limit`, `statement_timeout` and `idle_in_transaction_session_timeout` on every provision; verify a test that clears them and asserts re-assertion on the next run
 - [ ] 5.9 Implement `teardown_database` as `NOLOGIN` plus `purge_after`, dropping nothing; verify it is idempotent and tolerates a deployment that never had a database
-- [ ] 5.10 Implement `evaluate_quota_state(deployment)` returning and applying the state, with a flag to suppress notification; verify tests cover each threshold transition in both directions
+- [ ] 5.10 Implement `evaluate_quota_state(deployment)` returning and applying the state, assuming the tenant role via `SET ROLE` for the owner-scoped `ALTER DATABASE`, with a flag to suppress notification; verify tests cover each threshold transition in both directions
 
 ## 6. Reconcile integration
 
@@ -62,12 +64,12 @@
 - [ ] 8.2 Implement the quota tick over the fleet using `evaluate_quota_state`, on a configurable interval defaulting to 60s; verify a test that walks a deployment from `ok` through `blocked` and back
 - [ ] 8.3 Send rate-limited threshold emails at 80%, 90% and 100% through the SMTP relay, recording suppression state; verify a deployment hovering above a threshold is not mailed twice
 - [ ] 8.4 Send an email at the 150% hard block — **drop this task if the open question in design.md resolves that way**; verify the message is sent once on transition to `blocked`
-- [ ] 8.5 Implement suspension as `NOLOGIN` + the suspension flag + backend termination; verify a suspended deployment cannot authenticate through the pooler and that lifting it restores access
+- [ ] 8.5 Implement suspension as `NOLOGIN` plus backend termination, recording the transition in `quota_state`; verify that a client already connected to the pooler cannot execute a further query, that a fresh connection is refused, that no pooler admin credential is configured or used, and that lifting the suspension restores access
 - [ ] 8.6 Add the worker Deployment to `tf/app` with resource bounds; verify it comes up and logs a completed sweep
 
 ## 9. Housekeeping worker — purge and orphan ticks
 
-- [ ] 9.1 Implement the purge tick: `DROP DATABASE ... WITH (FORCE)` then `DROP ROLE` past `purge_after`; verify a test that a due deployment is destroyed and one inside its grace period is not
+- [ ] 9.1 Implement the purge tick: `SET ROLE <tenant>` then `DROP DATABASE ... WITH (FORCE)`, then `RESET ROLE` and `DROP ROLE`, past `purge_after`; verify a test that a due deployment is destroyed and one inside its grace period is not
 - [ ] 9.2 Refuse to purge a null or future `purge_after`, cap purges per run, and log every drop with its deployment id; verify tests for each guard
 - [ ] 9.3 Verify a purge succeeds while sessions are connected to the target database
 - [ ] 9.4 Implement the orphan tick over both databases and roles, reporting cluster objects no row accounts for; verify a test that creates a role without a database and asserts it is reported

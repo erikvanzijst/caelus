@@ -54,6 +54,37 @@ def test_var_encryption_keys_default_to_empty(monkeypatch):
     assert CaelusSettings(_env_file=None).var_encryption_keys == []
 
 
+def test_tenant_db_settings_default_to_absent(monkeypatch):
+    """A product that has not opted in never reads these, so nothing may
+    require them at startup: an environment with no tenant cluster -- and every
+    migration, test and CLI invocation -- must still construct settings."""
+    for key in list(os.environ):
+        if key.startswith("CAELUS_TENANT_DB_"):
+            monkeypatch.delenv(key)
+    settings = CaelusSettings(_env_file=None)
+    assert settings.tenant_db_host == ""
+    assert settings.tenant_db_admin_password == ""
+    assert settings.tenant_db_pooler_host == ""
+    # The names and ports are conventions, not per-environment facts, so they
+    # carry defaults while the addresses and the credential do not.
+    assert settings.tenant_db_port == 5432
+    assert settings.tenant_db_admin_user == "caelus_admin"
+    assert settings.tenant_db_maintenance_db == "postgres"
+    assert settings.tenant_db_pooler_port == 6432
+
+
+def test_tenant_db_settings_from_env(monkeypatch):
+    monkeypatch.setenv("CAELUS_TENANT_DB_HOST", "caelus-tenant-postgres.caelus-dev.svc.cluster.local")
+    monkeypatch.setenv("CAELUS_TENANT_DB_ADMIN_PASSWORD", "s3cret")
+    monkeypatch.setenv("CAELUS_TENANT_DB_POOLER_HOST", "caelus-tenant-pooler.caelus-dev.svc.cluster.local")
+    monkeypatch.setenv("CAELUS_TENANT_DB_POOLER_PORT", "6432")
+    settings = CaelusSettings(_env_file=None)
+    assert settings.tenant_db_host == "caelus-tenant-postgres.caelus-dev.svc.cluster.local"
+    assert settings.tenant_db_admin_password == "s3cret"
+    assert settings.tenant_db_pooler_host == "caelus-tenant-pooler.caelus-dev.svc.cluster.local"
+    assert settings.tenant_db_pooler_port == 6432
+
+
 def test_static_path_from_env(monkeypatch, tmp_path):
     monkeypatch.setenv("CAELUS_STATIC_PATH", str(tmp_path))
     settings = CaelusSettings(_env_file=None)

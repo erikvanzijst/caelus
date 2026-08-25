@@ -42,17 +42,79 @@ statements, so that common drivers and ORMs work with their default settings.
 - **WHEN** more client connections are open than server connections
 - **THEN** clients are multiplexed over the server pool
 
-### Requirement: Pooler authentication resolves against a platform-owned database
-The pooler's authentication lookup SHALL be pinned to a database that no tenant can
-reach, so that no tenant can influence how credentials are resolved.
+### Requirement: Pooler authentication resolves against a database no tenant can reach
+The pooler's authentication lookup SHALL be pinned to a database on the tenant cluster
+that no tenant can connect to, so that no tenant can influence how credentials are
+resolved. It SHALL NOT resolve against the control-plane database, so that a
+control-plane outage cannot prevent tenants from authenticating to their databases.
 
 #### Scenario: Lookup does not occur in a tenant database
 - **WHEN** a tenant connects to their own database through the pooler
-- **THEN** the credential lookup is performed against the platform-owned database, not the tenant's
+- **THEN** the credential lookup is performed against the pinned platform database, not the tenant's
 
 #### Scenario: A tenant cannot define the lookup
 - **WHEN** a tenant creates objects in their own database matching the lookup's names
 - **THEN** authentication behavior is unaffected
+
+#### Scenario: A tenant cannot reach the lookup database
+- **WHEN** a deployment role attempts to connect to the database the lookup is pinned to
+- **THEN** the connection is refused
+
+#### Scenario: Tenant authentication survives a control-plane outage
+- **WHEN** the control-plane database is unavailable
+- **THEN** tenants can still authenticate to their own databases through the pooler
+
+### Requirement: No platform process holds a pooler administrative credential
+No platform process SHALL require or hold administrative access to the pooler. Every
+operation the platform performs against a tenant's database SHALL be expressed against
+PostgreSQL.
+
+#### Scenario: Provisioning issues no pooler command
+- **WHEN** a deployment is provisioned or removed
+- **THEN** no administrative command is issued to any pooler instance
+
+#### Scenario: Suspension issues no pooler command
+- **WHEN** a deployment is suspended or restored
+- **THEN** no administrative command is issued to any pooler instance
+
+#### Scenario: Scaling the pooler needs no coordination
+- **WHEN** the number of pooler instances changes
+- **THEN** no platform process needs to be reconfigured for correctness
+
+### Requirement: Runtime processes hold no superuser credential
+Superuser access to the tenant cluster SHALL be used only by the one-time bootstrap.
+Long-running platform processes SHALL operate under a non-superuser administrative role
+holding only the privileges their operations require.
+
+#### Scenario: Workers run without superuser
+- **WHEN** the reconcile worker or the housekeeping worker connects to the tenant cluster
+- **THEN** it authenticates as a non-superuser role
+
+#### Scenario: The administrative role can still perform the full lifecycle
+- **WHEN** the administrative role provisions, measures, degrades, suspends and purges a deployment's database
+- **THEN** every operation succeeds without superuser
+
+#### Scenario: The administrative role does not silently hold tenant privileges
+- **WHEN** the administrative role is connected without having explicitly assumed a tenant role
+- **THEN** it does not inherit that tenant's privileges
+
+### Requirement: The cluster is bootstrapped declaratively, not by hand
+The cluster's one-time setup — the `PUBLIC` revocations, the platform administrative
+role, and the pooler's authentication role and lookup — SHALL be applied by an
+idempotent, automated step that runs as part of deploying the environment, and SHALL be
+safe to run repeatedly.
+
+#### Scenario: A fresh environment is bootstrapped without manual steps
+- **WHEN** an environment is deployed from scratch
+- **THEN** the cluster is fully bootstrapped with no operator running SQL by hand
+
+#### Scenario: Bootstrap is repeatable
+- **WHEN** the bootstrap runs again against an already-bootstrapped cluster
+- **THEN** it succeeds and leaves the cluster in the same state
+
+#### Scenario: Bootstrap failure does not yield a half-configured platform
+- **WHEN** the bootstrap cannot reach the cluster
+- **THEN** the process that depends on it does not start serving
 
 ### Requirement: Provisioning a deployment requires no pooler restart or reconfiguration
 Adding or removing a deployment SHALL NOT require restarting the pooler, and SHALL NOT

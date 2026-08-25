@@ -76,22 +76,39 @@ on every quota evaluation while the deployment remains at or above its allowance
 - **WHEN** a deployment that was read-only is measured below its allowance
 - **THEN** read-only is cleared and the quota state returns to `ok` or `warned`
 
-### Requirement: Login refusal is the exact enforcement point
-Refusal of login SHALL be enforced both by the role's login attribute and by the
-authentication path the pooler consults, and SHALL NOT depend on any pooler
-administrative command succeeding.
+### Requirement: Login refusal is enforced by role state, not by pooler configuration
+Refusal of login SHALL be enforced by revoking the deployment role's ability to log in
+and terminating that role's existing server connections. It SHALL cause the pooler's
+credential lookup to resolve nothing for that role, and SHALL NOT issue, or require,
+any pooler administrative command.
 
 #### Scenario: A suspended deployment cannot authenticate
-- **WHEN** a suspended deployment's application attempts to connect
+- **WHEN** a suspended deployment's application attempts to connect through the pooler
 - **THEN** authentication is refused
+
+#### Scenario: The credential lookup resolves nothing for a suspended role
+- **WHEN** the pooler performs its credential lookup for a suspended deployment
+- **THEN** no credential is returned
+
+#### Scenario: Suspension holds without any pooler command
+- **WHEN** a deployment is suspended and no administrative command is issued to any pooler instance
+- **THEN** the deployment is still unable to execute queries
+
+#### Scenario: A client holding an established pooler connection is still cut off
+- **WHEN** a deployment is suspended while one of its clients is already connected to the pooler
+- **THEN** that client's next query fails because no server connection can be established
 
 #### Scenario: Suspension survives a pooler restart or rescheduling
 - **WHEN** a pooler instance restarts while a deployment is suspended
 - **THEN** the deployment remains unable to authenticate
 
+#### Scenario: Existing sessions are terminated
+- **WHEN** a deployment becomes suspended while sessions are open
+- **THEN** those sessions are terminated
+
 #### Scenario: Suspension is lifted
 - **WHEN** a suspended deployment is measured below its allowance
-- **THEN** login is restored
+- **THEN** its login is restored and it can authenticate again
 
 ### Requirement: Quota state is evaluated during reconcile as well as on the schedule
 Reconciling a deployment SHALL evaluate and apply its quota state using the same

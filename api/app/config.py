@@ -104,6 +104,32 @@ class CaelusSettings(BaseSettings):
     # its own.
     deployment_bucket_expiry_days: int = 1
 
+    # ── Tenant relational storage (PostgreSQL) ────────────────────────────
+    # The shared tenant cluster, which is a different PostgreSQL instance from
+    # the one `database_url` names: that one holds these tables, this one holds
+    # tenants' databases. Every value defaults to empty so migrations, tests
+    # and the operator CLI construct settings without a tenant cluster, and so
+    # an environment that has not deployed one still starts -- only a product
+    # that has opted in to relational storage reads them.
+    #
+    # The admin connects to PostgreSQL directly rather than through the pooler:
+    # `SET ROLE` followed by an owner-scoped `ALTER DATABASE` is session state,
+    # which transaction pooling does not preserve.
+    tenant_db_host: str = ""
+    tenant_db_port: int = 5432
+    tenant_db_admin_user: str = "caelus_admin"
+    tenant_db_admin_password: str = ""
+    # Where role and database statements are issued from. Not a tenant
+    # database, and one no tenant can connect to: the bootstrap revokes CONNECT
+    # on it from PUBLIC.
+    tenant_db_maintenance_db: str = "postgres"
+
+    # What a tenant's own DATABASE_URL points at. Never the server: the tenant
+    # NetworkPolicy permits the pooler's port and nothing else, which is what
+    # makes the pooler unbypassable.
+    tenant_db_pooler_host: str = ""
+    tenant_db_pooler_port: int = 6432
+
     # ── Deployment logs (Loki) ────────────────────────────────────────────
     loki_base_url: str = ""
     loki_query_timeout_seconds: float = 30.0

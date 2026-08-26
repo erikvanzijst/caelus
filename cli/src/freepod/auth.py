@@ -325,7 +325,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
 def loopback_flow(env: Environment, timeout: int, verbose: bool = False) -> dict:
     verifier, challenge = pkce_pair()
-    state = secrets.token_urlsafe(32)
+    state = secrets.token_hex(32)
 
     # Bind first: the ephemeral port is part of the redirect_uri registered in
     # the authorization request.

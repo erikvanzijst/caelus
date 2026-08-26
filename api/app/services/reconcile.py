@@ -10,7 +10,13 @@ from sqlmodel import Session
 from app.config import get_settings
 from app.models import DeploymentORM, DeploymentReleaseORM, ProductTemplateVersionORM
 from app.provisioner import Provisioner, provisioner as default_provisioner
-from app.services import deployment_logs, object_storage, template_values, var_crypto
+from app.services import (
+    deployment_logs,
+    object_storage,
+    relational_storage,
+    template_values,
+    var_crypto,
+)
 from app.services import vars as vars_service
 from app.services.loki import DIRECTION_BACKWARD, LokiQueryClient
 from app.services.template_values import bytes_to_k8s_size
@@ -38,6 +44,15 @@ def storage_secret_name(deployment: DeploymentORM) -> str:
     is updated in place rather than churned) and unique within the namespace.
     """
     return f"{deployment.name}-object-storage"
+
+
+def database_secret_name(deployment: DeploymentORM) -> str:
+    """Name of the Secret holding a deployment's database credentials.
+
+    Stable across reconciles, like the object-storage one, so the Secret is
+    updated in place rather than churned.
+    """
+    return f"{deployment.name}-database"
 
 
 VARS_SECRET_COMPONENT = "vars"
@@ -300,9 +315,10 @@ class DeploymentReconciler:
         # there yet. The values depend on what provisioning returns, so they are
         # built here rather than at the top.
         storage = self._ensure_object_storage(deployment)
+        database = self._ensure_database(deployment)
         vars_secret = self._ensure_vars_secret(deployment, release)
         merged_values = self._build_merged_values(
-            deployment, template, storage=storage, vars_secret=vars_secret
+            deployment, template, storage=storage, database=database, vars_secret=vars_secret
         )
 
         outcome = self._provisioner.helm_upgrade_install(
@@ -341,6 +357,8 @@ class DeploymentReconciler:
         )
         if object_storage.is_enabled(deployment):
             object_storage.teardown_object_storage(deployment)
+        if relational_storage.is_enabled(deployment):
+            relational_storage.teardown_database(self._session, deployment)
 
         self._provisioner.helm_uninstall(
             release_name=deployment.name,
@@ -402,6 +420,43 @@ class DeploymentReconciler:
         )
         return credentials
 
+    def _ensure_database(
+        self, deployment: DeploymentORM
+    ) -> relational_storage.DatabaseCredentials | None:
+        """Provision the deployment's database and publish its credentials.
+
+        Returns ``None`` for a product that has not opted in, which is what the
+        database overrides key off so such a deployment carries no database
+        block at all.
+
+        The password goes straight into a Kubernetes Secret and never into the
+        Helm values, for the reason spelled out in ``_ensure_object_storage``.
+        """
+        if not relational_storage.is_enabled(deployment):
+            return None
+
+        credentials = relational_storage.ensure_database(self._session, deployment)
+        self._provisioner.upsert_secret(
+            namespace=deployment.namespace,
+            name=database_secret_name(deployment),
+            string_data={
+                # The URL covers every ORM; the discrete variables are what
+                # libpq, psql and pg_dump read unaided.
+                "DATABASE_URL": credentials.url,
+                "PGHOST": credentials.host,
+                "PGPORT": str(credentials.port),
+                "PGUSER": credentials.user,
+                "PGPASSWORD": credentials.password,
+                "PGDATABASE": credentials.database,
+            },
+            labels={
+                "app.kubernetes.io/managed-by": "caelus",
+                "app.kubernetes.io/instance": deployment.name,
+                "caelus.dev/component": "database",
+            },
+        )
+        return credentials
+
     def _ensure_vars_secret(
         self, deployment: DeploymentORM, release: DeploymentReleaseORM
     ) -> str | None:
@@ -454,11 +509,12 @@ class DeploymentReconciler:
         template: ProductTemplateVersionORM,
         *,
         storage: object_storage.ObjectStorageCredentials | None = None,
+        database: relational_storage.DatabaseCredentials | None = None,
         vars_secret: str | None = None,
     ) -> dict:
         template_values.validate_user_values(deployment.user_values_json, template.values_schema_json)
         system_overrides = self._build_system_overrides(
-            deployment, storage=storage, vars_secret=vars_secret
+            deployment, storage=storage, database=database, vars_secret=vars_secret
         )
         return template_values.merge_values_scoped(
             template.system_values_json,
@@ -472,6 +528,7 @@ class DeploymentReconciler:
         deployment: DeploymentORM,
         *,
         storage: object_storage.ObjectStorageCredentials | None = None,
+        database: relational_storage.DatabaseCredentials | None = None,
         vars_secret: str | None = None,
     ) -> dict | None:
         """Combine all system-controlled value overrides under the ``caelus`` namespace.
@@ -486,6 +543,7 @@ class DeploymentReconciler:
             cls._build_ingress_overrides(deployment),
             cls._build_owner_overrides(deployment),
             cls._build_object_storage_overrides(deployment, storage),
+            cls._build_database_overrides(deployment, database),
             cls._build_vars_overrides(vars_secret),
             cls._build_release_overrides(deployment),
         ):
@@ -557,6 +615,35 @@ class DeploymentReconciler:
                     "endpoint": settings.s3_endpoint_url,
                     "region": settings.s3_region,
                     "secretName": storage_secret_name(deployment),
+                }
+            }
+        }
+
+    @staticmethod
+    def _build_database_overrides(
+        deployment: DeploymentORM,
+        database: relational_storage.DatabaseCredentials | None,
+    ) -> dict | None:
+        """Project database *references* into the ``caelus.database`` namespace.
+
+        References only -- the password is deliberately absent; see
+        ``_ensure_database``. The host and port are the pooler's, which is the
+        only route a tenant pod has to a database.
+
+        No ``enabled`` flag here: that is the chart's own top-level
+        ``relationalStorage.enabled``, a static product declaration from the
+        catalog's system values.
+        """
+        if database is None:
+            return None
+        return {
+            "caelus": {
+                "database": {
+                    "host": database.host,
+                    "port": database.port,
+                    "name": database.database,
+                    "user": database.user,
+                    "secretName": database_secret_name(deployment),
                 }
             }
         }

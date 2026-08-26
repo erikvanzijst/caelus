@@ -52,12 +52,12 @@
 
 ## 7. Reconcile integration
 
-- [ ] 7.1 Add `_ensure_database` to `_reconcile_apply` after `ensure_tenant_isolation` and before Helm; verify ordering in `api/tests/test_reconcile_service.py`
-- [ ] 7.2 Publish the `<name>-database` Secret with `DATABASE_URL` and the discrete `PG*` variables; verify the Secret's contents and that it is updated in place across reconciles
-- [ ] 7.3 Add `_build_database_overrides` projecting only host, port, name, user and `secretName` under `caelus.database`; verify no password appears in merged values and that a non-opted-in product emits no block
-- [ ] 7.4 Call `evaluate_quota_state` as the final provisioning step with notification suppressed; verify a test that an over-quota deployment reconciling has read-only re-asserted rather than cleared
-- [ ] 7.5 Fail the reconcile when the tenant cluster is unreachable; verify no Helm release is attempted in that case
-- [ ] 7.6 Call `teardown_database` from `_reconcile_delete`; verify the role is `NOLOGIN`, `purge_after` is set, and the database still exists
+- [x] 7.1 Add `_ensure_database` to `_reconcile_apply` after `ensure_tenant_isolation` and before Helm; verify ordering in `api/tests/test_reconcile_service.py`
+- [x] 7.2 Publish the `<name>-database` Secret with `DATABASE_URL` and the discrete `PG*` variables; verify the Secret's contents and that it is updated in place across reconciles
+- [x] 7.3 Add `_build_database_overrides` projecting only host, port, name, user and `secretName` under `caelus.database`; verify no password appears in merged values and that a non-opted-in product emits no block
+- [x] 7.4 Call `evaluate_quota_state` as the final provisioning step with notification suppressed; verify a test that an over-quota deployment reconciling has read-only re-asserted rather than cleared
+- [x] 7.5 Fail the reconcile when the tenant cluster is unreachable; verify no Helm release is attempted in that case
+- [x] 7.6 Call `teardown_database` from `_reconcile_delete`; verify the role is `NOLOGIN`, `purge_after` is set, and the database still exists
 
 ## 8. Chart and catalog
 

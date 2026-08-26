@@ -115,11 +115,11 @@ def get_record(session: Session, deployment: DeploymentORM) -> DeploymentDatabas
     ).one_or_none()
 
 
-def _client(
-    client: PostgresAdminClient | None, settings: CaelusSettings | None
+def _tenant_db_client(
+    tenant_db: PostgresAdminClient | None, settings: CaelusSettings | None
 ) -> tuple[PostgresAdminClient, CaelusSettings]:
     settings = settings or get_settings()
-    return client or PostgresAdminClient.from_settings(settings), settings
+    return tenant_db or PostgresAdminClient.from_settings(settings), settings
 
 
 def _store_password(
@@ -135,7 +135,7 @@ def _store_password(
     if record is not None:
         return record, var_crypto.decrypt(record.password_encrypted, record.key_id)
 
-    password = secrets.token_urlsafe(PASSWORD_BYTES)
+    password = secrets.token_hex(PASSWORD_BYTES)
     ciphertext, key_id = var_crypto.encrypt(password)
     record = DeploymentDatabaseORM(
         deployment_id=deployment.id,
@@ -154,7 +154,7 @@ def ensure_database(
     session: Session,
     deployment: DeploymentORM,
     *,
-    client: PostgresAdminClient | None = None,
+    tenant_db: PostgresAdminClient | None = None,
     settings: CaelusSettings | None = None,
 ) -> DatabaseCredentials:
     """Provision (or repair) this deployment's role, database and limits.
@@ -162,7 +162,7 @@ def ensure_database(
     Each step reads before it writes and is verified independently, so an
     interrupted run is finished by the next one (design D6).
     """
-    client, settings = _client(client, settings)
+    tenant_db, settings = _tenant_db_client(tenant_db, settings)
 
     # Before anything is created, so a bad plan leaves nothing behind.
     quota_bytes = resolve_quota_bytes(deployment)
@@ -171,8 +171,8 @@ def ensure_database(
 
     record, password = _store_password(session, deployment, get_record(session, deployment))
 
-    if not client.role_exists(role):
-        client.execute(
+    if not tenant_db.role_exists(role):
+        tenant_db.execute(
             "CREATE ROLE {role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
             "NOREPLICATION NOBYPASSRLS",
             identifiers={"role": role},
@@ -181,20 +181,20 @@ def ensure_database(
 
     # CREATEROLE confers admin_option but not set_option, and without SET the
     # admin can neither create a database owned by this role nor act on one.
-    client.execute(
+    tenant_db.execute(
         "GRANT {role} TO {admin} WITH SET TRUE, INHERIT FALSE",
         identifiers={"role": role, "admin": settings.tenant_db_admin_user},
     )
 
-    client.execute(
+    tenant_db.execute(
         "ALTER ROLE {role} WITH PASSWORD {password}",
         identifiers={"role": role},
         literals={"password": password},
     )
 
     # Checked on its own rather than inferred from the role's existence.
-    if not client.database_exists(database):
-        client.execute_autocommit(
+    if not tenant_db.database_exists(database):
+        tenant_db.execute_autocommit(
             "CREATE DATABASE {database} OWNER {role}",
             identifiers={"database": database, "role": role},
         )
@@ -202,10 +202,10 @@ def ensure_database(
             "Created tenant database deployment_id=%s database=%s", deployment.id, database
         )
 
-    _revoke_public_access(client, database=database, role=role, deployment=deployment)
+    _revoke_public_access(tenant_db, database=database, role=role, deployment=deployment)
 
     for name, value in ROLE_SETTINGS.items():
-        client.execute(
+        tenant_db.execute(
             f"ALTER ROLE {{role}} SET {name} = {{value}}",
             identifiers={"role": role},
             literals={"value": value},
@@ -213,7 +213,7 @@ def ensure_database(
 
     # A reconcile must not mail anyone; the housekeeping worker does that.
     evaluate_quota_state(
-        session, deployment, client=client, settings=settings, notify=False, record=record
+        session, deployment, tenant_db=tenant_db, settings=settings, notify=False, record=record
     )
 
     logger.info(
@@ -232,7 +232,7 @@ def ensure_database(
 
 
 def _revoke_public_access(
-    client: PostgresAdminClient,
+    tenant_db: PostgresAdminClient,
     *,
     database: str,
     role: str,
@@ -243,14 +243,14 @@ def _revoke_public_access(
     Owner-scoped, so it runs under `SET ROLE`; read back afterwards because a
     revoke that is not owner-scoped warns rather than failing (design D6 5b).
     """
-    with client.session() as sql_session:
-        with sql_session.as_role(role):
-            sql_session.execute(
+    with tenant_db.session() as tenant_session:
+        with tenant_session.as_role(role):
+            tenant_session.execute(
                 "REVOKE ALL ON DATABASE {database} FROM PUBLIC",
                 identifiers={"database": database},
             )
 
-    if client.public_can_connect(database):
+    if tenant_db.public_can_connect(database):
         raise IntegrityException(
             f"Deployment {deployment.id}: PUBLIC still holds CONNECT on {database} after "
             "the revocation; refusing to report a provisioned database that every other "
@@ -262,7 +262,7 @@ def teardown_database(
     session: Session,
     deployment: DeploymentORM,
     *,
-    client: PostgresAdminClient | None = None,
+    tenant_db: PostgresAdminClient | None = None,
     settings: CaelusSettings | None = None,
 ) -> None:
     """Revoke the role's login and record when the data may be destroyed.
@@ -270,15 +270,15 @@ def teardown_database(
     Drops nothing. Idempotent, and a no-op for a deployment that never had a
     database.
     """
-    client, settings = _client(client, settings)
+    tenant_db, settings = _tenant_db_client(tenant_db, settings)
 
     record = get_record(session, deployment)
     if record is None:
         return
 
-    if client.role_exists(record.role_name):
-        client.execute("ALTER ROLE {role} NOLOGIN", identifiers={"role": record.role_name})
-        client.terminate_backends(record.role_name)
+    if tenant_db.role_exists(record.role_name):
+        tenant_db.execute("ALTER ROLE {role} NOLOGIN", identifiers={"role": record.role_name})
+        tenant_db.terminate_backends(record.role_name)
 
     if record.purge_after is None:
         record.purge_after = _utcnow() + timedelta(
@@ -322,7 +322,7 @@ def evaluate_quota_state(
     session: Session,
     deployment: DeploymentORM,
     *,
-    client: PostgresAdminClient | None = None,
+    tenant_db: PostgresAdminClient | None = None,
     settings: CaelusSettings | None = None,
     notify: bool = True,
     record: DeploymentDatabaseORM | None = None,
@@ -332,7 +332,7 @@ def evaluate_quota_state(
     Shared by the reconcile (`notify=False`) and the quota tick, so read-only is
     re-asserted rather than cleared.
     """
-    client, settings = _client(client, settings)
+    tenant_db, settings = _tenant_db_client(tenant_db, settings)
     record = record or get_record(session, deployment)
     if record is None:
         raise IntegrityException(
@@ -344,12 +344,12 @@ def evaluate_quota_state(
         return record.quota_state
 
     allowance = resolve_quota_bytes(deployment)
-    size_bytes = client.database_size_bytes(record.db_name)
+    size_bytes = tenant_db.database_size_bytes(record.db_name)
     percent = size_bytes * 100 / allowance
     state = _state_for(percent)
     previous = record.quota_state
 
-    _apply_quota_state(client, record=record, state=state)
+    _apply_quota_state(tenant_db, record=record, state=state)
 
     now = _utcnow()
     record.size_bytes = size_bytes
@@ -387,27 +387,27 @@ def evaluate_quota_state(
 
 
 def _apply_quota_state(
-    client: PostgresAdminClient, *, record: DeploymentDatabaseORM, state: str
+    tenant_db: PostgresAdminClient, *, record: DeploymentDatabaseORM, state: str
 ) -> None:
     """Make the cluster agree with the state just derived, on every call."""
     read_only = state in (QUOTA_READONLY, QUOTA_BLOCKED)
 
-    with client.session() as sql_session:
-        with sql_session.as_role(record.role_name):
+    with tenant_db.session() as tenant_session:
+        with tenant_session.as_role(record.role_name):
             if read_only:
-                sql_session.execute(
+                tenant_session.execute(
                     "ALTER DATABASE {database} SET default_transaction_read_only = on",
                     identifiers={"database": record.db_name},
                 )
             else:
-                sql_session.execute(
+                tenant_session.execute(
                     "ALTER DATABASE {database} RESET default_transaction_read_only",
                     identifiers={"database": record.db_name},
                 )
 
     if state == QUOTA_BLOCKED:
-        client.execute("ALTER ROLE {role} NOLOGIN", identifiers={"role": record.role_name})
+        tenant_db.execute("ALTER ROLE {role} NOLOGIN", identifiers={"role": record.role_name})
         # NOLOGIN alone leaves already-authenticated pooler connections usable.
-        client.terminate_backends(record.role_name)
+        tenant_db.terminate_backends(record.role_name)
     else:
-        client.execute("ALTER ROLE {role} LOGIN", identifiers={"role": record.role_name})
+        tenant_db.execute("ALTER ROLE {role} LOGIN", identifiers={"role": record.role_name})

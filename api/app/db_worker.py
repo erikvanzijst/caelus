@@ -19,6 +19,7 @@ import os
 import signal
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, Callable
 
 from sqlmodel import Session, select
@@ -40,6 +41,7 @@ class TickResult:
     swept: int = 0
     changed: dict[str, str] = field(default_factory=dict)
     failed: dict[str, str] = field(default_factory=dict)
+    orphans: dict[str, list[str]] = field(default_factory=dict)
 
 
 def quota_tick(
@@ -96,6 +98,81 @@ def quota_tick(
     return result
 
 
+def purge_tick(
+    session: Session,
+    *,
+    tenant_db: PostgresAdminClient | None = None,
+    settings: CaelusSettings | None = None,
+) -> TickResult:
+    """Destroy the databases of deployments whose grace period has elapsed.
+
+    The only irreversible work this process does. It is capped per run, refuses
+    anything not yet due, and logs every drop with its deployment id.
+    """
+    settings = settings or get_settings()
+    tenant_db = tenant_db or PostgresAdminClient.from_settings(settings)
+    result = TickResult(name="purge")
+    now = datetime.now(UTC).replace(tzinfo=None)
+
+    due = session.exec(
+        select(DeploymentDatabaseORM)
+        .where(
+            DeploymentDatabaseORM.purge_after.is_not(None),
+            DeploymentDatabaseORM.purge_after <= now,
+        )
+        .order_by(DeploymentDatabaseORM.purge_after)
+        .limit(settings.db_worker_max_purges_per_run)
+    ).all()
+
+    for record in due:
+        deployment_id = str(record.deployment_id)
+        try:
+            relational_storage.purge_database(
+                session, record, tenant_db=tenant_db, settings=settings
+            )
+        except Exception as exc:
+            logger.exception("Purge failed deployment_id=%s", deployment_id)
+            result.failed[deployment_id] = str(exc)
+            session.rollback()
+            continue
+        result.swept += 1
+        result.changed[deployment_id] = "purged"
+
+    logger.info(
+        "Purge sweep complete: purged=%s failed=%s due=%s",
+        result.swept,
+        len(result.failed),
+        len(due),
+    )
+    return result
+
+
+def orphan_tick(
+    session: Session,
+    *,
+    tenant_db: PostgresAdminClient | None = None,
+    settings: CaelusSettings | None = None,
+) -> TickResult:
+    """Report cluster objects no row accounts for. Destroys nothing."""
+    settings = settings or get_settings()
+    tenant_db = tenant_db or PostgresAdminClient.from_settings(settings)
+    result = TickResult(name="orphan")
+
+    result.orphans = relational_storage.find_orphans(
+        session, tenant_db=tenant_db, settings=settings
+    )
+    result.swept = sum(len(names) for names in result.orphans.values())
+    if result.swept:
+        logger.warning(
+            "Orphaned tenant objects: databases=%s roles=%s",
+            result.orphans["databases"],
+            result.orphans["roles"],
+        )
+    else:
+        logger.info("Orphan sweep complete: nothing unaccounted for")
+    return result
+
+
 def run_ticks(ticks: list[Callable[[], TickResult]], *, emit: Any = None) -> list[TickResult]:
     """Run each tick, letting a failure in one stop only that one."""
     results: list[TickResult] = []
@@ -140,21 +217,46 @@ def run_db_worker(
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
-    interval = settings.db_worker_quota_interval_seconds
-    logger.info("Database worker started: quota interval=%ss", interval)
+    # Each tick keeps its own cadence: quotas are customer-facing state and
+    # move minute to minute, while purging and orphan-hunting are daily.
+    schedule = [
+        (quota_tick, settings.db_worker_quota_interval_seconds),
+        (purge_tick, settings.db_worker_purge_interval_seconds),
+        (orphan_tick, settings.db_worker_orphan_interval_seconds),
+    ]
+    logger.info(
+        "Database worker started: quota=%ss purge=%ss orphan=%ss",
+        *(interval for _, interval in schedule),
+    )
 
+    # Every tick runs on the first pass, so a restart is also a full sweep.
+    due_at = {tick.__name__: 0.0 for tick, _ in schedule}
     passes = 0
     while not shutdown:
-        with session_scope() as session:
-            run_ticks(
-                [lambda: quota_tick(session, tenant_db=tenant_db, settings=settings)],
-                emit=emit,
-            )
+        now = time.monotonic()
+        ready = [(tick, interval) for tick, interval in schedule if due_at[tick.__name__] <= now]
+        if ready:
+            with session_scope() as session:
+                run_ticks(
+                    [
+                        _bind(tick, session, tenant_db=tenant_db, settings=settings)
+                        for tick, _ in ready
+                    ],
+                    emit=emit,
+                )
+            for tick, interval in ready:
+                due_at[tick.__name__] = time.monotonic() + interval
+
         passes += 1
         if max_passes is not None and passes >= max_passes:
             break
-        deadline = time.monotonic() + interval
-        while not shutdown and time.monotonic() < deadline:
-            time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
+        sleep_until = min(due_at.values())
+        while not shutdown and time.monotonic() < sleep_until:
+            time.sleep(min(1.0, max(0.0, sleep_until - time.monotonic())))
 
     logger.info("Database worker stopped after %s pass(es)", passes)
+
+
+def _bind(tick, session, **kwargs) -> Callable[[], TickResult]:
+    """A zero-argument tick, so `run_ticks` guards each one identically."""
+    return lambda: tick(session, **kwargs)

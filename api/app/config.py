@@ -151,6 +151,12 @@ class CaelusSettings(BaseSettings):
     # Customer-facing quota state, not cluster safety: a tenant can write
     # gigabytes inside any interval, so this is not what protects the volume.
     db_worker_quota_interval_seconds: float = 60.0
+    # Purge and orphan sweeps are daily: one destroys, the other only reports.
+    db_worker_purge_interval_seconds: float = 86400.0
+    db_worker_orphan_interval_seconds: float = 86400.0
+    # A ceiling per run, so a clock that jumped cannot cascade into destroying
+    # the fleet's databases in one pass.
+    db_worker_max_purges_per_run: int = 20
 
     # The shared SMTP relay, for the quota ladder's threshold mails. Empty host
     # means no mail is sent, which is what dev and the test suite run with.

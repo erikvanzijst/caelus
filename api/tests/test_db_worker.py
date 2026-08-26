@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import pytest
+from datetime import UTC, datetime, timedelta
 from sqlmodel import Session
 
 from app import db_worker
 from app.config import CaelusSettings
 from app.services import relational_storage as rs
+from app.services.errors import IntegrityException
 from tests import tenant_cluster
 from tests.conftest import TEST_DATABASE_URL
 from tests.test_relational_storage import (  # noqa: F401  (fixtures)
@@ -248,7 +250,166 @@ def test_a_reconcile_evaluation_sends_nothing(session, tenant_db, settings, sent
     assert sent == []
 
 
+# ── Purge ─────────────────────────────────────────────────────────────────
+
+
+def _due_for_purge(session, deployment, tenant_db, settings, *, days_ago: float = 1):
+    """Tear down, then move the deadline into the past."""
+    rs.teardown_database(session, deployment, tenant_db=tenant_db, settings=settings)
+    record = rs.get_record(session, deployment)
+    record.purge_after = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days_ago)
+    session.add(record)
+    session.commit()
+    return record
+
+
+def test_a_due_deployment_is_destroyed(session, tenant_db, settings):
+    deployment = _deployment(session)
+    credentials = rs.ensure_database(session, deployment, tenant_db=tenant_db, settings=settings)
+    _due_for_purge(session, deployment, tenant_db, settings)
+
+    result = db_worker.purge_tick(session, tenant_db=tenant_db, settings=settings)
+
+    assert result.swept == 1
+    assert not tenant_db.database_exists(credentials.database)
+    assert not tenant_db.role_exists(credentials.user)
+    # The row goes with the objects: its absence is what "not provisioned"
+    # means, and leaving it would make the orphan sweep lie.
+    assert rs.get_record(session, deployment) is None
+
+
+def test_a_deployment_inside_its_grace_period_is_left_alone(session, tenant_db, settings):
+    deployment = _deployment(session)
+    credentials = rs.ensure_database(session, deployment, tenant_db=tenant_db, settings=settings)
+    rs.teardown_database(session, deployment, tenant_db=tenant_db, settings=settings)
+
+    result = db_worker.purge_tick(session, tenant_db=tenant_db, settings=settings)
+
+    assert result.swept == 0
+    assert tenant_db.database_exists(credentials.database)
+    assert rs.get_record(session, deployment) is not None
+
+
+def test_a_live_deployment_is_never_purged(session, tenant_db, settings):
+    """No `purge_after` at all: the deployment was never deleted."""
+    deployment = _deployment(session)
+    credentials = rs.ensure_database(session, deployment, tenant_db=tenant_db, settings=settings)
+
+    assert db_worker.purge_tick(session, tenant_db=tenant_db, settings=settings).swept == 0
+    assert tenant_db.database_exists(credentials.database)
+
+
+def test_purging_a_row_that_is_not_due_is_refused(session, tenant_db, settings):
+    """The guard lives with the destruction, not only in the query that finds
+    it: a caller with a bad clock must not be able to skip the window."""
+    deployment = _deployment(session)
+    rs.ensure_database(session, deployment, tenant_db=tenant_db, settings=settings)
+    rs.teardown_database(session, deployment, tenant_db=tenant_db, settings=settings)
+    record = rs.get_record(session, deployment)
+
+    with pytest.raises(IntegrityException):
+        rs.purge_database(session, record, tenant_db=tenant_db, settings=settings)
+
+    record.purge_after = None
+    session.add(record)
+    session.commit()
+    with pytest.raises(IntegrityException):
+        rs.purge_database(session, record, tenant_db=tenant_db, settings=settings)
+
+
+def test_a_run_is_capped(session, tenant_db, settings, monkeypatch):
+    """A clock that jumped must not cascade into destroying the whole fleet."""
+    for _ in range(3):
+        deployment = _deployment(session)
+        rs.ensure_database(session, deployment, tenant_db=tenant_db, settings=settings)
+        _due_for_purge(session, deployment, tenant_db, settings)
+
+    capped = CaelusSettings(
+        **{**settings.model_dump(), "db_worker_max_purges_per_run": 2}, _env_file=None
+    )
+    assert db_worker.purge_tick(session, tenant_db=tenant_db, settings=capped).swept == 2
+    # The rest are still there for the next run, not lost.
+    assert db_worker.purge_tick(session, tenant_db=tenant_db, settings=capped).swept == 1
+
+
+def test_a_purge_succeeds_while_sessions_are_connected(session, tenant_db, settings):
+    """`DROP DATABASE` fails outright while anyone is connected, which is why
+    it is WITH (FORCE) and why it lives in a re-runnable tick."""
+    deployment = _deployment(session)
+    credentials = rs.ensure_database(session, deployment, tenant_db=tenant_db, settings=settings)
+    conn = _connect_as_tenant(credentials)
+    try:
+        conn.execute("SELECT 1")
+        _due_for_purge(session, deployment, tenant_db, settings)
+        assert db_worker.purge_tick(session, tenant_db=tenant_db, settings=settings).swept == 1
+    finally:
+        conn.close()
+    assert not tenant_db.database_exists(credentials.database)
+
+
+# ── Orphans ───────────────────────────────────────────────────────────────
+
+
+def test_a_role_without_a_database_is_reported(session, tenant_db, settings):
+    """The partial-provisioning case: the role is created before the database
+    and both before the row, so a worker killed in between leaves either."""
+    tenant_db.execute("CREATE ROLE dpl_orphanrole NOLOGIN")
+
+    result = db_worker.orphan_tick(session, tenant_db=tenant_db, settings=settings)
+
+    assert result.orphans["roles"] == ["dpl_orphanrole"]
+    assert result.orphans["databases"] == []
+    assert result.swept == 1
+
+
+def test_a_provisioned_deployment_is_not_an_orphan(session, tenant_db, settings):
+    deployment = _deployment(session)
+    rs.ensure_database(session, deployment, tenant_db=tenant_db, settings=settings)
+
+    result = db_worker.orphan_tick(session, tenant_db=tenant_db, settings=settings)
+
+    assert result.orphans == {"databases": [], "roles": []}
+
+
+def test_the_orphan_sweep_destroys_nothing(session, tenant_db, settings):
+    tenant_db.execute("CREATE ROLE dpl_orphanrole NOLOGIN")
+    db_worker.orphan_tick(session, tenant_db=tenant_db, settings=settings)
+    assert tenant_db.role_exists("dpl_orphanrole")
+
+
+def test_a_deployment_awaiting_purge_is_not_an_orphan(session, tenant_db, settings):
+    """Its row still accounts for it, which is the whole reason the row
+    outlives the deployment."""
+    deployment = _deployment(session)
+    rs.ensure_database(session, deployment, tenant_db=tenant_db, settings=settings)
+    rs.teardown_database(session, deployment, tenant_db=tenant_db, settings=settings)
+
+    result = db_worker.orphan_tick(session, tenant_db=tenant_db, settings=settings)
+
+    assert result.orphans == {"databases": [], "roles": []}
+
+
 # ── Startup ───────────────────────────────────────────────────────────────
+
+
+def test_every_tick_runs_on_the_first_pass(monkeypatch, settings):
+    """A restart is also a full sweep: nothing waits a day to run once."""
+    ran: list[str] = []
+
+    def record(name):
+        def tick(session, **kwargs):
+            ran.append(name)
+            return db_worker.TickResult(name=name)
+
+        return tick
+
+    monkeypatch.setattr(db_worker, "quota_tick", record("quota"))
+    monkeypatch.setattr(db_worker, "purge_tick", record("purge"))
+    monkeypatch.setattr(db_worker, "orphan_tick", record("orphan"))
+
+    db_worker.run_db_worker(settings=settings, tenant_db=object(), max_passes=1)
+
+    assert ran == ["quota", "purge", "orphan"]
 
 
 def test_the_worker_starts_without_a_keyring(cli_runner, monkeypatch, settings):

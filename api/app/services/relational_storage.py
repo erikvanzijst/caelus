@@ -295,6 +295,85 @@ def teardown_database(
     )
 
 
+def purge_database(
+    session: Session,
+    record: DeploymentDatabaseORM,
+    *,
+    tenant_db: PostgresAdminClient | None = None,
+    settings: CaelusSettings | None = None,
+) -> None:
+    """Destroy a deleted deployment's database and role, and forget the row.
+
+    The only irreversible operation in this subsystem. It refuses a row whose
+    grace period has not elapsed, so a caller with a bad clock or a bad query
+    cannot use it to skip the window.
+
+    `DROP DATABASE` is owner-scoped and cannot run in a transaction; the role
+    must outlive it, since assuming the role is what makes the drop possible.
+    """
+    tenant_db, settings = _tenant_db_client(tenant_db, settings)
+
+    if record.purge_after is None or record.purge_after > _utcnow():
+        raise IntegrityException(
+            f"Deployment {record.deployment_id} is not due for purge "
+            f"(purge_after={record.purge_after})"
+        )
+
+    with tenant_db.session(autocommit=True) as tenant_session:
+        if tenant_db.database_exists(record.db_name):
+            with tenant_session.as_role(record.role_name):
+                tenant_session.execute(
+                    "DROP DATABASE {database} WITH (FORCE)",
+                    identifiers={"database": record.db_name},
+                )
+        if tenant_db.role_exists(record.role_name):
+            tenant_session.execute(
+                "DROP ROLE {role}", identifiers={"role": record.role_name}
+            )
+
+    session.delete(record)
+    session.commit()
+    logger.info(
+        "Purged tenant database deployment_id=%s database=%s role=%s",
+        record.deployment_id,
+        record.db_name,
+        record.role_name,
+    )
+
+
+def find_orphans(
+    session: Session,
+    *,
+    tenant_db: PostgresAdminClient | None = None,
+    settings: CaelusSettings | None = None,
+) -> dict[str, list[str]]:
+    """Cluster objects no `deployment_database` row accounts for.
+
+    Not a guard against vanished rows -- those never vanish outside a purge --
+    but against partial provisioning: the role and database are created before
+    the row is written, so a worker killed in between leaves objects behind.
+    Roles as well as databases, since the role is created first.
+    """
+    tenant_db, settings = _tenant_db_client(tenant_db, settings)
+
+    records = session.exec(select(DeploymentDatabaseORM)).all()
+    known_databases = {record.db_name for record in records}
+    known_roles = {record.role_name for record in records}
+
+    return {
+        "databases": [
+            name
+            for name in tenant_db.databases_with_prefix(NAME_PREFIX)
+            if name not in known_databases
+        ],
+        "roles": [
+            name
+            for name in tenant_db.roles_with_prefix(NAME_PREFIX)
+            if name not in known_roles
+        ],
+    }
+
+
 def _utcnow() -> datetime:
     """Naive UTC, matching the schema's timestamp columns."""
     return datetime.now(UTC).replace(tzinfo=None)

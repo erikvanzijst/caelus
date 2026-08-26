@@ -76,10 +76,10 @@
 
 ## 10. Housekeeping worker — purge and orphan ticks
 
-- [ ] 10.1 Implement the purge tick: `SET ROLE <tenant>` then `DROP DATABASE ... WITH (FORCE)`, then `RESET ROLE` and `DROP ROLE`, past `purge_after`; verify a test that a due deployment is destroyed and one inside its grace period is not
-- [ ] 10.2 Refuse to purge a null or future `purge_after`, cap purges per run, and log every drop with its deployment id; verify tests for each guard
-- [ ] 10.3 Verify a purge succeeds while sessions are connected to the target database
-- [ ] 10.4 Implement the orphan tick over both databases and roles, reporting cluster objects no row accounts for; verify a test that creates a role without a database and asserts it is reported
+- [x] 10.1 Implement the purge tick: `SET ROLE <tenant>` then `DROP DATABASE ... WITH (FORCE)`, then `RESET ROLE` and `DROP ROLE`, past `purge_after`; verify a test that a due deployment is destroyed and one inside its grace period is not
+- [x] 10.2 Refuse to purge a null or future `purge_after`, cap purges per run, and log every drop with its deployment id; verify tests for each guard
+- [x] 10.3 Verify a purge succeeds while sessions are connected to the target database
+- [x] 10.4 Implement the orphan tick over both databases and roles, reporting cluster objects no row accounts for; verify a test that creates a role without a database and asserts it is reported
 
 ## 11. Documentation
 

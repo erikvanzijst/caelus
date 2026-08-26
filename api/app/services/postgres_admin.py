@@ -230,6 +230,20 @@ class PostgresAdminClient:
             self.fetchval("SELECT has_database_privilege('public', %s, 'CONNECT')", (name,))
         )
 
+    def databases_with_prefix(self, prefix: str) -> list[str]:
+        with self.session() as session:
+            return session.fetchcol(
+                "SELECT datname FROM pg_database WHERE datname LIKE %s ORDER BY datname",
+                (prefix + "%",),
+            )
+
+    def roles_with_prefix(self, prefix: str) -> list[str]:
+        with self.session() as session:
+            return session.fetchcol(
+                "SELECT rolname FROM pg_roles WHERE rolname LIKE %s ORDER BY rolname",
+                (prefix + "%",),
+            )
+
     def database_size_bytes(self, name: str) -> int:
         """Logical size; needs `pg_read_all_stats`, not CONNECT."""
         return int(self.fetchval("SELECT pg_database_size(%s)", (name,)) or 0)

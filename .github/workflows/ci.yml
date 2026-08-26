@@ -84,6 +84,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # The dev container passes through the host's audio device and group for
+    # local speech-to-text. Runners are headless and have neither, and docker
+    # fails to start a container whose device source is missing, so point both
+    # at values that always exist here.
+    env:
+      CAELUS_SND_DEVICE: /dev/null
+      CAELUS_AUDIO_GROUP: root
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5

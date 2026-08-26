@@ -354,7 +354,7 @@ path that would otherwise need fanning out.
 | 80% | `warned` | yes, rate-limited |
 | 90% | `warned` | yes, rate-limited |
 | 100% | `readonly`, re-asserted each evaluation | yes — states the database is read-only and the exit is support or a higher plan |
-| 150% | `blocked` | see *Open Questions* |
+| 150% | `blocked` | no |
 
 **There is no recovery path.** Verified: read-only blocks `DELETE`, `DROP TABLE` and
 `VACUUM`, and with no external access an over-quota tenant cannot delete data by any
@@ -767,16 +767,26 @@ rollback.
 
 ## Open Questions
 
-- **An email at the 150% hard block.** The ladder decided in review covers 80%, 90% and
-  100%. Suspending a database with no notification seems wrong, but adding one is a
-  product decision rather than a design consequence — confirm or drop before step 7.
+- ~~**An email at the 150% hard block.**~~ Dropped in review: the tenant-facing ladder
+  is 80%, 90% and 100%. A deployment that crosses 150% has defeated a read-only setting
+  after being told twice, so the block is an abuse signal rather than news, and it
+  reverses the moment usage falls back under the allowance.
 - ~~**PgBouncer's `auth_query` cache-invalidation semantics.**~~ Observed on 1.25.2
   during step 2 and no longer open: a suspended tenant is rejected **at connect**, with
   `bouncer config error` reaching the client (asyncpg surfaces it as
   `ProtocolViolationError`). The block took effect on the very next connection despite
   that tenant having connected successfully moments earlier, so a cached credential does
-  not hold a suspension open; lifting it was equally immediate (0.10s to reconnect). No
-  pooler command was issued in either direction.
+  not hold a suspension open; lifting it was equally immediate. No pooler command was
+  issued in either direction.
+
+  Re-measured while implementing the quota tick, with a client left connected across the
+  suspension: its next query fails with `connection was closed in the middle of
+  operation`, and in that run the *first* connection attempt after lifting failed the
+  same way, with an immediate retry succeeding. Three controlled rounds that closed each
+  client cleanly restored on the first attempt, so the extra failure needs a stale client
+  connection to reproduce and was not isolated further. It changes nothing about whether
+  the block holds, and applications already have to tolerate a reconnect — see the
+  pooler entry under *Risks*.
 - **Whether `db_name` / `role_name` are stored at all.** They are derivable from
   `deployment_id` via D2, and `object_storage.py` computes such names rather than
   storing them. Kept here for derivation-change insurance and operator ergonomics;

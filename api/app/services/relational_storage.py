@@ -19,7 +19,7 @@ from sqlmodel import Session, select
 
 from app.config import CaelusSettings, get_settings
 from app.models import DeploymentDatabaseORM, DeploymentORM
-from app.services import var_crypto
+from app.services import mailer, var_crypto
 from app.services.errors import IntegrityException
 from app.services.postgres_admin import PostgresAdminClient
 
@@ -366,8 +366,18 @@ def evaluate_quota_state(
     elif notify:
         threshold = _crossed_threshold(percent)
         if threshold is not None and threshold != record.warned_threshold:
-            record.warned_threshold = threshold
-            record.warned_at = now
+            # Recorded only once the mail is away, so a relay outage is retried
+            # on the next sweep instead of suppressing the one notification a
+            # tenant gets. A duplicate after a crash is the better failure.
+            if _notify_threshold(
+                deployment,
+                threshold=threshold,
+                size_bytes=size_bytes,
+                allowance=allowance,
+                settings=settings,
+            ):
+                record.warned_threshold = threshold
+                record.warned_at = now
 
     session.add(record)
     session.commit()
@@ -384,6 +394,50 @@ def evaluate_quota_state(
             allowance,
         )
     return state
+
+
+def _notify_threshold(
+    deployment: DeploymentORM,
+    *,
+    threshold: int,
+    size_bytes: int,
+    allowance: int,
+    settings: CaelusSettings,
+) -> bool:
+    """Mail the deployment's owner about a threshold. Returns whether it sent.
+
+    No message at 150%: a deployment that gets there defeated the read-only
+    setting after being told twice (design D8).
+    """
+    owner = deployment.user
+    if owner is None or not owner.email:
+        logger.warning(
+            "No owner address for deployment_id=%s; not sending the %s%% notice",
+            deployment.id,
+            threshold,
+        )
+        return False
+
+    used = f"{size_bytes / 1024 ** 2:.0f} MB of {allowance / 1024 ** 2:.0f} MB"
+    if threshold >= READONLY_THRESHOLD:
+        subject = f"{deployment.name}: database is full and now read-only"
+        body = (
+            f"The database for {deployment.name} has reached its plan allowance "
+            f"({used}), and is now read-only: your application can still read its "
+            f"data, but writes will be refused.\n\n"
+            f"To start writing again, move to a plan with a larger database "
+            f"allowance, or contact support.\n"
+        )
+    else:
+        subject = f"{deployment.name}: database is {threshold}% full"
+        body = (
+            f"The database for {deployment.name} is using {used}, which is over "
+            f"{threshold}% of its plan allowance.\n\n"
+            f"At 100% the database becomes read-only and your application's writes "
+            f"will be refused.\n"
+        )
+
+    return mailer.send_email(to=owner.email, subject=subject, body=body, settings=settings)
 
 
 def _apply_quota_state(

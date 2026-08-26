@@ -765,6 +765,32 @@ def worker(
     )
 
 
+@app.command("db-worker")
+def db_worker(
+    interval_seconds: float | None = typer.Option(
+        None, "--interval-seconds", help="Seconds between quota sweeps"
+    ),
+) -> None:
+    """Run the database housekeeping worker: measure and apply quota state.
+
+    Deliberately does not verify the var keyring, unlike `worker`: every tick
+    connects as the platform's database admin and none of them decrypts a
+    tenant password, so a keyring problem must not stop quota enforcement.
+    """
+    from app.db_worker import run_db_worker
+
+    settings = get_settings()
+    if interval_seconds is not None:
+        if interval_seconds <= 0:
+            typer.echo("Error: --interval-seconds must be > 0", err=True)
+            raise typer.Exit(code=1)
+        settings = CaelusSettings(
+            **{**settings.model_dump(), "db_worker_quota_interval_seconds": interval_seconds}
+        )
+
+    run_db_worker(settings=settings, emit=_echo_yaml_stream_item)
+
+
 @app.command("build-worker")
 def build_worker(
     interval_seconds: float | None = typer.Option(

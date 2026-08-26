@@ -147,6 +147,17 @@ class CaelusSettings(BaseSettings):
     # statement false for one of them.
     deployment_database_purge_grace_days: int = 1
 
+    # How often the housekeeping worker measures every provisioned database.
+    # Customer-facing quota state, not cluster safety: a tenant can write
+    # gigabytes inside any interval, so this is not what protects the volume.
+    db_worker_quota_interval_seconds: float = 60.0
+
+    # The shared SMTP relay, for the quota ladder's threshold mails. Empty host
+    # means no mail is sent, which is what dev and the test suite run with.
+    smtp_host: str = ""
+    smtp_port: int = 25
+    smtp_from: str = ""
+
     # ── Deployment logs (Loki) ────────────────────────────────────────────
     loki_base_url: str = ""
     loki_query_timeout_seconds: float = 30.0

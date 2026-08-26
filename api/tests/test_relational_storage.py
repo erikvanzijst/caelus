@@ -534,7 +534,21 @@ def test_a_reconcile_does_not_grant_an_over_quota_tenant_a_write_window(
     assert rs.get_record(session, deployment).quota_state == rs.QUOTA_READONLY
 
 
-def test_measurements_and_thresholds_are_recorded(session, tenant_db, settings):
+@pytest.fixture
+def mail_sent(monkeypatch):
+    """The threshold marker records that a tenant was told, so it only moves
+    once the relay accepted the message."""
+    messages: list[dict] = []
+
+    def send_email(*, to, subject, body, settings=None):
+        messages.append({"to": to, "subject": subject})
+        return True
+
+    monkeypatch.setattr("app.services.relational_storage.mailer.send_email", send_email)
+    return messages
+
+
+def test_measurements_and_thresholds_are_recorded(session, tenant_db, settings, mail_sent):
     deployment = _deployment(session)
     rs.ensure_database(session, deployment, tenant_db=tenant_db, settings=settings)
 
@@ -563,7 +577,7 @@ def test_measurements_and_thresholds_are_recorded(session, tenant_db, settings):
     assert record.warned_threshold is None and record.warned_at is None
 
 
-def test_a_reconcile_evaluation_records_no_threshold(session, tenant_db, settings):
+def test_a_reconcile_evaluation_records_no_threshold(session, tenant_db, settings, mail_sent):
     """`notify=False` must not consume the threshold either."""
     deployment = _deployment(session)
     rs.ensure_database(session, deployment, tenant_db=tenant_db, settings=settings)
@@ -572,6 +586,7 @@ def test_a_reconcile_evaluation_records_no_threshold(session, tenant_db, setting
     record = rs.get_record(session, deployment)
     assert record.quota_state == rs.QUOTA_WARNED
     assert record.warned_threshold is None
+    assert mail_sent == []
 
     _evaluate_at(session, deployment, tenant_db, settings, percent=85)
     assert rs.get_record(session, deployment).warned_threshold == 80

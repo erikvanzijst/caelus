@@ -29,6 +29,13 @@ resource "kubernetes_config_map" "api" {
     CAELUS_TENANT_DB_POOLER_NAMESPACE = var.namespace
     CAELUS_TENANT_DB_POOLER_POD_LABEL = local.tenant_pooler_app_label
 
+    # The quota ladder's threshold mails. The relay is a tf/deps singleton that
+    # accepts unauthenticated mail from in-cluster namespaces, so there is no
+    # credential to carry.
+    CAELUS_SMTP_HOST = "smtp.${var.mailer_namespace}.svc.cluster.local"
+    CAELUS_SMTP_PORT = "25"
+    CAELUS_SMTP_FROM = "no-reply@${var.domain}"
+
     CAELUS_BUILDER_IMAGE = var.builder_image
     CAELUS_BUILDS_NAMESPACE    = var.builds_namespace
     CAELUS_BUILD_MAX_IN_FLIGHT = tostring(var.build_max_in_flight)

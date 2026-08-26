@@ -46,6 +46,12 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "mailer_namespace" {
+  description = "Namespace of the shared SMTP relay (a tf/deps singleton)"
+  type        = string
+  default     = "mailer"
+}
+
 variable "wildcard_domains" {
   description = "Freely available wildcard domains"
   type        = list(string)

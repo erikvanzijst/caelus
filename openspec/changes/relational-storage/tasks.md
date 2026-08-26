@@ -68,12 +68,11 @@
 
 ## 9. Housekeeping worker — quota tick
 
-- [ ] 9.1 Add the `caelus db-worker` entry point beside `caelus worker` and `caelus build-worker`, with per-tick guarding so one failing tick cannot stop another, and **no keyring verification at startup** per design D10 — it decrypts nothing; verify a test that raises in one tick and asserts the other still runs, and one that the process starts with an empty keyring while the API and `caelus worker` refuse to
-- [ ] 9.2 Implement the quota tick over the fleet using `evaluate_quota_state`, on a configurable interval defaulting to 60s; verify a test that walks a deployment from `ok` through `blocked` and back
-- [ ] 9.3 Send rate-limited threshold emails at 80%, 90% and 100% through the SMTP relay, recording suppression state; verify a deployment hovering above a threshold is not mailed twice
-- [ ] 9.4 Send an email at the 150% hard block — **drop this task if the open question in design.md resolves that way**; verify the message is sent once on transition to `blocked`
-- [ ] 9.5 Implement suspension as `NOLOGIN` plus backend termination, recording the transition in `quota_state`; verify that a client already connected to the pooler cannot execute a further query, that a fresh connection is refused, that no pooler admin credential is configured or used, and that lifting the suspension restores access
-- [ ] 9.6 Add the worker Deployment to `tf/app` with resource bounds; verify it comes up and logs a completed sweep
+- [x] 9.1 Add the `caelus db-worker` entry point beside `caelus worker` and `caelus build-worker`, with per-tick guarding so one failing tick cannot stop another, and **no keyring verification at startup** per design D10 — it decrypts nothing; verify a test that raises in one tick and asserts the other still runs, and one that the process starts with an empty keyring while the API and `caelus worker` refuse to
+- [x] 9.2 Implement the quota tick over the fleet using `evaluate_quota_state`, on a configurable interval defaulting to 60s; verify a test that walks a deployment from `ok` through `blocked` and back
+- [x] 9.3 Send rate-limited threshold emails at 80%, 90% and 100% through the SMTP relay, recording suppression state; verify a deployment hovering above a threshold is not mailed twice
+- [x] 9.4 Implement suspension as `NOLOGIN` plus backend termination, recording the transition in `quota_state`; verify that a client already connected to the pooler cannot execute a further query, that a fresh connection is refused, that no pooler admin credential is configured or used, and that lifting the suspension restores access
+- [x] 9.5 Add the worker Deployment to `tf/app` with resource bounds; verify it comes up and logs a completed sweep
 
 ## 10. Housekeeping worker — purge and orphan ticks
 

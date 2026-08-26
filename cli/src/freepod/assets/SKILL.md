@@ -1,6 +1,6 @@
 ---
 name: deploy-to-freepod
-description: Deploy a web app to freepod.eu using the `freepod` CLI — it builds a container from source with no Dockerfile and serves it on its own HTTPS hostname. Use when asked to deploy, ship, host, or put a web app online; when adapting an existing codebase to run on Freepod; or when the user mentions freepod, `freepod deploy`, or `.freepod.json`. Also read it *before* designing a new app that will be deployed there, because the platform's constraints (bind `$PORT`, no disk, no database, S3 for all state) decide whether an app can run at all.
+description: Deploy a web app to freepod.eu using the `freepod` CLI — it builds a container from source with no Dockerfile and serves it on its own HTTPS hostname. Use when asked to deploy, ship, host, or put a web app online; when adapting an existing codebase to run on Freepod; or when the user mentions freepod, `freepod deploy`, or `.freepod.json`. Also read it *before* designing a new app that will be deployed there, because the platform's constraints (bind `$PORT`, no disk, one HTTP process) decide whether an app can run at all.
 ---
 
 # Deploying to Freepod
@@ -34,10 +34,11 @@ filesystem is gone at the next restart and at every release. This rules out
 SQLite, local file uploads, on-disk session stores, and any cache whose loss
 matters.
 
-**3. There is no database.** No Postgres, no MySQL, no Redis. A deployment gets
-an S3 bucket (below) and nothing else. Porting an app with a relational schema
-means either rewriting its persistence onto object storage or pointing it at a
-database you host somewhere else and reaching it over the network.
+**3. There is a PostgreSQL database, and nothing else.** Every deployment gets
+its own database (below) and its own private S3 bucket (below). There is no
+MySQL, no Redis, and no way to run one — anything that would be a second process
+is ruled out by constraint 5. An app that needs a cache or a queue must either
+use the database for it or drop the requirement.
 
 **4. Runtime configuration goes through `freepod var`, not through files.**
 An app that needs an API key at request time reads it from the environment, and
@@ -64,6 +65,10 @@ Some names are reserved because the platform sets them: `PORT`, the `AWS_*`
 and `S3_*` object-storage credentials, `BUCKET_NAME`, and anything starting
 with `CAELUS_` or `RAILPACK_`. `freepod var set` refuses them.
 
+`DATABASE_URL` and the `PG*` variables are **not** refused today, but setting
+one achieves nothing: the platform's own values are applied after your vars, so
+yours is silently overridden. Never set them.
+
 Build-time configuration is a different matter, and it also works, because the
 upload carries your dotenv files. `.env` and `.env.<mode>` ship; `.env.local`
 and `.env.*.local` are excluded and never leave your machine. A framework that
@@ -85,12 +90,136 @@ can live here.
 If the app fails any of these and cannot be adapted, say so before building
 anything. That is a more useful answer than a deployment that comes up broken.
 
-## Object storage: the one place state can live
+## The database
 
-Every deployment is automatically given its own **private S3 bucket** on the
-platform's Garage instance. There is nothing to enable, provision, or
-configure — the credentials are in the container's environment under the names
-an S3 SDK already looks for:
+Every deployment gets its **own PostgreSQL 18 database** and a role that owns
+it. Nothing to provision, enable or configure — the credentials are already in
+the environment:
+
+```
+DATABASE_URL                 postgresql://<role>:<password>@<pooler>:6432/<db>
+PGHOST  PGPORT  PGUSER  PGPASSWORD  PGDATABASE
+```
+
+`DATABASE_URL` is what an ORM or driver wants; the `PG*` variables are what
+libpq, `psql` and `pg_dump` read with no arguments. **Read them from the
+environment** — the database and role names are derived from the deployment's
+id and are not guessable, and the password is rotated by the platform, not by
+you.
+
+```python
+import os, psycopg
+with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+    conn.execute("CREATE TABLE IF NOT EXISTS visits (id serial primary key)")
+```
+
+### What you own, and what you cannot do
+
+You own the database: schemas, tables, indexes, and PostgreSQL's **trusted**
+extensions (`pgcrypto`, `uuid-ossp`, `citext`, …) all work. You cannot create a
+second database, install untrusted extensions (anything needing superuser), or
+reach another deployment's data — every tenant database has `CONNECT` revoked
+from `PUBLIC`.
+
+Three settings are applied to your role and re-applied on every deploy:
+
+| Setting                               | Value | Can you change it? |
+|---------------------------------------|-------|--------------------|
+| `statement_timeout`                   | 30s   | yes, per session   |
+| `idle_in_transaction_session_timeout` | 60s   | yes, per session   |
+| `temp_file_limit`                     | 64MB  | **no**             |
+
+A query killed at 30s is your own timeout, not a platform fault — raise it for
+the session if a migration or a report legitimately needs longer.
+
+### Connections go through a pooler
+
+Every connection is proxied by PgBouncer in **transaction pooling** mode: the
+server connection under you belongs to you only for the duration of a
+transaction. Protocol-level prepared statements are supported, so asyncpg,
+SQLAlchemy, Prisma and node-postgres all work on their defaults — do **not**
+disable prepared statements or set `statement_cache_size=0`; that advice is for
+poolers that lack this and only costs you performance here.
+
+What does not survive between transactions, because the connection underneath
+you changes:
+
+- session state — `SET`, `LISTEN`/`NOTIFY`, session-level advisory locks,
+  `WITH HOLD` cursors, temporary tables
+- a transaction held open across HTTP requests
+
+### Migrations
+
+There is no release phase and no way to run a one-off command against the
+database, so you'll need to run migrations run at startup, before the server binds.
+E.g.:
+
+```procfile
+web: sh -c 'alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT'
+```
+
+### The size allowance
+
+The plan bounds the database's size, and crossing the line changes what the
+database will do:
+
+| Usage     | What your app sees                                              |
+|-----------|-----------------------------------------------------------------|
+| under 80% | nothing                                                         |
+| 80%, 90%  | nothing — the account owner gets an email                       |
+| **100%**  | writes fail: `cannot execute INSERT in a read-only transaction` |
+| **150%**  | connections are refused entirely                                |
+
+Falling back under the allowance reverses each step within about a minute.
+
+Two things make the ceiling harder than it looks: deleting rows does not shrink
+a table on its own, and a read-only database refuses `VACUUM` — so a full
+database cannot be emptied out of trouble from inside. Treat the allowance as a
+design constraint, and check usage from the app itself:
+
+```sql
+SELECT pg_size_pretty(pg_database_size(current_database()));
+```
+
+### Backups
+
+There are none you can reach — no snapshot, no restore, no support request.
+An accidental `DROP TABLE` is gone. If the data matters, export it to the
+deployment's bucket on a schedule you control. Deleting the deployment revokes
+access immediately and destroys the data after a short retention period.
+
+### Debugging it
+
+**You cannot connect to the database from your machine.** It is reachable only
+from the deployment's own pod — there is no tunnel, no public endpoint, and no
+`freepod db`. Everything below is therefore done through the app's own output.
+
+`freepod log` is the first move, always. These are the errors worth
+recognizing:
+
+| What you see                                               | What it means                                                                  |
+|------------------------------------------------------------|--------------------------------------------------------------------------------|
+| `cannot execute INSERT in a read-only transaction`         | you are at 100% of the allowance                                               |
+| `bouncer config error` at connect                          | the role cannot log in — over 150%, or the deployment was deleted              |
+| `connection was closed in the middle of operation`         | the server connection went away mid-query; retry, and check the two rows above |
+| `password authentication failed`                           | you are not using `DATABASE_URL` / `PG*` from the environment                  |
+| `permission denied to create database`                     | expected: you get exactly one                                                  |
+| `must be superuser to create this extension`               | that extension is untrusted; only trusted ones are installable                 |
+| `canceling statement due to statement timeout`             | your own 30s limit; raise it for that session if the work is legitimate        |
+| rollout fails with *"plan declares no database allowance"* | a platform-side plan misconfiguration, not an app bug — report it              |
+
+A one-off query is best answered by making the app answer it: log the result at
+startup, or add a route that returns it. **Do not add an endpoint that prints
+environment variables or the connection string** — it would be on the public
+internet. Print what you need to the log instead, where only you can read it.
+
+## Object storage: the other place state can live
+
+Every deployment is also given its own **private S3 bucket** on the platform's
+Garage instance — the right home for anything large or file-shaped, and for the
+exports the database has no backups for. There is nothing to enable, provision,
+or configure — the credentials are in the container's environment under the
+names an S3 SDK already looks for:
 
 ```
 AWS_ACCESS_KEY_ID          AWS_ENDPOINT_URL_S3     S3_BUCKET
@@ -253,6 +382,8 @@ things those rules miss. Two wrinkles:
 | Exit 5                                | Image built, rollout failed or timed out        | Usually the container exits at startup — check the start command and that it binds `0.0.0.0:$PORT`. `freepod releases` shows which release failed and which is still live |
 | Deploy succeeds, requests hang or 502 | App is not listening where the platform expects | `freepod log` — then bind `0.0.0.0:$PORT`, not a hardcoded port and not `127.0.0.1`                                                                                       |
 | Deploy succeeds, one endpoint 500s    | A runtime fault                                 | `freepod log -f`, then exercise the failing request                                                                                                                       |
+| Writes 500 but reads work             | The database is at 100% of its allowance        | `freepod log` shows `read-only transaction`; the exit is a larger allowance, not a delete — see The database                                                               |
+| Every request 500s on a database call | Connections refused, or credentials not read    | `freepod log` — `bouncer config error` means the role cannot log in; `password authentication failed` means the app is not using `DATABASE_URL` from the environment      |
 
 **Read the logs first.** `freepod log` prints what the application wrote to
 stdout and stderr. Reach for it before theorizing, before adding instrumentation,

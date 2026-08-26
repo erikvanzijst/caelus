@@ -67,6 +67,10 @@ Instead, each pod has its own private S3-compatible bucket for object storage.
 Use with any aws-s3 client. `S3_BUCKET`, `BUCKET_NAME` and `AWS_*` environment
 variables and access keys are already set.
 
+Each deployment also gets its own PostgreSQL database. Nothing to set up:
+`DATABASE_URL` and the usual `PG*` variables are already in the environment, so
+any ORM or `psql` connects as-is.
+
 ## Environment variables
 
 Inject environment variables in to your pod.

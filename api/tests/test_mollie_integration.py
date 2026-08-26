@@ -39,6 +39,7 @@ from app.services.reconcile_constants import (
     DEPLOYMENT_STATUS_PROVISIONING,
 )
 from tests.conftest import (
+    CURRENT_TOS_VERSION,
     create_free_plan_template,
     create_paid_plan_template,
 )
@@ -760,7 +761,7 @@ def test_cli_creates_free_plan_deployment(cli_runner, monkeypatch):
 
     # Deploying requires prior ToS acceptance.
     assert runner.invoke(
-        app, ["accept-tos", "--user-id", str(user_id), "--version", "2026-07-01"]
+        app, ["accept-tos", "--user-id", str(user_id), "--version", CURRENT_TOS_VERSION]
     ).exit_code == 0
 
     # Deploy with free plan — should succeed

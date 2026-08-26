@@ -58,6 +58,16 @@ STORAGE = {
 }
 
 
+DATABASE = {
+    "relationalStorage__enabled": "true",
+    "caelus__database__host": "caelus-tenant-pooler.caelus-dev.svc.cluster.local",
+    "caelus__database__port": "6432",
+    "caelus__database__name": "dpl_11115310fc464ef48808654a6b7a68f6",
+    "caelus__database__user": "dpl_11115310fc464ef48808654a6b7a68f6",
+    "caelus__database__secretName": "custom-user-app-abc123-database",
+}
+
+
 def test_renders_without_storage_and_projects_nothing():
     """A product that has not opted in renders exactly as it did before."""
     container = _app_container(_render(**BASE))
@@ -82,6 +92,50 @@ def test_storage_enabled_without_a_secret_name_fails_loudly():
     result = subprocess.run(args, capture_output=True, text=True)
     assert result.returncode != 0
     assert "caelus.objectStorage.secretName is required" in result.stderr
+
+
+def test_renders_with_a_database_and_projects_the_secret():
+    container = _app_container(_render(**BASE, **DATABASE, image=f"1@{DIGEST}"))
+    assert container["envFrom"] == [
+        {"secretRef": {"name": "custom-user-app-abc123-database"}}
+    ]
+
+
+def test_renders_without_a_database_and_projects_nothing():
+    assert "envFrom" not in _app_container(_render(**BASE))
+
+
+def test_a_database_without_a_secret_name_fails_loudly():
+    args = ["helm", "template", "t", str(CHART)]
+    for key, value in {**BASE, "relationalStorage__enabled": "true"}.items():
+        args += ["--set", f"{key.replace('__', '.')}={value}"]
+    result = subprocess.run(args, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "caelus.database.secretName is required" in result.stderr
+
+
+def test_both_storages_project_in_a_stable_order():
+    """Vars first, then the platform's own sources: a tenant var named like an
+    injected credential cannot displace it."""
+    container = _app_container(
+        _render(**BASE, **VARS, **STORAGE, **DATABASE, image=f"1@{DIGEST}")
+    )
+    assert [next(iter(e["secretRef"]["name"].rsplit("-", 1)[1:])) for e in container["envFrom"]] == [
+        "vars",
+        "storage",
+        "database",
+    ]
+
+
+def test_the_schema_rejects_an_unknown_sibling_of_the_opt_in():
+    """`relationalStorage` is closed, so a typo is a rollout error rather than
+    a flag that silently does nothing."""
+    args = ["helm", "template", "t", str(CHART)]
+    for key, value in {**BASE, "relationalStorage__enabledd": "true"}.items():
+        args += ["--set", f"{key.replace('__', '.')}={value}"]
+    result = subprocess.run(args, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "relationalStorage" in result.stderr
 
 
 def test_renders_without_vars_and_projects_nothing():
@@ -157,6 +211,13 @@ def test_catalog_system_values_are_valid_values_for_this_chart():
                     "endpoint": "https://blob.example.invalid",
                     "region": "garage",
                     "secretName": "custom-user-app-abc123-object-storage",
+                },
+                "database": {
+                    "host": "caelus-tenant-pooler.caelus-dev.svc.cluster.local",
+                    "port": 6432,
+                    "name": "dpl_11115310fc464ef48808654a6b7a68f6",
+                    "user": "dpl_11115310fc464ef48808654a6b7a68f6",
+                    "secretName": "custom-user-app-abc123-database",
                 },
             }
         },

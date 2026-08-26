@@ -19,6 +19,7 @@ from app.models.core import (  # noqa: F401
     DeploymentBase,
     DeploymentCreate,
     DeploymentCreateResponse,
+    DeploymentDatabaseORM,
     DeploymentORM,
     DeploymentRead,
     DeploymentReconcileJobBase,

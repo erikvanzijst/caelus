@@ -53,6 +53,14 @@
       },
       "additionalProperties": false
     },
+    "relationalStorage": {
+      "type": "object",
+      "description": "Whether this chart wires up a PostgreSQL database. A system value set by the product's catalog entry, never tenant-settable — it is deliberately absent from the tenant-facing values schema. Distinct from caelus.database, which carries the per-deployment references the reconciler injects.",
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
     "caelus": {
       "type": "object",
       "description": "Reconciler-injected values. Open by design (additionalProperties: true throughout): this namespace is written by the platform, never by a tenant, so new reconciler fields can land without a schema bump in every chart.",
@@ -91,6 +99,21 @@
             "secretName": {
               "type": "string",
               "description": "Name of the Secret the reconciler writes into this deployment's namespace, projected into the app container with envFrom."
+            }
+          },
+          "additionalProperties": true
+        },
+        "database": {
+          "type": "object",
+          "description": "Per-deployment database references injected by the Caelus reconciler. References only — the password lives in the Secret named by secretName, never in values. The host and port address the pooler, which is the only route a tenant pod has to a database. The toggle is the top-level relationalStorage.enabled, not here. Optional throughout: a product that has not opted in gets an empty object.",
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "integer" },
+            "name": { "type": "string" },
+            "user": { "type": "string" },
+            "secretName": {
+              "type": "string",
+              "description": "Name of the Secret the reconciler writes into this deployment's namespace, projected into the app container with envFrom. It carries DATABASE_URL and the discrete PG* variables."
             }
           },
           "additionalProperties": true

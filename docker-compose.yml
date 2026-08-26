@@ -18,9 +18,17 @@ services:
     # Allow Chrome sandboxing:
     cap_add:
       - SYS_ADMIN
+    group_add:
+      # Local dev passes through the host's audio group and sound device for
+      # speech-to-text. CI runners are headless and have neither, and docker
+      # refuses to start a container whose device source is missing, so CI
+      # overrides both to values that always exist (see .github/workflows/ci.yml).
+      - ${CAELUS_AUDIO_GROUP:-audio}
     security_opt:
       - seccomp=unconfined
       - apparmor=unconfined
+    devices:
+      - ${CAELUS_SND_DEVICE:-/dev/snd}:/dev/snd
     shm_size: "1gb"
     ports:
       - "5173:5173" # ui

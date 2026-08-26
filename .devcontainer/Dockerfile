@@ -29,6 +29,8 @@ RUN apt-get update -y && \
       dnsutils \
       postgresql-client \
       gnupg \
+      sox \
+      alsa-utils \
       whois && \
     install -m 0755 -d /etc/apt/keyrings && \
     wget -qO- https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \

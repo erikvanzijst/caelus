@@ -1,5 +1,5 @@
 import { requestJson, requestMultipart } from './client'
-import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplateVersion, Product, ProductTemplate, ProductVisibility, SftpCredentials, TosAcceptance, User, VarWrite } from './types'
+import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplatePayload, PlanTemplateVersion, Product, ProductTemplate, ProductVisibility, SftpCredentials, TosAcceptance, User, VarWrite } from './types'
 
 export function getMe() {
   return requestJson<User>('/me')
@@ -128,7 +128,7 @@ export function listPlanTemplates(planId: number) {
   return requestJson<PlanTemplateVersion[]>(`/plans/${planId}/templates`)
 }
 
-export function createPlanTemplate(planId: number, payload: { price_cents: number; billing_interval: string; storage_bytes?: number | null; description?: string | null }) {
+export function createPlanTemplate(planId: number, payload: PlanTemplatePayload) {
   return requestJson<PlanTemplateVersion>(`/plans/${planId}/templates`, {
     method: 'POST',
     body: JSON.stringify(payload),

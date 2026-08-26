@@ -30,3 +30,19 @@ def test_current_tos_version_matches_markdown():
         "settings.current_tos_version is out of sync with the ToS markdown's "
         "Effective date; bump both together when the terms change."
     )
+
+
+# The retention period the Terms publish is a promise about two subsystems, and
+# both reclaim on their own setting. A change to either without the other makes
+# the published number false for one of them.
+_RETENTION_DAYS = re.compile(r"destroyed after a retention period of \*\*(\d+) day")
+
+
+def test_published_retention_matches_what_the_platform_reclaims_on():
+    published = _RETENTION_DAYS.search(TOS_MARKDOWN.read_text())
+    assert published, "the Terms no longer state a retention period"
+    days = int(published.group(1))
+
+    settings = get_settings()
+    assert days == settings.deployment_bucket_expiry_days
+    assert days == settings.deployment_database_purge_grace_days

@@ -21,7 +21,7 @@ class CaelusSettings(BaseSettings):
     # parity by construction, and a CI test binds it to the ToS markdown so the
     # two cannot drift. The CAELUS_CURRENT_TOS_VERSION override exists only as an
     # emergency escape hatch and is not populated in normal operation.
-    current_tos_version: str = "2026-07-01"
+    current_tos_version: str = "2026-08-26"
 
     database_url: str = "postgresql+psycopg://caelus:caelus@localhost:5432/caelus"
     static_path: Path = Path(__file__).parent.parent / "static"
@@ -63,6 +63,14 @@ class CaelusSettings(BaseSettings):
     ]
     sshpiper_namespace: str = "sshpiper"
     sshpiper_pod_label: str = "sshpiper"
+    # The shared database pooler. Its allowance is part of the one fleet-wide
+    # policy, so it is present in every tenant namespace -- including those
+    # whose product has no relational storage, because reachability is not
+    # authorization: a deployment without credentials cannot authenticate.
+    # Empty until an environment deploys a tenant cluster, which renders a rule
+    # whose namespaceSelector matches nothing -- no egress, not free egress.
+    tenant_db_pooler_namespace: str = ""
+    tenant_db_pooler_pod_label: str = "caelus-tenant-pooler"
     sftp_sidecar_port: int = 2222
     sftp_host: str = "freepod.eu"
     sftp_port: int = 22
@@ -103,6 +111,58 @@ class CaelusSettings(BaseSettings):
     # Applied to a deleted deployment's bucket so Garage reclaims the objects on
     # its own.
     deployment_bucket_expiry_days: int = 1
+
+    # ── Tenant relational storage (PostgreSQL) ────────────────────────────
+    # The shared tenant cluster, which is a different PostgreSQL instance from
+    # the one `database_url` names: that one holds these tables, this one holds
+    # tenants' databases. Every value defaults to empty so migrations, tests
+    # and the operator CLI construct settings without a tenant cluster, and so
+    # an environment that has not deployed one still starts -- only a product
+    # that has opted in to relational storage reads them.
+    #
+    # The admin connects to PostgreSQL directly rather than through the pooler:
+    # `SET ROLE` followed by an owner-scoped `ALTER DATABASE` is session state,
+    # which transaction pooling does not preserve.
+    tenant_db_host: str = ""
+    tenant_db_port: int = 5432
+    tenant_db_admin_user: str = "caelus_admin"
+    tenant_db_admin_password: str = ""
+    # Where role and database statements are issued from. Not a tenant
+    # database, and one no tenant can connect to: the bootstrap revokes CONNECT
+    # on it from PUBLIC.
+    tenant_db_maintenance_db: str = "postgres"
+
+    # What a tenant's own DATABASE_URL points at. Never the server: the tenant
+    # NetworkPolicy permits the pooler's port and nothing else, which is what
+    # makes the pooler unbypassable. Delivered through the ConfigMap rather
+    # than the admin Secret -- these are addresses, not credentials, and the
+    # NetworkPolicy needs the port in processes that hold no admin password.
+    tenant_db_pooler_host: str = ""
+    tenant_db_pooler_port: int = 6432
+
+    # How long a deleted deployment's database survives before the purge tick
+    # drops it. Deliberately the same number as
+    # `deployment_bucket_expiry_days`: a tenant reads one retention period in
+    # `legal/`, and two subsystems reclaiming on different days would make that
+    # statement false for one of them.
+    deployment_database_purge_grace_days: int = 1
+
+    # How often the housekeeping worker measures every provisioned database.
+    # Customer-facing quota state, not cluster safety: a tenant can write
+    # gigabytes inside any interval, so this is not what protects the volume.
+    db_worker_quota_interval_seconds: float = 60.0
+    # Purge and orphan sweeps are daily: one destroys, the other only reports.
+    db_worker_purge_interval_seconds: float = 86400.0
+    db_worker_orphan_interval_seconds: float = 86400.0
+    # A ceiling per run, so a clock that jumped cannot cascade into destroying
+    # the fleet's databases in one pass.
+    db_worker_max_purges_per_run: int = 20
+
+    # The shared SMTP relay, for the quota ladder's threshold mails. Empty host
+    # means no mail is sent, which is what dev and the test suite run with.
+    smtp_host: str = ""
+    smtp_port: int = 25
+    smtp_from: str = ""
 
     # ── Deployment logs (Loki) ────────────────────────────────────────────
     loki_base_url: str = ""

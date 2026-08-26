@@ -765,6 +765,32 @@ def worker(
     )
 
 
+@app.command("db-worker")
+def db_worker(
+    interval_seconds: float | None = typer.Option(
+        None, "--interval-seconds", help="Seconds between quota sweeps"
+    ),
+) -> None:
+    """Run the database housekeeping worker: measure and apply quota state.
+
+    Deliberately does not verify the var keyring, unlike `worker`: every tick
+    connects as the platform's database admin and none of them decrypts a
+    tenant password, so a keyring problem must not stop quota enforcement.
+    """
+    from app.db_worker import run_db_worker
+
+    settings = get_settings()
+    if interval_seconds is not None:
+        if interval_seconds <= 0:
+            typer.echo("Error: --interval-seconds must be > 0", err=True)
+            raise typer.Exit(code=1)
+        settings = CaelusSettings(
+            **{**settings.model_dump(), "db_worker_quota_interval_seconds": interval_seconds}
+        )
+
+    run_db_worker(settings=settings, emit=_echo_yaml_stream_item)
+
+
 @app.command("build-worker")
 def build_worker(
     interval_seconds: float | None = typer.Option(
@@ -804,23 +830,28 @@ def build_worker(
     run_build_worker(settings=settings, emit=_echo_yaml_stream_item)
 
 
-@app.command("vars-rotate")
-def vars_rotate(
+@app.command("keyring-rotate")
+def keyring_rotate(
     batch_size: int = typer.Option(
         200, "--batch-size", help="Rows re-encrypted per committed batch"
     ),
 ) -> None:
-    """Re-encrypt deployment vars under the current encryption key.
+    """Re-encrypt every value the keyring covers under the current key.
 
     Run after promoting a new key to the front of CAELUS_VAR_ENCRYPTION_KEYS.
     Every batch commits on its own, so the sweep can be interrupted and
-    re-run: a row names the key that encrypted it, and a half-swept table
-    stays fully readable throughout. The old key may be retired once this
-    reports nothing left to rotate.
+    re-run: a row names the key that encrypted it, and a half-swept store
+    stays fully readable throughout.
+
+    Retiring the old key takes more than this reporting zero. That count is a
+    snapshot: a process still running with the old key at the front keeps
+    writing rows under it. Roll every process onto the new key list first,
+    re-run this until it reports zero, and let the startup check be the gate --
+    it refuses to serve while any stored value names a key that is gone.
     """
     with session_scope() as session:
         try:
-            rotated = var_crypto.rotate_vars(
+            rotated = var_crypto.rotate_encrypted_values(
                 session,
                 batch_size=batch_size,
                 on_batch=lambda n: logger.info("Re-encrypted %d rows so far", n),
@@ -998,6 +1029,7 @@ def create_plan_template(
     price_cents: int = typer.Option(..., "--price-cents"),
     billing_interval: BillingInterval = typer.Option(..., "--billing-interval"),
     storage_bytes: int | None = typer.Option(None, "--storage-bytes"),
+    database_bytes: int | None = typer.Option(None, "--database-bytes"),
     description: str | None = typer.Option(None, "--description"),
 ) -> None:
     with session_scope() as session:
@@ -1010,6 +1042,7 @@ def create_plan_template(
                     price_cents=price_cents,
                     billing_interval=billing_interval,
                     storage_bytes=storage_bytes,
+                    database_bytes=database_bytes,
                     description=description,
                 ),
             )

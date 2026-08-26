@@ -28,9 +28,15 @@ def build_tenant_baseline_policy(*, namespace: str, settings: CaelusSettings) ->
       sidecar port only -- it has no business on app ports, and the port scoping
       is also what keeps the other environment's router out), plus free traffic
       within the namespace;
-    - egress: free traffic within the namespace, DNS, the shared SMTP relay, and
-      the public internet minus every internal range (LAN, node, other tenants,
-      the service CIDR, and link-local/cloud-metadata).
+    - egress: free traffic within the namespace, DNS, the shared SMTP relay, the
+      shared database pooler (client port only), and the public internet minus
+      every internal range (LAN, node, other tenants, the service CIDR, and
+      link-local/cloud-metadata).
+
+    The tenant PostgreSQL server is deliberately not among the allowances: it
+    sits behind the same internal ranges the internet rule excludes, so the
+    pooler is the only route to a database, and the pooler is therefore
+    unbypassable rather than merely conventional.
 
     The policy is byte-for-byte identical for every tenant; only
     ``metadata.namespace`` varies. That is what lets a single definition, applied
@@ -111,6 +117,21 @@ def build_tenant_baseline_policy(*, namespace: str, settings: CaelusSettings) ->
                         }
                     ],
                     "ports": [{"port": settings.mailer_port, "protocol": "TCP"}],
+                },
+                {  # shared database pooler -> its client port only
+                    "to": [
+                        {
+                            "namespaceSelector": {
+                                "matchLabels": {
+                                    "kubernetes.io/metadata.name": settings.tenant_db_pooler_namespace
+                                }
+                            },
+                            "podSelector": {
+                                "matchLabels": {"app": settings.tenant_db_pooler_pod_label}
+                            },
+                        }
+                    ],
+                    "ports": [{"port": settings.tenant_db_pooler_port, "protocol": "TCP"}],
                 },
                 {  # internet, minus every internal range + link-local/metadata
                     "to": [

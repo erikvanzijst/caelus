@@ -53,6 +53,14 @@ again after any node rebuild (the userns sysctl for rootless BuildKit, and
 containerd's trust for the internal registry). Both are documented in
 [`../api/README.md`](../api/README.md) § Builds.
 
+## Tenant database cluster
+
+`tf/app` also creates the PostgreSQL 18 instance and PgBouncer pair that hold
+every `custom` deployment's own database, per workspace.
+
+The bootstrap SQL that creates the platform's roles runs as an init container
+on the reconcile worker, so a change to it ships with the next rollout.
+
 ## Secrets
 
 Each project has its own `secrets.auto.tfvars` (gitignored):

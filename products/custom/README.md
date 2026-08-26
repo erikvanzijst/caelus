@@ -105,6 +105,66 @@ flag:
 new S3Client({ forcePathStyle: true })     // endpoint/region come from the env
 ```
 
+## Database
+
+Every `custom` deployment also gets its **own PostgreSQL database** and a login
+role that owns it, provisioned automatically. As with the bucket, there is
+nothing to enable and nothing to configure — the credentials arrive as
+environment variables:
+
+```
+DATABASE_URL                 postgresql://<role>:<password>@<pooler>:6432/<db>
+PGHOST  PGPORT  PGUSER  PGPASSWORD  PGDATABASE
+```
+
+`DATABASE_URL` covers every ORM; the `PG*` variables are what libpq, `psql` and
+`pg_dump` read with no arguments. In Python:
+
+```python
+import os, psycopg
+with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+    conn.execute("CREATE TABLE IF NOT EXISTS visits (id serial primary key)")
+```
+
+### What you can and cannot do with it
+
+You **own** the database: create schemas, tables and indexes, and install
+PostgreSQL's trusted extensions (`pgcrypto` and friends).
+
+Session state does not survive between transactions (`SET`, `LISTEN`/`NOTIFY`,
+session-level advisory locks).
+
+Three role-level settings are applied and re-applied on every deploy:
+`statement_timeout = 30s`, `idle_in_transaction_session_timeout = 60s`, and
+`temp_file_limit = 64MB`. The first two you can override per session; the third
+you cannot.
+
+### The size allowance, and what happens when you hit it
+
+The plan's `database_bytes` bounds the database. At 80% and 90% the owner is
+mailed; at 100% the database goes **read-only** — reads keep working, writes are
+refused; at 150% the role stops being able to log in at all. Falling back under
+the allowance reverses each step on the next sweep.
+
+### Backups
+
+There are none you can reach. An accidental `DROP TABLE` is not recoverable.
+Deleting the deployment revokes access immediately and the data is destroyed
+after the platform's retention period.
+
+### How it is wired
+
+Two distinct keys, and the distinction is the same one object storage draws:
+
+- `relationalStorage.enabled` is the **product's** static declaration, set in
+  `products/catalog/custom.yaml` under `template.system_values`. It is
+  identical for every deployment of this product and a tenant cannot set it.
+- `caelus.database.{host,port,name,user,secretName}` are the **per-deployment**
+  facts the reconciler injects after provisioning. The chart reads
+  `secretName` and projects that Secret with `envFrom`; the password is
+  deliberately not among them, because Helm values are logged in full and
+  persisted into the deployment's own namespace.
+
 ## Runtime configuration
 
 Whatever vars the deployment has set arrive in the container as environment

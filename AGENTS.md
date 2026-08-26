@@ -30,10 +30,12 @@ This repository is a monorepo with:
   `_validate_build_reference` checks only that the caller owns the build.
   Nothing currently stops one build being named by releases of *different*
   deployments — an image is technically reusable that way, it is not the
-  intended case, and rejecting it is an open item. There are now two
-  worker processes: `caelus worker` (reconcile queue) and `caelus build-worker`
-  (builds), the latter running each build as a Kubernetes Job in a
-  per-environment `caelus-builds*` namespace. Builds are addressed under their
+  intended case, and rejecting it is an open item. There are three
+  worker processes: `caelus worker` (reconcile queue), `caelus build-worker`
+  (builds), and `caelus db-worker` (all tenant-database housekeeping —
+  measuring quotas, purging deleted deployments' databases after their grace
+  period, and reporting orphaned cluster objects). The build worker runs each
+  build as a Kubernetes Job in a per-environment `caelus-builds*` namespace. Builds are addressed under their
   owner — `/api/users/{user_id}/builds*` — like every other user-owned
   resource; there is no root-level `/api/builds`, and no `user_id` query
   parameter. See `api/README.md` § Builds.
@@ -46,9 +48,25 @@ This repository is a monorepo with:
   a vars projection — there is no second schema and no second namespace. A var
   marked `x-caelus-sensitive` is write-only: reads omit its `value` entirely,
   for everyone including administrators. Values are encrypted at rest under a
-  rotatable keyring that the API and `caelus worker` must both hold; both
-  refuse to start when theirs cannot cover what is stored. See
+  rotatable keyring; see § Encrypted columns below. See
   `api/README.md` § Deployment Vars.
+- **A deployment's database credentials are not vars.** Vars are the channel a
+  *tenant* writes; the database password is platform-held, and it reaches the
+  pod through a Kubernetes Secret the reconciler publishes
+  (`<name>-database`), exactly as the object-storage credentials do. Helm
+  values carry references only — host, port, database name, role name and the
+  Secret's name — because merged values are logged in full and persisted into
+  the tenant's own namespace. See `api/README.md` § Per-Deployment Relational
+  Storage.
+- **Encrypted columns and the keyring.** `deployment_var.value_encrypted` and
+  `deployment_database.password_encrypted` are both encrypted under one
+  rotatable keyring, declared in `var_crypto.ENCRYPTED_COLUMNS`. The **API**
+  and **`caelus worker`** hold it and refuse to start when theirs cannot cover
+  what is stored; `caelus db-worker` deliberately does **not** require it,
+  because every one of its ticks connects as the platform's database admin and
+  none decrypts a tenant password. `caelus keyring-rotate` re-encrypts every
+  registered column — adding a new encrypted column means adding it to that
+  registry, or a retired key strands it silently.
 - Products are either **curated** (declared in `products/catalog/<slug>.yaml`,
   reconciled into the database on rollout, and read-only through the API, CLI,
   and admin UI apart from `visibility`) or **non-curated** (database-authored).
@@ -115,12 +133,16 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
 
 ## Conventions
 - Keep CLI and REST functionality in lockstep. **Exception**: the `caelus
-  catalog` command group (`apply`, `curate`, `lint`) is intentionally CLI-only
-  and requires no REST equivalent. These are operator and build tooling rather
-  than tenant-facing surface — `apply` is invoked by an init container during
-  rollout, and `lint` runs in CI with no database. The write guards they depend
-  on live in `api/app/services/`, so REST, CLI, and the admin UI still enforce
-  identical rules and no parity gap is introduced.
+  catalog` command group (`apply`, `curate`, `lint`), the long-running worker
+  entry points (`caelus worker`, `caelus build-worker`, `caelus db-worker`),
+  and `caelus keyring-rotate` are intentionally CLI-only and require no REST
+  equivalent. These are operator and build tooling rather than tenant-facing
+  surface — `catalog apply` is invoked by an init container during rollout,
+  `lint` runs in CI with no database, the workers are processes rather than
+  requests, and `keyring-rotate` is a maintenance sweep an operator runs while
+  rotating an encryption key. The write guards they depend on live in
+  `api/app/services/`, so REST, CLI, and the admin UI still enforce identical
+  rules and no parity gap is introduced.
 - Put all DB/ORM logic in `api/app/services/` and call from API + CLI (DRY).
 - Build logs are stored as `bytea`, not text, and served as raw bytes:
   container output is tenant-controlled and may contain invalid UTF-8 or NUL

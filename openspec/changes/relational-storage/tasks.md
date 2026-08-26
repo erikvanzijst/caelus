@@ -83,11 +83,11 @@
 
 ## 11. Documentation
 
-- [ ] 11.1 Update `AGENTS.md`: three worker processes rather than two, `caelus db-worker` described as all database housekeeping, and the vars-vs-database channel distinction; verify the worker list matches the shipped entry points
-- [ ] 11.2 Add a Relational Storage section to `api/README.md` mirroring Object Storage; verify it documents the Secret contract and the quota ladder
-- [ ] 11.3 Update `tf/README.md` and `tf/app/README.md` with the tenant cluster and design D13's warning that `local-path` enforces no size and cannot expand
-- [ ] 11.4 Update `products/custom/README.md` with the opt-in flag and the injected values
-- [ ] 11.5 Rewrite the `deploy-to-freepod` skill's "there is no database" guidance, and add a migrations paragraph covering "run them at startup, beware the multi-replica race"; verify no remaining text tells users to port relational schemas onto S3
-- [ ] 11.6 Update `legal/` to state that no tenant-reachable backups exist and to record the database retention period; verify it matches `deployment_bucket_expiry_days`
-- [ ] 11.7 Update AGENTS.md's statement that "the API and `caelus worker` must both hold" the keyring, to reflect the third process and whichever way task 5.6 resolves; verify it names every process that requires a key and no process that does not
-- [ ] 11.8 Extend AGENTS.md's REST-parity exemption to name `caelus db-worker` and the `caelus db` operator commands alongside `caelus catalog`; verify the wording covers both
+- [x] 11.1 Update `AGENTS.md`: three worker processes rather than two, `caelus db-worker` described as all database housekeeping, and the vars-vs-database channel distinction; verify the worker list matches the shipped entry points
+- [x] 11.2 Add a Relational Storage section to `api/README.md` mirroring Object Storage; verify it documents the Secret contract and the quota ladder
+- [x] 11.3 Update `tf/README.md` and `tf/app/README.md` with the tenant cluster and design D13's warning that `local-path` enforces no size and cannot expand
+- [x] 11.4 Update `products/custom/README.md` with the opt-in flag and the injected values
+- [x] 11.5 Rewrite the `deploy-to-freepod` skill's "there is no database" guidance, and add a migrations paragraph covering "run them at startup, beware the multi-replica race"; verify no remaining text tells users to port relational schemas onto S3
+- [x] 11.6 Update `legal/` to state that no tenant-reachable backups exist and to record the database retention period; verify it matches `deployment_bucket_expiry_days`
+- [x] 11.7 Update AGENTS.md's statement that "the API and `caelus worker` must both hold" the keyring, to reflect the third process and whichever way task 5.6 resolves; verify it names every process that requires a key and no process that does not
+- [x] 11.8 Extend AGENTS.md's REST-parity exemption to name `caelus db-worker` and the `caelus db` operator commands alongside `caelus catalog`; verify the wording covers both

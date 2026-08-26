@@ -9,7 +9,7 @@ Customer's behalf.
 In case of conflict between this DPA and the Terms, this DPA prevails with
 respect to the processing of Personal Data.
 
-**Effective date:** 2026-07-01  
+**Effective date:** 2026-08-26  
 This DPA takes effect on the effective date of the Terms and is versioned
 alongside them.
 
@@ -91,7 +91,11 @@ the Customer in meeting its own notification obligations.
 3.8 **Deletion or return.** At the Customer's choice, delete or return all
 Personal Data after the end of the provision of the Service, and delete existing
 copies, unless EU or Member-State law requires storage. This aligns with the
-Export Window and deletion terms in the Terms.
+Export Window and deletion terms in the Terms. A deleted deployment's database
+and object storage are destroyed after the retention period stated in the Terms
+(Section 5.5); the Processor operates no tenant-reachable backup or restore
+facility, so return of Personal Data must be exported by the Customer before
+deletion.
 
 3.9 **Audits and information.** Make available to the Customer information
 necessary to demonstrate compliance with Article 28, and allow for and
@@ -200,7 +204,9 @@ long as Freepod processes Personal Data on the Customer's behalf.
 - **Retention:** Personal Data is retained while it remains in the Customer's
   Instance and during the Export Window after termination, after which it is
   deleted in accordance with Section 3.8 and routine backup cycles, unless
-  applicable law requires longer retention.
+  applicable law requires longer retention. A deleted deployment's database and
+  object storage are destroyed after the retention period in the Terms
+  (Section 5.5), currently 1 day.
 
 ## Annex 2 — Technical and organisational measures (Article 32)
 

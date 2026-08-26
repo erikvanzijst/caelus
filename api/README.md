@@ -374,6 +374,114 @@ back the secret of any access key it can see**, so compromise of this process is
 compromise of every tenant bucket. That is inherent to automated provisioning
 and is stated here rather than left to be discovered.
 
+## Per-Deployment Relational Storage
+
+Deployments of a product whose template sets
+`system_values.relationalStorage.enabled` get their own PostgreSQL database and
+login role on the shared **tenant cluster** — a separate instance from
+`caelus-postgres`, deployed per Terraform workspace, reached only through a
+PgBouncer pair. Provisioning sits in the same place in the apply path as object
+storage:
+
+```
+_reconcile_apply
+    ensure_namespace
+    ensure_tenant_isolation
+    ensure_object_storage    ← key, bucket, grant, quota + CORS
+    ensure_database          ← role, database, revocation, session limits
+    upsert_secret            ← credentials into the tenant namespace
+    helm_upgrade_install     ← values carry only references
+```
+
+`services/relational_storage.py` holds the policy,
+`services/postgres_admin.py` the transport.
+
+### What the pod gets
+
+The reconciler writes `<deployment.name>-database` into the tenant's namespace
+and the chart consumes it with `envFrom`:
+
+| Variable | What it is |
+| --- | --- |
+| `DATABASE_URL` | `postgresql://<role>:<password>@<pooler>:6432/<database>` |
+| `PGHOST` / `PGPORT` | the **pooler**, never the PostgreSQL server |
+| `PGUSER` / `PGDATABASE` | both are `dpl_` plus the deployment UUID without hyphens |
+| `PGPASSWORD` | platform-generated, re-asserted on every reconcile |
+
+The URL covers every ORM; the discrete variables are what libpq, `psql` and
+`pg_dump` read unaided. **The password never enters Helm values** — merged
+values are logged in full and persisted into the tenant's namespace, so they
+carry host, port, database name, role name and the Secret's name and nothing
+else.
+
+### What the isolation rests on
+
+PostgreSQL grants `CONNECT` to `PUBLIC` on every new database, so
+database-per-tenant is not isolation by itself. Provisioning revokes it, and
+then **reads the privilege back and fails the provision if `PUBLIC` still holds
+it**. That check is not decoration: the revoke is owner-scoped, and issued
+without assuming the owner's role it does not error — it warns and does
+nothing.
+
+The role is created with every attribute negated. `NOCREATEDB` is what stops a
+tenant provisioning around its own quota. Session limits (`temp_file_limit`,
+`statement_timeout`, `idle_in_transaction_session_timeout`) are re-applied on
+every reconcile, so a tenant's `RESET` does not survive one.
+
+No platform process holds a pooler administrative credential, and none is
+configured. Everything the platform does is expressed against PostgreSQL.
+
+### The quota ladder
+
+`plan_template_version.database_bytes` bounds the database. It is a **separate**
+allowance from `storage_bytes`, which already means two things (the Garage
+bucket quota and the chart's PVC size), and neither is derived from the other. A
+relational-storage deployment whose plan declares no positive allowance fails to
+provision rather than getting an unbounded database.
+
+`caelus db-worker` measures every database and applies the state it lands in:
+
+| Usage | State | What happens | Email |
+| --- | --- | --- | --- |
+| < 80% | `ok` | — | — |
+| 80%, 90% | `warned` | — | yes, once per threshold |
+| 100% | `readonly` | `default_transaction_read_only` on the database | yes |
+| 150% | `blocked` | role set `NOLOGIN`, its backends terminated | no |
+
+Read-only is deliberately soft — the owner can clear it on their own database,
+and a tenant who does keeps growing until the hard block, which is what makes
+crossing 150% an abuse signal rather than an arbitrary number. It is therefore
+re-asserted on every evaluation. The reconcile runs the *same* evaluation with
+notification suppressed, so redeploying cannot buy an over-quota tenant a write
+window.
+
+A threshold's suppression marker only moves once the relay accepted the
+message, so an SMTP outage is retried on the next sweep rather than swallowing
+the one notification a tenant gets.
+
+**There is no recovery path other than a larger allowance.** Read-only blocks
+`DELETE`, `DROP TABLE` and `VACUUM`, and no operation currently changes a
+deployment's plan, so crossing 100% is presently terminal for that deployment's
+data.
+
+### Deletion, and what destroys data
+
+Deleting a deployment revokes access and destroys nothing: the role is set
+`NOLOGIN`, its backends are terminated, and a `purge_after` deadline is
+recorded. The database and every byte in it survive the grace period
+(`deployment_database_purge_grace_days`, matching
+`deployment_bucket_expiry_days` so `legal/` can state one retention period).
+
+`caelus db-worker`'s purge tick is the only thing that destroys tenant data. It
+refuses a row with no deadline or one still inside its window, caps how many it
+will purge per run, and logs every drop with its deployment id. Its orphan tick
+reports cluster objects no `deployment_database` row accounts for — roles as
+well as databases, because provisioning creates the role first and writes the
+row last.
+
+**No backups exist that a tenant can reach.** An accidental `DROP TABLE` is
+unrecoverable for them.
+
 ## Deployment Vars (Runtime Configuration)
 
 A **var** is one entry in a deployment's process environment. Vars are the

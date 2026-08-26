@@ -77,14 +77,15 @@ spec:
 
           Object storage second. The Secret carries the conventional AWS_*
           names, so a tenant's `boto3.client("s3")` works with no configuration
-          at all.
+          at all. The database Secret follows, carrying DATABASE_URL and the
+          discrete PG* variables for the same reason.
 
           Two namespaces on purpose. `objectStorage.enabled` is the product's
           own static declaration — a system value from the catalog, the same for
           every deployment of this product. `caelus.objectStorage.*` are the
           per-deployment facts the reconciler injects after provisioning.
           */}}
-          {{- if or .Values.caelus.vars.secretName .Values.objectStorage.enabled }}
+          {{- if or .Values.caelus.vars.secretName .Values.objectStorage.enabled .Values.relationalStorage.enabled }}
           envFrom:
             {{- with .Values.caelus.vars.secretName }}
             - secretRef:
@@ -93,6 +94,10 @@ spec:
             {{- if .Values.objectStorage.enabled }}
             - secretRef:
                 name: {{ required "custom: caelus.objectStorage.secretName is required when object storage is enabled" .Values.caelus.objectStorage.secretName | quote }}
+            {{- end }}
+            {{- if .Values.relationalStorage.enabled }}
+            - secretRef:
+                name: {{ required "custom: caelus.database.secretName is required when relational storage is enabled" .Values.caelus.database.secretName | quote }}
             {{- end }}
           {{- end }}
           {{- with .Values.resources }}

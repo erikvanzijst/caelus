@@ -527,14 +527,14 @@ class Session:
                 if not interactive:
                     raise AuthenticationError(
                         f"the cached credential for '{self.env.name}' is no longer valid — "
-                        f"run `freepod login --env {self.env.name}`"
+                        f"run `freepod --env {self.env.name} login`"
                     )
                 log("Refresh failed; falling back to a full login.")
             else:
                 if not interactive:
                     raise AuthenticationError(
                         f"not authenticated for '{self.env.name}' — "
-                        f"run `freepod login --env {self.env.name}`"
+                        f"run `freepod --env {self.env.name} login`"
                     )
                 log(f"No cached credential for '{self.env.name}'.")
 

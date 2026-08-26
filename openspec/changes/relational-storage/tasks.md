@@ -61,10 +61,10 @@
 
 ## 8. Chart and catalog
 
-- [ ] 8.1 Add `relationalStorage.enabled` and `caelus.database` to `products/custom/chart/values.schema.json`; verify `helm template` accepts both and rejects an unknown sibling
-- [ ] 8.2 Render `envFrom` for the credentials Secret in the custom chart, gated on the opt-in flag; verify a rendered manifest carries the Secret reference only when enabled
-- [ ] 8.3 Set `relationalStorage.enabled: true` in `products/catalog/custom.yaml`; verify `caelus catalog lint` passes and `caelus catalog apply` produces a new template version
-- [ ] 8.4 Deploy a scratch `custom` app that reads `DATABASE_URL`, creates a table and writes a row; verify end to end that it succeeds
+- [x] 8.1 Add `relationalStorage.enabled` and `caelus.database` to `products/custom/chart/values.schema.json`; verify `helm template` accepts both and rejects an unknown sibling
+- [x] 8.2 Render `envFrom` for the credentials Secret in the custom chart, gated on the opt-in flag; verify a rendered manifest carries the Secret reference only when enabled
+- [x] 8.3 Set `relationalStorage.enabled: true` in `products/catalog/custom.yaml`; verify `caelus catalog lint` passes and `caelus catalog apply` produces a new template version
+- [x] 8.4 Deploy a scratch `custom` app that reads `DATABASE_URL`, creates a table and writes a row; verify end to end that it succeeds
 
 ## 9. Housekeeping worker — quota tick
 

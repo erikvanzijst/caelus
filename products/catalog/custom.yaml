@@ -13,10 +13,12 @@ upstream:
   version_path: template.system_values.placeholderImage
 template:
   chart_ref: oci://registry.home/helm/custom
-  chart_version: 0.6.0
+  chart_version: 0.7.0
   system_values:
     placeholderImage: registry.home/caelus/custom-placeholder:0.1.0
     objectStorage:
+      enabled: true
+    relationalStorage:
       enabled: true
   values_schema:
     $schema: https://json-schema.org/draft/2020-12/schema

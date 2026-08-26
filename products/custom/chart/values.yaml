@@ -76,6 +76,12 @@ resources: {}
 objectStorage:
   enabled: false
 
+# Whether this chart wires up a PostgreSQL database. A system value like
+# `objectStorage` above, set by the product's catalog entry and absent from the
+# tenant-facing schema, so a tenant can neither enable nor disable it.
+relationalStorage:
+  enabled: false
+
 # Injected per deployment by the Caelus reconciler. These defaults let the chart
 # render standalone (helm lint / helm template with no --set).
 caelus:
@@ -106,6 +112,11 @@ caelus:
   # Empty by default so the traversal in deployment.yaml resolves and `required`
   # can report the missing value, rather than failing on a nil map.
   objectStorage: {}
+  # Per-deployment database references, injected once the reconciler has
+  # provisioned the database. The host and port are the pooler's: a tenant pod
+  # cannot reach the PostgreSQL server directly. The password is deliberately
+  # not here, for the same reason the S3 credential is not.
+  database: {}
   # Runtime configuration the tenant set, injected as the *name* of a Secret the
   # reconciler writes into the deployment's namespace before Helm runs. The
   # values are deliberately not here: Helm values are logged in full and

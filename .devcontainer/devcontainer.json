@@ -17,6 +17,7 @@
   "mounts": [
     "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind",
     "source=${localEnv:HOME}/.docker/config.json,target=/home/vscode/.docker/config.json,type=bind",
+    "source=${localEnv:HOME}/.config/freepod,target=/home/vscode/.config/freepod,type=bind",
     "source=${localEnv:HOME}/.config/opencode,target=/home/vscode/.config/opencode,type=bind",
     "source=${localEnv:HOME}/.config/amp,target=/home/vscode/.config/amp,type=bind",
     "source=${localEnv:HOME}/.qwen,target=/home/vscode/.qwen,type=bind",

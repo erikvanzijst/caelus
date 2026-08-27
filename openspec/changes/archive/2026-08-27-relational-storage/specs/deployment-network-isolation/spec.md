@@ -54,3 +54,8 @@ The tenant PostgreSQL server itself is not among the allowances. A deployment MU
 #### Scenario: The tenant PostgreSQL server is unreachable directly
 - **WHEN** a pod in the deployment namespace connects to the tenant PostgreSQL server rather than the pooler
 - **THEN** the connection is denied
+
+## RENAMED Requirements
+
+- FROM: `### Requirement: Egress permits only the deployment's own namespace, cluster DNS, the shared mailer, and the public internet`
+- TO: `### Requirement: Egress permits only the deployment's own namespace, cluster DNS, the shared mailer, the shared database pooler, and the public internet`

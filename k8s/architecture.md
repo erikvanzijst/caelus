@@ -717,7 +717,7 @@ Use this checklist to validate a new chart/template manually before wiring it in
 1. Cluster connectivity:
 
 ```bash
-export KUBECONFIG=/workspace/k8s/kubeconfigs/dev-k3s.yaml
+export KUBECONFIG=/workspace/src/k8s/kubeconfigs/dev-k3s.yaml
 kubectl config current-context
 kubectl get nodes -o wide
 ```

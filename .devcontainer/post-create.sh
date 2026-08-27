@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /workspace/api
+cd /workspace/src/api
 uv sync
 
 completion_dir="$HOME/.local/share/caelus"
@@ -20,5 +20,5 @@ grep -qxF "$alias_line" "$HOME/.bashrc" || \
 
 uv run alembic upgrade head
 
-cd /workspace/cli
+cd /workspace/src/cli
 uv sync

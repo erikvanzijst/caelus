@@ -6,7 +6,7 @@
   "service": "app",
   "remoteUser": "vscode",
   "overrideCommand": true,
-  "workspaceFolder": "/workspace",
+  "workspaceFolder": "/workspace/src",
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "forwardPorts": [
     8000

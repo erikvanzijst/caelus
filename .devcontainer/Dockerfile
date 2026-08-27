@@ -59,7 +59,7 @@ RUN npm i -g @openai/codex
 RUN npm i -g @qwen-code/qwen-code@latest
 RUN npm i -g @fission-ai/openspec@latest
 RUN npm i -g @google/gemini-cli
-RUN mkdir /workspace && chown vscode:vscode /workspace
+RUN mkdir -p /workspace/src && chown -R vscode:vscode /workspace
 
 ENV LANG="en_US.UTF-8"
 ENV PATH=/home/vscode/.local/bin:$PATH
@@ -69,7 +69,7 @@ ENV DOCKER_BUILDKIT=1
 ENV OPENCODE_ENABLE_EXA=1
 
 USER vscode
-WORKDIR /workspace
+WORKDIR /workspace/src
 RUN mkdir -p ~/.local/bin ~/.ssh ~/.docker
 RUN chmod 700 ~/.ssh ~/.docker
 RUN ssh-keyscan github.com >> ~/.ssh/known_hosts

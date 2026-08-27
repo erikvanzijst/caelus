@@ -41,11 +41,17 @@ services:
     environment:
       - CAELUS_DATABASE_URL=postgresql+psycopg://caelus:caelus@postgres:5432/caelus
       - CAELUS_TEST_DATABASE_URL=postgresql+psycopg://caelus:caelus@postgres:5432/caelus_test
-      - KUBECONFIG=/workspace/k8s/kubeconfigs/dev-k3s.yaml
+      - KUBECONFIG=/workspace/src/k8s/kubeconfigs/dev-k3s.yaml
       # https://github.com/anthropics/claude-code/issues/1736#issuecomment-3170502150
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
       - QWEN_STREAM_IDLE_TIMEOUT_MS=900000
     volumes:
-      - .:/workspace
+      # Mount the checkout's parent so sibling dirs (trees/, apps/) are shared
+      # with the host, then pin the checkout itself at /workspace/src. The
+      # second mount is what makes workspaceFolder stable: without it the repo
+      # would land at /workspace/<host dir name>, which is "src" locally but
+      # "freepod" on a CI runner (/home/runner/work/freepod/freepod).
+      - ..:/workspace
+      - .:/workspace/src
     depends_on:
       - postgres

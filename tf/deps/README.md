@@ -552,7 +552,7 @@ Keycloak container**. Two quirks of running Docker from inside the dev container
 (sibling containers via the mounted Docker socket) shape the commands below:
 
 - **Bind-mount sources are *host* paths**, not dev-container paths — so we mount
-  the host directory backing `/workspace`.
+  the host directory backing `/workspace/src`.
 - **Port publishing happens on the host**, where the dev container already owns
   the forwarded ports (`8501`, `8000`). So instead of `-p`, the throwaway
   containers **share the dev container's network namespace**
@@ -561,7 +561,7 @@ Keycloak container**. Two quirks of running Docker from inside the dev container
 ```bash
 DEVCTR=caelus-app-1   # this dev container, as the Docker host sees it
 HOST_WS=$(docker inspect "$DEVCTR" --format \
-  '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}')
+  '{{range .Mounts}}{{if eq .Destination "/workspace/src"}}{{.Source}}{{end}}{{end}}')
 
 docker run -d --name freepod-kc \
   --network "container:$DEVCTR" \

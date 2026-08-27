@@ -1,14 +1,6 @@
 -- One-time setup for the tenant PostgreSQL cluster, applied on every rollout.
 --
--- Runs as the cluster superuser against the `postgres` maintenance database,
--- from an init container on the reconcile worker (worker.tf). It is the only
--- place a superuser credential is used: everything the platform does at runtime
--- goes through `caelus_admin`, created here without superuser (design D6).
---
--- Idempotent by construction, because it runs again on every rollout and
--- because PostgreSQL has no CREATE ROLE IF NOT EXISTS: creates are guarded and
--- attributes are re-asserted unconditionally, so editing this file is how the
--- cluster's configuration changes.
+-- Idempotent by construction, because it runs again on every rollout.
 --
 -- Required psql variables:
 --   caelus_admin_password    password for the platform's admin role
@@ -16,10 +8,10 @@
 
 \set ON_ERROR_STOP on
 
+SET client_min_messages = warning;
+
 -- PostgreSQL grants CONNECT to PUBLIC on every database, these two included, so
--- database-per-tenant is not isolation until this runs (design D1). Verified:
--- without it a tenant connects to the maintenance databases and reads the
--- catalogs.
+-- database-per-tenant is not isolation until this runs (design D1).
 --
 -- ALL rather than CONNECT: revoking only CONNECT leaves PUBLIC holding TEMPORARY
 -- (`datacl` reads `=T/postgres`), which is inert without CONNECT but is one more
@@ -30,7 +22,7 @@ REVOKE ALL ON DATABASE template1 FROM PUBLIC;
 
 
 -- ---------------------------------------------------------------------------
--- caelus_admin -- what every long-running platform process connects as
+-- Provision the caelus_admin role (used by the api and worker processes)
 -- ---------------------------------------------------------------------------
 
 DO $$
@@ -50,14 +42,11 @@ GRANT pg_read_all_stats TO caelus_admin;
 -- pg_terminate_backend on a tenant's backends:
 GRANT pg_signal_backend TO caelus_admin;
 
--- The revocation above applies to caelus_admin too -- it is not a superuser.
 GRANT CONNECT ON DATABASE postgres TO caelus_admin;
 
 -- temp_file_limit is superuser-only to set, which is exactly what makes it real
 -- enforcement rather than advice -- and is also why a non-superuser admin
--- cannot apply it to a tenant role without this (PG15+). Verified both ways on
--- 18.6: with the grant caelus_admin sets the limit on a tenant role, and the
--- tenant is still refused `SET temp_file_limit` in its own session.
+-- cannot apply it to a tenant role without this (PG15+).
 GRANT SET ON PARAMETER temp_file_limit TO caelus_admin;
 
 
@@ -83,14 +72,8 @@ GRANT CONNECT ON DATABASE postgres TO pgbouncer_auth;
 -- one: PG16+ reserved_connections, held open for exactly this role (design D9).
 GRANT pg_use_reserved_connections TO pgbouncer_auth;
 
--- SECURITY DEFINER because pg_shadow is superuser-only (verified: a plain role
--- gets `permission denied for view pg_shadow`). Owned by the superuser running
+-- SECURITY DEFINER because pg_shadow is superuser-only. Owned by the superuser running
 -- this script.
---
--- No filtering of our own: pg_shadow's own definition already reads
--- `FROM pg_authid WHERE rolcanlogin`, so a role set to NOLOGIN resolves to no
--- row and cannot authenticate. That is what makes NOLOGIN the whole suspension
--- mechanism, with nothing replicated onto this cluster to keep in sync.
 CREATE SCHEMA IF NOT EXISTS pgbouncer;
 REVOKE ALL ON SCHEMA pgbouncer FROM PUBLIC;
 GRANT USAGE ON SCHEMA pgbouncer TO pgbouncer_auth;

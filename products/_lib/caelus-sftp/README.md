@@ -27,7 +27,7 @@ NetworkPolicy admits.
 |--------|---------|
 | Secret `<release>-sftp-credentials` | username + `lookup`-stable password + `users.conf` |
 | ConfigMap `<release>-sftp-scripts` | sshd init: force `internal-sftp -R`, move to port 2222 |
-| Service `<release>-sftp` | routes sshpiper → sidecar on 2222 |
+| Service `<release>-sftp` | routes sshpiper → sidecar on 2222, publishing not-ready addresses |
 | Pipe `<release>` | sshpiper route: username → the Service |
 
 `caelus-sftp.sidecar` and `caelus-sftp.volumes` emit the atmoz/sftp container
@@ -40,7 +40,7 @@ and its supporting volumes, to splice into the app pod.
 ```yaml
 dependencies:
   - name: caelus-sftp
-    version: "0.1.0"
+    version: "0.2.0"
     repository: "file://../../_lib/caelus-sftp"
 ```
 
@@ -103,9 +103,25 @@ is not offered for that product in v1 (document it and move on).
   gets "Permission denied" on `ls` despite a good login. Pass `internalUid` (and
   `internalGid` if different) equal to the uid that owns the files. When the
   data is world-readable (or root-owned `0777`), the default 1000 is fine.
-- **SFTP needs the pod `Ready`.** The Service only routes to a ready pod, so SFTP
-  is unreachable while the app is still initializing or if it is crashlooping.
-  This is expected in v1.
+- **SFTP reachability is deliberately independent of application health.** The
+  Service sets `publishNotReadyAddresses: true`, so its endpoints include the
+  deployment's pod whenever that pod exists, ready or not. This is not an
+  oversight to tidy up in a refactor: the Service fronts an administrative
+  sidecar, not the application, and a tenant whose app is crash-looping is
+  exactly the tenant who needs to get at their files. Dropping the flag is
+  silent — everything works until an app crash-loops, which is when nobody is
+  looking at the Service. The application's own Service is untouched and still
+  excludes unready pods.
+- **The sidecar is liveness-probed, and that is now load-bearing.** With
+  readiness no longer gating routing, the sidecar's `livenessProbe` (a
+  `tcpSocket` check on 2222) is the only thing that stops connections being
+  routed to a wedged `sshd`; a sidecar that has stopped serving is restarted
+  rather than left in place. A `startupProbe` on the same port holds liveness
+  off while atmoz/sftp generates host keys, which it does on **every** start
+  because nothing persists `/etc/ssh`. Neither probe may reference the
+  application container, the exposed PVCs, or any credential — a sidecar whose
+  PVC mount is unhappy is still worth reaching, since that may be the thing
+  being debugged.
 - **subPath for shared PVCs.** If the exposable data lives in a subdirectory of a
   PVC that also holds app source or secrets (nextcloud's `config/config.php` has
   DB credentials), mount only that subdir via `subPath`. Never expose a PVC root

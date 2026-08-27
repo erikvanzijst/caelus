@@ -1,6 +1,6 @@
 dependencies:
 - name: caelus-sftp
   repository: file://../../_lib/caelus-sftp
-  version: 0.1.0
-digest: sha256:df518d3d41962ad20c85aabb22603e5160f784a9c06ba800c998045bc540b50a
-generated: "2026-08-24T12:56:58.437150143Z"
+  version: 0.2.0
+digest: sha256:f0c31fdf7e6bed2dc7eec996e6d3473afafcedaba40ef7b66c0ca2f8ed3a0aad
+generated: "2026-08-27T20:35:11.118049978Z"

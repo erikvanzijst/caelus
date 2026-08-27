@@ -83,10 +83,13 @@ resource "kubernetes_deployment" "worker" {
           command = ["/bin/sh", "-c"]
           args = [
             <<-EOT
-              exec psql -v ON_ERROR_STOP=1 \
+              set -e
+              echo 'Starting tenant database bootstrap...'
+              psql -q -v ON_ERROR_STOP=1 \
                 -v caelus_admin_password="$CAELUS_ADMIN_PASSWORD" \
                 -v pgbouncer_auth_password="$PGBOUNCER_AUTH_PASSWORD" \
                 -f /bootstrap/tenant-bootstrap.sql
+              echo 'Bootstrap complete'
             EOT
           ]
 

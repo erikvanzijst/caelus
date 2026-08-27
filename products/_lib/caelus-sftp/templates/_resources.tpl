@@ -110,6 +110,10 @@ metadata:
   labels:
     {{- include "caelus-sftp.labels" (dict "root" $root) | nindent 4 }}
 spec:
+  # The sidecar fronts administration, not the application. Its usefulness peaks
+  # when the app container is broken, so application readiness must not gate
+  # routing here. Do not drop this: its loss is silent until an app crash-loops.
+  publishNotReadyAddresses: true
   selector:
     {{- include "caelus-sftp.podSelector" (dict "root" $root "selector" .selector) | nindent 4 }}
   ports:
@@ -167,6 +171,21 @@ NEVER list a database PVC here.
   image: {{ .image | default "atmoz/sftp:alpine" }}
   ports:
     - containerPort: 2222
+  # atmoz/sftp regenerates SSH host keys on every start (nothing persists
+  # /etc/ssh), so the startup probe holds liveness off until sshd first binds;
+  # 30 x 5s comfortably exceeds RSA-4096 generation. Neither probe touches the
+  # app container, the exposed PVCs, or any credential.
+  startupProbe:
+    tcpSocket:
+      port: 2222
+    periodSeconds: 5
+    failureThreshold: 30
+  livenessProbe:
+    tcpSocket:
+      port: 2222
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
   volumeMounts:
     {{- range .mounts }}
     - name: {{ .volume }}

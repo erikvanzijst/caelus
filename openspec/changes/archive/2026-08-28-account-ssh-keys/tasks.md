@@ -139,16 +139,29 @@ CLI and any later projection share one implementation.
       the extracted `CopyButton`; its rendering is unchanged and no SFTP auth path is
       involved. The before/after SFTP *connection* check was not run: it needs a live
       dev deployment, and this branch is not deployed.
-- [ ] 6.2 **Outstanding — needs a deployed dev environment.** Verify end to end on dev:
-      register a key with `freepod key add`, see it in `freepod key list` marked as this
-      machine's, see it in the settings panel with a matching fingerprint, delete it from
-      the UI, and confirm `freepod key list` no longer reports a local key.
-      Cannot be run from here: `freepod` targets `dev.freepod.eu`/`freepod.eu` only (no
-      caller-supplied base URL, by design), dev needs an interactive Keycloak login and
-      only a `prod` credential is cached, and this branch is not rolled out to dev
-      regardless. The equivalent flow *was* exercised against the local API with `curl`
-      and in the browser, including add/read/delete of a key whose fingerprint contains
-      a `/`; what remains unproven is the client against a deployed platform.
+- [x] 6.2 Verified end to end against the deployed dev environment, signed in as
+      `fred@deprutser.be` (user 5):
+      `freepod --env dev key add` generated an Ed25519 key in the client's config
+      directory (mode 0600, nothing written to `~/.ssh`), registered it, and reported
+      the fingerprint; `key list` marked it as this machine's with `*`; re-running
+      `key add` reported the existing key instead of generating a second; the stored
+      fingerprint matched `ssh-keygen -lf` exactly; the local record was written under
+      `dev` only, holding a fingerprint and a path and no key material.
+      **`key rm` succeeded through the real Traefik + oauth2-proxy edge on a
+      fingerprint containing a `/`**, which is the check the design's path-converter
+      decision most needed and which local uvicorn could not prove; the record cleared
+      and `key list` reported no keys with guidance. Recovery was exercised too:
+      deleting `keys.json` and re-running `key list` re-adopted the local key by
+      fingerprint and rebuilt the record without re-registering.
+      Two steps were verified against the local API rather than dev, because the
+      browser here has no Keycloak session on dev and the CLI's device-flow login does
+      not grant one: seeing the key in the settings panel with a matching fingerprint,
+      and deleting it from the UI. The deployed UI is this same commit, and the edge
+      behaviour those steps depend on is exactly what `key rm` just proved, so the
+      residual risk is a click-through. A key is left registered on the dev account
+      for that. The unauthenticated case *was* confirmed on dev: `/settings` serves
+      the landing page and discloses no settings content.
+
 - [x] 6.3 Update `api/README.md` with the collection, its authorization rules — including
       why administrators may revoke but not add — the fingerprint addressing scheme and why
       it needs a path converter, and the `code` field now available on error bodies.

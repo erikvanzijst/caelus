@@ -1,5 +1,5 @@
 import { requestJson, requestMultipart } from './client'
-import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplatePayload, PlanTemplateVersion, Product, ProductTemplate, ProductVisibility, SftpCredentials, TosAcceptance, User, VarWrite } from './types'
+import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplatePayload, PlanTemplateVersion, Product, ProductTemplate, ProductVisibility, SftpCredentials, SshKey, TosAcceptance, User, VarWrite } from './types'
 
 export function getMe() {
   return requestJson<User>('/me')
@@ -200,4 +200,26 @@ export function listDomains() {
 
 export function getCnameTarget() {
   return requestJson<string>('/cname-target')
+}
+
+export function listSshKeys(userId: number) {
+  return requestJson<SshKey[]>(`/users/${userId}/ssh-keys`)
+}
+
+export function addSshKey(userId: number, payload: { public_key: string; label?: string }) {
+  return requestJson<SshKey>(`/users/${userId}/ssh-keys`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/**
+ * Revoke one key. The fingerprint is encoded rather than interpolated raw:
+ * it is unpadded base64, so about half of all fingerprints contain a `/`.
+ */
+export function deleteSshKey(userId: number, fingerprint: string) {
+  return requestJson<null>(
+    `/users/${userId}/ssh-keys/${encodeURIComponent(fingerprint)}`,
+    { method: 'DELETE' },
+  )
 }

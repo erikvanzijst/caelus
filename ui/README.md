@@ -35,10 +35,14 @@ npm run build
 ```
 
 ## App Structure
-- `src/App.tsx`: route switch (`/` Dashboard, `/admin` with nested routes for `products` and `deployments`).
+- `src/App.tsx`: route switch (`/` Dashboard, `/settings` and `/admin`, each with nested panel routes).
 - `src/components/AppShell.tsx`: global layout shell, top app bar, nav buttons, signed-in chip, email switch button, decorative radial background, and email dialog gating.
 - `src/components/EmailDialog.tsx`: modal to capture local dev email.
-- `src/components/AdminSidebar.tsx`: left sidebar navigation for Admin page (Products, Deployments).
+- `src/components/SectionSidebar.tsx`: collapsible section nav for a page composed of panels. Shared by Admin and Settings so the two cannot drift.
+- `src/components/AdminSidebar.tsx`: the Admin page's nav items, over `SectionSidebar`.
+- `src/components/SshKeysPanel.tsx`: the account's SSH public keys — list, add, revoke.
+- `src/components/AddSshKeyDialog.tsx`: paste or drop a public key; maps the platform's error `code` to a readable message.
+- `src/components/CopyButton.tsx`: copy-to-clipboard with a confirmation tick. Shared by the SFTP fields and the SSH key list.
 - `src/components/ProductsPanel.tsx`: product/template management (extracted from Admin page).
 - `src/components/DeploymentsPanel.tsx`: admin deployments table using MUI DataGrid with sortable columns.
 - `src/components/DeploymentDialog.tsx`: deployment detail dialog with read-only form, metadata, upgrade, and delete actions with live polling.
@@ -46,7 +50,8 @@ npm run build
 - `src/components/IconInput.tsx`: icon upload component with preview and automatic client-side downscaling for oversized images.
 - `src/pages/Dashboard.tsx`: user deployment creation + deployment cards.
 - `src/pages/Admin.tsx`: admin layout shell with sidebar and `<Outlet>` for nested routes.
-- `src/api/client.ts`: request helpers with `ApiError` class carrying HTTP status codes.
+- `src/pages/Settings.tsx`: account settings shell, same shape as Admin. Available to every signed-in user.
+- `src/api/client.ts`: request helpers with `ApiError` class carrying the HTTP status and the platform's machine-readable error `code`.
 - `src/api/endpoints.ts`: endpoint wrappers.
 - `src/state/useAuthEmail.ts`: localStorage-backed auth email hook.
 - `src/utils/formatDate.ts`: local-time ISO timestamp formatting.
@@ -203,8 +208,54 @@ Live polling:
 - Dashboard deployments query auto-polls every 3s while any deployment is in transitional states (`provisioning` or `deleting`).
 - Admin deployment dialog polls a single deployment at 1s intervals during transitions, patching the list cache via `setQueryData`.
 
+## Settings (`/settings`)
+
+The first account-level surface: everything here belongs to the person rather
+than to one deployment. Reachable from the account menu, available to **every**
+signed-in user — it is not an administrative feature and must not read as one.
+
+Structured as a section nav plus `<Outlet>`, the same shape `/admin` uses, so a
+second account section is one nav entry and one route. `/settings` redirects to
+`/settings/ssh-keys`.
+
+### SSH keys panel
+
+Lists each key by label, fingerprint (Space Mono, with a copy button), type and
+date. **A key with no label is named by its fingerprint**, not by a placeholder
+— the platform deliberately does not invent a label, and inventing one in the
+client would be the same mistake one layer out.
+
+Adding accepts a pasted key or a **dropped `.pub` file**; the whole dialog body
+is the drop target, with a `browse` link so it is reachable by keyboard.
+
+A dropped **private** key is refused outright rather than loaded into the
+field. That is the one path where the private half can be kept out of the page
+entirely, and putting it in a textarea would itself be displaying it. Pasted
+private material can only be caught after the fact, so it warns and blocks
+submission instead.
+
+Rejections are selected from the platform's `code` — `duplicate_key`,
+`key_too_short`, `private_key_material` and the rest — **never** by matching on
+its prose, so a reworded message cannot collapse six distinct failures into one
+generic error. An unrecognized code falls back to the platform's own message.
+
+The panel never offers in-browser key generation; it points at `freepod key
+add`, where the private half stays on the user's machine.
+
+Deleting asks for confirmation naming the key and its consequence.
+
+The dialog resets on exit rather than in a close handler: the panel closes it
+directly after a successful add without passing through any cancel path, and
+the component stays mounted throughout, so a per-handler reset leaves the next
+open still holding the previous key.
+
 ## Manual QA Matrix
 Use these checks after UI/API contract changes:
+
+0. Settings reachability (non-admin):
+   - sign in as a user without administrator privileges
+   - expected: the account menu shows `Settings` and no `Admin`
+   - expected: navigating directly to `/settings` renders the SSH keys panel
 
 1. Template create (Admin):
    - open `/admin`, select a product

@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import Dashboard from './pages/Dashboard'
 import Landing from './pages/Landing'
+import Settings from './pages/Settings'
 import LegalDoc from './pages/LegalDoc'
 import { AuthProvider, useAuth } from './state/AuthContext'
 
@@ -22,6 +23,9 @@ const UsersPanel = lazy(() =>
 )
 const PlansPanel = lazy(() =>
   import('./components/PlansPanel').then((m) => ({ default: m.PlansPanel })),
+)
+const SshKeysPanel = lazy(() =>
+  import('./components/SshKeysPanel').then((m) => ({ default: m.SshKeysPanel })),
 )
 
 /**
@@ -57,6 +61,10 @@ function AuthedApp() {
       {user ? (
         <Route element={<AppShellLayout />}>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/settings" element={<Settings />}>
+            <Route index element={<Navigate to="ssh-keys" replace />} />
+            <Route path="ssh-keys" element={<SshKeysPanel />} />
+          </Route>
           <Route path="/admin" element={<Admin />}>
             <Route index element={<Navigate to="products" replace />} />
             <Route path="products" element={<ProductsPanel />} />

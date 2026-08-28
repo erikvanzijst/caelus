@@ -2,10 +2,17 @@ import { getStoredAuthHeaders } from '../state/useAuthEmail'
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  /**
+   * The platform's stable identifier for the failing check, when it supplied
+   * one. Branch on this rather than on `message`: several conditions share a
+   * status code, and the prose is free to be reworded.
+   */
+  code?: string
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -58,9 +65,9 @@ export async function requestJson<T>(
     return null as T
   }
 
-  let data: ({ detail?: unknown } & T) | null = null
+  let data: ({ detail?: unknown; code?: unknown } & T) | null = null
   try {
-    data = (await response.json()) as { detail?: unknown } & T
+    data = (await response.json()) as { detail?: unknown; code?: unknown } & T
   } catch {
     if (!response.ok) {
       throw new ApiError(response.statusText || 'Request failed', response.status)
@@ -68,7 +75,11 @@ export async function requestJson<T>(
     throw new Error('Invalid JSON response')
   }
   if (!response.ok) {
-    throw new ApiError(toErrorMessage(data?.detail, response.statusText || 'Request failed'), response.status)
+    throw new ApiError(
+      toErrorMessage(data?.detail, response.statusText || 'Request failed'),
+      response.status,
+      typeof data?.code === 'string' ? data.code : undefined,
+    )
   }
   return data as T
 }
@@ -98,9 +109,9 @@ export async function requestMultipart<T>(
     },
   })
 
-  let data: ({ detail?: unknown } & T) | null = null
+  let data: ({ detail?: unknown; code?: unknown } & T) | null = null
   try {
-    data = (await response.json()) as { detail?: unknown } & T
+    data = (await response.json()) as { detail?: unknown; code?: unknown } & T
   } catch {
     if (!response.ok) {
       throw new ApiError(response.statusText || 'Request failed', response.status)
@@ -108,7 +119,11 @@ export async function requestMultipart<T>(
     throw new Error('Invalid JSON response')
   }
   if (!response.ok) {
-    throw new ApiError(toErrorMessage(data?.detail, response.statusText || 'Request failed'), response.status)
+    throw new ApiError(
+      toErrorMessage(data?.detail, response.statusText || 'Request failed'),
+      response.status,
+      typeof data?.code === 'string' ? data.code : undefined,
+    )
   }
   return data as T
 }

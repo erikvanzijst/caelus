@@ -18,6 +18,7 @@ from app.api import (
     hostnames,
     plans,
     releases,
+    ssh_keys,
     subscriptions,
     vars,
     webhooks,
@@ -96,6 +97,7 @@ app.include_router(webhooks.router, prefix="/api")
 app.include_router(artifacts.router, prefix="/api")
 app.include_router(builds.router, prefix="/api")
 app.include_router(vars.router, prefix="/api")
+app.include_router(ssh_keys.router, prefix="/api")
 
 _init_static_dir()
 app.mount("/api/static", StaticFiles(directory=str(_settings.static_path)), name="static")

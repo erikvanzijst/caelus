@@ -1,29 +1,9 @@
 import { useState } from 'react'
 import { Box, IconButton, Tooltip, Typography } from '@mui/material'
-import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
-import CheckIcon from '@mui/icons-material/Check'
 import type { SftpCredentials } from '../api/types'
-
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <Tooltip title={copied ? 'Copied' : `Copy ${label}`}>
-      <IconButton
-        size="small"
-        aria-label={`Copy ${label}`}
-        onClick={() => {
-          void navigator.clipboard.writeText(value)
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
-        }}
-      >
-        {copied ? <CheckIcon fontSize="inherit" /> : <ContentCopyIcon fontSize="inherit" />}
-      </IconButton>
-    </Tooltip>
-  )
-}
+import { CopyButton } from './CopyButton'
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

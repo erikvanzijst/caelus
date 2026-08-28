@@ -11,6 +11,8 @@ The models are split across three modules:
                 SubscriptionStatus, and PaymentStatus enums.
   - build.py:   Build (and its Base/Create/Read variants). Standalone: a build
                 references a user and an artifact, never a deployment.
+  - ssh_key.py: SshKey (and its Create/Read variants). Owned by a user and
+                scoped to no deployment.
 """
 
 from app.models.core import (  # noqa: F401
@@ -62,6 +64,12 @@ from app.models.build import (  # noqa: F401
     BuildCreate,
     BuildORM,
     BuildRead,
+)
+
+from app.models.ssh_key import (  # noqa: F401
+    SshKeyCreate,
+    SshKeyORM,
+    SshKeyRead,
 )
 
 from app.models.billing import (  # noqa: F401

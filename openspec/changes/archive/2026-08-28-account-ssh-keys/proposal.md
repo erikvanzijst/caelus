@@ -17,7 +17,8 @@ the legal pages, and nothing else — so this change introduces one.
 ## What Changes
 
 - A **user-owned SSH public key** resource: the key material, a user-supplied label, and
-  a server-computed SHA256 fingerprint. Keys belong to the account, not to a deployment.
+  a server-computed SHA256 fingerprint. Keys belong to the account, not to a deployment,
+  and their number is not bounded.
 - **REST endpoints** under the user, following the platform's nested-resource
   convention: list, add, and delete. The fingerprint is part of the read model.
 - **`freepod key add | list | rm`**, plus the CLI-side record of which local key belongs
@@ -38,7 +39,7 @@ lands. That is deliberate — it keeps this change additive and independently re
 ### New Capabilities
 
 - `ssh-key-data-model`: what an account SSH key is — accepted algorithms, validation,
-  fingerprint derivation, per-user uniqueness, labels, limits, and deletion semantics.
+  fingerprint derivation, per-user uniqueness, labels, and deletion semantics.
 - `ssh-key-api`: the deployment-independent REST surface for listing, adding and
   deleting an account's keys, and its authorization rules.
 - `cli-ssh-keys`: the `freepod key` command group, generation of a CLI-owned keypair,
@@ -58,8 +59,13 @@ None. No existing requirement changes behavior; SFTP authentication is untouched
 - New table and Alembic migration for account SSH keys.
 - New service module under `api/app/services/`, per the repository's rule that all
   DB/ORM logic lives there and API and CLI are thin facades over it.
-- New routes under `/api/users/{user_id}/ssh-keys`, guarded by the existing
-  `require_self` / `require_admin` dependencies.
+- New routes under `/api/users/{user_id}/ssh-keys` — list, add, read one, delete one —
+  guarded by the existing `require_self` / `require_admin` dependencies. A single key is
+  addressed by its fingerprint, which needs a path-converter segment because roughly half
+  of all SHA256 fingerprints contain a `/`.
+- An optional machine-readable `code` on `CaelusException`, emitted by the shared
+  exception handler in `api/app/api/util.py`. Additive: `detail` is unchanged and every
+  existing error omits it.
 - `caelus` CLI parity for the same operations, per the API/CLI lockstep convention.
 
 **Client CLI (`cli/`)**
@@ -67,8 +73,9 @@ None. No existing requirement changes behavior; SFTP authentication is untouched
 - New `key` command group alongside `var` and `skill`.
 - New files in `${XDG_CONFIG_HOME:-~/.config}/freepod`: a CLI-generated private key and
   a record of which key is registered, keyed by environment like the token cache.
-- The package ships on its own cadence; the new commands must learn host and limits
-  from the platform rather than embedding them.
+- The package ships on its own cadence, so the new commands must learn platform values
+  at runtime rather than embedding them, and must branch on the machine-readable error
+  identifier rather than on message text.
 
 **UI (`ui/`)**
 

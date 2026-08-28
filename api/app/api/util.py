@@ -44,7 +44,14 @@ def _exception_handler(request: Request, exc: Exception):
         logger.exception("Unhandled application error for path=%s: %s", request.url.path, exc)
     else:
         logger.warning("Request failed path=%s status=%s error=%s", request.url.path, status, exc)
-    return JSONResponse({"detail": str(exc)}, status_code=status)
+    body = {"detail": str(exc)}
+    # A stable identifier for conditions that share a status code and would
+    # otherwise only be told apart by matching on prose. Omitted entirely
+    # unless the raising service supplied one.
+    code = getattr(exc, "code", None)
+    if isinstance(code, str) and code:
+        body["code"] = code
+    return JSONResponse(body, status_code=status)
 
 
 def register_exception_handlers(app):

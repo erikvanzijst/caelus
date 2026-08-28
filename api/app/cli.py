@@ -1402,5 +1402,81 @@ def cancel_subscription(subscription_id: int) -> None:
         _echo_yaml_entity(sub)
 
 
+# ── SSH keys ──────────────────────────────────────────────────────────
+
+ssh_key_app = typer.Typer(
+    help="Manage an account's SSH public keys.",
+    no_args_is_help=True,
+)
+app.add_typer(ssh_key_app, name="ssh-key")
+
+
+def _ssh_key_target(session: Session, user_id: int | None) -> int:
+    """The account to act on, honoring the admin-only cross-account form."""
+    user = _require_cli_user(session)
+    if user_id is None or user_id == user.id:
+        return user.id
+    if not user.is_admin:
+        typer.echo("Error: Forbidden", err=True)
+        raise typer.Exit(code=1)
+    return user_id
+
+
+@ssh_key_app.command("list")
+def ssh_key_list(
+    user_id: int | None = typer.Argument(None, help="Whose keys to list (admin only)"),
+) -> None:
+    """List an account's registered SSH public keys."""
+    from app.services import ssh_keys as ssh_key_service
+
+    with session_scope() as session:
+        target = _ssh_key_target(session, user_id)
+        _echo_yaml_entity(ssh_key_service.list_keys(session, user_id=target))
+
+
+@ssh_key_app.command("add")
+def ssh_key_add(
+    public_key: str = typer.Argument(..., help="Path to a .pub file, or the key line itself"),
+    label: str | None = typer.Option(None, "--label", help="Defaults to the key's comment"),
+) -> None:
+    """Register an SSH public key on the acting account.
+
+    Only ever on your own account, exactly as the API restricts it: adding a
+    key to someone else's account installs a credential that authenticates as
+    them.
+    """
+    from app.services import ssh_keys as ssh_key_service
+
+    candidate = Path(public_key)
+    material = candidate.read_text() if candidate.is_file() else public_key
+
+    with session_scope() as session:
+        user = _require_cli_user(session)
+        try:
+            key = ssh_key_service.add_key(
+                session, user_id=user.id, public_key=material, label=label
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(key)
+
+
+@ssh_key_app.command("rm")
+def ssh_key_rm(
+    fingerprint: str = typer.Argument(..., help="The key's SHA256: fingerprint"),
+    user_id: int | None = typer.Option(None, "--user-id", help="Whose key to revoke (admin only)"),
+) -> None:
+    """Revoke a registered SSH public key."""
+    from app.services import ssh_keys as ssh_key_service
+
+    with session_scope() as session:
+        target = _ssh_key_target(session, user_id)
+        try:
+            ssh_key_service.delete_key(session, user_id=target, fingerprint=fingerprint)
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        typer.echo(f"Removed {fingerprint}")
+
+
 if __name__ == "__main__":
     app()

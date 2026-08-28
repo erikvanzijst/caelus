@@ -49,7 +49,7 @@ An account with no keys MUST be shown an explanatory empty state that says what 
 - **THEN** an explanatory empty state is shown, including how to add a key
 
 ### Requirement: Adding a key accepts a pasted public key and an optional label
-The panel MUST let a user add a key by pasting a public key in OpenSSH single-line format, with an optional label. It MUST surface the platform's validation failures — unsupported type, malformed key, duplicate, private key material, account limit reached — as distinct, readable messages rather than a generic failure.
+The panel MUST let a user add a key by pasting a public key in OpenSSH single-line format, with an optional label. It MUST surface the platform's validation failures — unsupported type, malformed key, duplicate, private key material, more than one key pasted at once — as distinct, readable messages rather than a generic failure. It MUST select those messages from the machine-readable identifier the platform returns, never by matching on the platform's message text, so that a reworded message does not silently collapse the panel back to a generic failure.
 
 The panel MUST warn the user before submission if the pasted content looks like a private key, and MUST NOT submit it.
 
@@ -61,13 +61,13 @@ The panel MUST warn the user before submission if the pasted content looks like 
 - **WHEN** the platform rejects a submission because the key is a duplicate
 - **THEN** the panel says the key is already registered, distinguishably from other failures
 
+#### Scenario: Each rejection reads differently
+- **WHEN** the platform rejects one submission as an unsupported key type and another as private key material
+- **THEN** the panel shows two different explanations, each naming its own cause
+
 #### Scenario: Private key is caught before submission
 - **WHEN** a user pastes private key material into the field
 - **THEN** the panel warns that this is a private key and does not submit it
-
-#### Scenario: Limit is communicated before it is hit
-- **WHEN** the account is at or near the platform's key limit
-- **THEN** the panel communicates the limit, using the value reported by the platform rather than one built into the application
 
 ### Requirement: Deleting a key is confirmed and states its consequence
 Deleting a key MUST require an explicit confirmation that identifies the key being removed and states the consequence: any machine holding that key loses access. Deletion is how a user revokes a lost device, so the panel MUST NOT make it hard to find — but it MUST NOT be a single unguarded click either.

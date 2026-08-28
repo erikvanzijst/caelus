@@ -22,6 +22,7 @@ from . import EXIT_ERROR, EXIT_OK, FreepodError, UsageError
 from . import delete as delete_module
 from . import deploy as deploy_module
 from . import history
+from . import keys as keys_module
 from . import logs as logs_module
 from . import project
 from . import releases as releases_module
@@ -779,6 +780,119 @@ def _finish_var_write(
             f"or apply them later with `freepod deploy --no-build`."
         ) from error
     click.echo(address)
+
+
+@cli.group()
+def key() -> None:
+    """Register the SSH public keys that identify you to the platform.
+
+    A key belongs to your account, not to one deployment, and applies to every
+    deployment you own. Registering one records which local key is this
+    machine's, so later connections offer exactly that key rather than trying
+    each in turn.
+
+    Nothing reads these keys yet: registering or removing one does not
+    currently grant or withdraw any access.
+    """
+
+
+@key.command("list")
+@click.pass_obj
+def key_list(context: Context) -> None:
+    """List the keys registered on your account.
+
+    The key this machine holds is marked with `*`.
+    """
+    session = context.session()
+    session.authenticate(interactive=False)
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        registered = keys_module.list_keys(api, user_id)
+
+    if not registered:
+        context.say("No SSH keys are registered on this account.")
+        context.say("Add one with `freepod key add`.")
+        return
+
+    recorded = keys_module.local_key(context.env.name)
+    here = recorded["fingerprint"] if recorded else None
+    if here is None:
+        matches = keys_module.recover(registered)
+        if len(matches) == 1:
+            here = keys_module.fingerprint_for_file(matches[0])
+            keys_module.remember(context.env.name, here, matches[0])
+    click.echo(keys_module.render_table(registered, here))
+
+
+@key.command("add")
+@click.argument("path", required=False, type=click.Path(path_type=Path))
+@click.option("--label", help="how this key is listed; defaults to its comment")
+@click.pass_obj
+def key_add(context: Context, path: Optional[Path], label: Optional[str]) -> None:
+    """Register a public key, generating one if you name no file.
+
+    With no argument, generates an Ed25519 key in this client's own
+    configuration directory — not in `~/.ssh` — and registers it. With a path,
+    registers that **public** key file and records it as this machine's.
+    """
+    env_name = context.env.name
+    session = context.session()
+    session.authenticate(interactive=False)
+
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        registered = keys_module.list_keys(api, user_id)
+
+        if path is None:
+            generated = keys_module.generated_key_path()
+            public_path = Path(str(generated) + ".pub")
+            existing = keys_module.fingerprint_for_file(public_path)
+            if existing and any(k.get("fingerprint") == existing for k in registered):
+                context.say("This machine already holds a registered key.")
+                click.echo(existing)
+                keys_module.remember(env_name, existing, public_path)
+                return
+            if public_path.exists():
+                material = keys_module.read_public_key(public_path)
+            else:
+                material = keys_module.generate_keypair(generated)
+                context.say(f"Generated a new key at {generated}")
+            source = public_path
+        else:
+            material = keys_module.read_public_key(path)
+            source = path
+
+        stored = keys_module.add_key(api, user_id, material, label)
+
+    keys_module.remember(env_name, stored["fingerprint"], source)
+    context.say(f"Registered {stored['label']!r} on {env_name}.")
+    click.echo(stored["fingerprint"])
+    context.say(
+        "This grants no access yet — the platform does not read these keys "
+        "until SSH authentication moves onto them."
+    )
+
+
+@key.command("rm")
+@click.argument("fingerprint")
+@click.pass_obj
+def key_rm(context: Context, fingerprint: str) -> None:
+    """Revoke a key by the fingerprint `freepod key list` shows.
+
+    Works for keys this machine does not hold — revoking a lost laptop is done
+    from a different machine, which is the point.
+    """
+    session = context.session()
+    session.authenticate(interactive=False)
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        keys_module.remove_key(api, user_id, fingerprint)
+
+    recorded = keys_module.local_key(context.env.name)
+    if recorded and recorded["fingerprint"] == fingerprint:
+        keys_module.forget(context.env.name)
+        context.say("This machine no longer holds a registered key.")
+    context.say(f"Removed {fingerprint}.")
 
 
 @cli.group()

@@ -35,6 +35,7 @@ No component of the system may accept, store, log, display, or transmit an SSH p
 #### Scenario: Multiple keys in one submission are rejected
 - **WHEN** a user submits two or more key lines in a single request
 - **THEN** the submission is rejected and no key is stored
+- **AND** neither line is registered, so the request cannot partially succeed
 
 #### Scenario: Malformed key is rejected
 - **WHEN** a user submits text that is not a well-formed OpenSSH public key line
@@ -68,15 +69,15 @@ The key type MUST be determined by decoding the key blob and reading the algorit
 ### Requirement: Each key carries a server-computed SHA256 fingerprint
 The system MUST compute and store a fingerprint for every key: the SHA256 digest of the raw key blob, base64-encoded without padding, presented in the conventional `SHA256:<digest>` form so that it is byte-identical to what `ssh-keygen -lf` reports for the same key.
 
-The fingerprint MUST be computed by the platform, never accepted from a client, and MUST be part of every read of a key. It is the identifier clients use to recognise a key they hold without transmitting key material.
+The fingerprint MUST be computed by the platform and MUST be part of every read of a key. It MUST NOT be accepted from a client on any path: a submission that supplies one is rejected rather than silently overridden, so a client holding a mistaken belief about who derives it learns that at once instead of on the day the two disagree. It is the identifier clients use to recognize a key they hold without transmitting key material.
 
 #### Scenario: Fingerprint matches the standard tool
 - **WHEN** a key is registered
 - **THEN** its stored fingerprint equals the `SHA256:` fingerprint that `ssh-keygen -lf` reports for the same public key file
 
-#### Scenario: Client-supplied fingerprint is ignored
+#### Scenario: Client-supplied fingerprint is refused
 - **WHEN** a submission includes a fingerprint field
-- **THEN** the stored fingerprint is the one the platform computed, not the one supplied
+- **THEN** the submission is rejected for carrying a derived field, rather than accepted with the supplied value ignored
 
 #### Scenario: Fingerprint is returned on read
 - **WHEN** a user's keys are listed
@@ -111,18 +112,6 @@ Labels MUST NOT be required to be unique and MUST NOT be used to identify a key 
 #### Scenario: Comment-less key still gets a label
 - **WHEN** a user registers a key with no trailing comment and supplies no label
 - **THEN** the key is stored with a non-empty generated label
-
-### Requirement: The number of keys per account is bounded
-The system MUST enforce an upper bound on the number of keys one account may hold, and MUST reject a registration that would exceed it with an error naming the limit. The bound MUST be platform configuration rather than a value compiled into any client, because clients ship on their own release cadence.
-
-#### Scenario: Registration beyond the limit is refused
-- **WHEN** a user who already holds the maximum number of keys registers another
-- **THEN** the registration is rejected with an error stating the limit
-- **AND** the user's existing keys are unchanged
-
-#### Scenario: Deleting frees a slot
-- **WHEN** a user at the limit deletes a key and registers a new one
-- **THEN** the new registration succeeds
 
 ### Requirement: Deletion is immediate and permanent
 Deleting a key MUST remove it outright. A deleted key MUST NOT be recoverable, MUST NOT be returned by any read, and MUST NOT be retained in a soft-deleted state that a later projection could mistake for a live key.

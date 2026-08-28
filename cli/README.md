@@ -47,9 +47,31 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 | `freepod delete`   | Delete this project's deployment.                                                    |
 | `freepod whoami`   | Report who you are signed in as.                                                     |
 | `freepod logout`   | Forget the stored credential.                                                        |
+| `freepod key`      | Register the SSH public keys that identify you to the platform.                      |
 | `freepod skill`    | Install deployment instructions for your coding agents.                              |
 
 `freepod --help` and `freepod <command> --help` cover the flags.
+
+## SSH keys
+
+`freepod key add` registers an SSH public key on your account. With no
+argument it generates one for you and registers it in a single step; give it a
+path to register a key you already have. Only ever the **public** half — the
+private key never leaves your machine, and the client refuses a private key
+path with a message naming the `.pub` file it wanted.
+
+```
+freepod key add                 # generate one, register it
+freepod key add ~/.ssh/id_ed25519.pub
+freepod key list                # `*` marks the key this machine holds
+freepod key rm SHA256:...
+```
+
+Keys belong to your account rather than to one app, and apply to every app you
+own. `rm` works for a key this machine does not hold, which is how you revoke a
+lost laptop from a different one.
+
+Registering a key does not change how you connect today.
 
 ## Hostnames
 

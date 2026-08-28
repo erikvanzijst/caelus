@@ -609,6 +609,9 @@ REST routes:
 - Builds: `POST/GET /users/{user_id}/builds`,
   `GET /users/{user_id}/builds/{build_id}`,
   `GET /users/{user_id}/builds/{build_id}/log` (plain text, HTTP Range)
+- SSH keys: `POST/GET /users/{user_id}/ssh-keys`,
+  `GET/DELETE /users/{user_id}/ssh-keys/{fingerprint}` (addressed by the
+  `SHA256:` fingerprint; see [Account SSH Keys](#account-ssh-keys))
 
 CLI equivalents (`caelus ...`):
 - `create-user`, `list-users`, `get-user`, `delete-user`
@@ -618,6 +621,7 @@ CLI equivalents (`caelus ...`):
   `update-deployment`, `delete-deployment`
 - `list-releases`, `get-release` (by per-deployment release number)
 - `build list|show|log|submit` — `submit` performs all three upload phases
+- `ssh-key list|add|rm`
 - `reconcile` (CLI-only operational command to run one reconcile pass)
 - `build-worker` (CLI-only; the build worker's process entry point)
 - `catalog apply|curate|lint` (CLI-only; intentionally exempt from parity — see
@@ -652,6 +656,136 @@ status: deleting
 ```
 
 This works for any `caelus` command that returns a YAML list or object.
+
+## Account SSH Keys
+
+An SSH public key is owned by a **user**, never by a deployment. A user's keys
+apply to every deployment that user owns, including ones created after the key
+was registered, and stop applying to deployments the user ceases to own.
+
+**Nothing reads these keys yet.** SSH access still authenticates with the
+per-deployment credentials the SFTP endpoint issues. This table is a store, not
+yet a credential; the switch happens in a later change.
+
+### The collection
+
+| Method | Path | Who |
+| --- | --- | --- |
+| `GET` | `/api/users/{user_id}/ssh-keys` | owner or admin |
+| `POST` | `/api/users/{user_id}/ssh-keys` | **owner only** |
+| `GET` | `/api/users/{user_id}/ssh-keys/{fingerprint}` | owner or admin |
+| `DELETE` | `/api/users/{user_id}/ssh-keys/{fingerprint}` | owner or admin |
+
+Listing returns a plain array. A read carries the fingerprint, key type, size
+in bits, label, the normalized public key body and the registration time. No
+response ever contains private key material, because none is ever stored.
+
+### Administrators may revoke, not grant
+
+Reads and deletes follow the usual `require_self` rule, so an administrator can
+revoke a compromised key during an incident. **Adding is restricted to the
+owner even for administrators.** Installing a key on someone's account creates
+a credential that authenticates *as that user*, which is impersonation rather
+than administration, and is exactly what an attacker holding an admin session
+would want.
+
+### The fingerprint is the address, and it needs a path converter
+
+Keys are addressed by their `SHA256:` fingerprint — the SHA256 digest of the
+raw key blob, base64 without padding, byte-identical to `ssh-keygen -lf`. That
+is what lets a client revoke the key it holds without a prior lookup, and
+recognize a local key without transmitting key material.
+
+The route is `/{fingerprint:path}`, the only path-converter route in the API,
+and the reason is arithmetic: a fingerprint is unpadded base64, so roughly half
+of all fingerprints contain a `/` and roughly half contain a `+`. Measured over
+2000 random digests, 976 contained `/` and 971 contained `+`.
+
+An ordinary path segment **404s** for those keys, because the ASGI server
+percent-decodes the path before routing and a `str` path parameter cannot span
+a `/`. A query parameter is worse: an unencoded `+` arrives decoded as a space,
+so the server answers a confident "no such key" for a key that exists — a
+silent mis-parse on the one operation that revokes a lost laptop. The path
+converter also accepts the fingerprint whether an intermediary forwards the
+separator encoded or decoded, so it does not depend on how Traefik and
+oauth2-proxy normalize the path.
+
+If you ever refactor that route back to an ordinary segment, the tests that
+register and delete a key whose fingerprint contains `/` and `+` will fail
+loudly rather than the endpoint failing for half of real users.
+
+### What is accepted
+
+Ed25519, ECDSA over NIST P-256/384/521, RSA of at least 2048 bits, and the
+FIDO security-key variants of Ed25519 and ECDSA. `ssh-dss` is refused by
+policy.
+
+The key type is read out of the **key blob's own first string field**, not from
+the text before it, and must match the declared prefix. This matters for the
+security-key variants specifically: `cryptography`'s `load_ssh_public_key`
+strips the `sk-*` wrapper and hands back a plain Ed25519 or EC key that
+re-serializes with a *different blob*. Normalizing through the parser would
+store something that can never authenticate, so the submitted blob is preserved
+verbatim.
+
+The parser also accepts a multi-line submission and silently returns only the
+first key, so the "one key at a time" check runs **before** it.
+
+The stored body is normalized to `<type> <blob>` with the comment stripped: the
+comment has already been consumed as the default label, and keeping it twice
+would let the two drift apart.
+
+### Labels are optional
+
+A label defaults from the key's trailing comment. When there is no comment and
+none was supplied, the key is stored **without** a label and reads back as
+`null`. The platform does not invent one — a generated string naming the
+algorithm is not information about the key, and it denies each surface the
+chance to decide how an unlabeled key should read. A key's identity is its
+fingerprint, so an absent label costs nothing.
+
+### Uniqueness is per user
+
+One account may not hold the same key twice; two accounts may. Equality is on
+the blob, so comment and whitespace differences are the same key. Global
+uniqueness would add no protection — registering someone's public key on your
+own account grants them nothing — while creating a cross-account oracle for
+whether some other account holds a given key.
+
+The unique index is on `(user_id, fingerprint)` rather than on the blob. The
+guarantee is identical, since the fingerprint is a digest of that blob, and a
+btree row tops out at 2704 bytes while an RSA-16384 line is 2772.
+
+### Deletion
+
+Immediate and permanent: the row is removed, not tombstoned, so no later
+projection can mistake it for a live key. Deliberately **not** idempotent,
+unlike deleting a var — deleting a fingerprint the account does not hold
+answers `404`, because reporting success for a key that was never there would
+tell someone they had revoked a laptop they had not.
+
+Keys are removed with their owner by `ON DELETE CASCADE`: no key may outlive an
+accountable holder, in any state.
+
+### Errors carry a code
+
+Six of this collection's rejections are all `400`, so the body carries a stable
+`code` alongside `detail`:
+
+| `code` | Status |
+| --- | --- |
+| `malformed_key` | 400 |
+| `private_key_material` | 400 |
+| `multiple_keys` | 400 |
+| `unsupported_key_type` | 400 |
+| `key_type_mismatch` | 400 |
+| `key_too_short` | 400 |
+| `duplicate_key` | 409 |
+
+Branch on `code`, never on `detail` — the prose is free to be reworded. The
+field comes from an optional `code` attribute on `CaelusException`, emitted by
+`register_exception_handlers`, and is **omitted entirely** for any error that
+does not set one, so every other endpoint's error body is unchanged.
 
 ## Product Catalog (Curated Products)
 

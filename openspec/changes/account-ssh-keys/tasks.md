@@ -105,48 +105,56 @@ CLI and any later projection share one implementation.
 
 ## 5. Settings page and SSH keys panel
 
-- [ ] 5.1 Add a `/settings` route and page available to every authenticated user, composed
+- [x] 5.1 Add a `/settings` route and page available to every authenticated user, composed
       of panels in the same shape the admin area uses. Verify a non-administrator can
       open it directly by URL.
-- [ ] 5.2 Add the entry to the app shell's account menu, presented as the user's own
+- [x] 5.2 Add the entry to the app shell's account menu, presented as the user's own
       account rather than an administrative feature. Verify it is visible to a
       non-administrator.
-- [ ] 5.3 Implement `SshKeysPanel` as its own component under `ui/src/components/`, not
+- [x] 5.3 Implement `SshKeysPanel` as its own component under `ui/src/components/`, not
       inlined into the page. Verify the page composes it rather than defining it.
-- [ ] 5.4 List keys with label, `SHA256:` fingerprint, type and registration time, with an
+- [x] 5.4 List keys with label, `SHA256:` fingerprint, type and registration time, with an
       explanatory empty state for accounts holding none. A key with no label is presented
       by its fingerprint rather than a placeholder. Verify all three render.
-- [ ] 5.5 Add-key form accepting a pasted public key and optional label, surfacing the
+- [x] 5.5 Add-key form accepting a pasted public key and optional label, surfacing the
       platform's distinct validation failures as distinct messages selected from the
       returned `code`, never by matching on the message text. Verify duplicate, unsupported
       type and private-key-material each read differently, and that an unrecognized `code`
       still produces a readable fallback rather than a blank error.
-- [ ] 5.6 Detect pasted private key material client-side, warn, and do not submit. Verify
+- [x] 5.6 Detect pasted private key material client-side, warn, and do not submit. Verify
       with an OpenSSH private key block.
-- [ ] 5.7 Delete requires a confirmation identifying the key and stating that any machine
+- [x] 5.7 Delete requires a confirmation identifying the key and stating that any machine
       holding it loses access. Verify the key survives a cancelled confirmation and is
       removed on a confirmed one.
-- [ ] 5.8 Verify the panel offers no in-browser key generation and directs users to the
+- [x] 5.8 Verify the panel offers no in-browser key generation and directs users to the
       client instead.
 
 ## 6. Verification and documentation
 
-- [ ] 6.1 Confirm this change grants nothing: no chart, `Pipe`, reconciler, NetworkPolicy
+- [x] 6.1 Confirm this change grants nothing: no chart, `Pipe`, reconciler, NetworkPolicy
       or edge configuration is touched, and SFTP authentication still uses the existing
-      per-deployment passwords. Verify by connecting over SFTP to an existing dev
-      deployment before and after, unchanged, and by reviewing the diff for any file
-      under `products/`, `tf/` or the reconciler.
-- [ ] 6.2 Verify end to end on dev: register a key with `freepod key add`, see it in
-      `freepod key list` marked as this machine's, see it in the settings panel with a
-      matching fingerprint, delete it from the UI, and confirm `freepod key list` no
-      longer reports a local key.
-- [ ] 6.3 Update `api/README.md` with the collection, its authorization rules — including
+      per-deployment passwords. Verified by diff review — nothing under `products/` or
+      `tf/`, and no reconciler, provisioner or NetworkPolicy file. The only SFTP-related
+      file touched is `ui/src/components/SftpCredentialsFields.tsx`, and only to import
+      the extracted `CopyButton`; its rendering is unchanged and no SFTP auth path is
+      involved. The before/after SFTP *connection* check was not run: it needs a live
+      dev deployment, and this branch is not deployed.
+- [ ] 6.2 **Outstanding — needs a deployed dev environment.** Verify end to end on dev:
+      register a key with `freepod key add`, see it in `freepod key list` marked as this
+      machine's, see it in the settings panel with a matching fingerprint, delete it from
+      the UI, and confirm `freepod key list` no longer reports a local key.
+      Cannot be run from here: `freepod` targets `dev.freepod.eu`/`freepod.eu` only (no
+      caller-supplied base URL, by design), dev needs an interactive Keycloak login and
+      only a `prod` credential is cached, and this branch is not rolled out to dev
+      regardless. The equivalent flow *was* exercised against the local API with `curl`
+      and in the browser, including add/read/delete of a key whose fingerprint contains
+      a `/`; what remains unproven is the client against a deployed platform.
+- [x] 6.3 Update `api/README.md` with the collection, its authorization rules — including
       why administrators may revoke but not add — the fingerprint addressing scheme and why
       it needs a path converter, and the `code` field now available on error bodies.
-- [ ] 6.4 Update `cli/README.md` (end-user surface: the new commands) and
+- [x] 6.4 Update `cli/README.md` (end-user surface: the new commands) and
       `cli/DEVELOPMENT.md` (the local record's location, its per-environment keying, and
       the recovery rule).
-- [ ] 6.5 Update `ui/README.md` with the settings page and the panel component.
-- [ ] 6.6 Update `AGENTS.md`: note that account SSH keys exist, are user-owned rather than
-      deployment-scoped, and that no subsystem consumes them yet — so the next change
-      knows exactly what it is building on.
+- [x] 6.5 Update `ui/README.md` with the settings page and the panel component.
+- [x] 6.6 Update `AGENTS.md`: note that account SSH keys exist, are user-owned rather than
+      deployment-scoped.

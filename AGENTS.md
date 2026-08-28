@@ -39,6 +39,19 @@ This repository is a monorepo with:
   owner — `/api/users/{user_id}/builds*` — like every other user-owned
   resource; there is no root-level `/api/builds`, and no `user_id` query
   parameter. See `api/README.md` § Builds.
+- **Account SSH keys are a store, not yet a credential.** A user registers SSH
+  public keys on their account (`/api/users/{user_id}/ssh-keys`, `caelus
+  ssh-key`, `freepod key`, and the `/settings` page). They are owned by a
+  **user** and scoped to no deployment. **Nothing consumes them yet**: no
+  `Pipe` reads them, no sidecar trusts them, and SSH still authenticates with
+  the per-deployment passwords, so registering or revoking one currently
+  changes nothing about connecting. The next change is the auth swap that makes
+  them real. Reads and deletes follow `require_self`; **adds are owner-only
+  even for administrators**, because installing a key on someone's account is
+  impersonation. A key is addressed by its `SHA256:` fingerprint through a
+  `{fingerprint:path}` route — the only path-converter route in the API, and
+  not a stylistic choice: half of all fingerprints contain a `/`. See
+  `api/README.md` § Account SSH Keys.
 - **Vars are the single channel into a pod's environment.** A deployment's
   `vars` become environment variables in its container;
   `deployment.user_values_json` configures the **chart**, not the process, and
@@ -150,6 +163,8 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
   way in or out.
 - Prefer nested routes:
   - Templates under products: `/products/{product_id}/templates`
+  - SSH keys under users: `/users/{user_id}/ssh-keys`, one key addressed by its
+    `SHA256:` fingerprint as a **path-converter** segment
   - Deployments under users: `/users/{user_id}/deployments`
   - Releases under deployments:
     `/users/{user_id}/deployments/{deployment_id}/releases`, addressed by the
@@ -175,7 +190,10 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
 - UI uses Vite with Vitest + Testing Library (`cd ui && npm test`).
 
 ## Quality
-- Validate inputs; return stable errors.
+- Validate inputs; return stable errors. When several conditions share a status
+  code, give the exception a `code` and let `app/api/util.py` emit it, so
+  clients branch on an identifier rather than on prose. Anything without one
+  keeps the plain `{"detail": ...}` body.
 - Write tests for all new behavior.
 - No secrets in code.
 
@@ -208,6 +226,8 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
 ## Contribution Checklist
 - Update or add tests for new behavior.
 - Keep API + `caelus` CLI parity (same features and validations).
+- Extract a UI component before duplicating it. `SectionSidebar` and
+  `CopyButton` exist because a second copy was about to.
 - When an API contract changes, check whether `freepod` (`cli/`) depends on it.
   It ships on its own cadence, so it must learn values from the platform at
   runtime rather than embedding them — a constant baked into the client is

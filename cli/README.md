@@ -54,24 +54,8 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 
 ## SSH keys
 
-`freepod key add` registers an SSH public key on your account. With no
-argument it generates one for you and registers it in a single step; give it a
-path to register a key you already have. Only ever the **public** half — the
-private key never leaves your machine, and the client refuses a private key
-path with a message naming the `.pub` file it wanted.
-
-```
-freepod key add                 # generate one, register it
-freepod key add ~/.ssh/id_ed25519.pub
-freepod key list                # `*` marks the key this machine holds
-freepod key rm SHA256:...
-```
-
-Keys belong to your account rather than to one app, and apply to every app you
-own. `rm` works for a key this machine does not hold, which is how you revoke a
-lost laptop from a different one.
-
-Registering a key does not change how you connect today.
+`freepod key add` registers an SSH public key on your account. SSH is used as
+transport for commands including `freepod db` and `freepod shell`.
 
 ## Hostnames
 

@@ -264,29 +264,24 @@ first-class, not a fallback.
 Staying out of `~/.ssh` keeps the client from writing into a directory the user curates,
 and keeps `freepod`-owned material obviously distinguishable from the user's own.
 
-### The settings page ships visible, describing what keys are for
+### The settings page ships visible
 
 The panel is not hidden behind a flag while the auth-swap change is outstanding. It
-describes what a key is for and does not claim that adding or removing one currently
-grants or withdraws access — because at this point it does neither.
+describes what a key is for and how to add one, in the ordinary terms any settings
+surface would use.
 
-Hiding it would mean shipping dead UI code and a second change to reveal it; showing it
-with an overclaiming description would tell a user they had revoked access they had not.
-Describing the actual state is the honest option and costs one sentence of copy. This is
-the assumption most worth confirming before implementation, since it is a product
-judgment rather than a technical one.
+Hiding it would mean shipping dead UI code and a second change to reveal it.
 
 ## Risks / Trade-offs
 
 - **Registering a key appears to do nothing** → until the auth-swap change lands, a user
-  who registers a key sees no change in how they connect. Mitigated by the panel's copy
-  and by the CLI reporting the fingerprint it registered rather than implying access was
-  granted. Not mitigable further without shipping the two changes together, which would
-  defeat the decomposition.
+  who registers a key sees no change in how they connect. Accepted rather than mitigated
+  in the interface: the alternative is shipping the two changes together, which would
+  defeat the decomposition, and a standing disclaimer costs every future reader more than
+  it saves this one.
 - **Revocation likewise does nothing yet** → a user cannot use this to lock out a lost
-  laptop today, because the key never granted anything. The risk is a false sense of
-  security, and the mitigation is the same copy discipline. Worth re-reading when the
-  auth swap lands, since the copy must change at that point.
+  laptop today, because the key never granted anything. Same disposition, and the window
+  closes when the auth swap lands.
 - **A passphrase-less private key sits on disk** → mode 0600 in a directory the client
   owns, per machine, independently revocable, and never the only option. Accepted
   deliberately; see the decision above.

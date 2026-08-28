@@ -15,6 +15,7 @@ import {
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined'
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined'
 import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined'
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded'
 import { useState, type PropsWithChildren } from 'react'
 import { NavLink } from 'react-router-dom'
@@ -171,6 +172,19 @@ function AppShell({ children }: PropsWithChildren) {
               </MenuItem>
             )}
             {user?.is_admin && <Divider />}
+            {/* The user's own account, not a privileged feature: shown to
+                everyone, and above Profile because it is in-app rather than a
+                hop out to the identity provider. */}
+            <MenuItem
+              component={NavLink}
+              to="/settings"
+              onClick={() => setMenuAnchor(null)}
+            >
+              <ListItemIcon>
+                <SettingsOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              Settings
+            </MenuItem>
             {/* Always shown so the menu is identical across environments. In
                 local dev VITE_KEYCLOAK_ACCOUNT_URL is unset, so the href is
                 empty; in production it points at the Keycloak account portal

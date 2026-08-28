@@ -44,6 +44,10 @@ An account with no keys MUST be shown an explanatory empty state that says what 
 - **WHEN** a user with registered keys opens the settings page
 - **THEN** each key is listed with its label, fingerprint, type and registration time
 
+#### Scenario: An unlabeled key is presented by its fingerprint
+- **WHEN** a key carries no label, because it had no comment and none was supplied
+- **THEN** the panel identifies it by its fingerprint rather than by a placeholder label, and it remains removable
+
 #### Scenario: Empty state explains itself
 - **WHEN** a user with no registered keys opens the panel
 - **THEN** an explanatory empty state is shown, including how to add a key

@@ -166,3 +166,18 @@ export interface SftpCredentials {
   username: string
   password: string
 }
+
+/**
+ * An SSH public key registered on an account. Never carries private key
+ * material: none is ever stored or transmitted.
+ */
+export interface SshKey {
+  /** `SHA256:...`, as `ssh-keygen -lf` reports it. Identifies the key. */
+  fingerprint: string
+  key_type: string
+  bits: number
+  label: string | null
+  /** Normalized `<type> <blob>`; the comment lives in `label` instead. */
+  public_key: string
+  created_at: IsoDate
+}

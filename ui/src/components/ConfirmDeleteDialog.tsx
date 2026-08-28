@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   Button,
   Dialog,
@@ -17,6 +17,8 @@ interface ConfirmDeleteDialogProps {
   name: string
   subject?: string
   confirmValue?: string
+  /** Extra sentence naming what this deletion actually costs the user. */
+  consequence?: ReactNode
   onConfirm: () => void
   onCancel: () => void
 }
@@ -25,6 +27,7 @@ export function ConfirmDeleteDialog({
   name,
   subject = 'item',
   confirmValue,
+  consequence,
   onConfirm,
   onCancel,
 }: ConfirmDeleteDialogProps) {
@@ -48,6 +51,9 @@ export function ConfirmDeleteDialog({
           This will permanently delete the {subject} <strong>{name}</strong>.
           This action cannot be undone.
         </DialogContentText>
+        {consequence && (
+          <DialogContentText sx={{ mb: 2 }}>{consequence}</DialogContentText>
+        )}
         {confirmValue && (
           <>
             <DialogContentText sx={{ mb: 2 }}>

@@ -35,8 +35,7 @@ CLI and any later projection share one implementation.
       padding, `SHA256:` prefixed. Verify against `ssh-keygen -lf` output for generated
       keys of each accepted type, asserting byte equality.
 - [x] 2.5 Implement label defaulting from the key's trailing comment, and store **no**
-      label when the key carries no comment and none was supplied — the platform does not
-      invent one. Verify both paths, and that an unlabeled key still reads and deletes.
+      label when the key carries no comment and none was supplied. Verify both paths, and that an unlabeled key still reads and deletes.
 - [x] 2.6 Normalize stored key material to the two-token `<type> <blob>` form, dropping any
       trailing comment, since the comment has already been consumed as the default label
       and is not part of the key's identity. Verify a key registered with a comment reads
@@ -115,7 +114,8 @@ CLI and any later projection share one implementation.
 - [ ] 5.3 Implement `SshKeysPanel` as its own component under `ui/src/components/`, not
       inlined into the page. Verify the page composes it rather than defining it.
 - [ ] 5.4 List keys with label, `SHA256:` fingerprint, type and registration time, with an
-      explanatory empty state for accounts holding none. Verify both states render.
+      explanatory empty state for accounts holding none. A key with no label is presented
+      by its fingerprint rather than a placeholder. Verify all three render.
 - [ ] 5.5 Add-key form accepting a pasted public key and optional label, surfacing the
       platform's distinct validation failures as distinct messages selected from the
       returned `code`, never by matching on the message text. Verify duplicate, unsupported
@@ -128,10 +128,6 @@ CLI and any later projection share one implementation.
       removed on a confirmed one.
 - [ ] 5.8 Verify the panel offers no in-browser key generation and directs users to the
       client instead.
-- [ ] 5.9 Write the panel's copy to describe what keys are for **without** claiming that
-      adding or removing one currently grants or withdraws access, which it does not until
-      the auth-swap change lands (design.md § *The settings page ships visible*). Verify a
-      reader cannot conclude they have just revoked live access.
 
 ## 6. Verification and documentation
 

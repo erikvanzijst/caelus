@@ -49,7 +49,6 @@ MIN_RSA_BITS = 2048
 MAX_LABEL_LENGTH = 128
 
 _PRIVATE_KEY_MARKER = re.compile(r"-----BEGIN[ A-Z]*PRIVATE KEY-----", re.IGNORECASE)
-_PUBLIC_KEY_LINE = re.compile(r"^(?P<type>[\w.@-]+)\s+(?P<blob>[A-Za-z0-9+/]+={0,3})(?:\s+(?P<comment>.*))?$")
 
 
 def fingerprint_for_blob(blob: bytes) -> str:
@@ -112,25 +111,23 @@ def parse_public_key(submission: str) -> ParsedSshKey:
 
     lines = [line for line in text.splitlines() if line.strip()]
     if len(lines) > 1:
-        # Checked before the parser, which accepts a multi-line submission and
-        # silently returns only the first key.
         _reject(
             "multiple_keys",
             f"Submit one key at a time; this contained {len(lines)} key lines.",
         )
 
-    match = _PUBLIC_KEY_LINE.match(lines[0])
-    if match is None:
+    fields = lines[0].split(None, 2)
+    if len(fields) < 2:
         _reject(
             "malformed_key",
             "Not a valid OpenSSH public key line. Expected '<type> <base64 key> [comment]'.",
         )
 
-    declared_type = match.group("type")
-    comment = (match.group("comment") or "").strip()
+    declared_type = fields[0]
+    comment = fields[2].strip() if len(fields) > 2 else ""
 
     try:
-        blob = base64.b64decode(match.group("blob"), validate=True)
+        blob = base64.b64decode(fields[1], validate=True)
     except (binascii.Error, ValueError):
         _reject("malformed_key", "The key body is not valid base64.")
 

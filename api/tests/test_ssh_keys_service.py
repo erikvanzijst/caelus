@@ -193,6 +193,40 @@ def test_malformed_submissions_are_rejected(bad):
     assert exc.value.code in {"malformed_key", "key_type_mismatch"}
 
 
+def test_parsing_stays_linear_on_adversarial_input():
+    """The line is split, not pattern-matched.
+
+    `public_key` is attacker-supplied and unbounded, so parsing must not
+    invite backtracking. A pattern here was flagged as polynomial; this pins
+    the shape that replaced it.
+    """
+    import time
+
+    for shape in (
+        "ssh-ed25519 " + "A" * 200_000 + "=" * 200_000,
+        "a" * 200_000 + " " + "\x00",
+        "a A" + " \t" * 100_000 + "\x00",
+    ):
+        started = time.perf_counter()
+        with pytest.raises(service.SshKeyValidationException):
+            service.parse_public_key(shape)
+        assert time.perf_counter() - started < 2.0
+
+
+def test_comment_may_contain_spaces(tmp_path):
+    """`split(None, 2)` keeps the rest of the line as one comment."""
+    type_, blob = pub(tmp_path, "ed25519").split()[:2]
+    parsed = service.parse_public_key(f"{type_} {blob} my laptop at home")
+    assert parsed.comment == "my laptop at home"
+
+
+def test_tabs_and_repeated_spaces_are_tolerated(tmp_path):
+    type_, blob = pub(tmp_path, "ed25519").split()[:2]
+    parsed = service.parse_public_key(f"{type_}\t  {blob}   someone@host")
+    assert parsed.key_type == type_
+    assert parsed.comment == "someone@host"
+
+
 def test_every_rejection_code_is_distinct(tmp_path):
     """The codes a client branches on must not collapse onto one another."""
     cases = {

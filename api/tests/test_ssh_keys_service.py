@@ -225,10 +225,33 @@ def test_label_defaults_from_comment(tmp_path):
     assert service.default_label(parsed) == "alice@laptop"
 
 
-def test_commentless_key_gets_a_nonempty_label(tmp_path):
+def test_commentless_key_gets_no_invented_label(tmp_path):
     line = " ".join(pub(tmp_path, "ed25519").split()[:2])
     parsed = service.parse_public_key(line)
-    assert service.default_label(parsed).strip()
+    assert service.default_label(parsed) is None
+
+
+def test_unlabeled_key_stores_reads_and_deletes(db_session, tmp_path):
+    """An absent label costs nothing: the fingerprint is the identity."""
+    user = make_user(db_session)
+    line = " ".join(pub(tmp_path, "ed25519").split()[:2])
+    stored = service.add_key(db_session, user_id=user.id, public_key=line)
+    assert stored.label is None
+
+    listed = service.list_keys(db_session, user_id=user.id)
+    assert [k.label for k in listed] == [None]
+
+    service.delete_key(db_session, user_id=user.id, fingerprint=stored.fingerprint)
+    assert service.list_keys(db_session, user_id=user.id) == []
+
+
+def test_duplicate_message_survives_a_missing_label(db_session, tmp_path):
+    user = make_user(db_session)
+    line = " ".join(pub(tmp_path, "ed25519").split()[:2])
+    service.add_key(db_session, user_id=user.id, public_key=line)
+    with pytest.raises(service.DuplicateSshKeyException) as exc:
+        service.add_key(db_session, user_id=user.id, public_key=line)
+    assert "None" not in str(exc.value)
 
 
 def test_surrounding_whitespace_is_tolerated(tmp_path):

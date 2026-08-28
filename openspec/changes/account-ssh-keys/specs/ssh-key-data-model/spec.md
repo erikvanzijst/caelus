@@ -3,7 +3,7 @@
 SSH access to the platform is authenticated by public keys a user registers once and
 reuses everywhere, rather than by credentials generated per deployment. This capability
 defines what such a key is: which key types are accepted, how a submitted key is
-validated and identified, how it is labelled and counted, and what deleting one means.
+validated and identified, how it is labeled, and what deleting one means.
 It is the storage contract the API, CLI and UI all present, and the contract a later
 change relies on when it projects an account's keys into the SSH edge's view.
 
@@ -100,18 +100,23 @@ Uniqueness MUST NOT be enforced across users. Two accounts holding the same publ
 - **WHEN** two different users each register the same public key
 - **THEN** both registrations succeed
 
-### Requirement: Every key has a label, defaulted from the key's comment
-Every key MUST carry a human-readable label, so a user reviewing their keys can tell which machine or device each one belongs to and revoke the right one. When a label is not supplied, the system MUST default it from the submitted key's trailing comment, and MUST fall back to a stable generated label when the key carries no comment.
+### Requirement: A key may carry a label, defaulted from the key's comment
+A key MAY carry a human-readable label, so a user reviewing their keys can tell which machine or device each one belongs to and revoke the right one. When a label is not supplied, the system MUST default it from the submitted key's trailing comment.
 
-Labels MUST NOT be required to be unique and MUST NOT be used to identify a key for deletion.
+When a label is not supplied and the key carries no comment, the key MUST be stored **without** a label.
+A key's identity is its fingerprint, so an absent label costs nothing: every surface can still name, display and revoke the key. Labels MUST NOT be required to be unique and MUST NOT be used to identify a key for deletion.
 
 #### Scenario: Label defaults from the comment
 - **WHEN** a user registers `ssh-ed25519 AAAA... alice@laptop` without supplying a label
 - **THEN** the stored label is derived from `alice@laptop`
 
-#### Scenario: Comment-less key still gets a label
+#### Scenario: Comment-less key is stored without a label
 - **WHEN** a user registers a key with no trailing comment and supplies no label
-- **THEN** the key is stored with a non-empty generated label
+- **THEN** the key is stored with no label, rather than with a generated one
+
+#### Scenario: An unlabeled key is still identifiable
+- **WHEN** a user reads or deletes a key that carries no label
+- **THEN** the key is addressable and displayable by its fingerprint exactly as a labeled key is
 
 ### Requirement: Deletion is immediate and permanent
 Deleting a key MUST remove it outright. A deleted key MUST NOT be recoverable, MUST NOT be returned by any read, and MUST NOT be retained in a soft-deleted state that a later projection could mistake for a live key.

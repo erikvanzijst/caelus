@@ -118,7 +118,7 @@ The fingerprint and the key type are derived from the key material by the platfo
 
 #### Scenario: Label remains optional
 - **WHEN** a submission carries only the public key
-- **THEN** it is accepted and the label is defaulted by the platform
+- **THEN** it is accepted, and the label is taken from the key's comment when it has one and is otherwise absent
 
 ### Requirement: Operator CLI parity
 The `caelus` operator CLI MUST offer the same key operations as the REST API, with the same validations, by calling the same service layer. This preserves the platform's API/CLI lockstep convention, and it is what allows an operator to revoke a key for a user during an incident without going through the web UI.

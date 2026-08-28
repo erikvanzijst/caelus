@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column("public_key", sa.Text(), nullable=False),
         sa.Column("fingerprint", sa.String(length=64), nullable=False),
         sa.Column("bits", sa.SmallInteger(), nullable=False),
-        sa.Column("label", sa.String(length=128), nullable=False),
+        sa.Column("label", sa.String(length=128), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
     )

@@ -206,6 +206,15 @@ def test_supplied_fingerprint_is_refused(client, user, tmp_path):
     assert client.get(url(user["id"]), headers=USER_AUTH_HEADER).json() == []
 
 
+def test_commentless_key_is_returned_with_a_null_label(client, user, tmp_path):
+    line = " ".join(pub(tmp_path).split()[:2])
+    body = client.post(
+        url(user["id"]), json={"public_key": line}, headers=USER_AUTH_HEADER
+    ).json()
+    assert body["label"] is None
+    assert client.get(url(user["id"]), headers=USER_AUTH_HEADER).json()[0]["label"] is None
+
+
 def test_label_is_optional_and_defaults(client, user, tmp_path):
     body = client.post(
         url(user["id"]),

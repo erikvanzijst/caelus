@@ -37,7 +37,7 @@ class SshKeyORM(SQLModel, table=True):
     public_key: str = Field(sa_column=Column(Text(), nullable=False))
     fingerprint: str = Field(sa_column=Column(String(64), nullable=False))
     bits: int = Field(sa_column=Column(SmallInteger, nullable=False))
-    label: str = Field(sa_column=Column(String(128), nullable=False))
+    label: Optional[str] = Field(default=None, sa_column=Column(String(128), nullable=True))
     created_at: datetime = Field(default_factory=_utcnow, nullable=False)
 
 
@@ -56,6 +56,6 @@ class SshKeyRead(SQLModel):
     fingerprint: str
     key_type: str
     bits: int
-    label: str
+    label: Optional[str] = None
     public_key: str
     created_at: datetime

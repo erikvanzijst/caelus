@@ -182,11 +182,9 @@ def parse_public_key(submission: str) -> ParsedSshKey:
     )
 
 
-def default_label(parsed: ParsedSshKey) -> str:
-    """The key's comment, else a stable label naming the type."""
-    if parsed.comment:
-        return parsed.comment[:MAX_LABEL_LENGTH]
-    return f"{parsed.key_type} key"
+def default_label(parsed: ParsedSshKey) -> Optional[str]:
+    """The key's comment, or None."""
+    return parsed.comment[:MAX_LABEL_LENGTH] if parsed.comment else None
 
 
 def to_read(orm: SshKeyORM) -> SshKeyRead:
@@ -233,10 +231,12 @@ def add_key(
         raise DuplicateSshKeyException(
             f"This key is already registered as '{existing.label}' "
             f"({existing.fingerprint})."
+            if existing.label
+            else f"This key is already registered ({existing.fingerprint})."
         )
 
     chosen = (label or "").strip() or default_label(parsed)
-    if len(chosen) > MAX_LABEL_LENGTH:
+    if chosen is not None and len(chosen) > MAX_LABEL_LENGTH:
         _reject(
             "malformed_key",
             f"Label must be at most {MAX_LABEL_LENGTH} characters.",

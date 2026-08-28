@@ -34,8 +34,9 @@ CLI and any later projection share one implementation.
 - [x] 2.4 Implement fingerprint derivation: SHA256 of the raw blob, base64 without
       padding, `SHA256:` prefixed. Verify against `ssh-keygen -lf` output for generated
       keys of each accepted type, asserting byte equality.
-- [x] 2.5 Implement label defaulting from the key's trailing comment, with a non-empty
-      fallback when the key carries none. Verify both paths.
+- [x] 2.5 Implement label defaulting from the key's trailing comment, and store **no**
+      label when the key carries no comment and none was supplied — the platform does not
+      invent one. Verify both paths, and that an unlabeled key still reads and deletes.
 - [x] 2.6 Normalize stored key material to the two-token `<type> <blob>` form, dropping any
       trailing comment, since the comment has already been consumed as the default label
       and is not part of the key's identity. Verify a key registered with a comment reads

@@ -44,6 +44,7 @@ from app.models.core import (  # noqa: F401
     ProductUpdate,
     ProductVisibility,
     ReleaseVarORM,
+    DeploymentDatabaseRead,
     SftpCredentialsRead,
     SQLModel,
     TosAcceptanceCreate,

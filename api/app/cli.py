@@ -650,6 +650,29 @@ def get_deployment_sftp(user_id: int, deployment_id: UUID) -> None:
         _echo_yaml_entity(creds)
 
 
+@app.command("get-deployment-database")
+def get_deployment_database(user_id: int, deployment_id: UUID) -> None:
+    """A deployment's database connection details, quota state and usage.
+
+    The password is reported to the deployment's owner alone. An operator
+    acting as anyone else gets every other field with the password withheld --
+    the same rule the API applies, inherited from the same service rather than
+    re-implemented here.
+    """
+    with session_scope() as session:
+        operator = _require_cli_user(session)
+        try:
+            details = deployment_service.get_database_details(
+                session,
+                user_id=user_id,
+                deployment_id=deployment_id,
+                viewer_id=operator.id,
+            )
+        except CaelusException as e:
+            _exit_for_domain_error(e)
+        _echo_yaml_entity(details)
+
+
 @app.command("delete-deployment")
 def delete_deployment(user_id: int, deployment_id: UUID) -> None:
     with session_scope() as session:

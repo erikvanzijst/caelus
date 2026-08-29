@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 import click
 
 from . import EXIT_ERROR, EXIT_OK, FreepodError, UsageError
+from . import database as database_module
 from . import delete as delete_module
 from . import deploy as deploy_module
 from . import history
@@ -780,6 +781,47 @@ def _finish_var_write(
             f"or apply them later with `freepod deploy --no-build`."
         ) from error
     click.echo(address)
+
+
+@cli.group()
+def db() -> None:
+    """Your app's PostgreSQL database.
+
+    `db status` reports which database and role your deployment owns, its
+    password, and how much of its allowance it is using.
+
+    The database is reachable from your running app, which already has these
+    details in its environment. It is not reachable from this machine, so this
+    command reports no address and no connection URL.
+    """
+
+
+@db.command("status")
+@click.option("--show-password", is_flag=True, help="print the password instead of masking it")
+@click.pass_obj
+def db_status(context: Context, show_password: bool) -> None:
+    """Report this deployment's database and how much room is left.
+
+    The password is masked unless you ask for it. Nothing is withheld from you
+    — the platform returns it to the owner and you are the owner — but the
+    usual reason to run this is to ask how much room is left, and that should
+    not write a live credential into your scrollback.
+    """
+    project_file = _project_deployment(context)
+    session = context.session()
+    session.authenticate(interactive=False)
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        details = database_module.read(api, user_id, project_file.deployment_id)
+
+    if details is None:
+        context.say("This deployment has no database.")
+        return
+
+    click.echo(database_module.render_status(details, show_password=show_password))
+    context.say(
+        "\nThis database is reachable from your running app, not from this machine."
+    )
 
 
 @cli.group()

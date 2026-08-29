@@ -84,6 +84,7 @@ that locks users out until they upgrade.
 | `logs.py`     | `freepod log`: SSE parsing, the resume cursor, and reconnection.                            |
 | `tos.py`      | Terms acceptance: the gate, the prompt, and recording an acceptance.                        |
 | `keys.py`     | `freepod key`: the account's keys, the local key record, and fingerprint recovery.          |
+| `database.py` | `freepod db`: the deployment's database, the masking rule, and the absence shape.           |
 | `skill.py`    | The packaged agent instructions: reading `assets/SKILL.md`, and where to install it.        |
 
 ## Environments
@@ -133,6 +134,7 @@ one.
 | `delete` | Tear down the project's deployment, and follow the teardown to gone.           | `--yes/-y`, `--no-wait`             |
 | `builds` | List the **account's** builds, marking the one this project runs.              | `--limit`, `--all`                  |
 | `log`    | Stream the project deployment's application output.                            | `-f`, `-n`, `-r`, `-t`              |
+| `db`     | Group holding the deployment's database. `db status` reports identity, credential (masked), and quota state. | `--show-password` (status) |
 
 Global: `--env`, `--verbose`, `--quiet`, `--timeout`, `--version`, `-h/--help`.
 `--verbose` and `--quiet` together are a usage error.
@@ -809,6 +811,64 @@ URL that addresses nothing.
 Print, log, copy or transmit a private key, in any output mode including
 `--verbose`. This matches the existing rule that the client renders token
 claims but never raw token material.
+
+## `freepod db status`
+
+### Resolving the deployment
+
+`db status` resolves the deployment the same way `delete`, `releases` and
+`log` do: from the project file, through `_project_deployment`, refusing
+in the same places that can be wrong (no project file, a project pointing
+at another environment, no deployment recorded). The command does not
+accept a deployment on the command line, on the same grounds as those —
+the project file is the only place the client knows a deployment by, and
+a positional argument that could name any deployment would be one whose
+worst typo is unrecoverable.
+
+### The password is masked, and that is not a disclosure rule
+
+The default output masks the password; `--show-password` prints it.
+
+A bare `--json` is not offered, because the command has no result that a
+pipe must carry — everything it prints is human-facing. The reachability
+statement is a diagnostic, not part of the result, and goes to stderr under
+the client's ordinary stream discipline; `--quiet` silences it.
+
+### No address, and no connection URL
+
+`db status` prints the database name, role, password, usage, allowance,
+measurement time and state. It prints **no host, no port, and no
+`postgresql://` URL**, and offers **no flag that prints one**. The pooler
+is reachable only from inside the cluster, so a host here would point at
+an address that does not connect from this machine, and a URL composed
+around it would look exactly like the input to `psql` and be one for
+nobody holding it.
+
+The client that genuinely needs a URL is `db proxy`, and it cannot use a
+server-composed one either — its whole job is to replace the host and
+port with its own local ones, so it assembles the URL itself whatever the
+endpoint returns. The encode-correctly requirement is real, and moves to
+the forwarding change with the command that needs it. There is then
+exactly one connection URL in the product, on the one command that makes
+it work, rather than two that differ.
+
+### Absence is not a failure
+
+A product that offers no relational storage answers with the platform's
+`relational_storage_unavailable` 404. The client reads that code on the
+404 and treats the deployment as having no database, which is an answer
+rather than a failure of the command or of the platform. A 404 without
+that code (missing, not-yours, deleted) is raised as a `FreepodError`, on
+the same grounds as any other read of a deployment that does not exist.
+
+### State is reported in the owner's terms
+
+`readonly` is reported with its consequence (writes rejected), `blocked`
+with its consequence (the application cannot connect), and a never-measured
+database is reported as "not yet measured" rather than zero. A tenant
+reaching for this command is often doing so because writes started
+failing, and the state name on its own answers nothing — the wording
+requirement is what makes the answer useful.
 
 ## The agent skill
 

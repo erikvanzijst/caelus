@@ -71,9 +71,11 @@ if [[ -f /.dockerenv ]] && docker inspect "$(hostname)" >/dev/null 2>&1; then
     SELF_CONTAINER=$(hostname)
 fi
 
+# One word per line: `mapfile` splits on newlines, so emitting the flag and its
+# value together would hand `docker run` a single argument with a space in it.
 publish_args() {
     [[ -n $SELF_CONTAINER ]] && return 0
-    echo "--publish 127.0.0.1:0:2222"
+    printf '%s\n' --publish 127.0.0.1:0:2222
 }
 
 # Prints "<host> <port>" for the container that owns the sidecar's network.

@@ -1,0 +1,3 @@
+# The harness drives docker from outside the image; it is not part of it.
+test/
+README.md

@@ -623,6 +623,31 @@ class SftpCredentialsRead(SQLModel):
     password: str
 
 
+class DeploymentDatabaseRead(SQLModel):
+    """A deployment's database: which one it is, its credential, and its health.
+
+    `password` is `None` and `password_withheld` is True for a reader who is
+    not the owner. The flag is what keeps "withheld" distinguishable from
+    "absent", so a client is never left guessing which it is looking at.
+
+    `size_bytes` and `measured_at` come from the housekeeping sweep, not from
+    this read: a figure here is as old as the last tick, which is why its time
+    travels with it. Both are `None` on a database that has never been
+    measured, which is not the same as one measured at zero.
+    """
+
+    host: str
+    port: int
+    database: str
+    role: str
+    password: Optional[str] = None
+    password_withheld: bool = False
+    quota_state: str
+    allowance_bytes: int
+    size_bytes: Optional[int] = None
+    measured_at: Optional[datetime] = None
+
+
 class DeploymentCreateResponse(SQLModel):
     """Envelope returned by the deployment creation endpoint only."""
     deployment: DeploymentRead

@@ -1,5 +1,5 @@
 import { requestJson, requestMultipart } from './client'
-import type { Deployment, DeploymentCreateResponse, HostnameCheckResult, Plan, PlanTemplatePayload, PlanTemplateVersion, Product, ProductTemplate, ProductVisibility, SftpCredentials, SshKey, TosAcceptance, User, VarWrite } from './types'
+import type { Deployment, DeploymentCreateResponse, DeploymentDatabase, HostnameCheckResult, Plan, PlanTemplatePayload, PlanTemplateVersion, Product, ProductTemplate, ProductVisibility, SftpCredentials, SshKey, TosAcceptance, User, VarWrite } from './types'
 
 export function getMe() {
   return requestJson<User>('/me')
@@ -145,6 +145,12 @@ export function getDeployment(userId: number, deploymentId: string) {
 
 export function getDeploymentSftp(userId: number, deploymentId: string) {
   return requestJson<SftpCredentials>(`/users/${userId}/deployments/${deploymentId}/sftp`)
+}
+
+export function getDeploymentDatabase(userId: number, deploymentId: string) {
+  return requestJson<DeploymentDatabase>(
+    `/users/${userId}/deployments/${deploymentId}/database`,
+  )
 }
 
 export function listDeployments(userId: number) {

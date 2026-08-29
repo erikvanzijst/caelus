@@ -22,12 +22,14 @@ from app.models import (
     MolliePaymentStatus,
     PaymentStatus,
     PlanTemplateVersionORM,
+    DeploymentDatabaseRead,
     ProductTemplateVersionORM,
     SftpCredentialsRead,
     UserORM,
     DeploymentUpdate,
 )
 from app.services.jobs import JobService
+from app.services import relational_storage
 from app.services import subscriptions as subscription_service
 from app.services import template_values
 from app.services import vars as vars_service
@@ -515,6 +517,30 @@ def get_sftp_credentials(
         port=settings.sftp_port,
         username=data["username"],
         password=data["password"],
+    )
+
+
+def get_database_details(
+    session: Session,
+    *,
+    deployment_id: UUID,
+    user_id: int | None = None,
+    viewer_id: int | None = None,
+) -> DeploymentDatabaseRead:
+    """A deployment's database connection details and quota state.
+
+    The deployment is reached through the platform's readable-deployment rule,
+    under which missing, not yours, and deleted answer identically -- so this
+    function decides nothing about the deployment's own absence and cannot
+    drift from every other deployment sub-resource read.
+
+    Its own absence, "this product has no database", is
+    `RelationalStorageUnavailableException`, which carries a stable code
+    because it shares 404 with the above.
+    """
+    deployment = get_deployment_orm(session, deployment_id=deployment_id, user_id=user_id)
+    return relational_storage.get_connection_details(
+        session, deployment, viewer_id=viewer_id
     )
 
 

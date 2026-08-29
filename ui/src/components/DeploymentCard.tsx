@@ -15,12 +15,15 @@ import {
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined'
+import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined'
 import type { Deployment } from '../api/types'
 import { resolveApiPath } from '../api/client'
 import { isTransitionalStatus, statusColor } from '../utils/deploymentStatus'
 import { ensureUrl, formatDateTime } from '../utils/format'
 import { useSftpCredentials } from './SftpAccessPanel'
 import { SftpAccessDialog } from './SftpAccessDialog'
+import { useDatabaseDetails } from './DatabasePanel'
+import { DatabaseAccessDialog } from './DatabaseAccessDialog'
 
 interface DeploymentCardProps {
   deployment: Deployment
@@ -43,16 +46,26 @@ export function DeploymentCard({
   onDelete,
 }: DeploymentCardProps) {
   const [sftpOpen, setSftpOpen] = useState(false)
+  const [databaseOpen, setDatabaseOpen] = useState(false)
 
   // Doubles as the availability gate: the "Files" action only appears once the
   // credentials query resolves, so products that expose no files (404) show no
   // button, and opening the dialog is an instant cache hit.
   const { data: sftpCreds, refetch: refetchSftp } = useSftpCredentials(userId, deployment.id)
   const sftpAvailable = Boolean(sftpCreds)
+  // Same gate, same reason: a deployment's database is provisioned before it
+  // reaches ready, so an absent one on a settled deployment means the product
+  // has none, and one absent on a transitional deployment is already described
+  // by the deployment's own status.
+  const { data: database, refetch: refetchDatabase } = useDatabaseDetails(userId, deployment.id)
+  const databaseAvailable = Boolean(database)
   const settled = !isTransitionalStatus(deployment.status)
   useEffect(() => {
     if (settled && !sftpCreds) refetchSftp()
   }, [settled, sftpCreds, refetchSftp])
+  useEffect(() => {
+    if (settled && !database) refetchDatabase()
+  }, [settled, database, refetchDatabase])
 
   const openable =
     deployment.hostname &&
@@ -148,6 +161,15 @@ export function DeploymentCard({
             Files
           </Button>
         )}
+        {databaseAvailable && (
+          <Button
+            variant="outlined"
+            startIcon={<StorageOutlinedIcon />}
+            onClick={() => setDatabaseOpen(true)}
+          >
+            Database
+          </Button>
+        )}
         {deployment.status === 'ready' && (
           <Button variant="outlined" onClick={() => onEdit(deployment)}>
             Edit
@@ -171,6 +193,15 @@ export function DeploymentCard({
           deploymentId={deployment.id}
           hostname={deployment.hostname}
           onClose={() => setSftpOpen(false)}
+        />
+      )}
+
+      {databaseOpen && (
+        <DatabaseAccessDialog
+          userId={userId}
+          deploymentId={deployment.id}
+          hostname={deployment.hostname}
+          onClose={() => setDatabaseOpen(false)}
         />
       )}
     </Card>

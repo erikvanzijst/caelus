@@ -18,9 +18,9 @@ from datetime import UTC, datetime, timedelta
 from sqlmodel import Session, select
 
 from app.config import CaelusSettings, get_settings
-from app.models import DeploymentDatabaseORM, DeploymentORM
+from app.models import DeploymentDatabaseORM, DeploymentDatabaseRead, DeploymentORM
 from app.services import mailer, var_crypto
-from app.services.errors import IntegrityException
+from app.services.errors import IntegrityException, NotFoundException
 from app.services.postgres_admin import PostgresAdminClient
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,21 @@ class DatabaseCredentials:
         return (
             f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
         )
+
+
+class RelationalStorageUnavailableException(NotFoundException):
+    """This deployment has no database details to report.
+
+    Carries a stable `code` because it shares 404 with "no such deployment",
+    and the UI keys on the difference to hide its panel rather than to show an
+    error. Both causes answer with it: a product that offers no relational
+    storage, and the interval before a deployment's first reconcile has
+    provisioned one -- which is exactly an interval in which the deployment is
+    not settled, and is described by the deployment's own status rather than by
+    a state invented here.
+    """
+
+    code = "relational_storage_unavailable"
 
 
 def is_enabled(deployment: DeploymentORM) -> bool:
@@ -113,6 +128,50 @@ def get_record(session: Session, deployment: DeploymentORM) -> DeploymentDatabas
             DeploymentDatabaseORM.deployment_id == deployment.id
         )
     ).one_or_none()
+
+
+def get_connection_details(
+    session: Session,
+    deployment: DeploymentORM,
+    *,
+    viewer_id: int | None,
+    settings: CaelusSettings | None = None,
+) -> DeploymentDatabaseRead:
+    """This deployment's database, as its owner or an administrator sees it.
+
+    `viewer_id` is the account reading, not the account in the path. `None`
+    withholds, so a caller that cannot say who is asking never gets a secret.
+    """
+    if not is_enabled(deployment):
+        raise RelationalStorageUnavailableException(
+            "This deployment's product does not offer relational storage"
+        )
+
+    record = get_record(session, deployment)
+    if record is None:
+        raise RelationalStorageUnavailableException(
+            "This deployment has no database"
+        )
+
+    settings = settings or get_settings()
+    is_owner = viewer_id is not None and deployment.user_id == viewer_id
+
+    return DeploymentDatabaseRead(
+        host=settings.tenant_db_pooler_host,
+        port=settings.tenant_db_pooler_port,
+        database=record.db_name,
+        role=record.role_name,
+        password=(
+            var_crypto.decrypt(record.password_encrypted, record.key_id)
+            if is_owner
+            else None
+        ),
+        password_withheld=not is_owner,
+        quota_state=record.quota_state,
+        allowance_bytes=resolve_quota_bytes(deployment),
+        size_bytes=record.size_bytes,
+        measured_at=record.measured_at,
+    )
 
 
 def _tenant_db_client(

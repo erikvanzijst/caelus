@@ -168,6 +168,31 @@ export interface SftpCredentials {
 }
 
 /**
+ * A deployment's database, as the platform reports it.
+ *
+ * Components only: there is no composed connection URL, and `host`/`port` are
+ * the in-cluster pooler's, which no browser can reach. The UI deliberately
+ * renders neither — see DatabaseFields.
+ *
+ * `password` is null with `password_withheld` true for a reader who is not the
+ * owner, which is what keeps "withheld" distinguishable from "absent".
+ * `size_bytes`/`measured_at` are null on a database never measured, which is
+ * not the same as one measured at zero.
+ */
+export interface DeploymentDatabase {
+  host: string
+  port: number
+  database: string
+  role: string
+  password: string | null
+  password_withheld: boolean
+  quota_state: 'ok' | 'warned' | 'readonly' | 'blocked'
+  allowance_bytes: number
+  size_bytes: number | null
+  measured_at: string | null
+}
+
+/**
  * An SSH public key registered on an account. Never carries private key
  * material: none is ever stored or transmitted.
  */

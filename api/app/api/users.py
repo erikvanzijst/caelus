@@ -13,6 +13,7 @@ from app.models import (
     DeploymentCreate,
     DeploymentCreateResponse,
     DeploymentRead,
+    DeploymentDatabaseRead,
     SftpCredentialsRead,
     TosAcceptanceCreate,
     TosAcceptanceRead,
@@ -390,6 +391,88 @@ def get_deployment_sftp(
     """
     return deployment_service.get_sftp_credentials(
         session, user_id=user_id, deployment_id=deployment_id
+    )
+
+
+@router.get(
+    "/{user_id}/deployments/{deployment_id}/database",
+    response_model=DeploymentDatabaseRead,
+    summary="Get a deployment's database connection details",
+    response_description=(
+        "Database name, role, password, and the database's quota state and usage."
+    ),
+    responses={
+        403: {"description": "Caller may only access their own deployments."},
+        404: {
+            "description": (
+                "No such deployment exists for this user, or this deployment has no "
+                "database (`code: relational_storage_unavailable`)."
+            )
+        },
+    },
+)
+def get_deployment_database(
+    user_id: int = Path(..., description="ID of the user that owns the deployment."),
+    deployment_id: UUID = Path(..., description="UUID of the deployment whose database to describe."),
+    current_user: UserORM = Depends(require_self),
+    session: Session = Depends(get_session),
+) -> DeploymentDatabaseRead:
+    """Return a deployment's database connection details, quota state and usage.
+
+    ## Authorization
+    You may only access your own deployments; administrators may access any
+    account's deployments. Other requests receive `403 Forbidden`.
+
+    **The password is returned to the owner alone.** An administrator receives
+    every other field with `password` null and `password_withheld` true. This
+    differs from the SFTP credentials endpoint, where an administrator does read
+    the password, and the difference is deliberate rather than an oversight to
+    be reconciled in that direction: a database password is read access to
+    everything the tenant stores, and the platform already takes the stricter
+    line for a var marked sensitive, which is write-only for everyone including
+    administrators. An administrator with cluster access can read the Secret
+    directly, so this is not a boundary against a determined operator -- it is
+    about not making casual disclosure the default path. If the two endpoints
+    are ever reconciled, the direction is to tighten SFTP.
+
+    ## Parameters
+    - **user_id** — owner of the deployment.
+    - **deployment_id** — UUID of the deployment.
+
+    ## Behavior
+    The response carries the pooler `host` and `port`, the `database` and `role`
+    names, the `password`, the `quota_state`, the `allowance_bytes` its plan
+    grants, and the `size_bytes` last measured with the `measured_at` time of
+    that measurement. `size_bytes` and `measured_at` are null on a database that
+    has never been measured, which is not the same as one measured at zero.
+    Usage is measured on the housekeeping sweep, never at request time, so the
+    figure is as old as the last tick -- which is why its time travels with it.
+
+    **No composed connection URL is returned.** The host and port are the
+    connection pooler's, which resolves inside the cluster and nowhere else, so
+    a URL built around them would connect from nowhere its holder is standing.
+    The client that forwards a connection composes its own URL around its local
+    address, and so cannot use a server-composed one either.
+
+    This is a pure read: nothing is provisioned, rotated, or re-evaluated by it.
+
+    ## Errors
+    - **403 Forbidden** — accessing another account's deployment without
+      administrator privileges.
+    - **404 Not Found** — no such deployment exists for this user, or this
+      deployment has no database. The latter carries
+      `code: relational_storage_unavailable`, which a UI keys on to hide its
+      database panel rather than to show an error. Both a product that offers no
+      relational storage and the interval before a deployment's first reconcile
+      has provisioned one answer with it; that interval is exactly one in which
+      the deployment is not settled, and is described by the deployment's own
+      status.
+    """
+    return deployment_service.get_database_details(
+        session,
+        deployment_id=deployment_id,
+        user_id=user_id,
+        viewer_id=current_user.id,
     )
 
 

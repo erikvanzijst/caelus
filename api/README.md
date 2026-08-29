@@ -482,6 +482,13 @@ row last.
 **No backups exist that a tenant can reach.** An accidental `DROP TABLE` is
 unrecoverable for them.
 
+## Reading a Deployment's Database Connection Details
+
+`GET /api/users/{user_id}/deployments/{deployment_id}/database` returns the
+deployment's database connection details together with its quota state and
+usage. It is a **read** of what already exists: nothing is provisioned,
+rotated, or re-evaluated by it.
+
 ## Deployment Vars (Runtime Configuration)
 
 A **var** is one entry in a deployment's process environment. Vars are the
@@ -612,6 +619,11 @@ REST routes:
 - SSH keys: `POST/GET /users/{user_id}/ssh-keys`,
   `GET/DELETE /users/{user_id}/ssh-keys/{fingerprint}` (addressed by the
   `SHA256:` fingerprint; see [Account SSH Keys](#account-ssh-keys))
+- Database: `GET /users/{user_id}/deployments/{deployment_id}/database` (see
+  [Reading a Deployment's Database Connection Details](#reading-a-deployments-database-connection-details);
+  pooler host/port, database/role names, password, quota state and usage;
+  password withheld from administrators — different rule from the SFTP
+  endpoint, by design)
 
 CLI equivalents (`caelus ...`):
 - `create-user`, `list-users`, `get-user`, `delete-user`

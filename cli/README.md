@@ -48,9 +48,28 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 | `freepod whoami`   | Report who you are signed in as.                                                     |
 | `freepod logout`   | Forget the stored credential.                                                        |
 | `freepod key`      | Register the SSH public keys that identify you to the platform.                      |
+| `freepod db`       | Report this deployment's database: name, role, password (masked), and quota state.   |
 | `freepod skill`    | Install deployment instructions for your coding agents.                              |
 
 `freepod --help` and `freepod <command> --help` cover the flags.
+
+## Database
+
+`freepod db status` reports this deployment's database: which database and
+role it is, the password that owns it, and how much of the allowance is
+used. The password is masked by default — pass `--show-password` to print
+it.
+
+The command prints **no address and no connection URL**, and offers no
+flag that prints one. The database is reachable only from inside the
+cluster, so a host or a `postgresql://` URL here would connect from
+nowhere this machine can stand. The host, port and the one URL that will
+actually work belong to `freepod db proxy`, which is the command that
+establishes a tunnel and composes its own URL around its local address.
+
+If the project records a deployment whose product offers no relational
+storage, the command says so plainly and exits successfully — the
+question was answered, not failed.
 
 ## SSH keys
 
@@ -76,6 +95,8 @@ variables and access keys are already set.
 Each deployment also gets its own PostgreSQL database. Nothing to set up:
 `DATABASE_URL` and the usual `PG*` variables are already in the environment, so
 any ORM or `psql` connects as-is.
+
+`freepod db status` shows the database name, role, password, and quota usage.
 
 ## Environment variables
 

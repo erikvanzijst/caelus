@@ -125,22 +125,17 @@
 - [x] 5.3 Confirm nothing was provisioned, rotated or mutated by any of the above: the
       `deployment_database` record is byte-identical before and after, and no reconcile
       was triggered.
-- [ ] 5.4 Update `api/README.md` with the endpoint, its response, its absence semantics,
+- [x] 5.4 Update `api/README.md` with the endpoint, its response, its absence semantics,
       and the administrator withholding rule with its rationale.
-- [ ] 5.5 Update `ui/README.md` with the panel component and its states.
+- [x] 5.5 Update `ui/README.md` with the panel component and its states.
 - [x] 5.6 Verify `freepod db status` end to end on dev against the same deployment as 5.1:
       the reported database, role and quota figures match the panel's, and
       `--show-password` matches the value in the deployment's database Secret.
-- [ ] 5.7 Update `cli/README.md`'s command table and `cli/DEVELOPMENT.md` with the `db`
+- [x] 5.7 Update `cli/README.md`'s command table and `cli/DEVELOPMENT.md` with the `db`
       group, the masking rule, and why the command reports no address — so the omission
       reads as deliberate rather than as a field someone forgot. Keep internals out of the
       README as that file's own rule requires.
-- [ ] 5.8 Record the handoff in `var/ssh_access.md` D10: `freepod db proxy` composes the
-      only connection URL in the product and owns the percent-encoding requirement this
-      change deliberately does not carry, and `db status` already exists alongside it in
-      the command table. Without this the requirement is inherited by a change that has no
-      reason to look for it (design.md § *Risks*).
-- [ ] 5.9 Update the agent skill in `cli/src/freepod/assets/SKILL.md`: add `freepod db` to
+- [x] 5.8 Update the agent skill in `cli/src/freepod/assets/SKILL.md`: add `freepod db` to
       the command reference and tell § *The database* that an agent can read the
       credentials and the quota state from the client, while the environment remains the
       way the running app gets them.

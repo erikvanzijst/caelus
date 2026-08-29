@@ -43,6 +43,9 @@ npm run build
 - `src/components/SshKeysPanel.tsx`: the account's SSH public keys — list, add, revoke.
 - `src/components/AddSshKeyDialog.tsx`: paste or drop a public key; maps the platform's error `code` to a readable message.
 - `src/components/CopyButton.tsx`: copy-to-clipboard with a confirmation tick. Shared by the SFTP fields and the SSH key list.
+- `src/components/DatabasePanel.tsx`: the deployment's database panel — identity, credential (masked, copyable without reveal) and quota state, with the same "renders nothing on a 404" shape as `SftpAccessPanel`.
+- `src/components/DatabaseFields.tsx`: the presentational fields rendered by `DatabasePanel` (database name, role, masked password, usage against allowance, state).
+- `src/components/DatabaseAccessDialog.tsx`: focused modal opened from the deployment card mirroring `SftpAccessDialog`.
 - `src/components/ProductsPanel.tsx`: product/template management (extracted from Admin page).
 - `src/components/DeploymentsPanel.tsx`: admin deployments table using MUI DataGrid with sortable columns.
 - `src/components/DeploymentDialog.tsx`: deployment detail dialog with read-only form, metadata, upgrade, and delete actions with live polling.
@@ -249,6 +252,16 @@ directly after a successful add without passing through any cancel path, and
 the component stays mounted throughout, so a per-handler reset leaves the next
 open still holding the previous key.
 
+## Database panel
+
+A deployment whose product opts into relational storage gets a panel on the
+deployment view — the same shape as the SFTP panel, mounted beside it. It
+shows identity (database name, role), a credential (the password, masked by
+default), and the database's health against its allowance.
+
+The panel is its own component (`DatabasePanel`), composed into the page
+rather than inlined.
+
 ## Manual QA Matrix
 Use these checks after UI/API contract changes:
 
@@ -311,6 +324,16 @@ Use these checks after UI/API contract changes:
 10. Validation error readability:
    - trigger invalid create payload (for example empty required template fields)
    - expected alert text is readable and not `[object Object]`
+
+11. Database panel:
+   - open a deployment whose product offers relational storage
+   - expected: panel renders database name, role and a masked password
+   - expected: password can be copied without first being revealed
+   - expected: panel states that the database is reachable from the running app, not the reader's machine
+   - open a deployment whose product does not offer relational storage
+   - expected: no panel is rendered and no placeholder is shown
+   - as an administrator, open another account's deployment
+   - expected: every field is shown except the password, which the panel states is withheld — no error state, no reveal affordance that cannot work
 
 ## Product Icon Sizes
 

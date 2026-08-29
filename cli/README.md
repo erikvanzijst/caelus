@@ -53,24 +53,6 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 
 `freepod --help` and `freepod <command> --help` cover the flags.
 
-## Database
-
-`freepod db status` reports this deployment's database: which database and
-role it is, the password that owns it, and how much of the allowance is
-used. The password is masked by default — pass `--show-password` to print
-it.
-
-The command prints **no address and no connection URL**, and offers no
-flag that prints one. The database is reachable only from inside the
-cluster, so a host or a `postgresql://` URL here would connect from
-nowhere this machine can stand. The host, port and the one URL that will
-actually work belong to `freepod db proxy`, which is the command that
-establishes a tunnel and composes its own URL around its local address.
-
-If the project records a deployment whose product offers no relational
-storage, the command says so plainly and exits successfully — the
-question was answered, not failed.
-
 ## SSH keys
 
 `freepod key add` registers an SSH public key on your account. SSH is used as

@@ -1,0 +1,13 @@
+# A stand-in for a distroless application image: a single static binary and no
+# shell at all. Built here rather than pulled so the harness needs no registry
+# beyond the base images it already uses.
+FROM debian:trixie-slim AS build
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends gcc libc6-dev; \
+    printf '%s\n' '#include <unistd.h>' 'int main(void){for(;;)pause();return 0;}' > /idle.c; \
+    gcc -static -Os -o /idle /idle.c
+
+FROM scratch
+COPY --from=build /idle /idle
+CMD ["/idle"]

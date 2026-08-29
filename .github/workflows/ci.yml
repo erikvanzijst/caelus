@@ -58,10 +58,28 @@ jobs:
   cli:
     uses: ./.github/workflows/cli-checks.yml
 
+  # The dev-profile SSH sidecar, driven by docker and ssh with no cluster:
+  # `docker run --pid=container:<name>` reproduces the shared process namespace
+  # a pod provides. Every negative case in there is a security property rather
+  # than a feature -- password authentication refused, unknown key refused,
+  # unlisted forward destination refused, the requested command never expanded
+  # by the dispatcher -- which is why it gates the branch rather than being run
+  # by hand when someone remembers.
+  ssh-sidecar-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run the ssh-sidecar harness
+        run: ./products/_lib/ssh-sidecar/test/run-tests.sh
+
   publish-images:
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    needs: [ui-test, api-test, catalog-lint, cli]
+    needs: [ui-test, api-test, catalog-lint, cli, ssh-sidecar-test]
     permissions:
       contents: read
       packages: write
@@ -79,6 +97,11 @@ jobs:
 
       - name: Build and publish images
         run: ./scripts/build-images.sh --all
+
+      # The sidecar is on an immutable tag defined in products/_lib/ss-sidecar/VERSION
+      # and so it can only be pushed if the VERSION actually revved.
+      - name: Publish the SSH sidecar when its version is new
+        run: ./scripts/build-images.sh --ssh-sidecar --skip-if-published
 
   api-test:
     runs-on: ubuntu-latest

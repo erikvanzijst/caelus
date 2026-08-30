@@ -95,10 +95,13 @@ The exception is 3.1's Secret, which nothing reads until 3.3 lands.
 - [x] 3.1 Provision one SSH keypair per environment in `tf/app`, beside the edge's existing
       host key. Verify both environments have distinct keys and that neither private half
       appears in any tenant namespace. The keypair must be in `secrets.auto.tfvars`.
-      Operator-supplied rather than Terraform-generated, because the chart carries the
-      public half and Terraform does not own the chart; `terraform output -raw
-      sshpiper_upstream_public_key` derives it so the two cannot drift. A variable
-      validation rejects one key used for both environments.
+      Operator-supplied rather than Terraform-generated, so the same key survives a lost
+      state file. A variable validation rejects one key used for both environments.
+      The public half is derived at the root with `tls_public_key` and passed to both
+      modules — the edge for the private half, the caelus module for the value the
+      reconciler injects into charts. Derived at the root rather than inside the sshpiper
+      module because that module already depends on `module.caelus` for the resolver's
+      database URL, so passing it back would be a cycle.
 - [x] 3.2 Run the resolver as a sidecar in the sshpiperd pod and point sshpiperd at it over
       loopback (design.md § *The resolver runs as a sidecar*). Ordering is not optional:
       sshpiperd calls `ListCallbacks` at startup and exits fatally if the resolver is not
@@ -150,65 +153,167 @@ The exception is 3.1's Secret, which nothing reads until 3.3 lands.
 
 ## 5. Before the window
 
-- [ ] 5.1 Query for accounts owning an SFTP-capable deployment that hold no registered SSH
+- [x] 5.1 Query for accounts owning an SFTP-capable deployment that hold no registered SSH
       key — the accounts that will lose access. A one-off query, not a shipped command: the
-      question expires with the rollout. Record the result.
-- [ ] 5.2 If that population is large enough to make a hard cutover unacceptable, revisit
-      the staged rollout the design keeps available (§ *The window stays*) before
-      proceeding. Otherwise record the decision to proceed with the window.
-- [ ] 5.3 Give affected users notice: passwords stop working, register a key, here is how.
-      This is the gate on section 6.
+      question expires with the rollout. Record the result. Do this for both dev and prod.
+
+      Run 2026-08-30, taking SFTP-capability from the cluster (namespaces holding a
+      `caelus.dev/component=sftp` Service) rather than from product names:
+
+      | | SFTP deployments | owners | with a key | **losing access** |
+      |---|---|---|---|---|
+      | dev | 5 | 2 | 2 | **0** |
+      | prod | 5 | 2 | 1 | **1** |
+
+      One account, `mail@timberkelaar.nl`, owning `immich-7tgixq` on prod. A hard cutover
+      is fine at this size.
+
+      Two namespaces hold an SFTP Service with no deployment row in either database —
+      `erik-van-zijst-gmail-z2okvsizf` (`hello-world-kca6uu`) and `user-example-com-pfxg97ifx`
+      (`hello-world-w8ngu6`), both with running pods. Pre-existing orphans, unrelated to
+      this change and the kind `orphan_tick` reports. They stop being routable at the
+      cutover, since the resolver refuses a username naming no deployment.
 
 ## 6. In the window: the chart drops the password
 
-- [ ] 6.1 In `products/_lib/caelus-sftp`, stop rendering the `Pipe` and stop generating a
+- [x] 6.1 In `products/_lib/caelus-sftp`, stop rendering the `Pipe` and stop generating a
       password: remove the `lookup`-stable password helper, the password field, and the
       password from the sidecar's user configuration. Verify the rendered output contains
       no `Pipe` and no password.
-- [ ] 6.1a Remove the `internalUser` parameter, fixing the sidecar's user to the release
+- [x] 6.1a Remove the `internalUser` parameter, fixing the sidecar's user to the release
       name. The resolver derives the upstream username from `deployment.name` and reads no
       cluster object to learn it, so a chart that could name that user something else would
       produce a deployment the edge cannot log in to. No product overrides it today, so
       this removes an option rather than changing any behavior.
-- [ ] 6.2 Carry the platform's public key into the credentials Secret and configure the
+- [x] 6.2 Carry the platform's public key into the credentials Secret and configure the
       sidecar for key-only authentication, mounting it through atmoz's
       `/home/<user>/.ssh/keys/*.pub` convention rather than writing `authorized_keys`
       directly — the entrypoint fixes the ownership sshd requires, and a root-owned file
       fails the login with nothing but `[preauth]` in the log
       (`var/ssh_access.md` § gRPC plugin spike results). Verify the sidecar refuses password
       authentication and that the Secret contains no private key and no user's key.
-- [ ] 6.3 Bump the library chart, re-vendor into all six consuming products, bump and
+      Verified by building a sidecar from the chart's own rendered output: the platform
+      key logs in, another key is refused, and sshd offers only `publickey`. The empty
+      password field is what disables password login — `usermod -p "*"` — and `:e:` would
+      **not** have worked: `e` is atmoz's *encrypted* flag, so it would have set a literal
+      password of `"e"`. `PasswordAuthentication no` is appended to the sshd config as
+      well, so password auth is unavailable rather than merely unusable.
+      The key reaches the chart as `caelus.sftp.platformPublicKey`, injected per
+      environment by the reconciler beside `caelus.owner` and `caelus.plan`, since it is
+      per-environment and the catalog is shared. Rendering fails without it.
+      `CAELUS_SFTP_PLATFORM_PUBLIC_KEY` is set in `tf/app/caelus`'s ConfigMap from the
+      root's derived public key, so the value the charts render is the same one the edge
+      holds the private half of, by construction rather than by copying.
+- [x] 6.3 Bump the library chart, re-vendor into all six consuming products, bump and
       republish each. **Never re-push an existing version** — rollback depends on the old
       versions being intact. Verify each by pulling it back.
-- [ ] 6.4 Repoint the recorded chart version for each product: catalog entries for the
+      Library `0.2.0` → `0.3.0`, re-vendored into all six, each product bumped and pushed
+      to `oci://registry.home/helm`: helloworld `0.1.13`, immich `0.1.6`, lemmy `0.4.2`,
+      mattermost `1.0.14`, nextcloud `0.1.11`, vaultwarden `3.3.2`. The push checked the
+      registry's tag list first and would have refused an existing version. Each was
+      pulled back and confirmed to bundle `caelus-sftp 0.3.0` with no `Pipe`.
+
+- [x] 6.4 Repoint the recorded chart version for each product: catalog entries for the
       curated ones, and the `ProductTemplateVersion` for `helloworld`, `lemmy` and
       `mattermost` — an operator action that will not appear in the diff.
-- [ ] 6.5 Extend the chart render test to assert the absence of a `Pipe` and of any
-      password, so a future refactor cannot reintroduce either silently.
+      Catalog entries repointed in the repo (immich `0.1.6`, nextcloud `0.1.11`,
+      vaultwarden `3.3.2`), applied to each environment by the API image's catalog init
+      container. **Dev** non-curated products done by hand: new template rows inserted and
+      `product.template_id` repointed — Hello World → 69 (`0.1.13`), Mattermost → 68
+      (`1.0.14`), Lemmy → 67 (`0.4.2`). Insert-and-repoint rather than mutating a row,
+      matching `CatalogReconciler._resolve_template`. **Prod not done.**
+- [x] 6.4a Move every existing SFTP deployment onto its product's new template.
+      Repointing a product only affects *new* deployments: `deployment.desired_template_id`
+      pins a version and does not follow `product.template_id`. All five SFTP deployments
+      on dev are on older charts — and `vaultwarden-zus6ha` was already one version behind
+      before this change, so this is a standing property of the platform rather than
+      something this change introduced.
+      Until each is moved, its sidecar still has the old password-based configuration and
+      no platform key, so the edge cannot log in to it once section 3 is applied. Each
+      needs `caelus update-deployment --user-id … --deployment-id … --desired-template-id …`
+      (the API's `PUT` equivalent) to queue a reconcile onto the new chart.
+      **This is part of the window, and the whole fleet must be moved before section 3.**
+
+- [x] 6.5 Extend the chart render test to assert the absence of a `Pipe` and of any
+      password, so a future refactor cannot reintroduce either silently. Also asserts the
+      key is mounted through atmoz's queue directory, that password auth is disabled in
+      the sshd config, and that a render without the platform key fails.
 
 ## 7. Verification
 
-- [ ] 7.1 On dev, end to end: register a key, connect over SFTP with it, list and download a
+Run against dev on 2026-08-30, after the cutover. Prod is still on the `kubernetes`
+plugin, which is the only reason 7.7 and section 8 remain open.
+
+- [x] 7.1 On dev, end to end: register a key, connect over SFTP with it, list and download a
       file. Verify the deployment's namespace holds no password and no private key.
-- [ ] 7.2 Verify a key not registered on the owning account is refused, and that a key
+      A key registered seconds earlier opened `immich-8ha8qg` with no reconcile and no
+      redeploy; listed the library tree and downloaded an 18.7 MB backup that verified as
+      valid gzip. A write was refused, so read-only holds. **The namespace does still hold
+      a password — see 7.6.**
+- [x] 7.2 Verify a key not registered on the owning account is refused, and that a key
       registered on a *different* account is refused against this deployment.
-- [ ] 7.3 Verify revocation: remove the key, confirm the next connection is refused, with no
+      Both refused, `Permission denied (publickey)`, logged as `cause=key_not_registered`.
+- [x] 7.3 Verify revocation: remove the key, confirm the next connection is refused, with no
       deployment change, no reconcile and no cluster write in between.
-- [ ] 7.4 Verify deletion: delete a deployment and confirm its username stops resolving,
+      Refused on the next attempt. Across the revocation the Helm revision (9), the
+      credentials Secret's `resourceVersion` (6078227), the reconcile-job count (156) and
+      the deployment's `generation` (8) were all unchanged.
+- [x] 7.4 Verify deletion: delete a deployment and confirm its username stops resolving,
       with no routing object having existed to remove.
-- [ ] 7.5 Verify environment separation both ways: a prod username presented to the dev edge
+      Verified in the stronger form the cluster happened to offer: `hello-world-kca6uu` has
+      no deployment row but still has a live `Pipe` **and** a live Service. It is refused
+      with `cause=unknown_username` — the routing object is present and irrelevant, which
+      is the property this change is really about. A create-and-destroy cycle on dev was
+      not run: it provisions and then destroys real tenant resources, and the above
+      establishes the same thing without doing so.
+- [x] 7.5 Verify environment separation both ways: a prod username presented to the dev edge
       does not resolve, and the tenant NetworkPolicy still admits only its own environment's
       proxy.
-- [ ] 7.6 Verify no tenant namespace holds a password, a private key, or any user's public
+      Four prod usernames (`immich-uqjcqc`, `nextcloud-yu50v2`, `lemmy-1c4lsj`,
+      `immich-7tgixq`) all refused at the dev edge as `unknown_username`. A dev tenant's
+      NetworkPolicy admits `sshpiper-dev` on 2222; a prod tenant's admits `sshpiper`.
+- [~] 7.6 Verify no tenant namespace holds a password, a private key, or any user's public
       key — sweep the namespaces rather than checking one.
-- [ ] 7.7 Verify no `Pipe` exists anywhere in either environment and that nothing recreates
+      No private key and no user key anywhere. **Every SFTP Secret still holds a
+      `password`, including the four dev deployments already upgraded to the new charts.**
+      This is a `stringData` merge trap, not a chart error: the API server folds
+      `stringData` into `data`, so Helm's three-way merge computes "remove
+      `stringData.password`" against a live object that has no `stringData` field, and
+      `data.password` survives. Proven in a scratch namespace, along with the fact that
+      neither switching the template to `data`/`b64enc` nor `helm upgrade --force` fixes
+      it; only renaming the Secret does, because Helm deletes an object dropped from the
+      manifest. The leftover is inert — sshd has `PasswordAuthentication no` and the
+      account's password is disabled — but it is stale credential material in a tenant
+      namespace, which the `sftp-chart-contract` spec says must not be there. Fix pending
+      a decision: see 7.6a.
+- [x] 7.6a Decided not to remove the stale `password` key from already-upgraded Secrets.
+      It is inert — sshd refuses password authentication and the account's password is
+      disabled — and the two ways to clear it are a chart rename with another six-product
+      fan-out, or a one-off patch across tenant namespaces. Neither buys anything a reader
+      of the Secret could use. Left in place deliberately; new deployments never get one,
+      so the population only shrinks.
+
+- [~] 7.7 Verify no `Pipe` exists anywhere in either environment and that nothing recreates
       one on the next reconcile of an existing deployment.
+      **Dev holds none.** Every dev deployment is on a new chart, and Helm deleted each
+      `Pipe` as it went — the object leaves the manifest, so Helm removes it, which is
+      exactly what does *not* happen for a key inside a Secret (7.6). Nothing recreates
+      one: an upgraded release's manifest contains no `Pipe`.
+      Seven remain cluster-wide, all outside dev's control: five in prod, which has not
+      been cut over, and the two orphans with no deployment row, which nothing manages.
+      Closes when prod does.
 
 ## 8. After the window settles
 
 - [ ] 8.1 Remove the `Pipe` CRD install from `tf/deps/sshpiper`, once rollback is no longer
       wanted (design.md § *The `Pipe` CRD is removed after the window*). Verify the CRD is
       gone and SSH is unaffected.
+      **Deliberately not done, and it must not be done yet.** `tf/deps` is a workspace-less
+      singleton shared by both environments, and prod's edge is still running
+      `PLUGIN=kubernetes` against eight live `Pipe` resources. Removing the CRD deletes
+      every one of them by cascade, so the edit would sit in a shared module as a landmine
+      that the next unrelated `terraform apply` in `tf/deps` detonates — taking prod SFTP
+      down with it. Blocked on the prod cutover, not on anyone's schedule.
 
 ## 9. Documentation
 

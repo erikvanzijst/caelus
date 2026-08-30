@@ -51,7 +51,9 @@ never implemented.
   key.
 - **The SFTP credentials endpoint and panel stop returning a password**, and instead point
   the user at their registered keys.
-- **The reconciler is unchanged.** It gains no new object to create, delete, or sweep.
+- **The reconciler owns no new state.** It gains no object to create, delete, or sweep.
+  It does gain one line: the platform's public key joins the `caelus.*` values it already
+  injects, alongside `caelus.owner` and `caelus.plan`.
 
 **BREAKING for existing users, and rolled out in a maintenance window.** Every SFTP
 password stops working at once. A user with no registered public key loses file access to
@@ -111,7 +113,9 @@ every deployment until they register one. The passwords are deleted, not migrate
 
 **Reconciler**
 
-- Unchanged. This is the point of the change.
+- One new values contributor, `caelus.sftp.platformPublicKey`, injected per environment
+  from settings the way `caelus.owner` and `caelus.plan` already are. No new object, no
+  new lifecycle, no reaper — which is the property this change is about.
 
 **Operational**
 

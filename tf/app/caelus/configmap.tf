@@ -5,18 +5,19 @@ resource "kubernetes_config_map" "api" {
   }
 
   data = {
-    CAELUS_BASE_URL = "https://${var.domain}"
-    CAELUS_BASE_URL_API = "https://${var.domain}/api/"
-    CAELUS_STATIC_PATH  = "/var/static"
-    CAELUS_DATABASE_URL = "postgresql+psycopg://${var.db_user}:${var.db_password}@caelus-postgres:5432/${var.db_name}"
-    CAELUS_DOMAIN = var.domain
-    CAELUS_WILDCARD_DOMAINS = jsonencode(var.wildcard_domains)
-    CAELUS_MOLLIE_API_KEY = var.mollie_api_key
-    CAELUS_MOLLIE_REDIRECT_URL="https://${var.domain}"
-    CAELUS_MOLLIE_WEBHOOK_BASE_URL="https://${var.domain}/api/"
-    CAELUS_SSHPIPER_NAMESPACE = var.sshpiper_namespace
-    CAELUS_SFTP_HOST = var.sftp_host
-    CAELUS_SFTP_PORT = tostring(var.sftp_port)
+    CAELUS_BASE_URL                 = "https://${var.domain}"
+    CAELUS_BASE_URL_API             = "https://${var.domain}/api/"
+    CAELUS_STATIC_PATH              = "/var/static"
+    CAELUS_DATABASE_URL             = "postgresql+psycopg://${var.db_user}:${var.db_password}@caelus-postgres:5432/${var.db_name}"
+    CAELUS_DOMAIN                   = var.domain
+    CAELUS_WILDCARD_DOMAINS         = jsonencode(var.wildcard_domains)
+    CAELUS_MOLLIE_API_KEY           = var.mollie_api_key
+    CAELUS_MOLLIE_REDIRECT_URL      = "https://${var.domain}"
+    CAELUS_MOLLIE_WEBHOOK_BASE_URL  = "https://${var.domain}/api/"
+    CAELUS_SSHPIPER_NAMESPACE       = var.sshpiper_namespace
+    CAELUS_SFTP_PLATFORM_PUBLIC_KEY = var.sftp_platform_public_key
+    CAELUS_SFTP_HOST                = var.sftp_host
+    CAELUS_SFTP_PORT                = tostring(var.sftp_port)
 
     # The tenant database pooler. Addresses, not credentials -- the admin
     # credential rides in the caelus-tenant-db Secret, on the worker only.
@@ -36,7 +37,7 @@ resource "kubernetes_config_map" "api" {
     CAELUS_SMTP_PORT = "25"
     CAELUS_SMTP_FROM = "no-reply@${var.domain}"
 
-    CAELUS_BUILDER_IMAGE = var.builder_image
+    CAELUS_BUILDER_IMAGE       = var.builder_image
     CAELUS_BUILDS_NAMESPACE    = var.builds_namespace
     CAELUS_BUILD_MAX_IN_FLIGHT = tostring(var.build_max_in_flight)
 
@@ -58,7 +59,7 @@ resource "kubernetes_config_map" "api" {
     CAELUS_LOG_KEEPALIVE_SECONDS = tostring(var.log_keepalive_seconds)
 
     # CAELUS_LOG_LEVEL    = "info"
-    PYTHONUNBUFFERED    = "1"
+    PYTHONUNBUFFERED = "1"
 
     # Trust X-Forwarded-For/Proto from the in-cluster Traefik pod so uvicorn
     # reports the real client IP instead of the proxy's pod IP. Value is the

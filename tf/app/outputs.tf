@@ -23,12 +23,12 @@ output "api_endpoint" {
   value       = "https://${local.domain}/api"
 }
 
-# The public half of this environment's upstream key. The `caelus-sftp` chart
-# carries it as the sole key each sidecar trusts, and the chart is not something
-# Terraform owns -- so read it from here rather than from a copy:
+# The public half of this environment's upstream key, which the reconciler
+# injects into every SFTP chart. Exposed for operators comparing what a sidecar
+# trusts against what the edge holds:
 #
 #   terraform output -raw sshpiper_upstream_public_key
 output "sshpiper_upstream_public_key" {
-  description = "Public half of the SSH edge's upstream key, for the caelus-sftp chart"
-  value       = module.sshpiper.upstream_public_key
+  description = "Public half of the SSH edge's upstream key, trusted by every SFTP sidecar"
+  value       = trimspace(data.tls_public_key.sshpiper_upstream.public_key_openssh)
 }

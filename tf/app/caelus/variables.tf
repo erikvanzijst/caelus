@@ -74,6 +74,11 @@ variable "sshpiper_namespace" {
   type        = string
 }
 
+variable "sftp_platform_public_key" {
+  description = "The SSH edge's public key. The reconciler injects it into every SFTP chart as caelus.sftp.platformPublicKey; charts refuse to render without it."
+  type        = string
+}
+
 variable "sftp_host" {
   description = "User-facing SFTP host advertised by the API/UI (e.g. freepod.eu / dev.freepod.eu)"
   type        = string

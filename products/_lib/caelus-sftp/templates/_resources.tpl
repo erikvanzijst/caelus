@@ -18,23 +18,6 @@ for .Release.* and cluster lookups). Example call sites in a product chart:
   {{ include "caelus-sftp.volumes" (dict "root" .) }}
 */}}
 
-{{- /*
-caelus-sftp.password — the stable per-deployment password. Generated once and
-reused from the existing Secret on upgrades (lookup pattern). lookup returns
-empty under `helm template`/`--dry-run`; the reconciler always performs real
-installs, so the password never spuriously rotates in practice.
-*/}}
-{{- define "caelus-sftp.password" -}}
-{{- $root := .root -}}
-{{- $secretName := .secretName | default (printf "%s-sftp-credentials" $root.Release.Name) -}}
-{{- $existing := lookup "v1" "Secret" $root.Release.Namespace $secretName -}}
-{{- if $existing -}}
-{{- index $existing.data "password" | b64dec -}}
-{{- else -}}
-{{- randAlphaNum 24 -}}
-{{- end -}}
-{{- end -}}
-
 {{- /* Common labels for SFTP resources. */ -}}
 {{- define "caelus-sftp.labels" -}}
 app.kubernetes.io/instance: {{ .root.Release.Name }}
@@ -43,16 +26,16 @@ caelus.dev/component: sftp
 {{- end -}}
 
 {{- /*
-caelus-sftp.resources — the four standalone objects (Secret, ConfigMap,
-Service, Pipe). Rendered from the wrapper's own template file (which has
-.Release.*), so it is used by both wrapper-owned and subchart products.
+caelus-sftp.resources — the three standalone objects (Secret, ConfigMap,
+Service). Rendered from the wrapper's own template file (which has .Release.*),
+so it is used by both wrapper-owned and subchart products.
+
+Required value:
+  caelus.sftp.platformPublicKey  the platform's SSH public key, the only key
+                   the sidecar trusts. Set per environment; the edge holds the
+                   private half. Rendering fails without it.
 
 Optional params (defaults suit wrapper-owned products):
-  internalUser     upstream sshd username = Pipe `to.username`
-                   (default: release name). Subchart products pass a fixed
-                   value (e.g. "sftp") because their sidecar lives in static
-                   subchart values that cannot reference .Release.Name; the
-                   Pipe still routes the unique external release-name to it.
   internalUid      uid the sftp user runs as (default 1000). MUST match the
                    uid that owns the exposed data when the app restricts it to
                    its own user (e.g. nextcloud locks its data dir to 0770
@@ -64,17 +47,21 @@ Optional params (defaults suit wrapper-owned products):
   serviceName      Service name (default "<release>-sftp").
   selector         Service pod selector (default: instance label). Subchart
                    products pass the upstream pod's labels.
-The external SFTP username (what the client types) is always the release name.
+
+The SFTP username is always the release name, inside and out. The edge derives
+it from the deployment record and reads no cluster object, so it cannot be
+overridden per product.
 */}}
 {{- define "caelus-sftp.resources" -}}
 {{- $root := .root -}}
-{{- $internalUser := .internalUser | default $root.Release.Name -}}
+{{- $internalUser := $root.Release.Name -}}
 {{- $internalUid := .internalUid | default 1000 -}}
 {{- $internalGid := .internalGid | default $internalUid -}}
 {{- $credsSecret := .credsSecret | default (printf "%s-sftp-credentials" $root.Release.Name) -}}
-{{- $password := include "caelus-sftp.password" (dict "root" $root "secretName" $credsSecret) -}}
 {{- $scriptsConfigMap := .scriptsConfigMap | default (printf "%s-sftp-scripts" $root.Release.Name) -}}
 {{- $serviceName := .serviceName | default (printf "%s-sftp" $root.Release.Name) -}}
+{{- $sftpValues := (($root.Values.caelus | default dict).sftp | default dict) -}}
+{{- $platformKey := required "caelus.sftp.platformPublicKey is required: without it the sidecar trusts no key and the edge cannot log in" $sftpValues.platformPublicKey -}}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -84,8 +71,10 @@ metadata:
 type: Opaque
 stringData:
   username: {{ $root.Release.Name }}
-  password: {{ $password | quote }}
-  users.conf: {{ printf "%s:%s:%v:%v" $internalUser $password $internalUid $internalGid | quote }}
+  # Empty password field: atmoz/sftp runs `usermod -p "*"`, disabling password
+  # login. Keys only.
+  users.conf: {{ printf "%s::%v:%v" $internalUser $internalUid $internalGid | quote }}
+  platform_key.pub: {{ $platformKey | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -102,6 +91,8 @@ data:
     #!/bin/sh
     sed -i 's/^ForceCommand.*/ForceCommand internal-sftp -R/' /etc/ssh/sshd_config
     echo "Port 2222" >> /etc/ssh/sshd_config
+    echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
+    echo "KbdInteractiveAuthentication no" >> /etc/ssh/sshd_config
 ---
 apiVersion: v1
 kind: Service
@@ -121,22 +112,6 @@ spec:
       protocol: TCP
       port: 2222
       targetPort: 2222
----
-apiVersion: sshpiper.com/v1beta1
-kind: Pipe
-metadata:
-  name: {{ $root.Release.Name }}
-  labels:
-    {{- include "caelus-sftp.labels" (dict "root" $root) | nindent 4 }}
-spec:
-  from:
-    - username: {{ $root.Release.Name | quote }}
-  to:
-    host: {{ $serviceName }}.{{ $root.Release.Namespace }}.svc:2222
-    username: {{ $internalUser | quote }}
-    # Released sshpiperd still requires this despite the upstream deprecation
-    # note; without it connections fail with "knownhosts: key is unknown".
-    ignore_hostkey: true
 {{- end -}}
 
 {{- /*
@@ -198,6 +173,11 @@ NEVER list a database PVC here.
     - name: sftp-users
       mountPath: /etc/sftp
       readOnly: true
+    # atmoz/sftp concatenates every file here into the user's authorized_keys
+    # at startup, with the ownership and mode sshd requires.
+    - name: sftp-platform-key
+      mountPath: /home/{{ $root.Release.Name }}/.ssh/keys
+      readOnly: true
     - name: sftp-scripts
       mountPath: /etc/sftp.d
       readOnly: true
@@ -222,6 +202,12 @@ already declared by the product; this adds only the SFTP-specific ones.
     items:
       - key: users.conf
         path: users.conf
+- name: sftp-platform-key
+  secret:
+    secretName: {{ $root.Release.Name }}-sftp-credentials
+    items:
+      - key: platform_key.pub
+        path: platform_key.pub
 - name: sftp-scripts
   configMap:
     name: {{ $root.Release.Name }}-sftp-scripts

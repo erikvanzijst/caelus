@@ -318,7 +318,12 @@ way D7 was proven for the `Pipe` path.
 4. **Terraform**: the upstream keypair, the resolver as a container in the edge's pod, the
    `grpc` argument, and the `pipes`/`secrets` cluster role rules dropped.
 5. **Chart**: drop the password, carry the platform public key, configure the sidecar for
-   keys only. Version bump, re-vendor, republish, repoint every product.
+   keys only. Version bump, re-vendor, republish, repoint every product — **and then move
+   every existing deployment onto the new template**. A product's `template_id` governs
+   new deployments only; `deployment.desired_template_id` pins a version and does not
+   follow it. Publishing and repointing therefore change nothing about a running
+   deployment, and a deployment left on the old chart has no platform key in its sidecar,
+   so the edge cannot log in to it after step 4.
 6. **API and UI**: password removed from the read model and the panel.
 
 **Steps 4, 5 and 6 do not have a safe interval between them, and the order within the
@@ -335,9 +340,9 @@ anyone who had not already saved theirs.
 
 7. Remove the `Pipe` CRD from `tf/deps/sshpiper`.
 
-**Rollback**: repoint every product to its previous chart version and restore the
-`kubernetes` plugin, which returns the tenant-rendered `Pipe` and its password on the next
-reconcile. A whole-fleet operation in a window, like the rollout. It depends on old chart
+**Rollback**: repoint every product to its previous chart version, move every deployment
+back onto it, and restore the `kubernetes` plugin, which returns the tenant-rendered
+`Pipe` and its password on the next reconcile. A whole-fleet operation in a window, like the rollout. It depends on old chart
 versions never having been overwritten, and on step 7 not having run yet.
 
 ## Open Questions

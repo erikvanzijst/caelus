@@ -75,6 +75,9 @@ class CaelusSettings(BaseSettings):
     sftp_host: str = "freepod.eu"
     sftp_port: int = 22
 
+    # The SSH edge's public key, which every sshd sidecar trusts.
+    sftp_platform_public_key: str = ""
+
     # ── Reconcile job lease ───────────────────────────────────────────────
     # How long a worker may hold a claimed reconcile job before another worker
     # is allowed to steal it. A worker that dies mid-reconcile (pod restart,

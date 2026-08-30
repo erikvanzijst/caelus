@@ -17,14 +17,6 @@ resource "kubernetes_secret" "server_key" {
   }
 }
 
-# Derived, never stored: the public half of the upstream key, which the
-# `caelus-sftp` chart carries so each sidecar trusts it. Exposed as an output so
-# the chart is filled from the same value the cluster runs on, rather than from
-# a copy someone kept.
-data "tls_public_key" "upstream" {
-  private_key_openssh = var.upstream_private_key
-}
-
 # The credential the edge presents to every SFTP sidecar in this environment.
 # It is mounted into the resolver alone -- sshpiperd never reads it, it is
 # handed the key inline on each connection -- and no tenant namespace holds it.
@@ -278,9 +270,4 @@ resource "kubernetes_service" "sshpiper" {
       target_port = 2222
     }
   }
-}
-
-output "upstream_public_key" {
-  description = "Public half of this environment's upstream key, for the caelus-sftp chart"
-  value       = trimspace(data.tls_public_key.upstream.public_key_openssh)
 }

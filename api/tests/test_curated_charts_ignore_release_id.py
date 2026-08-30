@@ -70,8 +70,16 @@ def _resolved_dependencies():
         assert result.returncode == 0, f"{chart}: {result.stderr}"
 
 
+# Charts with SFTP require the platform's public key, which the reconciler
+# injects per environment.
+PLATFORM_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIV5/SURDe/M7JtAheJuxURSGgpFB8Yfrd/LY6c9+DzR platform"
+
+
 def _render(chart: str, values: dict[str, str]) -> str:
-    args = ["helm", "template", "t", str(PRODUCTS / chart / "chart")]
+    args = [
+        "helm", "template", "t", str(PRODUCTS / chart / "chart"),
+        "--set-string", f"caelus.sftp.platformPublicKey={PLATFORM_KEY}",
+    ]
     for key, value in values.items():
         args += ["--set", f"{key}={value}"]
     result = subprocess.run(args, capture_output=True, text=True)

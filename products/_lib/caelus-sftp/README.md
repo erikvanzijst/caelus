@@ -1,18 +1,23 @@
 # caelus-sftp library chart
 
-Adds read-only SFTP access to a Caelus deployment's **data** PVCs, in the
-PikaPods style: the deployment gets an auto-generated username (= Helm release
-name) and password, shown in the Caelus UI. Users log in with any SFTP client
+Adds read-only SFTP access to a Caelus deployment's **data** PVCs: the
+deployment gets a username (= Helm release name), and the user authenticates
+with an SSH key registered on their account. Users log in with any SFTP client
 to the platform endpoint (`freepod.eu:22` / `dev.freepod.eu:23`) and browse or
-download their app's data. No shell, no writes.
+download their app's data. No shell, no writes, no password.
 
 It is a Helm **library chart** — it renders no resources on its own. A product
 wrapper chart depends on it and calls its named templates.
 
 ## Architecture in one line
 
-`client → sshpiper (routes by username) → this deployment's atmoz/sftp sidecar
-→ read-only mount of the data PVC(s)`.
+`client → sshpiper (asks the SSH auth resolver who this is and where it goes)
+→ this deployment's atmoz/sftp sidecar → read-only mount of the data PVC(s)`.
+
+The chart renders no routing object. The edge resolves the route and the
+user's key from the platform database on every connection (`ssh-auth/`), so
+everything this deployment contributes to SSH access is inside its Helm
+release and goes away with it.
 
 The sidecar rides **inside the app pod** because RWO PVCs can only be shared by
 containers in the same pod. sshpiper (platform-owned, one per environment)
@@ -21,14 +26,18 @@ NetworkPolicy admits.
 
 ## What it renders
 
-`caelus-sftp.resources` emits four objects, identical for every product:
+`caelus-sftp.resources` emits three objects, identical for every product:
 
-| Object | Purpose |
-|--------|---------|
-| Secret `<release>-sftp-credentials` | username + `lookup`-stable password + `users.conf` |
-| ConfigMap `<release>-sftp-scripts` | sshd init: force `internal-sftp -R`, move to port 2222 |
-| Service `<release>-sftp` | routes sshpiper → sidecar on 2222, publishing not-ready addresses |
-| Pipe `<release>` | sshpiper route: username → the Service |
+| Object                              | Purpose                                                             |
+|-------------------------------------|---------------------------------------------------------------------|
+| Secret `<release>-sftp-credentials` | username, `users.conf` (no password), and the platform's public key |
+| ConfigMap `<release>-sftp-scripts`  | sshd init: force `internal-sftp -R`, port 2222, no password auth    |
+| Service `<release>-sftp`            | routes sshpiper → sidecar on 2222, publishing not-ready addresses   |
+
+Nothing in the Secret is secret: a username, a uid/gid line, and a public key.
+
+**Required value.** `caelus.sftp.platformPublicKey` is the SSH edge's public
+key, the only key the sidecar trusts.
 
 `caelus-sftp.sidecar` and `caelus-sftp.volumes` emit the atmoz/sftp container
 and its supporting volumes, to splice into the app pod.
@@ -40,7 +49,7 @@ and its supporting volumes, to splice into the app pod.
 ```yaml
 dependencies:
   - name: caelus-sftp
-    version: "0.2.0"
+    version: "0.3.0"
     repository: "file://../../_lib/caelus-sftp"
 ```
 
@@ -93,7 +102,7 @@ is not offered for that product in v1 (document it and move on).
   dirs are off-limits — mounting a live DB data dir over SFTP is a corruption
   and data-exfiltration footgun. When in doubt, expose nothing.
 - **Zero-PVC products render nothing.** If a product has no user-visible data,
-  do not add the dependency or the templates. No sidecar, no Secret, no Pipe,
+  do not add the dependency or the templates. No sidecar, no Secret,
   no Service — and consequently the release name is not routable and the UI
   shows no SFTP panel. This is correct and expected.
 - **Multiple PVCs** become sibling subdirectories: pass several `mounts`

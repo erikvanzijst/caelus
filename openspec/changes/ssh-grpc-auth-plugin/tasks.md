@@ -127,18 +127,26 @@ The exception is 3.1's Secret, which nothing reads until 3.3 lands.
 
 ## 4. API and UI
 
-- [ ] 4.1 Remove the password from the SFTP credentials read model and the endpoint, along
+- [x] 4.1 Remove the password from the SFTP credentials read model and the endpoint, along
       with the namespace Secret read that served it. Verify no caller, administrator
       included, receives credential material, and that the endpoint reads no Secret.
-- [ ] 4.2 Convey in the response that authentication is by registered key, and make it
+      The username now comes from `deployment.name` — the Helm release name the chart
+      configures the sidecar with — so the only cluster question left is whether the
+      product exposes files at all, answered by the SFTP Service rather than the Secret.
+- [x] 4.2 Convey in the response that authentication is by registered key, and make it
       determinable whether the owning account has any key at all. Verify both an account
-      with keys and one without.
-- [ ] 4.3 Update the panel: no password field, a statement that access uses a registered SSH
+      with keys and one without. `auth_method: "publickey"` and `account_has_ssh_key`,
+      the latter reporting the *owner's* keys rather than the reader's — an administrator
+      is asking whether this deployment can be connected to.
+- [x] 4.3 Update the panel: no password field, a statement that access uses a registered SSH
       key, and a link to where keys are managed. Verify no masked-but-empty field remains
       and that nothing presents the absent password as a failure.
-- [ ] 4.4 When the owning account has no registered key, make that the panel's prominent
-      instruction. Verify against an account with none.
-- [ ] 4.5 Update `caelus` parity for the changed read model.
+- [x] 4.4 When the owning account has no registered key, make that the panel's prominent
+      instruction. Verify against an account with none. It sits above the details as a
+      warning; the details stay visible because they are correct, just unusable yet.
+- [x] 4.5 Update `caelus` parity for the changed read model. It echoes the same model, so
+      parity is structural; the command gained the docstring that says why there is no
+      credential to report.
 
 ## 5. Before the window
 

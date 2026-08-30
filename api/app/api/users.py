@@ -352,8 +352,8 @@ def get_deployment(
 @router.get(
     "/{user_id}/deployments/{deployment_id}/sftp",
     response_model=SftpCredentialsRead,
-    summary="Get a deployment's SFTP credentials",
-    response_description="SFTP host, port, username and password for file access.",
+    summary="Get a deployment's SFTP connection details",
+    response_description="SFTP host, port and username, and how to authenticate. No credential.",
     responses={
         403: {"description": "Caller may only access their own deployments."},
         404: {"description": "No such deployment exists for this user, or the deployment provides no SFTP file access."},
@@ -378,10 +378,11 @@ def get_deployment_sftp(
     - **deployment_id** — UUID of the deployment.
 
     ## Behavior
-    The response provides the `host`, `port`, `username`, and `password` for
-    connecting to the deployment's file storage over SFTP. A `404` is returned
-    when no such deployment exists for this user, or when the deployment's
-    product does not offer SFTP file access.
+    The response provides the `host`, `port` and `username` for connecting to
+    the deployment's file storage over SFTP. There is no password: access is
+    authenticated by a public key registered on the owning account, which
+    `auth_method` states. A `404` is returned when no such deployment exists for
+    this user, or when the deployment's product does not offer SFTP file access.
 
     ## Errors
     - **403 Forbidden** — accessing another account's deployment without

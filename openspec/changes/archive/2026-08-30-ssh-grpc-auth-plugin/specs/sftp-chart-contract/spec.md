@@ -1,14 +1,4 @@
-## RENAMED Requirements
-
-### Requirement: Per-deployment credentials Secret with stable password
-- **FROM:** Per-deployment credentials Secret with stable password
-- **TO:** Per-deployment credentials Secret carries no password
-
-### Requirement: Per-deployment Service and Pipe route the username to the sidecar
-- **FROM:** Per-deployment Service and Pipe route the username to the sidecar
-- **TO:** Per-deployment Service targets the sidecar
-
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Per-deployment Service targets the sidecar
 The chart MUST render a ClusterIP Service targeting the sidecar's SSH port (2222), as part of the Helm release so it is created, upgraded, and deleted with the deployment. It MUST NOT render any routing object: the edge resolves where a username goes at connection time, so nothing in the release describes the route.
@@ -61,3 +51,36 @@ Everything in the Secret is therefore either the release's own name or a public 
 #### Scenario: The sidecar's user is the release name
 - **WHEN** any product's chart is rendered
 - **THEN** the sidecar's configured user is the Helm release name, and no product overrides it
+
+## MODIFIED Requirements
+
+### Requirement: File access survives an unhealthy application container
+SFTP reachability MUST NOT depend on the health of the application container sharing the pod. While the application container is failing, restarting, or crash-looping, a user who could previously reach the deployment's files over SFTP MUST still be able to reach them, provided the pod exists and the sidecar is running.
+
+This is the case in which file access matters most: a tenant whose application is broken needs to retrieve or inspect their data. Withdrawing access at that moment is a defect, not a safety property. It MUST hold at every layer that could withdraw it, including whatever decides that a deployment is reachable at all.
+
+#### Scenario: Application container is crash-looping
+- **WHEN** a deployment's application container is in a crash-restart loop and its SFTP sidecar is running
+- **THEN** an SFTP client connecting to the platform endpoint with a key registered on the owning account completes a session and can list and download the exposed PVC contents
+
+#### Scenario: Application container fails to pull its image
+- **WHEN** a deployment's application container cannot start because its image cannot be pulled, and its SFTP sidecar is running
+- **THEN** SFTP access to the deployment's files is unaffected
+
+#### Scenario: No pod exists
+- **WHEN** a deployment has no pod at all, because it was never scheduled or the release was removed
+- **THEN** SFTP access is unavailable, and this requirement imposes no obligation
+
+## REMOVED Requirements
+
+### Requirement: Per-deployment Service and Pipe route the username to the sidecar
+
+**Reason**: The chart no longer renders a routing object. The edge resolves where a username goes at connection time, so nothing in the release describes the route. The requirement is replaced rather than amended because its scenarios asserted a `Pipe`'s existence and its removal on uninstall, and the `Pipe` is gone.
+
+**Migration**: None for a deployment. The Service is unchanged, including `publishNotReadyAddresses`; only the `Pipe` disappears, and it disappears with the Helm upgrade that removes it from the manifest.
+
+### Requirement: Per-deployment credentials Secret with stable password
+
+**Reason**: No password is generated at all, so there is nothing for the `lookup` pattern to keep stable across upgrades. Both scenarios asserted the password's stability and that it authenticates, and neither has a successor.
+
+**Migration**: Nothing reads the password. Deployments upgraded from a chart that generated one retain a stale `password` key in their Secret, because Helm's three-way merge cannot remove a key the API server folded from `stringData` into `data`; it is inert and left in place deliberately. New deployments never carry one.

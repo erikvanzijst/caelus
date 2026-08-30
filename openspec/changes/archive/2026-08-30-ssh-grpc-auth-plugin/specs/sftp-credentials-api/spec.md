@@ -1,10 +1,4 @@
-## RENAMED Requirements
-
-### Requirement: Deployment-scoped endpoint returns SFTP connection details
-- **FROM:** Deployment-scoped endpoint returns SFTP connection details
-- **TO:** Deployment-scoped endpoint returns SFTP connection details without a password
-
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Deployment-scoped endpoint returns SFTP connection details without a password
 The API MUST provide a read endpoint under the deployment resource (`GET /users/{user_id}/deployments/{deployment_id}/sftp`) returning the SFTP host and port for the environment (`freepod.eu:22` in prod, `dev.freepod.eu:23` in dev), plus the username for that deployment. Host and port MUST come from per-environment configuration (pydantic-settings) and MUST be the user-facing router values, not the internal HAProxy/cluster ports (2222/2223).
@@ -28,3 +22,11 @@ The response MUST make clear how the caller authenticates, so that a client or a
 #### Scenario: No credential is disclosed to anyone
 - **WHEN** any caller, including an administrator, reads the response
 - **THEN** it contains no credential material
+
+## REMOVED Requirements
+
+### Requirement: Deployment-scoped endpoint returns SFTP connection details
+
+**Reason**: The endpoint returned a password read from the deployment's credentials Secret. No such password exists: access is authenticated by a public key registered on the owning account. The requirement is replaced rather than amended because both of its scenarios asserted the password's presence and its correspondence to the Secret, and neither has a successor.
+
+**Migration**: Clients drop the `password` field. The replacement requirement above returns the same host, port and username, plus how to authenticate and whether the owning account holds any key. No caller receives credential material, administrators included.

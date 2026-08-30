@@ -1,6 +1,6 @@
 ## Purpose
 
-Product wrapper charts must offer read-only file access to a deployment's user-visible data without exposing internal state or granting shell access. This capability defines the contract every product chart follows: it renders an `atmoz/sftp` sidecar that read-only-mounts exposable PVCs, provisions per-deployment credentials with a stable password, and wires a Service and `Pipe` so the SFTP edge can route the deployment's username to its sidecar. Products that expose no user-visible PVCs render no SFTP resources at all, keeping the surface minimal and the routing table free of dead entries.
+Product wrapper charts must offer read-only file access to a deployment's user-visible data without exposing internal state or granting shell access. This capability defines the contract every product chart follows: it renders an `atmoz/sftp` sidecar that read-only-mounts exposable PVCs, provisions a credentials Secret carrying no password, and wires a Service the SFTP edge can reach. No routing object is rendered: the edge resolves where a username goes at connection time, so everything a deployment contributes to SSH access lives inside its Helm release. Products that expose no user-visible PVCs render no SFTP resources at all, keeping the surface minimal.
 
 ## Requirements
 
@@ -30,43 +30,14 @@ The sidecar MUST force the SFTP subsystem for all sessions (`ForceCommand intern
 - **WHEN** an SFTP session attempts to upload, delete, rename, or chmod any path
 - **THEN** the operation fails with a permission error
 
-### Requirement: Per-deployment credentials Secret with stable password
-The chart MUST render a credentials Secret in the deployment's namespace containing the SFTP username and password. The username MUST equal the Helm release name. The password MUST be generated randomly on first install and MUST remain unchanged across subsequent Helm upgrades (Helm `lookup` pattern: reuse the existing Secret's value when present). The sidecar's user configuration MUST be derived from the same value so the Secret and the SSH daemon cannot diverge.
-
-#### Scenario: Password is stable across upgrades
-- **WHEN** a deployment is upgraded via the reconciler after initial install
-- **THEN** the credentials Secret's password is unchanged
-- **AND** existing credentials continue to authenticate
-
-#### Scenario: Credentials work immediately after install
-- **WHEN** a deployment reaches ready state for the first time
-- **THEN** the username and password from its credentials Secret authenticate successfully over SFTP
-
-### Requirement: Per-deployment Service and Pipe route the username to the sidecar
-The chart MUST render a ClusterIP Service targeting the sidecar's SSH port (2222) and a `Pipe` custom resource mapping `from.username` (the release name) to that Service. Both MUST be part of the Helm release so they are created, upgraded, and deleted with the deployment.
-
-The Service MUST publish not-ready addresses, so its endpoints include the deployment's pod whenever that pod exists, irrespective of the pod's readiness. This Service does not front the application: it fronts an administrative sidecar whose availability is deliberately independent of the application's, so application readiness MUST NOT gate routing to it.
-
-#### Scenario: Pipe routes to the deployment's Service
-- **WHEN** the Helm release is installed
-- **THEN** a Pipe exists in the deployment's namespace whose `from.username` is the release name and whose `to.host` references the deployment's SFTP Service on port 2222
-
-#### Scenario: Uninstall removes routing
-- **WHEN** the Helm release is uninstalled
-- **THEN** the Pipe, Service, and sidecar are removed with it
-
-#### Scenario: Service endpoints include a not-ready pod
-- **WHEN** the deployment's pod exists but is not ready
-- **THEN** the SFTP Service's endpoints still include that pod's address, and traffic to the Service reaches the sidecar
-
 ### Requirement: File access survives an unhealthy application container
 SFTP reachability MUST NOT depend on the health of the application container sharing the pod. While the application container is failing, restarting, or crash-looping, a user who could previously reach the deployment's files over SFTP MUST still be able to reach them, provided the pod exists and the sidecar is running.
 
-This is the case in which file access matters most: a tenant whose application is broken needs to retrieve or inspect their data. Withdrawing access at that moment is a defect, not a safety property.
+This is the case in which file access matters most: a tenant whose application is broken needs to retrieve or inspect their data. Withdrawing access at that moment is a defect, not a safety property. It MUST hold at every layer that could withdraw it, including whatever decides that a deployment is reachable at all.
 
 #### Scenario: Application container is crash-looping
 - **WHEN** a deployment's application container is in a crash-restart loop and its SFTP sidecar is running
-- **THEN** an SFTP client connecting to the platform endpoint with the deployment's credentials completes a session and can list and download the exposed PVC contents
+- **THEN** an SFTP client connecting to the platform endpoint with a key registered on the owning account completes a session and can list and download the exposed PVC contents
 
 #### Scenario: Application container fails to pull its image
 - **WHEN** a deployment's application container cannot start because its image cannot be pulled, and its SFTP sidecar is running
@@ -94,9 +65,61 @@ The probe MUST test the SSH port's acceptance of connections and MUST NOT depend
 - **THEN** it establishes no SFTP session and uses no deployment credentials
 
 ### Requirement: Products without exposable PVCs render no SFTP resources
-A chart with no user-visible PVCs MUST render no sidecar, no credentials Secret, no Service, and no Pipe.
+A chart with no user-visible PVCs MUST render no sidecar, no credentials Secret, and no Service.
 
 #### Scenario: Zero-PVC product
 - **WHEN** a product without exposable PVCs is deployed
 - **THEN** its namespace contains no SFTP-related resources
 - **AND** its release name is not routable at the SSH entry point
+
+### Requirement: Per-deployment Service targets the sidecar
+The chart MUST render a ClusterIP Service targeting the sidecar's SSH port (2222), as part of the Helm release so it is created, upgraded, and deleted with the deployment. It MUST NOT render any routing object: the edge resolves where a username goes at connection time, so nothing in the release describes the route.
+
+The whole of what a deployment contributes to SSH access is therefore inside its Helm release, and uninstalling the release removes all of it. No object survives the deployment, so nothing has to be swept for objects that do.
+
+The Service MUST publish not-ready addresses, so its endpoints include the deployment's pod whenever that pod exists, irrespective of the pod's readiness. This Service does not front the application: it fronts an administrative sidecar whose availability is deliberately independent of the application's, so application readiness MUST NOT gate routing to it.
+
+#### Scenario: Service is rendered by the chart
+- **WHEN** the Helm release is installed
+- **THEN** a ClusterIP Service targeting the sidecar on port 2222 exists in the deployment's namespace
+
+#### Scenario: Chart renders no routing object
+- **WHEN** the chart's output is rendered
+- **THEN** it contains no `Pipe` and no other object describing an SSH route
+
+#### Scenario: Uninstall removes everything the deployment contributed
+- **WHEN** the Helm release is uninstalled
+- **THEN** the Service and sidecar are removed with it, the username stops being routable, and no object remains for the platform to clean up
+
+#### Scenario: Service endpoints include a not-ready pod
+- **WHEN** the deployment's pod exists but is not ready
+- **THEN** the SFTP Service's endpoints still include that pod's address, and traffic to the Service reaches the sidecar
+
+### Requirement: Per-deployment credentials Secret carries no password
+The chart MUST render a credentials Secret in the deployment's namespace containing the SFTP username, which MUST equal the Helm release name, and the sidecar's user configuration. It MUST NOT generate or store a password, and the sidecar's user MUST be configured for key authentication only.
+
+The Secret MUST carry the platform's public key as the sole key the sidecar trusts. It MUST NOT carry any private key, and MUST NOT carry any user's public key: the keys that authenticate a person are resolved at the edge, and never reach the tenant.
+
+The sidecar's user MUST be the Helm release name, and the chart MUST NOT offer products a way to choose a different one. The edge derives the upstream username from the deployment's own record and reads no cluster object to learn it, so a chart free to name that user something else would produce a deployment the edge cannot log in to — a failure visible only on a live connection, and only to the affected product.
+
+Everything in the Secret is therefore either the release's own name or a public key, so the tenant's pod holds no secret material for this feature at all — that and the sidecar's own generated host key.
+
+#### Scenario: No password is generated
+- **WHEN** the chart is rendered or installed
+- **THEN** no password is generated, stored in the Secret, or written into the sidecar's user configuration
+
+#### Scenario: Sidecar trusts the platform's public key
+- **WHEN** the credentials Secret is inspected
+- **THEN** it contains the platform's public key and no private key
+
+#### Scenario: No user keys reach the tenant namespace
+- **WHEN** a deployment's namespace is inspected
+- **THEN** it contains no registered user's public key
+
+#### Scenario: Password authentication is unavailable at the sidecar
+- **WHEN** a connection to the sidecar attempts password authentication
+- **THEN** it is refused
+
+#### Scenario: The sidecar's user is the release name
+- **WHEN** any product's chart is rendered
+- **THEN** the sidecar's configured user is the Helm release name, and no product overrides it

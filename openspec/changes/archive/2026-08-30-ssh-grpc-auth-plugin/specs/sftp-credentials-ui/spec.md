@@ -6,7 +6,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: Deployment view shows SFTP access details and how to authenticate
+### Requirement: Deployment view shows SFTP access details
 The deployment detail view MUST display an SFTP/file-access panel for deployments that have SFTP access, showing host, port and username, with copy-to-clipboard affordances. The panel MUST be implemented as its own component under `ui/src/components/` (not inlined into page-level components).
 
 The panel MUST NOT display a password field, masked or otherwise, and MUST NOT present the absence of one as missing information. It MUST state that access is authenticated by an SSH key registered on the account, and MUST link to where those keys are managed.

@@ -20,6 +20,19 @@ module "sshpiper" {
   namespace = kubernetes_namespace.sshpiper.metadata[0].name
   ssh_port  = local.sshpiper_port
   rbac_name = "sshpiper-${local.ns_sshpiper}"
+
+  # This environment's upstream credential.
+  upstream_private_key = var.sshpiper_upstream_private_keys[terraform.workspace]
+
+  resolver_image = var.ssh_resolver_image
+
+  resolver_database_url = format(
+    "postgresql://%s:%s@%s:5432/%s",
+    module.caelus.ssh_resolver_db_role,
+    module.caelus.ssh_resolver_db_password,
+    module.caelus.database_host,
+    module.caelus.database_name,
+  )
 }
 
 module "caelus" {

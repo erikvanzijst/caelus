@@ -84,23 +84,40 @@ discarded; the reasoning is recorded in that section rather than lost.
 
 ## 3. Platform infrastructure
 
-- [ ] 3.1 Provision one SSH keypair per environment in `tf/app`, beside the edge's existing
+**Written now, applied in the window, and after section 6.** Applying this is the moment
+the edge starts authenticating upstream with the platform's key, which a sidecar that has
+not yet been given that key refuses — so every SFTP connection in the environment fails
+until the chart catches up (design.md § Migration Plan). Nothing here is safe to apply on
+its own.
+
+The exception is 3.1's Secret, which nothing reads until 3.3 lands.
+
+- [x] 3.1 Provision one SSH keypair per environment in `tf/app`, beside the edge's existing
       host key. Verify both environments have distinct keys and that neither private half
       appears in any tenant namespace. The keypair must be in `secrets.auto.tfvars`.
-- [ ] 3.2 Run the resolver as a native sidecar (an init container with
-      `restartPolicy: Always`) in the sshpiperd pod and point sshpiperd at it over
+      Operator-supplied rather than Terraform-generated, because the chart carries the
+      public half and Terraform does not own the chart; `terraform output -raw
+      sshpiper_upstream_public_key` derives it so the two cannot drift. A variable
+      validation rejects one key used for both environments.
+- [x] 3.2 Run the resolver as a sidecar in the sshpiperd pod and point sshpiperd at it over
       loopback (design.md § *The resolver runs as a sidecar*). Ordering is not optional:
       sshpiperd calls `ListCallbacks` at startup and exits fatally if the resolver is not
-      yet listening. Verify the pod starts cleanly from cold and that the gRPC endpoint is
-      not reachable from outside the pod.
-- [ ] 3.2a Give the resolver container a `grpc` readiness probe against
+      yet listening. A native sidecar (an init container with `restartPolicy: Always`)
+      would express that best, but the pinned Kubernetes provider has no `restart_policy`
+      on `init_container` and moving to 3.x for it is not this change's business — so the
+      edge waits on the loopback port before exec'ing the daemon. Verify the pod starts
+      cleanly from cold and that the gRPC endpoint is not reachable from outside the pod.
+- [x] 3.2a Give the resolver container a `grpc` readiness probe against
       `grpc.health.v1`, which it answers from a real database query. This is what the
       `SshResolverNotReady` alert added in 2.10 keys on, so without the probe the alert
-      can never fire.
-- [ ] 3.3 Switch each environment to the gRPC plugin — container args `["grpc"]`, the
+      can never fire. Deliberately no liveness probe: restarting fixes no database
+      outage, and would take sshpiperd down with the pod.
+- [x] 3.3 Switch each environment to the gRPC plugin — container args `["grpc"]`, the
       `PLUGIN` entry removed from the ConfigMap — and drop the `pipes` and `secrets` rules
-      from the proxy's ClusterRole. Verify the proxy can no longer read Secrets or Pipes
-      and that SSH still works end to end.
+      from the proxy's ClusterRole. The ClusterRole and its binding are gone entirely, and
+      the service account token is no longer mounted: the daemon needs nothing from the
+      Kubernetes API now. Verify the proxy can no longer read Secrets or Pipes and that SSH
+      still works end to end — **the end-to-end half is section 7, in the window.**
 
 ## 4. API and UI
 

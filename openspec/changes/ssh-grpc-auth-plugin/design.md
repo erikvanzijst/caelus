@@ -301,22 +301,42 @@ is torn down in a later, separate step once the new path has settled.
 The spike gates everything. Nothing else starts until the round trip is proven on dev, the
 way D7 was proven for the `Pipe` path.
 
+**Ahead of the window**, in any order, each safe on its own:
+
 1. **Spike** a minimal resolver against sshpiperd v1.5.4 and a real deployment's sidecar,
    with one hard-coded account. Confirm `PublicKeyAuth` receives the username and key,
    that `Upstream` routes and authenticates, and that `ListCallbacks` suppresses password
    authentication. **Done** — `var/ssh_access.md` § gRPC plugin spike results; four
    findings are folded into the decisions above, and `ssh-pipe-key-auth` is deleted.
-2. **Resolver**, complete and tested, deployed alongside the edge but not yet selected.
-3. **Terraform**: upstream keypair, resolver sidecar, the `grpc` argument. Drop the `pipes` and
-   `secrets` cluster role rules.
-4. **API and UI**: password removed from the read model and the panel.
-5. **Before the window**: run the query for accounts that will lose access, give notice.
-6. **In the window**: chart drops the password, carries the platform public key, key-only
-   sidecar. Version bump, re-vendor, republish, repoint every product.
-7. **After it settles**: remove the `Pipe` CRD from `tf/deps/sshpiper`.
+2. **Resolver**, complete and tested, and its read-only database role, which is additive
+   and reaches nothing until something connects as it.
+3. **Publish the resolver image**, and run the query for accounts that will lose access.
+   Give those users notice.
 
-**Rollback**: repoint every product to its previous chart version and restore
-`PLUGIN=kubernetes`, which returns the tenant-rendered `Pipe` and its password on the next
+**In the window**, and this is one switchover rather than three:
+
+4. **Terraform**: the upstream keypair, the resolver as a container in the edge's pod, the
+   `grpc` argument, and the `pipes`/`secrets` cluster role rules dropped.
+5. **Chart**: drop the password, carry the platform public key, configure the sidecar for
+   keys only. Version bump, re-vendor, republish, repoint every product.
+6. **API and UI**: password removed from the read model and the panel.
+
+**Steps 4, 5 and 6 do not have a safe interval between them, and the order within the
+window is 5 then 4 then 6.** An earlier draft of this plan had the Terraform ahead of the
+window, which is wrong: the moment the edge switches to the resolver it authenticates
+upstream with the platform's key, and a sidecar that has not yet been given that key
+refuses it — every SFTP connection in the environment fails until the chart catches up.
+Taking the chart first inverts that, because a sidecar trusting the platform key while it
+still accepts its own password is a coherent state that breaks nothing. Removing the
+password from the API before the edge stops accepting passwords would likewise strand
+anyone who had not already saved theirs.
+
+**After it settles**
+
+7. Remove the `Pipe` CRD from `tf/deps/sshpiper`.
+
+**Rollback**: repoint every product to its previous chart version and restore the
+`kubernetes` plugin, which returns the tenant-rendered `Pipe` and its password on the next
 reconcile. A whole-fleet operation in a window, like the rollout. It depends on old chart
 versions never having been overwritten, and on step 7 not having run yet.
 

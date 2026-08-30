@@ -37,3 +37,13 @@ output "ssh_resolver_db_role" {
   description = "Role name the SSH auth resolver connects as"
   value       = "caelus_ssh_resolver"
 }
+
+output "database_host" {
+  description = "In-cluster hostname of the platform database"
+  value       = "caelus-postgres.${var.namespace}.svc.cluster.local"
+}
+
+output "database_name" {
+  description = "Platform database name"
+  value       = var.db_name
+}

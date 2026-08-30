@@ -37,9 +37,10 @@ the register it finds. This change retires that counter-example.
   paragraph that exists only in a README is not duplication, and deleting it
   loses information. It moves into the spec (if normative) or is left in place
   with a note (if operational).
-- **Add a markdown link check** to CI over the repo's `*.md`, so a spec
-  directory renamed during a future `openspec archive`/`sync` breaks the build
-  instead of silently rotting every link this change introduces.
+- **Guard link rot by process, not tooling:** `AGENTS.md` § Documentation
+  Layering gains the rule that renaming or merging a capability directory
+  updates the prose links pointing at it in the same change. A CI link checker
+  was weighed and dropped — design.md § D5 carries the evidence.
 - Done per-document, in the task order below, so each step is reviewable on its
   own and the change can stop after any of them.
 
@@ -49,7 +50,7 @@ the register it finds. This change retires that counter-example.
 
 <!-- None. This change alters no system behavior: no endpoint, schema,
      reconciler path, CLI command or UI surface changes. It rewrites prose
-     documentation and adds a CI link check. Per the proposal instruction,
+     documentation. Per the proposal instruction,
      a docs-and-tooling change declares `skip_specs: true` rather than
      inventing a requirement to satisfy validation. -->
 
@@ -70,8 +71,7 @@ the register it finds. This change retires that counter-example.
   the rule, not the goal.
 - **Specs:** possible errata edits to `openspec/specs/**` where the audit finds
   rationale that a README held and a spec should have.
-- **CI:** one new workflow step (markdown link check). No test, build or
-  deployment path changes.
+- **CI:** none. No test, build or deployment path changes.
 - **No code, schema, API, chart or Terraform change.** Nothing ships to users;
   `cli/README.md` (the PyPI landing page) is explicitly out of scope, as it is
   written for end users and carries no platform internals.

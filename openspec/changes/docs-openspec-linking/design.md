@@ -16,13 +16,12 @@ approach:
   directory. Capability directories under `openspec/specs/` are *not* stable —
   `openspec archive`/`sync` can rename or merge them.
 - **`AGENTS.md` § Documentation Layering already landed on this branch.** The
-  rule exists; this change makes the tree match it.
+  rule exists; this change makes the tree match it and adds the
+  capability-rename rule to it (D5).
 - **The docs in scope are uncontested.** Neither in-flight branch
   (`erik/cli-rust`, `erik/sftp-reachability`) touches `AGENTS.md`,
   `api/README.md`, `ui/README.md`, `cli/DEVELOPMENT.md` or `tf/README.md`
   against its merge base, so this rewrite races nothing.
-- **CI has no markdown job today.** `.github/workflows/ci.yml` runs UI tests,
-  catalog lint, the CLI gate, the ssh-sidecar harness and API tests.
 
 ## Goals / Non-Goals
 
@@ -32,8 +31,10 @@ approach:
   entry plus links, per `AGENTS.md` § Documentation Layering.
 - No information is lost: content that exists only in a README is relocated,
   not deleted.
-- Links are mechanically verified, so this does not trade a staleness problem
-  for a rot problem.
+- Link rot — the one failure the rewrite introduces — is guarded by the
+  Documentation Layering rule that a capability rename updates the prose links
+  pointing at it, so this does not trade a staleness problem for a rot
+  problem.
 - Each document lands as its own reviewable step.
 
 **Non-Goals:**
@@ -90,19 +91,30 @@ requirement is reworded, which happens on every delta sync; a file-level link
 plus a named requirement degrades to "right file, find the heading" instead of
 "page jumps to the top and the reader does not notice".
 
-### D5: A repo-local link checker, not a third-party action
+### D5: Link rot is guarded by a process rule, not a checker
 
-Add `scripts/check-doc-links.py` — resolve every relative markdown link in the
-repo's tracked `*.md`, fail on a target that does not exist — and call it from
-a new `docs-links` job in `.github/workflows/ci.yml`. It needs no network and
-no dependency beyond the Python already installed for `catalog-lint`.
+No link-checking script or CI job lands. `AGENTS.md` § Documentation Layering
+gains one rule instead: renaming or merging a capability directory updates the
+prose links pointing at it in the same change. The exposure this change
+introduces — roughly a hundred new links into `openspec/` — is real but small
+on the evidence: the repo's 555 tracked markdown files carry 27 relative links
+today, the current tree does not pass a whole-tree check (one genuinely broken
+link in an out-of-scope file, the rest prose examples and regex-shaped false
+positives), and no capability directory has ever been renamed in this repo's
+589-commit history. Rot is a rare, bounded failure, detectable on follow; the
+staleness it replaces was ambient and silent.
 
-*Alternative considered:* `lycheeverse/lychee-action`. More capable — it also
-validates external URLs — but that capability is what makes it flaky (rate
-limits, transient 5xx on unrelated third-party sites) and it would gate merges
-on the uptime of sites this repo does not own. The risk this change actually
-introduces is *internal* link rot from a renamed capability directory, which
-the local script catches exactly.
+*Alternative considered:* `scripts/check-doc-links.py` over every tracked
+`*.md`, called from a new `docs-links` CI job. Rejected on the evidence above:
+its "must pass on the current tree" gate fails before the change starts, and
+making it pass means fixing unrelated files or teaching the parser to skip
+fenced code, inline code and regex-shaped prose. A version scoped to the five
+in-scope documents, or to links targeting `openspec/` only, passes today — but
+it maintains a script and a CI job to police a failure this repo has never
+seen, where the process rule directs the same behavior at less cost. A
+third-party action (`lycheeverse/lychee-action`) was also weighed: validating
+external URLs is what makes it flaky (rate limits, transient 5xx on sites this
+repo does not own), and it would gate merges on third-party uptime.
 
 ### D6: Orphan rationale is relocated before its README section is cut
 
@@ -133,9 +145,10 @@ contradict each other.
 
 ## Risks / Trade-offs
 
-- **Link rot from a renamed capability directory** → D5's CI job. This is the
-  single largest new failure mode and the reason the checker is in scope rather
-  than deferred.
+- **Link rot from a renamed capability directory** → D5's process rule: the
+  rename updates the prose links in the same change. Unobserved in this repo's
+  history (zero renames under `openspec/specs/` in 589 commits); accepted as
+  process-guarded rather than tool-enforced.
 - **Over-deletion loses information** → D6's three-bucket audit, per-section
   review, one document per commit. `git log -p` retains anything cut in error.
 - **An extra hop for the reader.** Someone who wants the endpoint table now
@@ -156,10 +169,9 @@ contradict each other.
 ## Migration Plan
 
 Documentation only; nothing deploys and there is no runtime rollback concern.
-One commit per document, in D7's order, each self-contained. `scripts/
-check-doc-links.py` and its CI job land in the first commit so every subsequent
-commit is verified as it arrives. Reverting any single commit restores that
-document's prose from history without affecting the others.
+One commit per document, in D7's order, each self-contained. Reverting any
+single commit restores that document's prose from history without affecting the
+others.
 
 ## Open Questions
 
@@ -167,3 +179,10 @@ document's prose from history without affecting the others.
   mostly VM and cluster operations — bucket 2) need any entry at all. Both look
   out of scope on inspection; confirm during the audit. Neither answer changes
   the approach or the task breakdown.
+
+  **Resolved (task 6.1):** both are out of scope; no entry added. The root
+  `README.md` is pure orientation (repo layout, devcontainer, deployment, the
+  `k8s/` pointer) — every line is bucket 2 and it already links the sub-READMEs.
+  `k8s/README.md` is VM management, cluster access, backups, and a Helm
+  onboarding walkthrough (a Nextcloud example with a sample schema); it is
+  operational and restates no capability, so it stays as-is.

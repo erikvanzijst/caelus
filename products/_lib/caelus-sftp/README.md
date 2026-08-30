@@ -9,15 +9,17 @@ download their app's data. No shell, no writes, no password.
 It is a Helm **library chart** — it renders no resources on its own. A product
 wrapper chart depends on it and calls its named templates.
 
+Spec: [sftp-chart-contract](../../../openspec/specs/sftp-chart-contract/spec.md),
+[sftp-edge-routing](../../../openspec/specs/sftp-edge-routing/spec.md) ·
+Rationale: [ssh-grpc-auth-plugin](../../../openspec/changes/ssh-grpc-auth-plugin/design.md)
+
 ## Architecture in one line
 
 `client → sshpiper (asks the SSH auth resolver who this is and where it goes)
 → this deployment's atmoz/sftp sidecar → read-only mount of the data PVC(s)`.
 
-The chart renders no routing object. The edge resolves the route and the
-user's key from the platform database on every connection (`ssh-auth/`), so
-everything this deployment contributes to SSH access is inside its Helm
-release and goes away with it.
+The chart renders no routing object: the edge resolves the route and the user's
+key from the platform database on every connection (`ssh-auth/`).
 
 The sidecar rides **inside the app pod** because RWO PVCs can only be shared by
 containers in the same pod. sshpiper (platform-owned, one per environment)

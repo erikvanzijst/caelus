@@ -317,19 +317,27 @@ plugin, which is the only reason 7.7 and section 8 remain open.
 
 ## 9. Documentation
 
-- [ ] 9.1 Update `AGENTS.md`: SSH authentication and routing are resolved per connection by
-      the resolver from the platform database; no routing objects exist; SSH access is
-      authenticated by account keys; the reconciler owns nothing for this feature. Add
-      `caelus ssh-resolver` to the CLI-parity exception list beside the workers — it is a
-      process, not a request, and has no REST equivalent by design.
-- [ ] 9.2 Update the `sftp-edge-routing` main spec's `## Purpose`, which still describes
+Follows `AGENTS.md` § Documentation Layering: terse orientation plus links, no
+restating what a spec or design document already carries.
+
+- [x] 9.1 Update `AGENTS.md`: link to the appropriate openspec files regarding
+      authentication, routing, account keys. The account-keys bullet no longer says
+      nothing consumes them; a new bullet covers per-connection resolution.
+- [x] 9.2 Update the `sftp-edge-routing` main spec's `## Purpose`, which still describes
       `Pipe` custom resources and password relay — a delta cannot change it.
-- [ ] 9.3 Update `products/_lib/caelus-sftp/README.md`: no `Pipe`, no password, the platform
+      The requirements below it still describe `Pipe`s, correctly: the deltas replace them
+      on archive, and only `## Purpose` is unreachable by one.
+- [x] 9.3 Update `products/_lib/caelus-sftp/README.md`: no `Pipe`, no password, the platform
       public key's role, and that the release now contains everything the deployment
       contributes to SSH access.
-- [ ] 9.4 Update `tf/app/README.md` with the resolver, the upstream keypair, and the
-      `grpc`-argument wiring (and why it is not `PLUGIN`); note the removed CRD in
-      `tf/deps/`.
-- [ ] 9.5 Update `api/README.md` and `ui/README.md` for the changed read model and panel.
-- [ ] 9.6 Document the resolver in its own README: the proto pin and regeneration step, the
+- [x] 9.4 Update `tf/app/README.md` with openspec links for the resolver, the upstream keypair, and the
+      `grpc`-argument wiring.
+- [x] 9.5 Update `api/README.md` and `ui/README.md` for the changed read model and panel.
+      `api/README.md` documents no SFTP endpoint of its own, so the account-keys section
+      was the only thing to correct. `ui/README.md` gained a file-access panel section and
+      the three SFTP components in its map, which it had never listed.
+- [x] 9.6 Document the resolver in its own README: the proto pin and regeneration step, the
       fail-closed posture, the database role, and how to rotate the upstream keypair.
+      Rewritten: the first draft argued the design — why the join is outer, why `error` is
+      reachable, why loopback — which is design.md's job. It now orients and links, and
+      keeps the operational half (configuration, the role, rotation, codegen, releasing).

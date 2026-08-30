@@ -305,9 +305,21 @@ Builds also need two node-level settings that Terraform does not manage — see
 ## SFTP entry point (sshpiper)
 
 Each workspace deploys an sshpiperd instance (`sshpiper` module) that
-terminates all tenant SFTP traffic for its environment and routes by SSH
-username via `Pipe` CRs (CRD installed by `tf/deps/sshpiper`). klipper
-ServiceLB binds the cluster-side port directly on the node.
+terminates all tenant SFTP traffic for its environment. It runs the gRPC
+plugin — selected by the `grpc` argument, not by `PLUGIN` — against the SSH
+auth resolver in the same pod, which answers both the route and the
+authentication decision per connection. klipper ServiceLB binds the
+cluster-side port directly on the node.
+
+The module also holds this environment's upstream keypair, the credential the
+edge presents to every tenant sidecar. Set it per workspace in
+`secrets.auto.tfvars` as `sshpiper_upstream_private_keys`; the public half is
+derived at the root and reaches charts through the reconciler. Read it back
+with `terraform output -raw sshpiper_upstream_public_key`.
+
+Spec: [sftp-edge-routing](../../openspec/specs/sftp-edge-routing/spec.md) ·
+Rationale: [ssh-grpc-auth-plugin](../../openspec/changes/ssh-grpc-auth-plugin/design.md),
+[ssh-auth/README.md](../../ssh-auth/README.md)
 
 Port chain (all internal hops avoid 22 — the hosts' own sshd lives there):
 

@@ -43,6 +43,9 @@ npm run build
 - `src/components/SshKeysPanel.tsx`: the account's SSH public keys — list, add, revoke.
 - `src/components/AddSshKeyDialog.tsx`: paste or drop a public key; maps the platform's error `code` to a readable message.
 - `src/components/CopyButton.tsx`: copy-to-clipboard with a confirmation tick. Shared by the SFTP fields and the SSH key list.
+- `src/components/SftpAccessPanel.tsx`: the deployment's file-access panel, with the same "renders nothing on a 404" shape as `DatabasePanel`.
+- `src/components/SftpCredentialsFields.tsx`: the presentational fields rendered by `SftpAccessPanel` and `SftpAccessDialog`.
+- `src/components/SftpAccessDialog.tsx`: focused modal opened from the deployment card's "Files" action, over the same query as the panel.
 - `src/components/DatabasePanel.tsx`: the deployment's database panel — identity, credential (masked, copyable without reveal) and quota state, with the same "renders nothing on a 404" shape as `SftpAccessPanel`.
 - `src/components/DatabaseFields.tsx`: the presentational fields rendered by `DatabasePanel` (database name, role, masked password, usage against allowance, state).
 - `src/components/DatabaseAccessDialog.tsx`: focused modal opened from the deployment card mirroring `SftpAccessDialog`.
@@ -142,6 +145,15 @@ a successful add without passing through any cancel path and the component
 stays mounted throughout.
 
 Spec: [account-settings-ui](../openspec/specs/account-settings-ui/spec.md)
+
+## File access panel
+
+A deployment whose product exposes files gets a panel on the deployment view
+with its SFTP connection details. It carries no credential: access is
+authenticated by an SSH key registered on the account.
+
+Spec: [sftp-credentials-ui](../openspec/specs/sftp-credentials-ui/spec.md) ·
+Rationale: [ssh-grpc-auth-plugin](../openspec/changes/ssh-grpc-auth-plugin/design.md)
 
 ## Database panel
 

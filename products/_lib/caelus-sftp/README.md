@@ -11,7 +11,7 @@ wrapper chart depends on it and calls its named templates.
 
 Spec: [sftp-chart-contract](../../../openspec/specs/sftp-chart-contract/spec.md),
 [sftp-edge-routing](../../../openspec/specs/sftp-edge-routing/spec.md) ·
-Rationale: [ssh-grpc-auth-plugin](../../../openspec/changes/ssh-grpc-auth-plugin/design.md)
+Rationale: [ssh-grpc-auth-plugin](../../../openspec/changes/archive/2026-08-30-ssh-grpc-auth-plugin/design.md)
 
 ## Architecture in one line
 

@@ -4,10 +4,9 @@ sshpiper's gRPC plugin. On every SSH connection the edge asks one question — m
 this key open the deployment this username names, and where is that deployment's
 sidecar — and this answers it from the platform's own rows, in one query.
 
-Spec: [ssh-auth-resolver](../openspec/changes/ssh-grpc-auth-plugin/specs/ssh-auth-resolver/spec.md)
-(new capability; it joins `openspec/specs/` on archive),
+Spec: [ssh-auth-resolver](../openspec/specs/ssh-auth-resolver/spec.md),
 [sftp-edge-routing](../openspec/specs/sftp-edge-routing/spec.md) · Rationale:
-[ssh-grpc-auth-plugin](../openspec/changes/ssh-grpc-auth-plugin/design.md),
+[ssh-grpc-auth-plugin](../openspec/changes/archive/2026-08-30-ssh-grpc-auth-plugin/design.md),
 [var/ssh_access.md](../var/ssh_access.md) (the spikes, and what sshpiperd
 actually does)
 

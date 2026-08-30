@@ -153,7 +153,7 @@ with its SFTP connection details. It carries no credential: access is
 authenticated by an SSH key registered on the account.
 
 Spec: [sftp-credentials-ui](../openspec/specs/sftp-credentials-ui/spec.md) ·
-Rationale: [ssh-grpc-auth-plugin](../openspec/changes/ssh-grpc-auth-plugin/design.md)
+Rationale: [ssh-grpc-auth-plugin](../openspec/changes/archive/2026-08-30-ssh-grpc-auth-plugin/design.md)
 
 ## Database panel
 

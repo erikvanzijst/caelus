@@ -51,9 +51,8 @@ This repository is a monorepo with:
   than reading cluster objects, so the reconciler owns nothing for this feature.
   Spec: [sftp-edge-routing](openspec/specs/sftp-edge-routing/spec.md),
   [sftp-chart-contract](openspec/specs/sftp-chart-contract/spec.md),
-  [ssh-auth-resolver](openspec/changes/ssh-grpc-auth-plugin/specs/ssh-auth-resolver/spec.md)
-  (new capability; it joins `openspec/specs/` on archive) · Rationale:
-  [ssh-grpc-auth-plugin](openspec/changes/ssh-grpc-auth-plugin/design.md),
+  [ssh-auth-resolver](openspec/specs/ssh-auth-resolver/spec.md) · Rationale:
+  [ssh-grpc-auth-plugin](openspec/changes/archive/2026-08-30-ssh-grpc-auth-plugin/design.md),
   [ssh-auth](ssh-auth/README.md)
 - **Vars are the single channel into a pod's environment.** A deployment's
   `vars` become environment variables in its container;

@@ -1,0 +1,19 @@
+plugin.proto is vendored verbatim from sshpiper. It is not edited here: the
+resolver speaks whatever the deployed sshpiperd speaks, so the file tracks the
+image tag and nothing else.
+
+  repo    https://github.com/tg123/sshpiper
+  path    libplugin/plugin.proto
+  tag     v1.5.4
+  commit  e5c5b904cfa57f7d60e37cb38cdb0bbcaadb022e
+  sha256  1c11ca0b75a1fc06ae6f721724b56106110bc5f57e3a7924cb1357dc796ea178
+
+That tag is the one running in both environments (`farmer1992/sshpiperd:v1.5.4`,
+tf/app/sshpiper). Re-vendor only together with an image bump:
+
+  gh api "repos/tg123/sshpiper/contents/libplugin/plugin.proto?ref=<tag>" \
+    -q .content | base64 -d > ssh-auth/proto/plugin.proto
+  ssh-auth/gen.sh
+
+then update the four lines above. proto_test.go checks the sha256 and
+regenerates the stubs to compare, so a half-done re-vendor fails the suite.

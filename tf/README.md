@@ -53,6 +53,10 @@ again after any node rebuild (the userns sysctl for rootless BuildKit, and
 containerd's trust for the internal registry). Both are documented in
 [`../api/README.md`](../api/README.md) § Builds.
 
+Spec: [build-worker](../openspec/specs/build-worker/spec.md),
+[build-execution](../openspec/specs/build-execution/spec.md) · Rationale:
+[add-build-subsystem](../openspec/changes/archive/2026-08-14-add-build-subsystem/design.md)
+
 ## Tenant database cluster
 
 `tf/app` also creates the PostgreSQL 18 instance and PgBouncer pair that hold
@@ -60,6 +64,10 @@ every `custom` deployment's own database, per workspace.
 
 The bootstrap SQL that creates the platform's roles runs as an init container
 on the reconcile worker, so a change to it ships with the next rollout.
+
+Spec: [tenant-database-cluster](../openspec/specs/tenant-database-cluster/spec.md) ·
+Rationale:
+[relational-storage](../openspec/changes/archive/2026-08-27-relational-storage/design.md)
 
 ## Secrets
 

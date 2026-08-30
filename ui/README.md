@@ -84,120 +84,34 @@ Important current behavior:
 - After reload, both routes initialize from localStorage and behave normally.
 
 ## Dashboard (`/`)
-Headline:
-- `Your applications`
-- Subtext: launch and track environments
 
-Deploy an applications Card:
-- Product `Select` shows only products with `template_id` set (canonical template required).
-- Domain `TextField` is free text.
-- `Launch` button disabled when:
-  - no current user
-  - no deployable products
-  - create mutation is pending
-- Inline validation:
-  - selected product without canonical template => explicit canonical-template error
-- Helper text shows selected canonical template id.
-- If no deployable products, info alert tells user to set canonical template in Admin.
+The user's own deployments. `DeployDialog` creates one — its fields are driven
+by the product's template schema through `UserValuesForm`, the hostname through
+`HostnameField`, and a user's first launch is gated on ToS consent — and each
+deployment card's `Edit` re-opens the same dialog in edit mode. Cards show the
+reconcile status and surface `last_error` inline.
 
-Data behavior:
-- On load with email:
-  - fetch users (`GET /users`)
-  - fetch products (`GET /products`)
-  - if no user exists for email, auto-create (`POST /users`) then refetch users
-  - fetch deployments for resolved user (`GET /users/{id}/deployments`)
-- On launch:
-  - `POST /users/{id}/deployments`
-  - clears domain input
-  - invalidates deployments query
-
-Deployment cards:
-- One card per deployment.
-- Shows domain, product chip (via `deployment.desired_template.product.name`), created timestamp, and desired template id.
-- Shows reconcile status chip from backend deployment state.
-- Shows `last_reconcile_at` timestamp.
-- Shows inline error alert if `last_error` is present.
-- Actions:
-  - `Open` uses `ensureUrl()` (adds `https://` if missing)
-  - `Delete` shows `window.confirm('Delete this deployment?')`, then `DELETE /users/{id}/deployments/{deploymentId}`
-  - while delete is pending/reconciling, action is disabled and label changes to `Deleting...`
-
-Empty state:
-- `No deployments yet` card with guidance text.
+Spec: [edit-deployment-frontend](../openspec/specs/edit-deployment-frontend/spec.md),
+[deploy-dialog-shared](../openspec/specs/deploy-dialog-shared/spec.md),
+[hostname-field-ui](../openspec/specs/hostname-field-ui/spec.md),
+[deploy-tos-consent-ui](../openspec/specs/deploy-tos-consent-ui/spec.md)
 
 ## Admin (`/admin`)
-Headline:
-- `Admin`
-- Subtext: products, template versions, canonical selection
 
-Layout:
-- Left sidebar navigation with two sections: **Products** and **Deployments**.
-- `/admin` redirects to `/admin/products` by default.
-- Content area renders via React Router `<Outlet>`.
+The administrative surface: a section nav over four panels — **Products**,
+**Deployments**, **Users**, and **Plans**. Products are managed in a detail
+panel whose template versions are tabbed, each tab a read-only viewer with a
+live schema preview and a make-canonical action. Deployments is a sortable
+table of every non-deleted deployment backed by a dedicated admin endpoint; a
+row opens a detail dialog with upgrade and delete, polling a single deployment
+while it is in a transitional state. Users lists accounts with their deployment
+counts.
 
-### Products (`/admin/products`)
-
-Create product:
-- Requires non-empty product name.
-- Description optional.
-- Icon upload: optional image file with client-side preview; oversized images are automatically scaled down before upload.
-- On success: clears fields, invalidates products query.
-- Uses multipart form upload to send product data + optional icon file atomically.
-
-Products list:
-- Each item shows name, description fallback, canonical template chip.
-- Selected row gets highlighted background.
-- On first load with products, first product auto-selects.
-
-Selected product panel:
-- Shows name, description, created timestamp (`—` fallback if none selected).
-- `Delete product` uses confirm dialog and then delete mutation.
-
-Create template version:
-- Disabled when no product is selected.
-- Chart reference required (`chart_ref`).
-- Chart version required (`chart_version`).
-- On success:
-  - invalidates templates + products queries
-  - if selected product had no canonical template, new template is auto-set canonical
-
-Template versions list:
-- Each template row shows id, `chart_ref:chart_version`, and created timestamp.
-- Canonical template gets `Canonical` chip.
-- Row actions:
-  - `Set canonical` => updates product template id
-  - `Delete` => confirm + delete mutation
-- Canonical delete behavior:
-  - after deleting canonical template, app fetches templates, sorts by newest `created_at`, and sets newest remaining template as canonical (if one exists)
-
-Empty templates state:
-- `No templates yet. Add the first version to unlock deployments.`
-
-### Deployments (`/admin/deployments`)
-
-Sortable DataGrid table listing all non-deleted deployments via `GET /api/deployments`.
-
-Columns:
-- **Product**: product name from applied or desired template
-- **Hostname**: clickable link (`https://{hostname}`, opens in new tab)
-- **Email**: deployment owner's email
-- **Created**: local-time ISO timestamp
-- **Status**: deployment status string
-- **Up to date**: green check if `applied_template.id === applied_template.product.template_id`, yellow warning otherwise
-
-Default sort: Created descending.
-
-Row click opens a **DeploymentDialog** with:
-- Read-only `DeployDialogContent` showing the deployment's user values (hostname field renders as plain text, no Free/Custom domain toggle)
-- Metadata section: Owner, Created, Age (human-readable), Last reconciliation, Current template, Status
-- **Delete** button (left, red): triggers `DELETE /users/{id}/deployments/{id}`, shows progress bar during `deleting` state, closes dialog and removes row when API returns 404
-- **Upgrade** button (right): disabled when up to date, otherwise shows `Upgrade to #{canonicalId}`. Calls `PUT /users/{id}/deployments/{id}` with the product's canonical template ID. Shows progress bar during `provisioning` state.
-
-Live polling:
-- Dialog polls `GET /users/{id}/deployments/{id}` at 1s intervals while deployment is in a transitional state (`provisioning` or `deleting`).
-- Each poll result patches the `admin-deployments` query cache via `setQueryData`, keeping the table row in sync without polling the full list.
-- Polling stops when deployment reaches a terminal state.
-- 404 response (deleted deployment) removes the row from cache and closes the dialog.
+Spec: [admin-product-detail](../openspec/specs/admin-product-detail/spec.md),
+[admin-template-tabs](../openspec/specs/admin-template-tabs/spec.md),
+[admin-schema-preview](../openspec/specs/admin-schema-preview/spec.md),
+[admin-list-deployments-endpoint](../openspec/specs/admin-list-deployments-endpoint/spec.md),
+[admin-users-panel](../openspec/specs/admin-users-panel/spec.md)
 
 ## API And Query Notes
 - API base URL: `VITE_API_URL` or default `http://localhost:8000`.
@@ -213,57 +127,46 @@ Live polling:
 
 ## Settings (`/settings`)
 
-The first account-level surface: everything here belongs to the person rather
-than to one deployment. Reachable from the account menu, available to **every**
-signed-in user — it is not an administrative feature and must not read as one.
+The account-level surface — everything here belongs to the person, not one
+deployment — reachable from the account menu and available to every signed-in
+user; it is not an administrative feature and must not read as one. It uses the
+same section-nav-plus-`<Outlet>` shape as `/admin`, so a second account section
+is one nav entry and one route; today it holds a single section, the SSH keys
+panel, which lists registered keys and adds or revokes them.
 
-Structured as a section nav plus `<Outlet>`, the same shape `/admin` uses, so a
-second account section is one nav entry and one route. `/settings` redirects to
-`/settings/ssh-keys`.
+Two implementation choices the spec leaves open: adding a key also accepts a
+**dropped `.pub` file** (the whole dialog body is the drop target, with a
+`browse` link so it is reachable by keyboard); and the add dialog resets on
+exit rather than in a close handler, because the panel closes it directly after
+a successful add without passing through any cancel path and the component
+stays mounted throughout.
 
-### SSH keys panel
-
-Lists each key by label, fingerprint (Space Mono, with a copy button), type and
-date. **A key with no label is named by its fingerprint**, not by a placeholder
-— the platform deliberately does not invent a label, and inventing one in the
-client would be the same mistake one layer out.
-
-Adding accepts a pasted key or a **dropped `.pub` file**; the whole dialog body
-is the drop target, with a `browse` link so it is reachable by keyboard.
-
-A dropped **private** key is refused outright rather than loaded into the
-field. That is the one path where the private half can be kept out of the page
-entirely, and putting it in a textarea would itself be displaying it. Pasted
-private material can only be caught after the fact, so it warns and blocks
-submission instead.
-
-Rejections are selected from the platform's `code` — `duplicate_key`,
-`key_too_short`, `private_key_material` and the rest — **never** by matching on
-its prose, so a reworded message cannot collapse six distinct failures into one
-generic error. An unrecognized code falls back to the platform's own message.
-
-The panel never offers in-browser key generation; it points at `freepod key
-add`, where the private half stays on the user's machine.
-
-Deleting asks for confirmation naming the key and its consequence.
-
-The dialog resets on exit rather than in a close handler: the panel closes it
-directly after a successful add without passing through any cancel path, and
-the component stays mounted throughout, so a per-handler reset leaves the next
-open still holding the previous key.
+Spec: [account-settings-ui](../openspec/specs/account-settings-ui/spec.md)
 
 ## Database panel
 
 A deployment whose product opts into relational storage gets a panel on the
-deployment view — the same shape as the SFTP panel, mounted beside it. It
-shows identity (database name, role), a credential (the password, masked by
-default), and the database's health against its allowance.
+deployment view, mounted beside the SFTP panel in the same shape. It shows the
+database's identity, a masked credential, and its health against its allowance,
+and states how the database is reached. It is its own component
+(`DatabasePanel`), composed into the page.
 
-The panel is its own component (`DatabasePanel`), composed into the page
-rather than inlined.
+Spec: [database-credentials-ui](../openspec/specs/database-credentials-ui/spec.md),
+[sftp-credentials-ui](../openspec/specs/sftp-credentials-ui/spec.md)
 
 ## Manual QA Matrix
-Use these checks after UI/API contract changes:
+Use these checks after UI/API contract changes. The acceptance criteria they
+assert are normative in the capability specs the sections above link; the rows
+that restate a spec scenario, and that scenario's governing spec, are: settings
+reachability (row 0) → [account-settings-ui](../openspec/specs/account-settings-ui/spec.md);
+template and canonical behavior (rows 1–3) →
+[admin-template-tabs](../openspec/specs/admin-template-tabs/spec.md);
+deployment create (row 4) →
+[deploy-dialog-shared](../openspec/specs/deploy-dialog-shared/spec.md);
+the admin deployments table (row 7) →
+[admin-list-deployments-endpoint](../openspec/specs/admin-list-deployments-endpoint/spec.md);
+and the database panel (row 11) →
+[database-credentials-ui](../openspec/specs/database-credentials-ui/spec.md).
 
 0. Settings reachability (non-admin):
    - sign in as a user without administrator privileges

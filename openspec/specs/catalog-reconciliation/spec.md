@@ -214,6 +214,10 @@ git remote or require cluster credentials to be held by CI. A reconciliation
 failure SHALL fail the init container so that new pods do not become ready and
 the previously running version continues serving.
 
+The image build SHALL NOT use path filters that exclude catalog files: a
+commit touching only `products/catalog/` must still produce an image, or the
+merged change would never roll out.
+
 #### Scenario: Catalog applies on rollout
 - **WHEN** a commit changing only catalog files is merged and the resulting
   image is rolled out

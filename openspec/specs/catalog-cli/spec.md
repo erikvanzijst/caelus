@@ -101,7 +101,10 @@ slugs across the directory, does not declare `visibility`, contains a
 `upstream.match` expression that compiles and defines a `version` capture
 group. It SHALL also verify that any referenced icon file exists inside the
 catalog directory and can be processed as an image, so that a missing or
-corrupt icon is caught in review rather than failing a rollout.
+corrupt icon is caught in review rather than failing a rollout. It SHALL also
+verify that the generated `catalog.schema.json` has not drifted from the
+Pydantic models it is generated from; `catalog lint --write-schema`
+regenerates it.
 
 #### Scenario: Lint passes on a valid catalog
 - **WHEN** continuous integration runs `catalog lint` on a valid catalog

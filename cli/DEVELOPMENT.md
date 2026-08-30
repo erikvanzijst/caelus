@@ -9,16 +9,38 @@ project, so it stays short and carries no platform internals. **New detail
 belongs here, not there.** `README.md` changes only when the end-user surface
 does.
 
-The *behavioral contract* is specified in `openspec/specs/cli-*`:
-`cli-authentication`, `cli-build-history`, `cli-build-submission`, `cli-delete`,
-`cli-deploy`, `cli-distribution`, `cli-environments`, `cli-init`,
-`cli-project-archive`, `cli-project-file`, `cli-terms-acceptance`. Those say
-what must be true. This file says how it is
-arranged and why, and carries the operational detail specs do not.
+The *behavioral contract* is specified in the sixteen `cli-*` capabilities
+under `openspec/specs/`; each section below links to the one(s) it restates.
+They say what must be true. This file says how it is arranged and why, and
+carries the operational detail the specs do not — the RFC citations, the
+Keycloak quirks, the concrete values, and the D-numbered rationale.
 
-The original design discussion, with the numbered decisions the source comments
-cite (D2, D4, D6, D10, D14, …), is in
-`openspec/changes/archive/2026-08-15-add-freepod-cli/design.md`.
+The capabilities: [cli-authentication](../openspec/specs/cli-authentication/spec.md),
+[cli-build-history](../openspec/specs/cli-build-history/spec.md),
+[cli-build-submission](../openspec/specs/cli-build-submission/spec.md),
+[cli-database-status](../openspec/specs/cli-database-status/spec.md),
+[cli-delete](../openspec/specs/cli-delete/spec.md),
+[cli-deploy](../openspec/specs/cli-deploy/spec.md),
+[cli-distribution](../openspec/specs/cli-distribution/spec.md),
+[cli-environments](../openspec/specs/cli-environments/spec.md),
+[cli-init](../openspec/specs/cli-init/spec.md),
+[cli-log](../openspec/specs/cli-log/spec.md),
+[cli-project-archive](../openspec/specs/cli-project-archive/spec.md),
+[cli-project-file](../openspec/specs/cli-project-file/spec.md),
+[cli-releases](../openspec/specs/cli-releases/spec.md),
+[cli-ssh-keys](../openspec/specs/cli-ssh-keys/spec.md),
+[cli-terms-acceptance](../openspec/specs/cli-terms-acceptance/spec.md),
+[cli-vars](../openspec/specs/cli-vars/spec.md).
+
+The numbered decisions the source comments cite (D2, D4, D6, D10, D14, …) are
+in [add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
+(D1–D16). Capabilities added later carry their reasoning in their own archived
+designs: [add-deployment-logs](../openspec/changes/archive/2026-08-18-add-deployment-logs/design.md)
+for `cli-log`, [releases-api-and-nested-builds](../openspec/changes/archive/2026-08-22-releases-api-and-nested-builds/design.md)
+for `cli-releases` and `cli-build-history`, [deployment-vars](../openspec/changes/archive/2026-08-24-deployment-vars/design.md)
+for `cli-vars`, [account-ssh-keys](../openspec/changes/archive/2026-08-28-account-ssh-keys/design.md)
+for `cli-ssh-keys`, and [database-connection-details](../openspec/changes/archive/2026-08-29-database-connection-details/design.md)
+for `cli-database-status`.
 
 ## Working in this package
 
@@ -100,27 +122,19 @@ not publish (design D2).
 | `dev`  | `https://dev.freepod.eu` | `freepod-cli-dev`  | Gated on the `freepod-dev` Keycloak group. |
 
 Selection is `--env`, then the environment recorded in `.freepod.json`, then
-`FREEPOD_ENV`, then `prod`. The file outranks the variable because it is the
-most specific statement of where this project lives: a deployment id minted on
-dev is meaningless on prod, so a global default must never pull a command away
-from the environment its project was created on. Inference is what makes `dev`
-invisible to the end user — a project on dev is deployed, logged, and deleted
-by the same commands as one on prod, without `--env` anywhere.
-
-Reading the file for the environment is best-effort, because it happens for
-every command, including ones with no business in a project: a missing or
-unreadable file yields nothing and the ordinary default applies. The command
-that actually needs the project loads it itself and reports the real problem.
+`FREEPOD_ENV`, then `prod`; the file outranks the variable, and reading it is
+best-effort. Inference is what makes `dev` invisible to the end user — a
+project on dev is deployed, logged, and deleted by the same commands as one on
+prod, without `--env` anywhere.
 
 Both clients are public: PKCE proves client identity and no secret exists. The
-issuer is `https://keycloak.freepod.eu/realms/freepod` for both.
+issuer is `https://keycloak.freepod.eu/realms/freepod` for both. The dev gate
+is `allowed_groups` in `tf/app/main.tf`, empty on prod; a non-member holding a
+perfectly valid token gets a bare 401 on every request, which is why the 401
+message names the group.
 
-The dev gate is `allowed_groups` in `tf/app/main.tf`, empty on prod. A non-member
-holding a perfectly valid token gets a bare 401 on every request, which is why
-the 401 message names the group.
-
-Credentials are cached per environment, so `logout` discards only the selected
-one.
+Spec: [cli-environments](../openspec/specs/cli-environments/spec.md) · Rationale:
+[add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
 
 ## The command surface
 
@@ -159,41 +173,22 @@ carries only the result:
 URL=$(freepod deploy)      # https://myapp.freepod.eu
 ```
 
-`builds` follows the same rule: the table is the result and goes to stdout,
-while the legend and the "showing N of M" note are diagnostics on stderr.
-`delete` writes nothing to stdout at all — a deletion has no result to pipe.
-
-The build log, the upload progress bar, and every status line are diagnostics.
-`--quiet` silences all of it and leaves the result and any error; a quiet deploy
-discards the build log through a sink rather than buffering it, so a large build
-does not accumulate in memory purely to be thrown away.
-
-Color is suppressed when stdout is not a terminal and whenever `NO_COLOR` is
-set — `ctx.color = False` rather than leaving it to click, which would still
-color a terminal that asked not to be.
-
-`tests/test_surface.py` pins all of this.
+`--quiet` silences the diagnostics and leaves the result and any error; a quiet
+deploy discards the build log through a sink rather than buffering it, so a
+large build does not accumulate in memory purely to be thrown away. Color is
+suppressed when stdout is not a terminal and whenever `NO_COLOR` is set —
+`ctx.color = False` rather than leaving it to click, which would still color a
+terminal that asked not to be. `tests/test_surface.py` pins all of this.
 
 ### Exit codes
 
-| Code | Meaning            |
-|------|--------------------|
-| 0    | success            |
-| 1    | error              |
-| 2    | usage error        |
-| 3    | not authenticated  |
-| 4    | the build failed   |
-| 5    | the rollout failed |
-
 `130` on interrupt. A **timeout is not a failure** and has no code of its own:
-`--timeout` bounds how long the client waits, never what the platform does. When
-it elapses the build or rollout is still running, uncanceled, and the message
-says so. Re-running picks it back up — and for a build, re-uploading the same
-archive re-attaches to the build already in flight rather than starting a second.
+`--timeout` bounds how long the client waits, never what the platform does, and
+applies to whichever wait is in progress — login 300s, build 1800s, rollout 600s
+by default. `DEFAULT_HTTP_TIMEOUT` (30s) is a separate, per-request bound.
 
-`--timeout` applies to whichever wait is in progress, so it means something
-different per command: login 300s, build 1800s, rollout 600s by default.
-`DEFAULT_HTTP_TIMEOUT` (30s) is a separate, per-request bound.
+Spec: [cli-distribution](../openspec/specs/cli-distribution/spec.md) · Rationale:
+[add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
 
 ## Authentication
 
@@ -203,6 +198,9 @@ Override with `--loopback` or `--device`.
 
 `Session` (`auth.py`) owns acquisition and renewal only. Interpreting the API's
 responses is `api.py`'s job, which drives `refresh()` and `login()` from there.
+
+Spec: [cli-authentication](../openspec/specs/cli-authentication/spec.md) ·
+Rationale: [add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
 
 ### Loopback + PKCE — when a browser is reachable
 
@@ -296,44 +294,27 @@ already-issued access token stays valid for up to its remaining 300 seconds.
 
 ## The API status-code contract
 
-| Status                                 | Answered by | Client action                    |
-|----------------------------------------|-------------|----------------------------------|
-| 401                                    | edge        | stop and explain; do not re-auth |
-| 403, non-JSON body                     | edge        | refresh once and retry           |
-| 403, JSON `detail`                     | API         | stop — a permission error        |
-| 404, `{"detail": "Not authenticated"}` | API         | report a platform condition      |
-
-**This inverts the usual HTTP reading, deliberately.** `403` is the signal to
-refresh or re-authenticate; `401` is not — on a 401 either no credential reached
-the edge, or (on dev) a valid one belongs to a non-member of the gating group,
-and re-authenticating would succeed and change nothing.
-
-The two 403 rows are why the rule cannot simply be "403 means refresh": the API
-issues its own 403s from `require_self` / `require_admin`, and an unbounded
-refresh rule would refresh, fail, re-login, and loop on a request no credential
-can satisfy. Hence **refresh at most once per request**, falling back to a full
-login only if the refresh is rejected.
-
-Which side answered is identified by **body shape**, not `Content-Type`: the
-edge's refusals are a bare `http.Error` with a plain-text body and no reliable
-content type, while every refusal the API itself issues is a FastAPI JSON
-document carrying `detail`.
-
-One asymmetry to keep in mind when adding a request: most reads the client
-performs — products, plans, hostnames, domains — are on the edge's
-`skip_auth_routes` list and are answered **anonymously** whatever credential
-the request carried. They cannot return 401 or 403, so none of the machinery
-above ever fires on them. That is exactly why `GET /api/me` must come first in
-any command that needs a credential to be real (design D15).
+The platform's authentication statuses invert the conventional reading: `403`
+is the signal to refresh or re-authenticate, `401` is not. Which side answered
+is identified by **body shape**, not `Content-Type` — the edge's refusals are a
+bare `http.Error` with a plain-text body and no reliable content type, while
+every refusal the API itself issues is a FastAPI JSON document carrying
+`detail`.
 
 Retries: safe methods only (`GET`, `HEAD`, `OPTIONS`), `MAX_ATTEMPTS = 3`
 including the first, backoff starting at 0.5s and doubling. Anything that could
 create or duplicate state fails to the caller instead.
 
+Spec: [cli-authentication](../openspec/specs/cli-authentication/spec.md) ·
+Rationale: [add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
+
 ## The deploy pipeline
 
 `preflight → pack → upload → build → release`, in that order, so that everything
 a cheap read can refuse is refused before a build is spent.
+
+Spec: [cli-deploy](../openspec/specs/cli-deploy/spec.md) · Rationale:
+[add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
 
 Preflight, cheapest and most fatal first:
 
@@ -402,6 +383,9 @@ deployment recorded in `.freepod.json` and nothing else. A command that could
 name an arbitrary deployment would be one whose worst typo is unrecoverable,
 and the project file is the only place the client knows a deployment by anyway.
 
+Spec: [cli-delete](../openspec/specs/cli-delete/spec.md) · Rationale:
+[add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
+
 Four things about it are deliberate:
 
 - **Nothing is deleted without an answer.** `--yes` is the only way to confirm
@@ -438,23 +422,20 @@ out the timeout reporting "still deleting". The 409 is the same
 ## The build history
 
 `builds` lists what `GET /api/users/{uid}/builds` answers, which is **the
-account's** builds and not a project's. The platform has no notion of a project at all — a
-build is owned by a user, never by a deployment — so a project-scoped history
-is not a thing the API can be asked for, and pretending otherwise would mean
-inventing a filter with nothing behind it.
+account's** builds and not a project's.
+
+Spec: [cli-build-history](../openspec/specs/cli-build-history/spec.md) ·
+Rationale: [releases-api-and-nested-builds](../openspec/changes/archive/2026-08-22-releases-api-and-nested-builds/design.md)
 
 What makes the listing project-relevant instead is the marker: the build whose
-image the current project's deployment is running is flagged `*`. That is the
-only reason the deployment is read at all, and every way of not knowing answers
-`None` rather than failing — no project file, one belonging to another
-environment, no deployment recorded yet, or a deployment the platform no longer
-has. The annotation is a convenience; the listing is the result.
+image the current project's deployment is running is flagged `*`. Every way of
+not knowing answers `None` rather than failing — no project file, one belonging
+to another environment, no deployment recorded yet, or a deployment the
+platform no longer has. The annotation is a convenience; the listing is the
+result.
 
 Details worth keeping:
 
-- **The platform's order is kept.** Most recent first is the endpoint's
-  contract. Re-sorting would mean parsing every timestamp to reproduce an
-  answer already given, and would reorder rows the moment one failed to parse.
 - **`--limit` is a display bound, not a query one.** The endpoint has no
   pagination and returns everything; the note about what was hidden goes to
   stderr.
@@ -474,15 +455,16 @@ commands share one implementation rather than two that drift.
 
 ## The release history
 
-`releases` is the other listing, and the one place the two differ is scope:
-a release belongs to a **deployment**, so there is no account-wide listing to
-fall back on. The command therefore requires a project that records a
-deployment, and refuses — naming the fix — when there is none, rather than
-printing an empty table. An empty table would read as "this deployment has
-never rolled out", which is a different and untrue statement. A project
-pointing at another environment is refused the same way `delete` refuses it,
-and for the same reason: reading the wrong environment would report another
-deployment's history as this one's.
+`releases` is the other listing, and the one place the two differ is scope. The
+command requires a project that records a deployment, and refuses — naming the
+fix — when there is none, rather than printing an empty table: an empty table
+would read as "this deployment has never rolled out", which is a different and
+untrue statement. A project pointing at another environment is refused the same
+way `delete` refuses it, and for the same reason: reading the wrong environment
+would report another deployment's history as this one's.
+
+Spec: [cli-releases](../openspec/specs/cli-releases/spec.md) · Rationale:
+[releases-api-and-nested-builds](../openspec/changes/archive/2026-08-22-releases-api-and-nested-builds/design.md)
 
 - **The mark comes from the deployment, not from the listing.** The row flagged
   `*` is the one the deployment reports as `applied_release`. Never
@@ -504,6 +486,9 @@ deployment's history as this one's.
 `freepod var` is the client half of the platform's runtime configuration. The
 resource is `/api/users/{u}/deployments/{d}/vars/runtime` — the phase is a path
 segment because it is part of a var's identity, not a filter.
+
+Spec: [cli-vars](../openspec/specs/cli-vars/spec.md) · Rationale:
+[deployment-vars](../openspec/changes/archive/2026-08-24-deployment-vars/design.md)
 
 - **A secret is write-only, and the client never pretends otherwise.** The
   platform returns a sensitive var with **no `value` key at all** — not a mask,
@@ -570,6 +555,9 @@ caller passes one, because the platform's schema declares it under
 `additionalProperties: false`, so neither a value nor an explicit null belongs
 in a file that is committed and diffed.
 
+Spec: [cli-project-file](../openspec/specs/cli-project-file/spec.md) · Rationale:
+[add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
+
 `env` is both a record and an instruction: it says which environment the
 recorded deployment was minted on, and it is the environment every command run
 from this directory targets unless `--env` says otherwise. The two readings
@@ -602,20 +590,17 @@ domain served via CNAME.
 
 ## Packing
 
-Four levels of precedence, last match wins:
+File selection follows a fixed precedence, last match wins: hard excludes
+(`.git/`, never overridable), the built-in defaults, the project's `.gitignore`
+(layered per directory, disable with `--no-gitignore`), then `.freepodignore`
+applied last so its negations outrank everything except the hard excludes. The
+built-in defaults are the only copy of this list: `node_modules/`, `.venv/`,
+`venv/`, `__pycache__/`, `*.pyc`, `.pytest_cache/`, `target/`, `dist/`,
+`build/`, `.DS_Store`, `*.swp`, `.env.local`, `.env.*.local`. A plain `.env` is
+deliberately **not** excluded (design D11).
 
-1. **Hard excludes** — `.git/`. Never packable, not overridable.
-2. **Built-in defaults** — `node_modules/`, `.venv/`, `venv/`, `__pycache__/`,
-   `*.pyc`, `.pytest_cache/`, `target/`, `dist/`, `build/`, `.DS_Store`,
-   `*.swp`, `.env.local`, `.env.*.local`.
-3. **`.gitignore`**, layered per directory (disable with `--no-gitignore`).
-4. **`.freepodignore`**, same syntax, applied last so its negations outrank
-   everything except the hard excludes, which are re-applied after it.
-
-`.env` is deliberately **not** excluded (design D11). Front-end tooling commonly
-reads it while producing its distributable output, so dropping it yields a
-silently misconfigured build rather than an error; a genuinely secret `.env` is
-already excluded by the project's own `.gitignore`.
+Spec: [cli-project-archive](../openspec/specs/cli-project-archive/spec.md) ·
+Rationale: [add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
 
 Matching is `pathspec`; the walk is ours, and it owns the two things `pathspec`
 does not do: per-directory layering, and **pruning**. Pruning is not merely an
@@ -662,16 +647,12 @@ node_modules/*                 # exclude the contents instead
 !node_modules/keep.txt         # ✓ now this works
 ```
 
-Entries the platform's extraction would refuse — sockets, FIFOs, device nodes,
-symlinks resolving outside the project — are omitted locally and each reported
-by path. Left in, one of them fails the entire extraction; omitted here, it is a
-single legible message.
-
 The archive spools in memory up to 32 MiB and to disk beyond it. The client
-enforces exactly one limit — the packed size — and learns it from the upload
-slot's `max_bytes` at runtime. The entry-count and uncompressed ceilings live in
-the builder's environment (`CAELUS_MAX_ENTRIES`, `CAELUS_MAX_EXTRACTED_BYTES`),
-are never reported to a client, and are reported in the build log when hit.
+enforces exactly one limit of its own — the packed size — and learns it from the
+upload slot's `max_bytes` at runtime. The entry-count and uncompressed ceilings
+live in the builder's environment (`CAELUS_MAX_ENTRIES`,
+`CAELUS_MAX_EXTRACTED_BYTES`), are never reported to a client, and are reported
+in the build log when hit.
 
 ## Builds
 
@@ -710,6 +691,10 @@ stream as bytes and never decoded here. `image` is null until the build
 succeeds, so it is read from the build record afterwards rather than from the
 creation response.
 
+Spec: [cli-build-submission](../openspec/specs/cli-build-submission/spec.md),
+[cli-project-archive](../openspec/specs/cli-project-archive/spec.md) · Rationale:
+[add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
+
 ## Terms of Service
 
 The platform refuses to create a deployment for an account that has never
@@ -717,6 +702,9 @@ accepted the terms: `POST /api/users/{id}/deployments` answers **400** with
 `Terms of Service must be accepted before deploying`. That refusal would arrive
 after the archive was packed, uploaded, and built, so the client settles it in
 preflight instead.
+
+Spec: [cli-terms-acceptance](../openspec/specs/cli-terms-acceptance/spec.md) ·
+Rationale: [add-freepod-cli](../openspec/changes/archive/2026-08-15-add-freepod-cli/design.md)
 
 Two things stay separate because they need different knowledge: the **gate** is
 `tos_accepted_version is not None` — the platform requires *some* acceptance,
@@ -738,17 +726,15 @@ else.
 ## SSH keys
 
 `freepod key add|list|rm` manages the account's SSH public keys. The commands
-are thin; the part worth understanding is the **local record**.
+are thin; the part worth understanding is the **local record**, which exists
+because the edge answers every offered key with "partial success" — a client
+that offers several exhausts the server's `MaxAuthTries` — and registration is
+the one moment the client holds both halves of a pair, so it is where the link
+between a registered public key and a local file is established rather than
+guessed later.
 
-### Why the client records anything at all
-
-The edge answers every offered key with "partial success", so a client that
-offers several exhausts the server's `MaxAuthTries` and is denied before it
-reaches the right one. It must therefore know which single key to present.
-
-Registration is the one moment the client holds both halves of a pair, so it is
-where the link between a registered public key and a local file is established
-rather than guessed later.
+Spec: [cli-ssh-keys](../openspec/specs/cli-ssh-keys/spec.md) · Rationale:
+[account-ssh-keys](../openspec/changes/archive/2026-08-28-account-ssh-keys/design.md)
 
 ### The record
 
@@ -805,12 +791,6 @@ curates.
 `remove_key` percent-encodes the fingerprint. It is unpadded base64, so about
 half of all fingerprints contain a `/`, and interpolating one raw produces a
 URL that addresses nothing.
-
-### What the client never does
-
-Print, log, copy or transmit a private key, in any output mode including
-`--verbose`. This matches the existing rule that the client renders token
-claims but never raw token material.
 
 ## `freepod db status`
 
@@ -869,6 +849,9 @@ database is reported as "not yet measured" rather than zero. A tenant
 reaching for this command is often doing so because writes started
 failing, and the state name on its own answers nothing — the wording
 requirement is what makes the answer useful.
+
+Spec: [cli-database-status](../openspec/specs/cli-database-status/spec.md) ·
+Rationale: [database-connection-details](../openspec/changes/archive/2026-08-29-database-connection-details/design.md)
 
 ## The agent skill
 
@@ -950,6 +933,9 @@ truncates.
 Events** — a line format, not a protocol, so `httpx.iter_lines()` parses it and
 the package gains no dependency. A WebSocket would have needed one (`httpx` has
 none) and bought a return channel nothing would use.
+
+Spec: [cli-log](../openspec/specs/cli-log/spec.md) · Rationale:
+[add-deployment-logs](../openspec/changes/archive/2026-08-18-add-deployment-logs/design.md)
 
 **Output goes to stdout, narration to stderr** — the opposite of `deploy`, and
 the reason is which of the two is the *result*. `deploy` narrates its progress

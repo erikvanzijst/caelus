@@ -64,10 +64,6 @@ module "system" {
   depends_on = [module.certmanager]
 }
 
-module "sshpiper_crd" {
-  source = "./sshpiper"
-}
-
 # One instance serves BOTH environments (tf/deps is workspace-less); separation
 # is by bucket and access-key naming, like the freepod-dev / freepod-prod split
 # in Keycloak.

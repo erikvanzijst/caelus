@@ -305,15 +305,18 @@ plugin, which is the only reason 7.7 and section 8 remain open.
 
 ## 8. After the window settles
 
-- [ ] 8.1 Remove the `Pipe` CRD install from `tf/deps/sshpiper`, once rollback is no longer
+- [x] 8.1 Remove the `Pipe` CRD install from `tf/deps/sshpiper`, once rollback is no longer
       wanted (design.md § *The `Pipe` CRD is removed after the window*). Verify the CRD is
       gone and SSH is unaffected.
-      **Deliberately not done, and it must not be done yet.** `tf/deps` is a workspace-less
-      singleton shared by both environments, and prod's edge is still running
-      `PLUGIN=kubernetes` against eight live `Pipe` resources. Removing the CRD deletes
-      every one of them by cascade, so the edit would sit in a shared module as a landmine
-      that the next unrelated `terraform apply` in `tf/deps` detonates — taking prod SFTP
-      down with it. Blocked on the prod cutover, not on anyone's schedule.
+      Applied after 8.1a. `pipes.sshpiper.com` no longer exists and the resource cannot be
+      listed at all; the three remaining `Pipe` objects went with it by cascade. Both edges
+      run the resolver and no ClusterRole grants `pipes` anywhere.
+- [x] 8.1a Repoint the Lemmy product to chart `0.4.2` on prod and move `lemmy-1c4lsj` onto
+      it. Lemmy is database-authored, not curated, so the catalog init container never
+      touched it and it was missed when the curated products were updated — the only
+      product in either environment still on a pre-cutover chart, and its SFTP was broken
+      from the cutover until this landed. Now on `0.4.2`, with `authorized_keys` owned by
+      the SFTP user and the account's password disabled.
 
 ## 9. Documentation
 

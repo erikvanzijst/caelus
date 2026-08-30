@@ -24,10 +24,12 @@
 **/.Python
 **/.eggs
 **/*.egg-info
-**/.venv
+**/.venv*
 **/venv
 **/ENV
 **/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
 **/.coverage
 **/htmlcov
 **/.idea

@@ -18,77 +18,77 @@ This repository is a monorepo with:
   (`cli/`) is the *end-user client*: a separately installable package that talks
   to a deployed platform over HTTP, imports nothing from `api/`, and shares no
   code with it.
-- Provisioning is stubbed in `api/app/provisioner.py` and should be replaced with a K8s implementation.
-- Product Templates are scoped to products; deployments are scoped to users.
-- **Builds** are a standalone subsystem: a build turns an uploaded project
-  archive into a container image and is owned by a **user**. Nothing
-  auto-deploys a build — the client submits a successful build's `image` to the
-  deployment create/update endpoint itself, and may pass that build's
-  `build_id` alongside it. Since `deployment_release`, that `build_id` is
-  recorded on the release row, so a build does have an explicit link to a
-  deployment; ownership still runs through the user, and
-  `_validate_build_reference` checks only that the caller owns the build.
-  Nothing currently stops one build being named by releases of *different*
-  deployments — an image is technically reusable that way, it is not the
-  intended case, and rejecting it is an open item. There are three
-  worker processes: `caelus worker` (reconcile queue), `caelus build-worker`
-  (builds), and `caelus db-worker` (all tenant-database housekeeping —
-  measuring quotas, purging deleted deployments' databases after their grace
-  period, and reporting orphaned cluster objects). The build worker runs each
-  build as a Kubernetes Job in a per-environment `caelus-builds*` namespace. Builds are addressed under their
-  owner — `/api/users/{user_id}/builds*` — like every other user-owned
-  resource; there is no root-level `/api/builds`, and no `user_id` query
-  parameter. See `api/README.md` § Builds.
+- Provisioning is in `api/app/provisioner.py`: a `Provisioner` that drives
+  kubectl and helm through adapters (namespaces, tenant network policy,
+  secrets, Helm releases).
+- **Builds** turn an uploaded project archive into a container image and are
+  owned by a **user**, addressed under their owner like every other user-owned
+  resource. Nothing auto-deploys a build — the client submits a successful
+  build's `image` to the deployment create/update endpoint itself, and may pass
+  that build's `build_id` alongside it, which is recorded on the release row.
+  Spec: [build-api](openspec/specs/build-api/spec.md),
+  [build-data-model](openspec/specs/build-data-model/spec.md),
+  [build-execution](openspec/specs/build-execution/spec.md),
+  [build-worker](openspec/specs/build-worker/spec.md) · Rationale:
+  [add-build-subsystem](openspec/changes/archive/2026-08-14-add-build-subsystem/design.md),
+  [add-deployment-logs](openspec/changes/archive/2026-08-18-add-deployment-logs/design.md)
+- **Three worker processes.** `caelus worker` (reconcile queue), `caelus
+  build-worker` (builds), and `caelus db-worker` (tenant-database housekeeping:
+  quota measurement, purging deleted deployments' databases after their grace
+  period, reclaiming orphaned cluster objects). Spec:
+  [worker-process-pool](openspec/specs/worker-process-pool/spec.md),
+  [build-worker](openspec/specs/build-worker/spec.md),
+  [database-housekeeping-worker](openspec/specs/database-housekeeping-worker/spec.md)
 - **Account SSH keys are a store, not yet a credential.** A user registers SSH
-  public keys on their account (`/api/users/{user_id}/ssh-keys`, `caelus
-  ssh-key`, `freepod key`, and the `/settings` page). They are owned by a
-  **user** and scoped to no deployment. **Nothing consumes them yet**: no
-  `Pipe` reads them, no sidecar trusts them, and SSH still authenticates with
-  the per-deployment passwords, so registering or revoking one currently
-  changes nothing about connecting. The next change is the auth swap that makes
-  them real. Reads and deletes follow `require_self`; **adds are owner-only
-  even for administrators**, because installing a key on someone's account is
-  impersonation. A key is addressed by its `SHA256:` fingerprint through a
-  `{fingerprint:path}` route — the only path-converter route in the API, and
-  not a stylistic choice: half of all fingerprints contain a `/`. See
-  `api/README.md` § Account SSH Keys.
+  public keys on their account; they are owned by the user and scoped to no
+  deployment. **Nothing consumes them yet** — SSH still authenticates with the
+  per-deployment passwords. Adds are owner-only even for administrators, and a
+  key is addressed by its `SHA256:` fingerprint. Spec:
+  [ssh-key-api](openspec/specs/ssh-key-api/spec.md),
+  [ssh-key-data-model](openspec/specs/ssh-key-data-model/spec.md) · Rationale:
+  [account-ssh-keys](openspec/changes/archive/2026-08-28-account-ssh-keys/design.md)
 - **Vars are the single channel into a pod's environment.** A deployment's
   `vars` become environment variables in its container;
   `deployment.user_values_json` configures the **chart**, not the process, and
   nothing fans one out into the other. Which channel a property takes is a
-  marker on the *one* template schema (`x-caelus-target: chart | runtime`,
-  defaulting to `chart`), from which the server derives a chart projection and
-  a vars projection — there is no second schema and no second namespace. A var
-  marked `x-caelus-sensitive` is write-only: reads omit its `value` entirely,
-  for everyone including administrators. Values are encrypted at rest under a
-  rotatable keyring; see § Encrypted columns below. See
-  `api/README.md` § Deployment Vars.
-- **A deployment's database credentials are not vars.** Vars are the channel a
-  *tenant* writes; the database password is platform-held, and it reaches the
-  pod through a Kubernetes Secret the reconciler publishes
-  (`<name>-database`), exactly as the object-storage credentials do. Helm
-  values carry references only — host, port, database name, role name and the
-  Secret's name — because merged values are logged in full and persisted into
-  the tenant's own namespace. See `api/README.md` § Per-Deployment Relational
-  Storage.
-- **Encrypted columns and the keyring.** `deployment_var.value_encrypted` and
-  `deployment_database.password_encrypted` are both encrypted under one
-  rotatable keyring, declared in `var_crypto.ENCRYPTED_COLUMNS`. The **API**
-  and **`caelus worker`** hold it and refuse to start when theirs cannot cover
-  what is stored; `caelus db-worker` deliberately does **not** require it,
-  because every one of its ticks connects as the platform's database admin and
-  none decrypts a tenant password. `caelus keyring-rotate` re-encrypts every
-  registered column — adding a new encrypted column means adding it to that
-  registry, or a retired key strands it silently.
+  marker on the one template schema (`x-caelus-target`); a var marked
+  `x-caelus-sensitive` is write-only. Spec:
+  [deployment-vars-api](openspec/specs/deployment-vars-api/spec.md),
+  [deployment-vars-data-model](openspec/specs/deployment-vars-data-model/spec.md),
+  [deployment-vars-schema-routing](openspec/specs/deployment-vars-schema-routing/spec.md),
+  [deployment-vars-reconciliation](openspec/specs/deployment-vars-reconciliation/spec.md) ·
+  Rationale: [deployment-vars](openspec/changes/archive/2026-08-24-deployment-vars/design.md)
+- **A deployment's database credentials are not vars.** The database password
+  is platform-held and reaches the pod through a Kubernetes Secret the
+  reconciler publishes; Helm values carry references only. Spec:
+  [deployment-relational-storage](openspec/specs/deployment-relational-storage/spec.md),
+  [tenant-database-cluster](openspec/specs/tenant-database-cluster/spec.md) ·
+  Rationale: [relational-storage](openspec/changes/archive/2026-08-27-relational-storage/design.md)
+- **Encrypted columns and the keyring.** Var values and database passwords are
+  encrypted under one rotatable keyring; every encrypted column is declared in
+  one registry, the API and `caelus worker` refuse to start when their keyring
+  cannot cover what is stored, and `caelus db-worker` deliberately does not.
+  `caelus keyring-rotate` re-encrypts every registered column — adding a new
+  encrypted column means adding it to the registry, or a retired key strands it
+  silently. Spec:
+  [deployment-vars-data-model](openspec/specs/deployment-vars-data-model/spec.md)
+  · Rationale:
+  [relational-storage](openspec/changes/archive/2026-08-27-relational-storage/design.md)
 - Products are either **curated** (declared in `products/catalog/<slug>.yaml`,
   reconciled into the database on rollout, and read-only through the API, CLI,
   and admin UI apart from `visibility`) or **non-curated** (database-authored).
-  Only `CatalogReconciler` writes `product.curated` and `product.slug`.
-  See `api/README.md` § Product Catalog.
-- Authentication: All API endpoints require `X-Auth-Request-Email` header
-  (injected by oauth2-proxy in production, set by frontend in local dev).
-  `GET /api/me` is the session initialization endpoint. CLI uses
-  `CAELUS_USER_EMAIL` env var with optional `--as-user` override.
+  Only `CatalogReconciler` writes `product.curated` and `product.slug`. Spec:
+  [product-catalog-format](openspec/specs/product-catalog-format/spec.md),
+  [catalog-reconciliation](openspec/specs/catalog-reconciliation/spec.md),
+  [curated-product-governance](openspec/specs/curated-product-governance/spec.md) ·
+  Rationale:
+  [curated-product-catalog](openspec/changes/archive/2026-08-03-curated-product-catalog/design.md)
+- Authentication: all API endpoints require the `X-Auth-Request-Email` header
+  (injected by oauth2-proxy in production, set by the frontend in local dev);
+  `GET /api/me` is the session initialization endpoint. The CLI uses
+  `CAELUS_USER_EMAIL` with an optional `--as-user` override. Spec:
+  [auth-header-integration](openspec/specs/auth-header-integration/spec.md),
+  [user-endpoint-authorization](openspec/specs/user-endpoint-authorization/spec.md)
 
 ## Quick Start
 Each project owns its own `.venv`, which uv resolves from the working
@@ -189,6 +189,11 @@ Prose docs point at it; they do not restate it.
 - READMEs and `cli/DEVELOPMENT.md` — **how to work with the code today**: how
   to run, test and operate it, the codebase map, troubleshooting, and
   narrative that spans several capabilities.
+
+Capability directories under `openspec/specs/` are not immutable the way
+archive paths are: `openspec sync` can rename or merge them. Renaming or
+merging a capability directory is a link-breaking operation — update the prose
+links pointing at it in the same change.
 
 When a feature was built through an OpenSpec change, its entry in a prose doc
 is a terse orientation — a few sentences, enough that a reader knows the

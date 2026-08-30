@@ -435,3 +435,11 @@ about `--atomic` in D1 and D12 depends on it, so it is fixed here rather than no
 - **A very fast crash plus a very fast rollback could outrun Promtail**, whose guarantee is "within
   seconds". `--wait` holds a crashing pod for the whole Helm timeout first, so the window is narrow
   and accepted rather than engineered around.
+
+## Open Questions
+
+- **Cross-deployment build references.** (Recovered from `AGENTS.md`
+  Architecture Notes, 2026-08-30.) D4 validates ownership only. Nothing
+  currently stops one build being named by releases of *different* deployments
+  — an image is technically reusable that way, it is not the intended case, and
+  rejecting it is an open item.

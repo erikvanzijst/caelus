@@ -22,8 +22,7 @@ interface SftpAccessDialogProps {
 /**
  * Focused modal showing a deployment's SFTP connection details, opened from the
  * dashboard card's "Files" action. Reuses the same query as the availability
- * gate, so it opens instantly from cache. Keeps the password behind an explicit
- * reveal rather than on the persistent card surface.
+ * gate, so it opens instantly from cache.
  */
 export function SftpAccessDialog({ userId, deploymentId, hostname, onClose }: SftpAccessDialogProps) {
   const { data: creds } = useSftpCredentials(userId, deploymentId)

@@ -34,6 +34,8 @@ resource "kubernetes_deployment" "worker" {
           # Without this a bootstrap edit would sit in the ConfigMap unapplied
           # until some unrelated restart happened to pick it up.
           "checksum/tenant-bootstrap" = sha256(kubernetes_config_map.tenant_db_bootstrap.data["tenant-bootstrap.sql"])
+          # Same reason as the line above, for the platform database's side.
+          "checksum/ssh-resolver-bootstrap" = sha256(kubernetes_config_map.ssh_resolver_bootstrap.data["ssh-resolver-bootstrap.sql"])
         }
       }
 
@@ -61,6 +63,72 @@ resource "kubernetes_deployment" "worker" {
           volume_mount {
             name       = "sqlite-data"
             mount_path = "/app/db"
+          }
+        }
+
+        # Creates the SSH auth resolver's read-only role on the *platform*
+        # database and grants it the two tables it reads. After `migrate`
+        # because a grant needs the table to exist, and init containers run in
+        # order.
+        init_container {
+          name    = "ssh-resolver-db-bootstrap"
+          image   = "postgres:16-alpine"
+          command = ["/bin/sh", "-c"]
+          args = [
+            <<-EOT
+              set -e
+              echo 'Provisioning the SSH resolver database role...'
+              psql -q -v ON_ERROR_STOP=1 \
+                -v ssh_resolver_password="$SSH_RESOLVER_PASSWORD" \
+                -f /ssh-resolver-bootstrap/ssh-resolver-bootstrap.sql
+              echo 'SSH resolver role ready'
+            EOT
+          ]
+
+          env {
+            name  = "PGHOST"
+            value = "caelus-postgres.${var.namespace}.svc.cluster.local"
+          }
+
+          env {
+            name  = "PGPORT"
+            value = "5432"
+          }
+
+          env {
+            name  = "PGUSER"
+            value = var.db_user
+          }
+
+          env {
+            name  = "PGDATABASE"
+            value = var.db_name
+          }
+
+          env {
+            name = "PGPASSWORD"
+            value_from {
+              secret_key_ref {
+                name = "caelus-db"
+                key  = "password"
+              }
+            }
+          }
+
+          env {
+            name = "SSH_RESOLVER_PASSWORD"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.ssh_resolver_db_bootstrap.metadata[0].name
+                key  = "SSH_RESOLVER_PASSWORD"
+              }
+            }
+          }
+
+          volume_mount {
+            name       = "ssh-resolver-bootstrap"
+            mount_path = "/ssh-resolver-bootstrap"
+            read_only  = true
           }
         }
 
@@ -213,6 +281,13 @@ resource "kubernetes_deployment" "worker" {
           name = "tenant-db-bootstrap"
           config_map {
             name = kubernetes_config_map.tenant_db_bootstrap.metadata[0].name
+          }
+        }
+
+        volume {
+          name = "ssh-resolver-bootstrap"
+          config_map {
+            name = kubernetes_config_map.ssh_resolver_bootstrap.metadata[0].name
           }
         }
       }

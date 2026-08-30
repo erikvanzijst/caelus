@@ -43,49 +43,122 @@ def _create_deployment(client, db_session, *, user_id: int) -> str:
 
 @pytest.fixture
 def stub_sftp(monkeypatch):
-    """Stub the provisioner's SFTP secret read. Pass creds=None to simulate a
-    product that exposes no files (no credentials Secret)."""
-    def _install(creds):
+    """Stub the provisioner's SFTP availability probe.
+
+    Pass False to simulate a product that exposes no files. The probe reads a
+    Service, not a Secret: nothing in the response is a credential, so the
+    endpoint has no reason to be able to read one.
+    """
+    def _install(available: bool):
         monkeypatch.setattr(
-            "app.provisioner.provisioner.read_sftp_credentials",
-            lambda **kwargs: creds,
+            "app.provisioner.provisioner.sftp_is_available",
+            lambda **kwargs: available,
         )
     return _install
 
 
-def test_owner_gets_sftp_credentials(client, db_session, stub_sftp, monkeypatch):
+@pytest.fixture
+def register_key(db_session):
+    """Register a real key on an account, through the same service the API uses."""
+    from app.services import ssh_keys as ssh_keys_service
+
+    def _register(user_id: int):
+        ssh_keys_service.add_key(
+            db_session,
+            user_id=user_id,
+            public_key=(
+                "ssh-ed25519 "
+                "AAAAC3NzaC1lZDI1NTE5AAAAIBZO/CpZb1FS9RnxIaTPPPAIrDvHCcynnYjhA7Jkvgw/ owner"
+            ),
+        )
+        db_session.commit()
+
+    return _register
+
+
+def test_owner_gets_connection_details(client, db_session, stub_sftp, register_key, monkeypatch):
     monkeypatch.setenv("CAELUS_SFTP_HOST", "dev.freepod.eu")
     monkeypatch.setenv("CAELUS_SFTP_PORT", "23")
     from app.config import get_settings
+    from app.models import DeploymentORM
 
     get_settings.cache_clear()
-    stub_sftp({"username": "files-app-ab12cd", "password": "s3cret-pw"})
+    stub_sftp(True)
 
     user_id = client.get("/api/me").json()["id"]
+    register_key(user_id)
     deployment_id = _create_deployment(client, db_session, user_id=user_id)
+    name = db_session.get(DeploymentORM, UUID(deployment_id)).name
     resp = client.get(f"/api/users/{user_id}/deployments/{deployment_id}/sftp")
 
     assert resp.status_code == 200
-    body = resp.json()
-    assert body == {
+    # Exact, not a subset: a password reappearing in this body is the failure
+    # this change exists to prevent, and only equality catches it.
+    assert resp.json() == {
         "host": "dev.freepod.eu",
         "port": 23,
-        "username": "files-app-ab12cd",
-        "password": "s3cret-pw",
+        "username": name,
+        "auth_method": "publickey",
+        "account_has_ssh_key": True,
     }
     get_settings.cache_clear()
 
 
-def test_absent_secret_returns_404(client, db_session, stub_sftp):
-    stub_sftp(None)  # product exposes no files
+def test_the_username_is_the_deployment_name(client, db_session, stub_sftp):
+    """It comes from the row, not from the cluster -- so no Secret is read."""
+    from app.models import DeploymentORM
+
+    stub_sftp(True)
+    user_id = client.get("/api/me").json()["id"]
+    deployment_id = _create_deployment(client, db_session, user_id=user_id)
+    expected = db_session.get(DeploymentORM, UUID(deployment_id)).name
+
+    resp = client.get(f"/api/users/{user_id}/deployments/{deployment_id}/sftp")
+    assert resp.json()["username"] == expected
+
+
+def test_serving_the_response_reads_no_secret(client, db_session, stub_sftp, monkeypatch):
+    """The endpoint must not need permission to read a Secret to answer.
+
+    Enforced at the provisioner boundary rather than by inspecting the body:
+    the point is not only that no credential is returned, but that none is ever
+    fetched.
+    """
+    stub_sftp(True)
+
+    def explode(**kwargs):
+        raise AssertionError("the SFTP endpoint read a Secret")
+
+    monkeypatch.setattr("app.provisioner.provisioner.kube.read_secret_data_by_label", explode, raising=False)
+    monkeypatch.setattr("app.provisioner.provisioner.upsert_secret", explode)
+
+    user_id = client.get("/api/me").json()["id"]
+    deployment_id = _create_deployment(client, db_session, user_id=user_id)
+    assert client.get(f"/api/users/{user_id}/deployments/{deployment_id}/sftp").status_code == 200
+
+
+def test_account_without_a_key_is_identifiable(client, db_session, stub_sftp):
+    """The details are still served -- they are correct, just not usable yet."""
+    stub_sftp(True)
+    user_id = client.get("/api/me").json()["id"]
+    deployment_id = _create_deployment(client, db_session, user_id=user_id)
+
+    body = client.get(f"/api/users/{user_id}/deployments/{deployment_id}/sftp").json()
+    assert body["account_has_ssh_key"] is False
+    assert body["auth_method"] == "publickey"
+
+
+def test_no_sftp_service_returns_404(client, db_session, stub_sftp):
+    stub_sftp(False)  # product exposes no files
     user_id = client.get("/api/me").json()["id"]
     deployment_id = _create_deployment(client, db_session, user_id=user_id)
     resp = client.get(f"/api/users/{user_id}/deployments/{deployment_id}/sftp")
     assert resp.status_code == 404
 
 
-def test_admin_can_read_other_users_credentials(client, db_session, stub_sftp):
-    stub_sftp({"username": "files-app-zz99", "password": "pw"})
+def test_admin_receives_no_credential_either(client, db_session, stub_sftp):
+    """There is nothing to withhold from an administrator, so nothing is."""
+    stub_sftp(True)
     # client is admin; create a deployment owned by a regular user
     regular_id = create_user(client, "owner@example.com")["id"]
     product_id = client.post(
@@ -104,12 +177,36 @@ def test_admin_can_read_other_users_credentials(client, db_session, stub_sftp):
 
     resp = client.get(f"/api/users/{regular_id}/deployments/{deployment_id}/sftp")
     assert resp.status_code == 200
+    assert "password" not in resp.json()
+
+
+def test_the_key_reported_is_the_owners_not_the_readers(client, db_session, stub_sftp, register_key):
+    """An administrator asks whether *this deployment* can be connected to."""
+    admin_id = client.get("/api/me").json()["id"]
+    register_key(admin_id)
+    stub_sftp(True)
+
+    regular_id = create_user(client, "keyless@example.com")["id"]
+    product_id = client.post("/api/products", json={"name": "b", "description": "b"}).json()["id"]
+    template_id = client.post(
+        f"/api/products/{product_id}/templates",
+        json={"chart_ref": "r/", "chart_version": "1.0.0", "values_schema_json": {"type": "object", "properties": {}}},
+    ).json()["id"]
+    client.put(f"/api/products/{product_id}", json={"template_id": template_id})
+    ptv_id = create_free_plan_template(db_session, product_id)
+    deployment_id = client.post(
+        f"/api/users/{regular_id}/deployments",
+        json={"desired_template_id": template_id, "plan_template_id": ptv_id},
+    ).json()["deployment"]["id"]
+
+    body = client.get(f"/api/users/{regular_id}/deployments/{deployment_id}/sftp").json()
+    assert body["account_has_ssh_key"] is False, "reported the reader's keys, not the owner's"
 
 
 def test_non_owner_is_denied(user_client, db_session, stub_sftp):
     # A regular user requesting another user's deployment is rejected by
-    # require_self before any secret is read (same guard as other sub-resources).
-    stub_sftp({"username": "u", "password": "p"})
+    # require_self before anything is read (same guard as other sub-resources).
+    stub_sftp(True)
     client, admin_user = user_client
     resp = client.get(
         f"/api/users/{admin_user.id}/deployments/"
@@ -122,22 +219,18 @@ def test_cli_parity(cli_runner, monkeypatch):
     from tests.test_cli import _seed_deployment_via_services
 
     runner, cli_app = cli_runner
-    monkeypatch.setattr(
-        "app.provisioner.provisioner.read_sftp_credentials",
-        lambda **kwargs: {"username": "files-app-cli", "password": "cli-pw"},
-    )
+    monkeypatch.setattr("app.provisioner.provisioner.sftp_is_available", lambda **kwargs: True)
 
     user_id, deployment_id = _seed_deployment_via_services()
 
     result = runner.invoke(cli_app, ["get-deployment-sftp", str(user_id), str(deployment_id)])
     assert result.exit_code == 0, result.output
-    assert "files-app-cli" in result.output
-    assert "cli-pw" in result.output
+    assert "auth_method: publickey" in result.output
+    assert "account_has_ssh_key:" in result.output
+    assert "password" not in result.output
 
-    # Absent secret -> stable not-found error, no traceback.
-    monkeypatch.setattr(
-        "app.provisioner.provisioner.read_sftp_credentials", lambda **kwargs: None
-    )
+    # No SFTP service -> stable not-found error, no traceback.
+    monkeypatch.setattr("app.provisioner.provisioner.sftp_is_available", lambda **kwargs: False)
     missing = runner.invoke(cli_app, ["get-deployment-sftp", str(user_id), str(deployment_id)])
     assert missing.exit_code == 1
     assert "Traceback" not in missing.output

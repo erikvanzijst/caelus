@@ -283,9 +283,8 @@ caelus list-deployments | yq -y '.[] | {id, domainname, status}'
 
 An SSH public key is owned by a **user**, never by a deployment; a user's keys
 apply to every deployment that user owns, including ones created after the key
-was registered. **Nothing reads these keys yet** — SSH access still
-authenticates with the per-deployment credentials the SFTP endpoint issues, so
-this table is a store, not yet a credential. Reads and deletes follow
+was registered. They are the SSH credential: the edge resolves every SFTP
+connection against this table. Reads and deletes follow
 `require_self`; **adds are owner-only even for administrators**, because
 installing a key on someone's account is impersonation. A key is addressed by
 its `SHA256:` fingerprint through a path-converter route — the only one in the

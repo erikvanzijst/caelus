@@ -197,6 +197,14 @@ def list_keys(session: Session, *, user_id: int) -> list[SshKeyRead]:
     return [to_read(row) for row in rows]
 
 
+def account_has_key(session: Session, *, user_id: int) -> bool:
+    """Whether this account has any registered key at all."""
+    return (
+        session.exec(select(SshKeyORM.id).where(SshKeyORM.user_id == user_id).limit(1)).first()
+        is not None
+    )
+
+
 def get_key(session: Session, *, user_id: int, fingerprint: str) -> SshKeyORM:
     row = session.exec(
         select(SshKeyORM).where(

@@ -207,6 +207,56 @@ resource "helm_release" "prometheus" {
               ]
             },
             {
+              # The SSH edge. Its availability is the resolver's: sshpiperd
+              # gets both the route and the authentication decision from the
+              # resolver on every connection, so a resolver that is not ready
+              # is an edge that admits nobody.
+              #
+              # Keyed on container readiness rather than on the pod restarting,
+              # because the failure that matters most does not restart
+              # anything: the resolver alive and unable to reach the platform
+              # database. It answers grpc.health.v1 from a real query for
+              # exactly that reason, and the container's readiness probe calls
+              # it (tf/app/sshpiper).
+              #
+              # A client presenting an unregistered key never reaches this.
+              # Refusals are the resolver working, and leave it SERVING.
+              name = "ssh-edge-alerts"
+              rules = [
+                {
+                  alert = "SshResolverNotReady"
+                  expr  = <<-EOT
+                    kube_pod_container_status_ready{container="ssh-resolver"} == 0
+                    EOT
+                  for   = "2m"
+                  labels = {
+                    severity = "critical"
+                  }
+                  annotations = {
+                    summary     = "SSH auth resolver not ready"
+                    description = "The SSH auth resolver in {{ $labels.namespace }} ({{ $labels.pod }}) is not ready. SFTP access to every deployment in that environment is refused while this holds; the resolver reports unready when it cannot read the platform database."
+                  }
+                },
+                {
+                  # The edge with no resolver at all: sshpiperd calls
+                  # ListCallbacks at startup and exits if it fails, so a
+                  # missing resolver takes the whole pod with it.
+                  alert = "SshEdgeDown"
+                  expr  = <<-EOT
+                    kube_deployment_status_replicas_available{deployment="sshpiper"} == 0
+                    EOT
+                  for   = "2m"
+                  labels = {
+                    severity = "critical"
+                  }
+                  annotations = {
+                    summary     = "SSH edge down"
+                    description = "The sshpiperd deployment in {{ $labels.namespace }} has no available replica. The environment's public SSH port is not being served."
+                  }
+                }
+              ]
+            },
+            {
               name = "job-alerts"
               rules = [
                 {

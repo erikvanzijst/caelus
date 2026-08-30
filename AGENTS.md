@@ -39,14 +39,22 @@ This repository is a monorepo with:
   [worker-process-pool](openspec/specs/worker-process-pool/spec.md),
   [build-worker](openspec/specs/build-worker/spec.md),
   [database-housekeeping-worker](openspec/specs/database-housekeeping-worker/spec.md)
-- **Account SSH keys are a store, not yet a credential.** A user registers SSH
-  public keys on their account; they are owned by the user and scoped to no
-  deployment. **Nothing consumes them yet** — SSH still authenticates with the
-  per-deployment passwords. Adds are owner-only even for administrators, and a
-  key is addressed by its `SHA256:` fingerprint. Spec:
+- **Account SSH keys are the SSH credential.** A user registers SSH public keys
+  on their account; they are owned by the user, scoped to no deployment, and are
+  what authenticates every SFTP connection. Adds are owner-only even for
+  administrators, and a key is addressed by its `SHA256:` fingerprint. Spec:
   [ssh-key-api](openspec/specs/ssh-key-api/spec.md),
   [ssh-key-data-model](openspec/specs/ssh-key-data-model/spec.md) · Rationale:
   [account-ssh-keys](openspec/changes/archive/2026-08-28-account-ssh-keys/design.md)
+- **SSH routing and authentication are resolved per connection.** The edge
+  (sshpiperd) asks the SSH auth resolver — `ssh-auth/`, a gRPC plugin — rather
+  than reading cluster objects, so the reconciler owns nothing for this feature.
+  Spec: [sftp-edge-routing](openspec/specs/sftp-edge-routing/spec.md),
+  [sftp-chart-contract](openspec/specs/sftp-chart-contract/spec.md),
+  [ssh-auth-resolver](openspec/changes/ssh-grpc-auth-plugin/specs/ssh-auth-resolver/spec.md)
+  (new capability; it joins `openspec/specs/` on archive) · Rationale:
+  [ssh-grpc-auth-plugin](openspec/changes/ssh-grpc-auth-plugin/design.md),
+  [ssh-auth](ssh-auth/README.md)
 - **Vars are the single channel into a pod's environment.** A deployment's
   `vars` become environment variables in its container;
   `deployment.user_values_json` configures the **chart**, not the process, and

@@ -108,6 +108,42 @@ variable "mollie_api_key" {
   sensitive   = true
 }
 
+# The SSH edge's upstream keypair, keyed by Terraform workspace.
+#
+# Generate one with:
+#
+#   ssh-keygen -t ed25519 -N "" -C freepod-upstream-<env> -f /tmp/k && cat /tmp/k
+#
+# Rotating it is a fleet-wide operation -- every sidecar trusts the public half
+# -- so plan it as a two-step chart change. See ssh-auth/README.md.
+variable "sshpiper_upstream_private_keys" {
+  description = "OpenSSH private key the edge authenticates to sidecars with, per Terraform workspace. Set in secrets.auto.tfvars."
+  type        = map(string)
+  sensitive   = true
+
+  validation {
+    condition     = alltrue([for k in ["default", "prod"] : contains(keys(var.sshpiper_upstream_private_keys), k)])
+    error_message = "sshpiper_upstream_private_keys must have both a \"default\" (dev) and a \"prod\" key. The dev workspace is named `default`, not `dev`."
+  }
+
+  validation {
+    condition = (
+      !alltrue([for k in ["default", "prod"] : contains(keys(var.sshpiper_upstream_private_keys), k)])
+      || var.sshpiper_upstream_private_keys["default"] != var.sshpiper_upstream_private_keys["prod"]
+    )
+    error_message = "The dev and prod upstream keys must differ: one key for both environments would let the dev edge authenticate to a prod tenant's sidecar."
+  }
+}
+
+# The resolver image. Immutable tag from ssh-auth/VERSION, never re-pushed, and
+# deliberately not a moving tag like the API's: the SSH edge must not roll
+# because the API rolled. Bump it here to deploy a new resolver.
+variable "ssh_resolver_image" {
+  description = "SSH auth resolver image (ssh-auth/), pinned to an immutable version"
+  type        = string
+  default     = "ghcr.io/erikvanzijst/freepod/ssh-resolver:0.1.1"
+}
+
 variable "sshpiper_port" {
   description = "Cluster-side SSH port for the SFTP entry point (null = workspace default: 2222 prod, 2223 dev)"
   type        = number

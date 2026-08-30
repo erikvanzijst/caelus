@@ -15,11 +15,32 @@ module "oauth2-proxy" {
   allowed_groups = local.is_prod_workspace ? [] : ["freepod-dev"]
 }
 
+# The public half of this environment's upstream key. Derived here rather than
+# inside the sshpiper module because both modules need it and that module
+# already depends on module.caelus for the resolver's database URL -- deriving
+# it there and passing it back would be a cycle.
+data "tls_public_key" "sshpiper_upstream" {
+  private_key_openssh = var.sshpiper_upstream_private_keys[terraform.workspace]
+}
+
 module "sshpiper" {
   source    = "./sshpiper"
   namespace = kubernetes_namespace.sshpiper.metadata[0].name
   ssh_port  = local.sshpiper_port
   rbac_name = "sshpiper-${local.ns_sshpiper}"
+
+  # This environment's upstream credential.
+  upstream_private_key = var.sshpiper_upstream_private_keys[terraform.workspace]
+
+  resolver_image = var.ssh_resolver_image
+
+  resolver_database_url = format(
+    "postgresql://%s:%s@%s:5432/%s",
+    module.caelus.ssh_resolver_db_role,
+    module.caelus.ssh_resolver_db_password,
+    module.caelus.database_host,
+    module.caelus.database_name,
+  )
 }
 
 module "caelus" {
@@ -38,6 +59,10 @@ module "caelus" {
   builder_image      = var.builder_image
   sftp_host          = local.sftp_host
   sftp_port          = local.sftp_port
+
+  # Every sidecar trusts this; the edge holds the private half. The reconciler
+  # injects it into each chart as caelus.sftp.platformPublicKey.
+  sftp_platform_public_key = trimspace(data.tls_public_key.sshpiper_upstream.public_key_openssh)
 
   # Select this workspace's Garage bucket and key. Like the Keycloak clients
   # above, the buckets and keys themselves are created in tf/deps (the singleton

@@ -30,6 +30,7 @@ from app.models import (
 )
 from app.services.jobs import JobService
 from app.services import relational_storage
+from app.services import ssh_keys as ssh_keys_service
 from app.services import subscriptions as subscription_service
 from app.services import template_values
 from app.services import vars as vars_service
@@ -495,10 +496,8 @@ def get_sftp_credentials(
     """Return a deployment's SFTP connection details, or raise NotFoundException.
 
     Enforces the same ownership rules as ``get_deployment`` (the ORM lookup is
-    scoped by ``user_id`` when provided). Credentials come from the credentials
-    Secret in the deployment's namespace, read live via the provisioner; nothing
-    is persisted in the DB. A 404 covers both "no such deployment" and "this
-    product exposes no files" (no Secret), which is what the UI keys on to hide
+    scoped by ``user_id`` when provided). A 404 covers both "no such deployment"
+    and "this product exposes no files", which is what the UI keys on to hide
     the feature.
     """
     prov: Provisioner = default_provisioner if provisioner is None else provisioner
@@ -507,16 +506,17 @@ def get_sftp_credentials(
     if deployment.status == DEPLOYMENT_STATUS_DELETED:
         raise NotFoundException("Deployment not found")
 
-    data = prov.read_sftp_credentials(namespace=deployment.namespace, instance=deployment.name)
-    if not data or "username" not in data or "password" not in data:
+    if not prov.sftp_is_available(namespace=deployment.namespace, instance=deployment.name):
         raise NotFoundException("SFTP access is not available for this deployment")
 
     settings = get_settings()
     return SftpCredentialsRead(
         host=settings.sftp_host,
         port=settings.sftp_port,
-        username=data["username"],
-        password=data["password"],
+        username=deployment.name,
+        account_has_ssh_key=ssh_keys_service.account_has_key(
+            session, user_id=deployment.user_id
+        ),
     )
 
 

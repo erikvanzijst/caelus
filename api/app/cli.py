@@ -637,6 +637,13 @@ def get_release(user_id: int, deployment_id: UUID, number: int) -> None:
 
 @app.command("get-deployment-sftp")
 def get_deployment_sftp(user_id: int, deployment_id: UUID) -> None:
+    """A deployment's SFTP connection details.
+
+    No credential is reported, to anyone: access is authenticated by a public
+    key registered on the owning account, so there is none to report.
+    `account_has_ssh_key` says whether that account has one yet -- when it does
+    not, these details cannot be used until the owner registers a key.
+    """
     with session_scope() as session:
         _require_cli_user(session)
         try:

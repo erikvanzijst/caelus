@@ -613,14 +613,16 @@ class DeploymentRead(DeploymentBase):
 class SftpCredentialsRead(SQLModel):
     """SFTP connection details for a deployment with file access.
 
-    host/port are the user-facing platform endpoint (from settings); username
-    and password come from the deployment's credentials Secret in the cluster
-    and are never persisted in the Caelus database.
+    host/port are the user-facing platform endpoint (from settings) and
+    `username` is the deployment's own name, so serving this reads nothing from
+    the deployment's namespace.
     """
+
     host: str
     port: int
     username: str
-    password: str
+    auth_method: str = "publickey"
+    account_has_ssh_key: bool
 
 
 class DeploymentDatabaseRead(SQLModel):

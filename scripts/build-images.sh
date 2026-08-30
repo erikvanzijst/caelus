@@ -9,6 +9,7 @@
 #   ./scripts/build-images.sh --ui           # Build only UI image (tag = git SHA)
 #   ./scripts/build-images.sh --keycloak     # Build only Keycloak image (Freepod theme)
 #   ./scripts/build-images.sh --ssh-sidecar   # Build only the dev-profile SSH sidecar
+#   ./scripts/build-images.sh --ssh-resolver  # Build only the SSH auth resolver
 #   ./scripts/build-images.sh v1.2.3 --api   # Build only API image with custom tag
 #   ./scripts/build-images.sh v1.2.3 --ui    # Build only UI image with custom tag
 #   ./scripts/build-images.sh --help         # Show this help message
@@ -27,6 +28,12 @@
 # into --all would fail every build that did not bump it. CI publishes it with
 # --skip-if-published instead, so a push lands exactly when VERSION names a
 # version the registry does not already hold.
+#
+# The SSH auth resolver is on the same footing and for a related reason. It runs
+# as a sidecar in the SSH edge's pod, on the authentication path of every SSH
+# connection, and must not roll because the API rolled: it takes its version from
+# ssh-auth/VERSION, is never re-pushed, and reaches the cluster only when
+# Terraform names a new version.
 
 set -euo pipefail
 
@@ -35,7 +42,7 @@ REGISTRY=ghcr.io/$(gh repo view --json nameWithOwner -q .nameWithOwner)
 # Function to display help
 usage() {
   cat <<'EOF'
-Usage: ./scripts/build-images.sh [TAG] [--api|--ui|--keycloak|--ssh-sidecar|--all|--help]
+Usage: ./scripts/build-images.sh [TAG] [--api|--ui|--keycloak|--ssh-sidecar|--ssh-resolver|--all|--help]
 
 If TAG is not provided, the current git SHA will be used.
 
@@ -46,12 +53,15 @@ Options:
   --ssh-sidecar   Build only the dev-profile SSH sidecar. Ignores TAG: its
                   version comes from products/_lib/ssh-sidecar/VERSION and an
                   already-published version is refused rather than overwritten.
+  --ssh-resolver  Build only the SSH auth resolver. Ignores TAG: its version
+                  comes from ssh-auth/VERSION and an already-published version
+                  is refused rather than overwritten.
   --skip-if-published
-                  With --ssh-sidecar, treat an already-published version as
-                  nothing to do rather than an error. This is what makes the
-                  publish safe to run on every merge: it pushes exactly when
-                  VERSION is new. Run by hand without it, so that a version you
-                  believed you had bumped fails loudly.
+                  With --ssh-sidecar or --ssh-resolver, treat an already-
+                  published version as nothing to do rather than an error. This
+                  is what makes the publish safe to run on every merge: it
+                  pushes exactly when VERSION is new. Run by hand without it, so
+                  that a version you believed you had bumped fails loudly.
   --all           Build all images on moving tags (API, UI, Keycloak).
   --help          Show this help message and exit.
 EOF
@@ -59,7 +69,7 @@ EOF
 
 # Parse arguments
 TAG=""
-TARGET="both"  # possible values: both, api, ui, keycloak, ssh-sidecar, all
+TARGET="both"  # possible values: both, api, ui, keycloak, ssh-sidecar, ssh-resolver, all
 SKIP_IF_PUBLISHED=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -77,6 +87,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ssh-sidecar)
       TARGET="ssh-sidecar"
+      shift
+      ;;
+    --ssh-resolver)
+      TARGET="ssh-resolver"
       shift
       ;;
     --skip-if-published)
@@ -103,11 +117,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Only the sidecar has an immutable tag to be already-published, so anywhere
+# Only the two immutably-tagged images can be already-published, so anywhere
 # else this flag would silently do nothing -- which is how a publish everyone
 # believes is conditional turns out never to have been.
-if [[ "$SKIP_IF_PUBLISHED" == "true" && "$TARGET" != "ssh-sidecar" ]]; then
-  echo "--skip-if-published only applies to --ssh-sidecar." >&2
+if [[ "$SKIP_IF_PUBLISHED" == "true" && "$TARGET" != "ssh-sidecar" && "$TARGET" != "ssh-resolver" ]]; then
+  echo "--skip-if-published only applies to --ssh-sidecar and --ssh-resolver." >&2
   exit 1
 fi
 
@@ -163,6 +177,44 @@ if [[ "$TARGET" == "ssh-sidecar" ]]; then
   echo "This does not reach any deployment on its own. Point the chart that"
   echo "consumes it at this version and roll that out; ./scripts/rollout.sh"
   echo "restarts the platform's own Deployments and has no bearing here."
+  echo "=============================================="
+  exit 0
+fi
+
+if [[ "$TARGET" == "ssh-resolver" ]]; then
+  RESOLVER_CONTEXT=./ssh-auth
+  RESOLVER_VERSION=$(tr -d '[:space:]' < "${RESOLVER_CONTEXT}/VERSION")
+  RESOLVER_REF="${REGISTRY}/ssh-resolver:${RESOLVER_VERSION}"
+
+  # Never overwritten, for the same reason as the sidecar above and one more:
+  # rolling back the SSH edge means pointing Terraform at the previous version,
+  # which only works while that version is still the image it was.
+  if docker manifest inspect "${RESOLVER_REF}" >/dev/null 2>&1; then
+    if [[ "$SKIP_IF_PUBLISHED" == "true" ]]; then
+      echo "${RESOLVER_REF} is already published. Nothing to do."
+      exit 0
+    fi
+    echo "Refusing to overwrite ${RESOLVER_REF}, which is already published." >&2
+    echo "Bump ssh-auth/VERSION and repoint tf/app/sshpiper." >&2
+    exit 1
+  fi
+
+  echo ""
+  echo "[1/1] Building and pushing SSH resolver image ${RESOLVER_VERSION}..."
+  # Its own directory is the whole context: ssh-auth/ depends on nothing else
+  # in the repository, which is the point of it being self-contained.
+  docker buildx build \
+    --push \
+    --platform linux/amd64 \
+    --tag "${RESOLVER_REF}" \
+    "${RESOLVER_CONTEXT}"
+
+  echo ""
+  echo "=============================================="
+  echo "Pushed ${RESOLVER_REF}"
+  echo ""
+  echo "This does not reach the SSH edge on its own. Point tf/app/sshpiper at"
+  echo "this version and apply; ./scripts/rollout.sh does not touch it."
   echo "=============================================="
   exit 0
 fi

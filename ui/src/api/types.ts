@@ -160,11 +160,20 @@ export interface DeploymentCreateResponse {
   checkout_url: string | null
 }
 
+/**
+ * A deployment's SFTP connection details, as the platform reports them.
+ *
+ * `account_has_ssh_key` is the owner's, not the reader's. It is false when the
+ * account has registered no key, in which case these details are correct and
+ * cannot be used until one is — by far the likeliest reason a connection
+ * fails, and the thing the panel has to say first.
+ */
 export interface SftpCredentials {
   host: string
   port: number
   username: string
-  password: string
+  auth_method: string
+  account_has_ssh_key: boolean
 }
 
 /**

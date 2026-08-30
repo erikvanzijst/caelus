@@ -45,6 +45,10 @@ CONSUMERS = {
     "vaultwarden": {"host": "v.example.test", "caelus.owner.email": "owner@example.test"},
 }
 
+# The platform's public key, injected per environment by the reconciler. The
+# chart refuses to render without it.
+PLATFORM_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIV5/SURDe/M7JtAheJuxURSGgpFB8Yfrd/LY6c9+DzR platform"
+
 
 @pytest.fixture(scope="module", autouse=True)
 def _resolved_dependencies():
@@ -66,13 +70,26 @@ def _resolved_dependencies():
         assert result.returncode == 0, f"{chart}: {result.stderr}"
 
 
-def _render(chart: str) -> list[dict]:
+def _render(chart: str, *, platform_key: str | None = PLATFORM_KEY) -> list[dict]:
     args = ["helm", "template", "t", str(PRODUCTS / chart / "chart")]
+    if platform_key is not None:
+        args += ["--set-string", f"caelus.sftp.platformPublicKey={platform_key}"]
     for key, value in CONSUMERS[chart].items():
         args += ["--set", f"{key}={value}"]
     result = subprocess.run(args, capture_output=True, text=True)
     assert result.returncode == 0, f"{chart}: {result.stderr}"
     return [doc for doc in yaml.safe_load_all(result.stdout) if isinstance(doc, dict)]
+
+
+def _sftp_secret(docs: list[dict]) -> dict:
+    secrets = [
+        doc
+        for doc in docs
+        if doc.get("kind") == "Secret"
+        and (doc.get("metadata", {}).get("labels") or {}).get("caelus.dev/component") == "sftp"
+    ]
+    assert len(secrets) == 1, f"expected exactly one SFTP Secret, got {len(secrets)}"
+    return secrets[0]
 
 
 def _sftp_service(docs: list[dict]) -> dict:
@@ -153,3 +170,74 @@ def test_no_other_container_is_probed_on_the_ssh_port(chart):
                 f"{chart}: container {container.get('name')!r} carries a "
                 f"{probe_name} on the SFTP port"
             )
+
+
+@pytest.mark.parametrize("chart", sorted(CONSUMERS))
+def test_no_routing_object_is_rendered(chart):
+    """Routing is resolved per connection; nothing describes it as an object."""
+    for doc in _render(chart):
+        assert doc.get("kind") != "Pipe", (
+            f"{chart}: renders a Pipe. The edge resolves routing from the platform "
+            "database, so a routing object here is state nothing reads and nothing reaps"
+        )
+
+
+@pytest.mark.parametrize("chart", sorted(CONSUMERS))
+def test_no_password_is_generated(chart):
+    """No password in the Secret, and none in the sidecar's user line."""
+    data = _sftp_secret(_render(chart)).get("stringData") or {}
+    assert "password" not in data, f"{chart}: the SFTP Secret carries a password"
+
+    user_line = data["users.conf"]
+    user, password, _, _ = user_line.split(":", 3)
+    assert password == "", (
+        f"{chart}: users.conf is {user_line!r}; the password field must be empty, which "
+        "is what makes atmoz/sftp disable password login for the account"
+    )
+    assert user == "t", f"{chart}: the sidecar user is {user!r}, not the release name"
+
+
+@pytest.mark.parametrize("chart", sorted(CONSUMERS))
+def test_the_secret_carries_the_platform_public_key_and_nothing_secret(chart):
+    data = _sftp_secret(_render(chart)).get("stringData") or {}
+    assert data.get("platform_key.pub") == PLATFORM_KEY
+    assert set(data) == {"username", "users.conf", "platform_key.pub"}
+    for value in data.values():
+        assert "PRIVATE KEY" not in value, f"{chart}: private key material in the SFTP Secret"
+
+
+@pytest.mark.parametrize("chart", sorted(CONSUMERS))
+def test_the_sidecar_reads_the_key_from_atmozs_queue_directory(chart):
+    """`.ssh/keys/*` is concatenated into authorized_keys with the ownership
+    sshd requires; writing authorized_keys directly leaves it root-owned and
+    the login fails with nothing but `[preauth]` in the log."""
+    docs = _render(chart)
+    sidecar = next(c for c in _containers(docs) if c.get("name") == "sftp")
+    mounts = {m["mountPath"]: m["name"] for m in sidecar.get("volumeMounts") or []}
+    assert "/home/t/.ssh/keys" in mounts, f"{chart}: the platform key is not mounted for atmoz"
+
+
+@pytest.mark.parametrize("chart", sorted(CONSUMERS))
+def test_the_sidecar_disables_password_authentication(chart):
+    """Unavailable at sshd, not merely unusable because accounts are locked."""
+    configmaps = [
+        doc
+        for doc in _render(chart)
+        if doc.get("kind") == "ConfigMap"
+        and (doc.get("metadata", {}).get("labels") or {}).get("caelus.dev/component") == "sftp"
+    ]
+    assert len(configmaps) == 1
+    init = configmaps[0]["data"]["init.sh"]
+    assert "PasswordAuthentication no" in init
+    assert "KbdInteractiveAuthentication no" in init
+
+
+@pytest.mark.parametrize("chart", sorted(CONSUMERS))
+def test_rendering_fails_without_the_platform_key(chart):
+    """A sidecar trusting no key is worse than a chart that refuses to render."""
+    args = ["helm", "template", "t", str(PRODUCTS / chart / "chart")]
+    for key, value in CONSUMERS[chart].items():
+        args += ["--set", f"{key}={value}"]
+    result = subprocess.run(args, capture_output=True, text=True)
+    assert result.returncode != 0, f"{chart}: rendered with no platform key"
+    assert "platformPublicKey" in result.stderr

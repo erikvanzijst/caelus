@@ -4,7 +4,7 @@ description: >-
   Lean Caelus-native chart for Nextcloud: the Nextcloud Deployment plus a bundled
   PostgreSQL StatefulSet on the official postgres image.
 type: application
-version: 0.1.10
+version: 0.1.11
 appVersion: "34.0.2"
 keywords:
   - nextcloud
@@ -17,5 +17,5 @@ maintainers:
 # Only dependency is Freepod's own SFTP library chart.
 dependencies:
   - name: caelus-sftp
-    version: "0.2.0"
+    version: "0.3.0"
     repository: "file://../../_lib/caelus-sftp"

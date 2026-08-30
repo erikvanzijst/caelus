@@ -141,7 +141,7 @@ variable "sshpiper_upstream_private_keys" {
 variable "ssh_resolver_image" {
   description = "SSH auth resolver image (ssh-auth/), pinned to an immutable version"
   type        = string
-  default     = "ghcr.io/erikvanzijst/freepod/ssh-resolver:0.1.0"
+  default     = "ghcr.io/erikvanzijst/freepod/ssh-resolver:0.1.1"
 }
 
 variable "sshpiper_port" {

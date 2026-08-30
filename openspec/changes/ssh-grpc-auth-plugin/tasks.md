@@ -112,6 +112,12 @@ The exception is 3.1's Secret, which nothing reads until 3.3 lands.
       `SshResolverNotReady` alert added in 2.10 keys on, so without the probe the alert
       can never fire. Deliberately no liveness probe: restarting fixes no database
       outage, and would take sshpiperd down with the pod.
+      **An `exec` probe, not Kubernetes' native `grpc` one.** That is dialed at the pod
+      IP, which a loopback-only listener can never answer — it failed exactly that way on
+      the first dev apply. The bind is load-bearing: `PublicKeyAuth` returns the upstream
+      private key to any caller naming a deployment and a public key registered on its
+      owner, so pod-IP reachability would be an escalation to the fleet-wide credential.
+      The binary answers `-healthcheck` for the probe to exec inside the container.
 - [x] 3.3 Switch each environment to the gRPC plugin — container args `["grpc"]`, the
       `PLUGIN` entry removed from the ConfigMap — and drop the `pipes` and `secrets` rules
       from the proxy's ClusterRole. The ClusterRole and its binding are gone entirely, and

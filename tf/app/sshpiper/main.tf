@@ -142,10 +142,24 @@ resource "kubernetes_deployment" "sshpiper" {
             read_only  = true
           }
 
-          # Answered from a real query, not from the process being alive.
+          # Answered from a real query, not from the process being alive: a
+          # resolver that is running and cannot reach the platform database
+          # admits nobody, and that is the outage the SshResolverNotReady alert
+          # exists to catch (tf/deps/prometheus). Refusals are the resolver
+          # working, and leave it SERVING.
+          #
+          # `exec`, not `grpc`. A grpc probe is dialed by the kubelet at the
+          # *pod IP*, and this server binds loopback only -- so that probe can
+          # never connect, which is exactly how it failed the first time. The
+          # bind is not tidiness: PublicKeyAuth hands back the environment's
+          # upstream private key to any caller naming a deployment and a public
+          # key registered on its owner, both public information, so reachable
+          # on the pod IP and unauthenticated it would give the fleet-wide
+          # upstream credential to anything in the cluster. An exec probe runs
+          # inside the container, where 127.0.0.1 is the right address.
           readiness_probe {
-            grpc {
-              port = var.resolver_port
+            exec {
+              command = ["/ssh-auth", "-healthcheck"]
             }
             period_seconds    = 10
             timeout_seconds   = 3

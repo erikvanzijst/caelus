@@ -397,7 +397,7 @@ func TestANewlyRegisteredKeyWorksOnTheNextConnection(t *testing.T) {
 // address that answers nothing, so the failure is the real one -- a connection
 // that cannot be made -- rather than a patched error.
 func TestAnUnreachableDatabaseRefusesRatherThanAdmits(t *testing.T) {
-	pool, err := pgxpool.New(context.Background(), "postgresql://nobody:nobody@127.0.0.1:1/nothing")
+	pool, err := newBrokenPool()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -427,7 +427,7 @@ func TestAHealthyResolverReportsServing(t *testing.T) {
 // on, so a resolver that is alive and admitting nobody has to say so here --
 // otherwise the SSH edge looks healthy while every connection to it is refused.
 func TestAnUnreachableDatabaseReportsNotServing(t *testing.T) {
-	pool, err := pgxpool.New(context.Background(), "postgresql://nobody:nobody@127.0.0.1:1/nothing")
+	pool, err := newBrokenPool()
 	if err != nil {
 		t.Fatal(err)
 	}

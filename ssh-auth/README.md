@@ -70,6 +70,18 @@ It serves `grpc.health.v1` on the same port, answered from a real query rather
 than from being alive: a resolver that is running and cannot read the store
 admits nobody, and the SSH edge's readiness probe has to say so.
 
+`ssh-auth -healthcheck` asks that question of a running server and reports it as
+an exit status. That is the container's readiness probe, and it has to be an
+`exec` probe rather than Kubernetes' native `grpc` one: the kubelet dials a grpc
+probe at the *pod IP*, and this binds loopback only.
+
+**The loopback bind is a security boundary, not tidiness.** `PublicKeyAuth`
+returns the environment's upstream private key to any caller that names a
+deployment and presents a public key registered on its owner — both public
+information. Reachable on the pod IP and unauthenticated, it would hand the
+fleet-wide upstream credential to anything in the cluster. Binding it anywhere
+else means mTLS first.
+
 ## The database role
 
 `tf/app/caelus/ssh-resolver-bootstrap.sql` creates `caelus_ssh_resolver` with

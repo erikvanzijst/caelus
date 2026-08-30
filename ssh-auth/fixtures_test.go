@@ -244,3 +244,10 @@ func (f *fixture) cleanup() {
 		f.pool.Exec(ctx, `DELETE FROM product WHERE id = $1`, f.productID)
 	}
 }
+
+// newBrokenPool points at an address that answers nothing, so a test exercising
+// the unavailable-dependency path gets the real failure -- a connection that
+// cannot be made -- rather than a patched error.
+func newBrokenPool() (*pgxpool.Pool, error) {
+	return pgxpool.New(context.Background(), "postgresql://nobody:nobody@127.0.0.1:1/nothing")
+}

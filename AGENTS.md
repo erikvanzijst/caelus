@@ -176,6 +176,48 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
     of a var's identity, not a filter over a set — and it is a phase, never an
     environment: a staging app is its own deployment.
 
+## Documentation Layering
+
+OpenSpec is the source of truth for behavior and for the reasoning behind it.
+Prose docs point at it; they do not restate it.
+
+- `openspec/specs/<capability>/spec.md` — **what must be true**. Requirements
+  and scenarios. Normative.
+- `openspec/changes/archive/<date>-<slug>/design.md` — **why it is that way**:
+  the decision, the alternatives weighed, the measurements. Archive paths are
+  dated and immutable, so link them directly.
+- READMEs and `cli/DEVELOPMENT.md` — **how to work with the code today**: how
+  to run, test and operate it, the codebase map, troubleshooting, and
+  narrative that spans several capabilities.
+
+When a feature was built through an OpenSpec change, its entry in a prose doc
+is a terse orientation — a few sentences, enough that a reader knows the
+feature exists and roughly what shape it has — followed by links:
+
+````markdown
+### Account SSH Keys
+
+A user registers SSH public keys on their account. They are owned by the user
+and scoped to no deployment; nothing consumes them yet.
+
+Spec: [ssh-key-api](../openspec/specs/ssh-key-api/spec.md),
+[ssh-key-data-model](../openspec/specs/ssh-key-data-model/spec.md) ·
+Rationale: [account-ssh-keys](../openspec/changes/archive/2026-08-28-account-ssh-keys/design.md)
+````
+
+Do not restate requirements, endpoint tables, field lists, validation rules,
+state transitions, error codes, or decision rationale that a linked document
+already carries. If the linked document is wrong or unclear, fix it there.
+A second copy is not a workaround, it is the failure mode this rule exists to
+prevent: two texts that drift until neither can be trusted.
+
+Anything that genuinely belongs in prose and nowhere else gets said once, in
+one file, with the others linking to it.
+
+Inline comments follow the same rule. Comment what the code does when that is
+not obvious; cite the decision (`# D6`, or the capability name) instead of
+re-explaining it. The design document holds the argument.
+
 ## Database & Migrations
 - Migrations: Alembic in `api/alembic/` with `alembic.ini`.
 
@@ -233,6 +275,10 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
   runtime rather than embedding them — a constant baked into the client is
   wrong the first time the platform retunes it.
 - Update migrations for schema changes.
-- Update api/README.md, ui/README.md, cli/DEVELOPMENT.md, tf/README.md, and
-  AGENTS.md when workflow changes. `cli/README.md` changes only when the
-  end-user surface does — it ships to PyPI as the package's landing page.
+- When behavior changes, the spec is the update that matters. Touch
+  api/README.md, ui/README.md, cli/DEVELOPMENT.md, tf/README.md or AGENTS.md
+  only when the *workflow* changes — how to run, build, test or operate the
+  thing — or to add a new capability's terse entry and links per
+  § Documentation Layering. Prose that restates a spec is a regression, not a
+  doc update. `cli/README.md` changes only when the end-user surface does — it
+  ships to PyPI as the package's landing page.

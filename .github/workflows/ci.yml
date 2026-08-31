@@ -58,6 +58,25 @@ jobs:
   cli:
     uses: ./.github/workflows/cli-checks.yml
 
+  # The Rust port of the client. It is not yet the published package —
+  # `publish-cli.yml` still ships the Python one — so this is a plain test
+  # gate until the port takes over the release.
+  cli-rust:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run the Rust test suite
+        run: |
+          cd cli-rust
+          cargo test
+
   # The dev-profile SSH sidecar, driven by docker and ssh with no cluster:
   # `docker run --pid=container:<name>` reproduces the shared process namespace
   # a pod provides. Every negative case in there is a security property rather
@@ -103,7 +122,7 @@ jobs:
   publish-images:
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    needs: [ui-test, api-test, catalog-lint, cli, ssh-sidecar-test, ssh-auth-test]
+    needs: [ui-test, api-test, catalog-lint, cli, cli-rust, ssh-sidecar-test, ssh-auth-test]
     permissions:
       contents: read
       packages: write

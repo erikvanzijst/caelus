@@ -132,21 +132,8 @@ Three settings are applied to your role and re-applied on every deploy:
 A query killed at 30s is your own timeout, not a platform fault — raise it for
 the session if a migration or a report legitimately needs longer.
 
-### Connections go through a pooler
-
-Every connection is proxied by PgBouncer in **transaction pooling** mode: the
-server connection under you belongs to you only for the duration of a
-transaction. Protocol-level prepared statements are supported, so asyncpg,
-SQLAlchemy, Prisma and node-postgres all work on their defaults — do **not**
-disable prepared statements or set `statement_cache_size=0`; that advice is for
-poolers that lack this and only costs you performance here.
-
-What does not survive between transactions, because the connection underneath
-you changes:
-
-- session state — `SET`, `LISTEN`/`NOTIFY`, session-level advisory locks,
-  `WITH HOLD` cursors, temporary tables
-- a transaction held open across HTTP requests
+Freepod does not support the following db session operations: `SET`,
+`LISTEN`/`NOTIFY`, session-level advisory locks, `WITH HOLD` cursors, temporary tables
 
 ### Migrations
 
@@ -163,12 +150,12 @@ web: sh -c 'alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
 The plan bounds the database's size, and crossing the line changes what the
 database will do:
 
-| Usage     | What your app sees                                              |
-|-----------|-----------------------------------------------------------------|
-| under 80% | nothing                                                         |
-| 80%, 90%  | nothing — the account owner gets an email                       |
-| **100%**  | writes fail: `cannot execute INSERT in a read-only transaction` |
-| **150%**  | connections are refused entirely                                |
+| Usage     | quota_state | What your app sees                                              |
+|-----------|-------------|-----------------------------------------------------------------|
+| under 80% | ok          | nothing                                                         |
+| 80%, 90%  | warned      | nothing — the account owner gets an email                       |
+| **100%**  | readonly    | writes fail: `cannot execute INSERT in a read-only transaction` |
+| **150%**  | blocked     | connections are refused entirely                                |
 
 Falling back under the allowance reverses each step within about a minute.
 
@@ -181,6 +168,8 @@ design constraint, and check usage from the app itself:
 SELECT pg_size_pretty(pg_database_size(current_database()));
 ```
 
+You can also check the current usage from the CLI with `freepod db status`.
+
 ### Backups
 
 There are none you can reach — no snapshot, no restore, no support request.
@@ -191,8 +180,9 @@ access immediately and destroys the data after a short retention period.
 ### Debugging it
 
 **You cannot connect to the database from your machine.** It is reachable only
-from the deployment's own pod — there is no tunnel, no public endpoint, and no
-`freepod db`. Everything below is therefore done through the app's own output.
+from the deployment's own pod — there is no tunnel and no public endpoint.
+Everything below is therefore done through the app's own output, or through
+`freepod db status` for database-level state.
 
 `freepod log` is the first move, always. These are the errors worth
 recognizing:
@@ -441,6 +431,7 @@ app is wrong."
 | `freepod releases` | List this project's rollouts, newest first, marking the live one. Where `log -r N` gets its N.                                                                   |
 | `freepod var`      | Read and change the app's environment: `var list`, `var get KEY`, `var set KEY=VALUE`, `var rm KEY`. `--secret` stores write-only; `--stage` defers the rollout. |
 | `freepod delete`   | Delete the deployment **and everything it stores**. Destructive; confirm with the user first, and note it prompts unless given `-y`.                             |
+| `freepod db`       | Read this deployment's database: `db status` reports database name, role, password (masked by default; `--show-password` reveals), and quota state. No host, no URL. |
 | `freepod logout`   | Forget the cached credential.                                                                                                                                    |
 
 Exit codes: `0` ok, `2` usage, `3` not authenticated, `4` build failed,

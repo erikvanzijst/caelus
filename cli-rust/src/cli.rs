@@ -134,6 +134,31 @@ enum Commands {
         #[arg(short = 't', long = "timestamps")]
         timestamps: bool,
     },
+    /// Your app's PostgreSQL database.
+    ///
+    /// `db status` reports which database and role your deployment owns, its
+    /// password, and how much of its allowance it is using.
+    ///
+    /// The database is reachable from your running app, which already has
+    /// these details in its environment. It is not reachable from this
+    /// machine, so this command reports no address and no connection URL.
+    Db {
+        #[command(subcommand)]
+        command: DbCommands,
+    },
+    /// Register the SSH public keys that identify you to the platform.
+    ///
+    /// A key belongs to your account, not to one deployment, and applies to
+    /// every deployment you own. Registering one records which local key is
+    /// this machine's, so later connections offer exactly that key rather
+    /// than trying each in turn.
+    ///
+    /// Nothing reads these keys yet: registering or removing one does not
+    /// currently grant or withdraw any access.
+    Key {
+        #[command(subcommand)]
+        command: KeyCommands,
+    },
     /// Install the deployment instructions for your coding agents.
     Skill {
         #[command(subcommand)]
@@ -176,6 +201,48 @@ enum VarCommands {
         /// record the removal without rolling the deployment
         #[arg(long)]
         stage: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum DbCommands {
+    /// Report this deployment's database and how much room is left.
+    ///
+    /// The password is masked unless you ask for it. Nothing is withheld from
+    /// you — the platform returns it to the owner and you are the owner — but
+    /// the usual reason to run this is to ask how much room is left, and that
+    /// should not write a live credential into your scrollback.
+    Status {
+        /// print the password instead of masking it
+        #[arg(long)]
+        show_password: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum KeyCommands {
+    /// List the keys registered on your account.
+    ///
+    /// The key this machine holds is marked with `*`.
+    List,
+    /// Register a public key, generating one if you name no file.
+    ///
+    /// With no argument, generates an Ed25519 key in this client's own
+    /// configuration directory — not in `~/.ssh` — and registers it. With a
+    /// path, registers that **public** key file and records it as this
+    /// machine's.
+    Add {
+        path: Option<std::path::PathBuf>,
+        /// how this key is listed; defaults to its comment
+        #[arg(long)]
+        label: Option<String>,
+    },
+    /// Revoke a key by the fingerprint `freepod key list` shows.
+    ///
+    /// Works for keys this machine does not hold — revoking a lost laptop is
+    /// done from a different machine, which is the point.
+    Rm {
+        fingerprint: String,
     },
 }
 
@@ -373,6 +440,16 @@ async fn async_main() -> i32 {
         }) => {
             cmd_log(&ctx, *follow, *tail, *release, *timestamps).await
         }
+        Some(Commands::Db { command }) => match command {
+            DbCommands::Status { show_password } => cmd_db_status(&ctx, *show_password).await,
+        },
+        Some(Commands::Key { command }) => match command {
+            KeyCommands::List => cmd_key_list(&ctx).await,
+            KeyCommands::Add { path, label } => {
+                cmd_key_add(&ctx, path.as_deref(), label.as_deref()).await
+            }
+            KeyCommands::Rm { fingerprint } => cmd_key_rm(&ctx, fingerprint).await,
+        },
         Some(Commands::Skill { command }) => match command {
             SkillCommands::Install {
                 agent,
@@ -1110,6 +1187,154 @@ async fn cmd_log(
             Ok(0)
         }
     }
+}
+
+async fn cmd_db_status(ctx: &Context, show_password: bool) -> Result<i32> {
+    let project_file = project_deployment(ctx)?;
+    let deployment_id = project_file.deployment_id().unwrap().to_string();
+
+    let mut session = ctx.session(None)?;
+    session.authenticate(&ctx.http, false, false).await?;
+    let mut api = ctx.client(session);
+    let user_id = api
+        .me()
+        .await?
+        .get("id")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let details = crate::database::read(&mut api, user_id, &deployment_id).await?;
+
+    let Some(details) = details else {
+        ctx.say("This deployment has no database.");
+        return Ok(0);
+    };
+    println!("{}", crate::database::render_status(&details, show_password));
+    ctx.say(
+        "\nThis database is reachable from your running app, not from this machine.",
+    );
+    Ok(0)
+}
+
+async fn cmd_key_list(ctx: &Context) -> Result<i32> {
+    let env_name = ctx.env.name;
+    let mut session = ctx.session(None)?;
+    session.authenticate(&ctx.http, false, false).await?;
+    let mut api = ctx.client(session);
+    let user_id = api
+        .me()
+        .await?
+        .get("id")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let registered = crate::keys::list_keys(&mut api, user_id).await?;
+
+    if registered.is_empty() {
+        ctx.say("No SSH keys are registered on this account.");
+        ctx.say("Add one with `freepod key add`.");
+        return Ok(0);
+    }
+
+    let mut here = crate::keys::local_key(env_name).map(|(fingerprint, _)| fingerprint);
+    if here.is_none() {
+        let matches = crate::keys::recover(&registered);
+        if matches.len() == 1 {
+            let fingerprint = crate::keys::fingerprint_for_file(&matches[0]).ok_or_else(|| {
+                crate::errors::freepod("the matching key can no longer be read")
+            })?;
+            crate::keys::remember(env_name, &fingerprint, &matches[0])?;
+            here = Some(fingerprint);
+        }
+    }
+    println!("{}", crate::keys::render_table(&registered, here.as_deref()));
+    Ok(0)
+}
+
+async fn cmd_key_add(
+    ctx: &Context,
+    path: Option<&std::path::Path>,
+    label: Option<&str>,
+) -> Result<i32> {
+    let env_name = ctx.env.name;
+    let mut session = ctx.session(None)?;
+    session.authenticate(&ctx.http, false, false).await?;
+    let mut api = ctx.client(session);
+    let user_id = api
+        .me()
+        .await?
+        .get("id")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let registered = crate::keys::list_keys(&mut api, user_id).await?;
+
+    let (material, source) = match path {
+        None => {
+            let generated = crate::keys::generated_key_path();
+            let mut public = generated.clone().into_os_string();
+            public.push(".pub");
+            let public = std::path::PathBuf::from(public);
+            let existing = crate::keys::fingerprint_for_file(&public);
+            if let Some(existing) = &existing {
+                if registered.iter().any(|k| {
+                    k.get("fingerprint").and_then(|v| v.as_str()) == Some(existing.as_str())
+                }) {
+                    ctx.say("This machine already holds a registered key.");
+                    println!("{existing}");
+                    crate::keys::remember(env_name, existing, &public)?;
+                    return Ok(0);
+                }
+            }
+            if public.exists() {
+                (crate::keys::read_public_key(&public)?, public)
+            } else {
+                let material = crate::keys::generate_keypair(&generated)?;
+                ctx.say(&format!(
+                    "Generated a new key at {}",
+                    generated.display()
+                ));
+                (material, public)
+            }
+        }
+        Some(p) => (crate::keys::read_public_key(p)?, p.to_path_buf()),
+    };
+
+    let stored = crate::keys::add_key(&mut api, user_id, &material, label).await?;
+    let fingerprint = stored
+        .get("fingerprint")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let stored_label = stored.get("label").and_then(|v| v.as_str()).unwrap_or("");
+    crate::keys::remember(env_name, &fingerprint, &source)?;
+    ctx.say(&format!("Registered '{stored_label}' on {env_name}."));
+    println!("{fingerprint}");
+    ctx.say(
+        "This grants no access yet — the platform does not read these keys \
+         until SSH authentication moves onto them.",
+    );
+    Ok(0)
+}
+
+async fn cmd_key_rm(ctx: &Context, fingerprint: &str) -> Result<i32> {
+    let env_name = ctx.env.name;
+    let mut session = ctx.session(None)?;
+    session.authenticate(&ctx.http, false, false).await?;
+    let mut api = ctx.client(session);
+    let user_id = api
+        .me()
+        .await?
+        .get("id")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    crate::keys::remove_key(&mut api, user_id, fingerprint).await?;
+
+    if crate::keys::local_key(env_name)
+        .is_some_and(|(recorded, _)| recorded == fingerprint)
+    {
+        crate::keys::forget(env_name)?;
+        ctx.say("This machine no longer holds a registered key.");
+    }
+    ctx.say(&format!("Removed {fingerprint}."));
+    Ok(0)
 }
 
 /// `a`, `a and b`, `a, b and c` — a list a person reads rather than parses.

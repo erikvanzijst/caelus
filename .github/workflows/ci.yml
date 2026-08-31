@@ -60,22 +60,33 @@ jobs:
 
   # The Rust port of the client. It is not yet the published package —
   # `publish-cli.yml` still ships the Python one — so this is a plain test
-  # gate until the port takes over the release.
+  # gate until the port takes over the release. Runs in the dev container
+  # like api-test rather than on a bare runner: the image already carries
+  # the Rust toolchain, and both jobs share its cached build.
   cli-rust:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # The dev container passes through the host's audio device and group for
+    # local speech-to-text. Runners are headless and have neither, and docker
+    # fails to start a container whose device source is missing, so point both
+    # at values that always exist here.
+    env:
+      CAELUS_SND_DEVICE: /dev/null
+      CAELUS_AUDIO_GROUP: root
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run the Rust test suite
-        run: |
-          cd cli-rust
-          cargo test
+      - name: Build and run dev container tests
+        uses: devcontainers/ci@v0.3
+        with:
+          # Image name for caching; not pushed
+          imageName: ghcr.io/${{ github.repository }}-devcontainer
+          push: never
+          runCmd: |
+            cd cli-rust
+            cargo test
 
   # The dev-profile SSH sidecar, driven by docker and ssh with no cluster:
   # `docker run --pid=container:<name>` reproduces the shared process namespace

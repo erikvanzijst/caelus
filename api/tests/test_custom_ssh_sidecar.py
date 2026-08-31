@@ -253,6 +253,43 @@ def test_the_forward_allowlist_is_spelled_as_a_client_will_write_it():
         )
 
 
+def test_a_deployment_with_no_database_still_gets_the_profile():
+    """The toolbox is a facility this profile offers, not a precondition it
+    imposes.
+
+    `custom` has relational storage today, but that is a property of the product
+    rather than of the profile: a shell in the application container is worth
+    having with or without a database. Coupling the two would surface as a pod
+    that never starts, for the first product to adopt `dev` without one -- and
+    `custom` will not stay the only such product.
+
+    So the chart renders the sidecar either way, with the two database-derived
+    pieces absent together. The image then writes `PermitOpen none` and declines
+    the database tools by name; every other session path is unchanged.
+    """
+    docs = _render(**{"relationalStorage.enabled": "false", "caelus.database": "null"})
+
+    ssh = _container(docs, "ssh")
+    env = {e["name"] for e in ssh.get("env") or []}
+
+    assert "FREEPOD_PERMIT_OPEN" not in env, (
+        "an allowlist rendered from an absent database is 'host:port' with both "
+        "halves empty, which the image rejects -- a pod that never starts because "
+        "of a facility this deployment was not asking for"
+    )
+    assert not ssh.get("envFrom"), (
+        f"the sidecar takes {ssh.get('envFrom')!r} from a deployment with no database"
+    )
+
+    # Everything the profile is actually for is still here.
+    assert {"FREEPOD_AUTHORIZED_KEYS", "FREEPOD_RELEASE_ID", "FREEPOD_LOGIN_USER"} <= env
+    assert _pod(docs).get("shareProcessNamespace") is True
+    assert any(
+        d["kind"] == "Service" and any(p.get("port") == SSH_PORT for p in d["spec"]["ports"])
+        for d in docs
+    ), "the deployment is unroutable at the SSH edge without its Service"
+
+
 def test_the_dev_profile_mounts_no_tenant_volume():
     """No SFTP subsystem, no chroot, and nothing of the tenant's mounted in."""
     ssh = _container(_render(), "ssh")

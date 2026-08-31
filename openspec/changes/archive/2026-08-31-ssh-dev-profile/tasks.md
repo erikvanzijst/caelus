@@ -140,3 +140,29 @@ The resolver and the charts must agree; between these steps the fleet is unrouta
       offers, including that debugging a broken deployment is supported and that no
       separate file-transfer configuration exists.
 - [x] 7.5 Update `var/ssh_access.md` noting which decisions this change delivered.
+
+## 8. Decouple the profile from relational storage
+
+Added after section 7, before the branch merged: the first draft made the sidecar's `PG*`
+variables required and recorded the resulting coupling as a stated precondition. A shell in
+the application container is worth having with or without a database, so the coupling was
+removed rather than documented.
+
+- [x] 8.1 Make `FREEPOD_PERMIT_OPEN` optional in the image, rendering `PermitOpen none`
+      when it is absent — never omitting the directive, whose default is to permit
+      forwarding anywhere.
+- [x] 8.2 Make the `PG*` variables optional as a set and all-or-nothing individually: none
+      is a deployment without a database, some is a broken projection and still aborts
+      startup naming both halves.
+- [x] 8.3 Have the dispatcher decline the database tools by name when there is no database,
+      rather than run them into a connection error.
+- [x] 8.4 Render the allowlist and the database environment in `_dev.tpl` only when the
+      product has a database.
+- [x] 8.5 Extend the image harness with a sidecar configured with no database and no
+      allowlist, asserting the shell, the explicit forward refusal, the declined tools and
+      that no credential is staged for the session.
+- [x] 8.6 Add the `custom` render test for a deployment with no relational storage.
+- [x] 8.7 Sidecar image 0.2.0 → 0.3.0, library chart 0.4.2 → 0.4.3, `custom` 0.8.2 → 0.8.3
+      and its catalog entry. The six `sftp` charts take the new library pin only; their
+      rendered output is unchanged, verified by diffing every one against `HEAD`.
+- [x] 8.8 Update the specs, both READMEs and the design note.

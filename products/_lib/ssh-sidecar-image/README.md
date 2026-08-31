@@ -26,18 +26,18 @@ secret from the pod — the trusted key is a *public* key, and the database
 details are already in the application container's environment — so there is
 nothing here that wants a mounted file.
 
-**All of these are required. The container validates them and exits non-zero
-naming the offending variable if any is missing or malformed**, rather than
+**The container validates all of them and exits non-zero naming the offending
+variable if a required one is missing or any is malformed**, rather than
 starting a server that refuses every connection: that failure is
 indistinguishable from a network fault and gets diagnosed as one.
 
 | Variable                                             | Meaning                                                                                                                                                                                                                                          |
 |------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `FREEPOD_AUTHORIZED_KEYS`                            | The public keys the server trusts, one per line. In normal operation this is the single public key of the platform's SSH edge — the tenant's own keys are checked by sshpiper on the downstream leg, never here. Validated with `ssh-keygen -l`. |
-| `FREEPOD_PERMIT_OPEN`                                | The forward allowlist: whitespace- or comma-separated `host:port`. Rendered as sshd's `PermitOpen`. See *Spelling the allowlist* below.                                                                                                          |
+| `FREEPOD_PERMIT_OPEN`                                | *Optional.* The forward allowlist: whitespace- or comma-separated `host:port`. Rendered as sshd's `PermitOpen`; absent, the server writes `PermitOpen none` and refuses every forward. See *Spelling the allowlist* below.                        |
 | `FREEPOD_RELEASE_ID`                                 | The release the pod belongs to, reported by the session banner. The chart projects `caelus.dev/release-id` here through the Downward API (D17).                                                                                                  |
 | `FREEPOD_LOGIN_USER`                                 | The account the SSH edge authenticates the upstream leg as: the **deployment name**. Added as a second uid-0 account at startup. See *The login account* below.                                                                                  |
-| `PGHOST` `PGPORT` `PGUSER` `PGPASSWORD` `PGDATABASE` | The deployment's database, in libpq's own variable names so that a bare `psql` connects with no wrapper and no arguments. `PGSSLMODE` and `PGAPPNAME` are passed through if set.                                                                 |
+| `PGHOST` `PGPORT` `PGUSER` `PGPASSWORD` `PGDATABASE` | *Optional as a set, all-or-nothing individually.* The deployment's database, in libpq's own variable names so that a bare `psql` connects with no wrapper and no arguments. `PGSSLMODE` and `PGAPPNAME` are passed through if set. See *No database* below. |
 
 The server listens on **2222**, the platform's sidecar-port convention that the
 tenant NetworkPolicy admits from the SSH edge.
@@ -78,9 +78,31 @@ produces a refusal that reads like an authorization failure rather than a typo.
 Wildcard ports are rejected — an entry that opens every port on a host is not an
 allowlist.
 
-An allowlist is required rather than recommended: tenant egress reaches the
-public internet on every port, so an unconstrained forwarder would be an
-authenticated open TCP relay originating from the platform's own address.
+What is never optional is the directive. sshd's default is to permit forwarding
+to anywhere, so a deployment with nothing to allow gets `PermitOpen none`
+written out rather than the line left off: tenant egress reaches the public
+internet on every port, and an unconstrained forwarder would be an authenticated
+open TCP relay originating from the platform's own address.
+
+### No database
+
+A product without relational storage supplies none of the `PG*` variables and
+runs this image unchanged. The toolbox is a facility the image offers, not a
+precondition it imposes — a shell in the application container is worth having
+either way, and refusing to start over a missing extra would deny the whole
+session to get it.
+
+What that deployment loses is exactly the two database-derived facilities: the
+dispatcher declines `psql` and its siblings by name, saying the deployment has
+no database, and there is nothing to forward to so every forward is refused.
+Everything else — the shell, remote commands, file transfer, the banner — is
+the same server.
+
+**A partial set is a different thing from an absent one** and aborts startup
+naming both halves. It means the projection that should have supplied the
+variables is broken, and a container that started anyway would surface that as a
+connection error inside `psql`, at the moment someone needed the database and
+furthest from the cause.
 
 ## Where a session lands
 
@@ -101,7 +123,9 @@ explicitly rather than relying on `ForceCommand` to do it.
 The platform allowlist is `psql`, `pg_dump`, `pg_dumpall`, `pg_restore` and
 `pg_isready`, decided on the **command** and never on arguments a client
 controls: `ssh <deployment> '/bin/echo psql'` runs `/bin/echo` in the
-application container.
+application container. On a deployment with no database they are declined rather
+than run, and a command given as a path reaches the application container as any
+other would.
 
 The allowlist routes; it does not confine. A developer who reaches this server
 is authenticated and gets a root shell in the application container, which
@@ -180,9 +204,11 @@ working one and concluding nothing is wrong.
 It runs as **root**, which is what reading and entering another container's
 process filesystem requires. It takes no capability beyond what the pod grants,
 mounts nothing, and needs no privileged mode. `CAP_SYS_CHROOT` is in the default
-set; the pod supplies `shareProcessNamespace: true` and `CAP_SYS_PTRACE`. When
-those are absent the container still starts and serves — forwarding and the
-database toolbox work — and says so when a session depends on them.
+set and is what entering the application container needs; the pod supplies
+`shareProcessNamespace: true`, and `CAP_SYS_PTRACE` — needed only by `strace`,
+`gdb` and `py-spy` — is not granted under Pod Security `baseline`. When either
+is absent the container still starts and serves, and says so when a session
+depends on it.
 
 ## Testing
 
@@ -195,8 +221,9 @@ namespace, and the harness needs only docker, ssh and bash:
 ```
 
 It stands up a PostgreSQL server, two forward targets, an ordinary application
-container, a distroless one, and a sidecar with no application beside it at all,
-then asserts every behavior above. The negative cases are each a security
+container, a distroless one, a sidecar with no application beside it at all, and
+a sidecar configured with no database and no allowlist, then asserts every
+behavior above. The negative cases are each a security
 property rather than a feature, so they are asserted rather than assumed:
 password authentication refused, unknown key refused, unlisted forward
 destination refused, remote and agent forwarding refused, a command's

@@ -202,15 +202,27 @@ users to forward to must be byte-identical. That makes the documented address an
 rendered value one fact with two readers, which is a thing to state rather than to leave
 to coincidence.
 
-### `custom` requires relational storage to run this profile
+### The database is optional, and its absence costs only the database
 
-The sidecar's contract makes the database variables required and exits without them.
-Every `custom` deployment has a database, so this holds today — but it is a coupling
-rather than a coincidence, and a future product adopting the `dev` profile without
-relational storage would get a pod that will not start.
+An earlier draft of this design made the sidecar's `PG*` variables required and noted the
+resulting coupling as a stated precondition rather than defending it in code. That was
+wrong: a shell in the application container is worth having with or without a database,
+and the coupling would have surfaced as a pod that never starts for the first product to
+adopt the profile without relational storage — a failure with nothing in it to point at
+the cause.
 
-Stated here rather than defended in code: the profile's own precondition is that its
-product has a database.
+So the toolbox and the forward are facilities the profile offers, not preconditions it
+imposes. The variables are optional **as a set**: absent, the chart renders no allowlist
+and no database environment, the image writes `PermitOpen none`, and the dispatcher
+declines `psql` and its siblings by name. Every other session path is untouched.
+
+A *partial* set still aborts startup, and that asymmetry is the point. Nothing supplied
+means a product without a database; something supplied means the projection that should
+have supplied the rest is broken, and a container that started anyway would surface that
+inside `psql`, at the moment someone needed the database and furthest from the cause.
+
+`custom` has relational storage today, but that is a property of the product rather than
+of the profile, and it will not stay the only product on it.
 
 ## Risks / Trade-offs
 

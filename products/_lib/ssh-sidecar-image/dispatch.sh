@@ -58,6 +58,11 @@ verb=${1:-}
 
 for platform_command in "${PLATFORM_COMMANDS[@]}"; do
     if [[ $verb == "$platform_command" ]]; then
+        # The tools are in this image unconditionally; the connection details
+        # are not. A product without relational storage runs the same sidecar,
+        # so the database tools are declined by name here rather than left to
+        # fail inside psql with a connection error that names no cause.
+        [[ -n ${PGHOST:-} ]] || die "this deployment has no database, so '${verb}' has nothing to connect to. A command given as a path runs in the application container instead."
         # The tool and its connection details are here, so this runs here. The
         # string still goes to a shell as one argument, so pipes and
         # redirections work the way a remote command should.

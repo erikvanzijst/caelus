@@ -13,9 +13,9 @@ are two, and a product is authored for exactly one:
 | Server | `atmoz/sftp` | the platform's own [ssh-sidecar image](../ssh-sidecar-image/README.md) |
 | For | products with user-visible data PVCs | `custom`, which has no PVC at all |
 | Session | SFTP only — **no shell, no writes** | a login shell **in the application container** |
-| Forwarding | refused (`AllowTcpForwarding no`) | to the deployment's database, allowlisted |
+| Forwarding | refused (`AllowTcpForwarding no`) | to the deployment's database if it has one, allowlisted; otherwise refused |
 | Tooling | none | PostgreSQL 18 client |
-| Pod needs | nothing | `shareProcessNamespace`, `CAP_SYS_PTRACE` on the sidecar |
+| Pod needs | nothing | `shareProcessNamespace` on the pod |
 | Renders | Secret, ConfigMap, sidecar, Service | sidecar, Service |
 
 It is a Helm **library chart** — it renders no resources on its own. A product
@@ -248,6 +248,13 @@ helper can set for you:
   application; that it is the *pod's* and not the *node's* is what bounds
   `CAP_SYS_PTRACE` to this tenant's own containers. Every warning treating that
   capability as a container-breakout vector assumes the node's namespace.
+- **`CAP_SYS_PTRACE` is not granted yet, so the template requests no
+  capability.** Tenant namespaces enforce Pod Security `baseline`, which refuses
+  every non-default capability at admission; a pod asking for one never
+  schedules. `strace`, `gdb` and `py-spy` are consequently unavailable, and
+  nothing else is: entering the application container needs `CAP_SYS_CHROOT`,
+  which is in the default set. The bullets around this one are the invariants
+  that must hold when the capability is granted.
 - **Both containers must keep the same AppArmor profile.** Neither declares one,
   so both run the node default under enforcement, and its peer clause matches
   when tracer and tracee carry the same profile name. Giving the application
@@ -262,7 +269,10 @@ helper can set for you:
 - **The image reference is a system value, pinned to an exact version.** Never a
   moving tag: the version a pod runs would become a function of when it last
   restarted and what its node had cached.
-- **This profile's precondition is that the product has a database.** The image
-  makes the `PG*` variables required and exits without them. Every `custom`
-  deployment has one; a future product adopting this profile without relational
-  storage would get a pod that will not start.
+- **The database is optional, and its absence costs only the database.** A
+  product with no relational storage renders this profile with no allowlist and
+  no `PG*` environment; the image writes `PermitOpen none` and declines the
+  database tools by name, and the shell, file transfer and session paths are
+  unchanged. The toolbox is a facility the profile offers, not a precondition it
+  imposes — `custom` has a database today, but that is a property of the product
+  and it will not stay the only one on this profile.

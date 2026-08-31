@@ -1,7 +1,8 @@
 {{- /*
 The `dev` access profile: the platform's own SSH sidecar, which opens a shell in
-the application container, carries the PostgreSQL toolbox, and forwards to the
-database pooler. One of the library's two profiles; a product chart calls this
+the application container and — where the product has a database — carries the
+PostgreSQL toolbox and forwards to the pooler. One of the library's two
+profiles; a product chart calls this
 set or `ssh-sidecar.sftp.*` (_sftp.tpl), never both. See README.md and
 products/_lib/ssh-sidecar-image/README.md for the image's own contract.
 
@@ -13,12 +14,6 @@ Secret the reconciler already writes. The image writes its own
 kind would be one nothing reads. `sftp` renders both because `atmoz/sftp` reads
 its user list and its startup script off disk; that is a property of that
 profile, not of the chart contract.
-
-**This profile's own precondition is that its product has a database.** The
-image makes `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` required and
-exits naming the offending variable without them. Every `custom` deployment has
-one, so this holds today — but a future product adopting this profile without
-relational storage would get a pod that will not start.
 
 Two call sites, not three: there are no supporting volumes to splice.
 
@@ -80,12 +75,17 @@ container that knows what is wrong.
     # edge on the downstream leg, never here.
     - name: FREEPOD_AUTHORIZED_KEYS
       value: {{ $ssh.platformPublicKey | default "" | quote }}
+    {{- if and $db.host $db.port }}
     # The forward allowlist. `PermitOpen` matches the destination **as the
     # client wrote it** and resolves it afterwards, so this spelling and the one
     # the platform documents must agree byte for byte -- a mismatch produces a
     # refusal that reads like an authorization failure rather than a typo.
+    #
+    # Rendered only for a product that has a database, because that endpoint is
+    # the only thing this profile forwards to.
     - name: FREEPOD_PERMIT_OPEN
-      value: {{ printf "%s:%v" ($db.host | default "") ($db.port | default "") | quote }}
+      value: {{ printf "%s:%v" $db.host $db.port | quote }}
+    {{- end }}
     # From the pod label rather than from `caelus.releaseId`, which is the same
     # fact and one fewer indirection. The label is what the log pipeline
     # relabels into the release stream, so a session and the logs of the pod it

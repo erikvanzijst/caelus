@@ -17,5 +17,5 @@ maintainers:
 # its own; provides the sidecar + Pipe/Service/Secret helpers).
 dependencies:
   - name: ssh-sidecar
-    version: "0.4.2"
+    version: "0.4.3"
     repository: "file://../../_lib/ssh-sidecar-chart"

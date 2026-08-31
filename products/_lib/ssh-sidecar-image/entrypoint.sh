@@ -42,8 +42,11 @@ done <<< "$FREEPOD_AUTHORIZED_KEYS"
 (( keys > 0 )) || die "FREEPOD_AUTHORIZED_KEYS contains no public key. Refusing to start a server nobody can authenticate to."
 
 # --- forward allowlist -----------------------------------------------------
-require FREEPOD_PERMIT_OPEN
-
+# Optional. A deployment with no forwardable endpoint gets a server that refuses
+# every forward -- which is `PermitOpen none`, written explicitly below. What it
+# must never get is the directive omitted: sshd's default is to permit
+# forwarding to anywhere, so silence would turn "nothing to allow" into "allow
+# everything", from a host with tenant egress to the public internet.
 permit_open=()
 while read -r dest; do
     [[ -n $dest ]] || continue
@@ -57,9 +60,7 @@ while read -r dest; do
         die "FREEPOD_PERMIT_OPEN entry '$dest' has a port outside 1-65535."
     fi
     permit_open+=("$dest")
-done < <(tr ',[:space:]' '\n\n' <<< "$FREEPOD_PERMIT_OPEN")
-
-(( ${#permit_open[@]} > 0 )) || die "FREEPOD_PERMIT_OPEN is empty. Forwarding must name at least one destination."
+done < <(tr ',[:space:]' '\n\n' <<< "${FREEPOD_PERMIT_OPEN:-}")
 
 # --- login account ---------------------------------------------------------
 # The SSH edge authenticates the upstream leg as the *deployment name*, because
@@ -101,10 +102,31 @@ require FREEPOD_RELEASE_ID
 # These reach the toolbox from the sidecar's own environment, never from the
 # application process: a developer connects precisely when the application is
 # broken, and details read from a crash-looping process are unavailable then.
+#
+# Optional as a set. The toolbox is a facility this server offers, not a reason
+# it exists: a deployment with no database still wants a shell in its
+# application container, and refusing to start over a missing extra would deny
+# the whole session to get it. Products without relational storage run this
+# image unchanged; the dispatcher declines the database tools by name.
+#
+# A partial set is not an absent one. It means the projection that should have
+# supplied them is broken, and a container that started anyway would surface
+# that as a connection error inside psql, at the moment someone needed the
+# database and furthest from the cause.
+pg_present=()
+pg_absent=()
 for var in PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE; do
-    require "$var"
+    if [[ -n ${!var:-} ]]; then pg_present+=("$var"); else pg_absent+=("$var"); fi
 done
-[[ $PGPORT =~ ^[0-9]{1,5}$ ]] || die "PGPORT is not a port number."
+
+if (( ${#pg_present[@]} == 0 )); then
+    database="none"
+elif (( ${#pg_absent[@]} > 0 )); then
+    die "the database configuration is incomplete: ${pg_present[*]} set, ${pg_absent[*]} missing. Supply all five or none."
+else
+    [[ $PGPORT =~ ^[0-9]{1,5}$ ]] || die "PGPORT is not a port number."
+    database="${PGUSER}@${PGHOST}:${PGPORT}/${PGDATABASE}"
+fi
 
 # sshd hands a session a sanitized environment, so the container's own
 # variables do not reach the dispatcher on their own. They are staged here in
@@ -159,11 +181,11 @@ ssh-keygen -q -t ed25519 -N '' -C '' -f "$HOST_KEY"
 	ForceCommand /usr/local/bin/freepod-dispatch
 	Subsystem sftp internal-sftp
 	CONFIG
-    printf 'PermitOpen %s\n' "${permit_open[*]}"
+    printf 'PermitOpen %s\n' "${permit_open[*]:-none}"
 } > "$SSHD_CONFIG"
 chmod 0600 "$SSHD_CONFIG"
 
 /usr/sbin/sshd -t -f "$SSHD_CONFIG" || die "rendered sshd configuration was rejected by sshd -t."
 
-echo "ssh-sidecar: release ${FREEPOD_RELEASE_ID}, login user ${FREEPOD_LOGIN_USER} (uid 0), ${keys} trusted key(s), forwarding to ${permit_open[*]}, listening on ${PORT}." >&2
+echo "ssh-sidecar: release ${FREEPOD_RELEASE_ID}, login user ${FREEPOD_LOGIN_USER} (uid 0), ${keys} trusted key(s), forwarding to ${permit_open[*]:-nothing}, database ${database}, listening on ${PORT}." >&2
 exec /usr/sbin/sshd -D -e -f "$SSHD_CONFIG"

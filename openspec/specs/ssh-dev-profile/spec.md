@@ -4,8 +4,9 @@
 see, on a pod the owner cannot reach. This capability is the chart side of fixing that: the
 `dev` access profile, which places the platform's SSH sidecar beside the application
 container, grants it exactly the pod-level facilities it needs to enter and inspect that
-container, and supplies it with the deployment's own database details and forward
-allowlist. It is one of two profiles a product may declare, and no deployment runs both.
+container, and — where the product has one — supplies it with the deployment's own database
+details and forward allowlist. It is one of two profiles a product may declare, and no
+deployment runs both.
 
 ## Requirements
 
@@ -92,7 +93,9 @@ The application container MUST NOT be granted anything by this profile.
 - **THEN** it holds no capability the profile added
 
 ### Requirement: The chart supplies every runtime input the sidecar requires
-The chart MUST supply the sidecar with all of the inputs its image declares as required: the platform's trusted public key, the forward allowlist, the release identity, and the deployment's database connection details. The sidecar exits rather than starting when any is missing, so an omission is a pod that will not run, not a pod that runs wrongly.
+The chart MUST supply the sidecar with all of the inputs its image declares as required: the platform's trusted public key, the release identity, and the account the edge authenticates as. The sidecar exits rather than starting when any is missing, so an omission is a pod that will not run, not a pod that runs wrongly.
+
+Where the product has a database, the chart MUST additionally supply the forward allowlist and the connection details, and MUST supply the connection details as a complete set. A partial set MUST abort startup: it means the projection that should have supplied them is broken, and a sidecar that started anyway would surface that as a connection error at the moment someone needed the database and furthest from its cause.
 
 Every one of these MUST come from values the platform projects, never from values a tenant supplies. The connection details MUST reach the sidecar's own environment, so that database access does not depend on the application container being alive — which is the state a developer is most likely connecting to investigate.
 
@@ -117,6 +120,8 @@ The forward allowlist the chart supplies MUST name the deployment's own database
 
 Tenant egress reaches the public internet on every port, so an unconstrained forwarder would be an authenticated open relay originating from the platform's address. The allowlist is the constraint that prevents it, and it is only effective if the spelling the chart renders and the spelling a client uses are identical.
 
+A deployment with no forwardable endpoint MUST refuse every forward. An empty allowlist MUST be expressed as an explicit refusal and MUST NOT be expressed by omitting the constraint, because the server's own default is to permit forwarding to any destination — so silence would turn "nothing to allow" into "allow everything".
+
 #### Scenario: The database is forwardable
 - **WHEN** a developer forwards a local port to the deployment's database endpoint as the chart spells it
 - **THEN** the forward carries traffic
@@ -128,6 +133,29 @@ Tenant egress reaches the public internet on every port, so an unconstrained for
 #### Scenario: The spelling is the one clients use
 - **WHEN** the platform documents the address a client should forward to
 - **THEN** it is byte-identical to what the chart renders into the allowlist
+
+#### Scenario: A deployment with nothing to forward to refuses every forward
+- **WHEN** a developer forwards to any destination through a deployment that has no database
+- **THEN** the forward is refused
+
+### Requirement: The profile does not require its product to have a database
+A product MUST be able to declare the `dev` profile whether or not it has relational storage. A deployment with no database MUST render the sidecar and Service and serve every session path the profile offers — the shell in the application container, remote commands, and file transfer — losing only the two facilities that are derived from a database.
+
+The database toolbox and the forward are facilities this profile offers, not preconditions it imposes. A shell in the application container is worth having with or without a database, and coupling the two would surface as a pod that never starts for the first product to adopt the profile without one. `custom` has relational storage today, but that is a property of the product and not of the profile.
+
+The two database-derived facilities MUST fail in a way that names the cause rather than one that reads as a fault: the database tools MUST be declined by name, and forwarding MUST be refused.
+
+#### Scenario: A product with no database runs the profile
+- **WHEN** a deployment of a product declaring the `dev` profile and having no relational storage is rendered and applied
+- **THEN** its sidecar starts and serves, and a developer gets a shell in the application container
+
+#### Scenario: The database tools are declined, not left to fail
+- **WHEN** a developer runs the database client against a deployment with no database
+- **THEN** the request is refused with a message naming the absence of a database, rather than a client connection error
+
+#### Scenario: A partial database configuration is refused
+- **WHEN** a deployment is given some but not all of its database connection details
+- **THEN** the sidecar exits at startup naming what is missing, rather than serving a session whose database tooling fails when used
 
 ### Requirement: The dev profile offers no SFTP subsystem and mounts no volume
 The `dev` profile MUST NOT configure an SFTP subsystem of its own, MUST NOT chroot sessions, and MUST NOT mount any tenant volume into the sidecar.

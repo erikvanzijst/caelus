@@ -22,13 +22,21 @@ The convention moves to `-ssh` across the resolver and every chart.
   `sftp` (today's `atmoz/sftp` behavior, unchanged) and `dev` (the platform sidecar image)
   as two helper sets a product chart chooses between. A product is written for one; no
   deployment ever runs both, and a tenant cannot change which.
-- **`custom` adopts the `dev` profile**: the sidecar, a shared process namespace, the
-  `CAP_SYS_PTRACE` capability, and the Service the edge reaches.
+- **`custom` adopts the `dev` profile**: the sidecar, a shared process namespace, and the
+  Service the edge reaches. `CAP_SYS_PTRACE` is *not* granted — Pod Security `baseline`
+  refuses every non-default capability at admission, so `strace`, `gdb` and `py-spy` are
+  deferred and everything else the profile offers is unaffected.
 - **The naming convention moves from `-sftp` to `-ssh`** in the resolver's upstream
   address and in every rendered resource name.
 - **The rendering trigger changes.** A chart renders SSH resources because its product
   opts into a profile, not because it has a user-visible PVC — otherwise `custom`, which
   has no PVC, could never have one.
+- **The profile does not require its product to have a database.** The toolbox and the
+  forward are facilities it offers, not preconditions it imposes: with no relational
+  storage the chart renders no allowlist and no `PG*` environment, the image writes
+  `PermitOpen none`, and the dispatcher declines the database tools by name. `custom` has
+  a database today, but that is a property of the product, and coupling the two would have
+  surfaced as a pod that never starts for the first product to adopt `dev` without one.
 - **A stale Secret key is cleaned up as a side effect.** The previous change left every
   SFTP credentials Secret carrying an inert `password` key that Helm's three-way merge
   cannot remove; renaming the Secret is the one fix that works, and this change renames it
@@ -54,6 +62,11 @@ resolver would be a moving part built to be deleted, so there is none.
   than on the presence of a PVC, and the Service naming convention becomes `-ssh`.
 - `ssh-auth-resolver`: the upstream address convention is stated as a contract shared with
   the charts, so neither side can move alone.
+- `ssh-sidecar-image`: the forward allowlist and the database connection details become
+  optional inputs — absent, forwarding is refused explicitly and the toolbox is
+  unavailable; incomplete, the container still fails fast.
+- `ssh-session-dispatcher`: a platform command on a deployment with no database is
+  declined by name rather than run and left to fail as a connection error.
 
 ## Impact
 

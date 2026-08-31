@@ -101,9 +101,9 @@
       },
       "additionalProperties": true
     },
-    "caelus-sftp": {
+    "ssh-sidecar": {
       "type": "object",
-      "description": "Values namespace for the caelus-sftp library dependency (unused; library charts render no values but Helm still reserves the key)."
+      "description": "Values namespace for the ssh-sidecar library dependency (unused; library charts render no values but Helm still reserves the key)."
     }
   },
   "required": ["user"],

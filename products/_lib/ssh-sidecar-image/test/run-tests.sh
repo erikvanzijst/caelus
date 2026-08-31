@@ -15,6 +15,10 @@ set -uo pipefail
 cd "$(dirname "$0")" || exit 1
 readonly CONTEXT=..
 readonly PREFIX=freepod-sshtest
+# The account the SSH edge authenticates the upstream leg as: the deployment
+# name, not "root". The sidecar adds it as a second uid-0 account, because the
+# edge has one username convention and is ignorant of access profiles.
+readonly LOGIN_USER=custom-user-app-harness
 readonly NET=$PREFIX-net
 readonly APP_IMAGE=$PREFIX/app
 readonly NOSHELL_IMAGE=$PREFIX/noshell
@@ -93,8 +97,11 @@ endpoint_of() {
 SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
           -o LogLevel=ERROR -o BatchMode=yes -o ConnectTimeout=10)
 
-# ssh_to <owner-container> [ssh options] [command] -- runs as root, the
-# username the platform's SSH edge uses upstream. Leading dash arguments are
+# ssh_to <owner-container> [ssh options] [command] -- logs in as root. The edge
+# actually authenticates as the deployment name, which is a second uid-0 account
+# the entrypoint adds; the test above this group's first case proves that
+# account works, and the rest use root because the two are the same uid.
+# Leading dash arguments are
 # ssh's; everything after them is the remote command, which must follow the
 # host on the command line.
 ssh_to() {
@@ -132,6 +139,7 @@ sidecar_env() {
         --env "FREEPOD_AUTHORIZED_KEYS=$(cat "$WORK/id.pub")" \
         --env "FREEPOD_PERMIT_OPEN=$PREFIX-allowed:8080 localhost:8080" \
         --env "FREEPOD_RELEASE_ID=$1" \
+        --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
         --env "PGHOST=$PREFIX-pg" --env PGPORT=5432 \
         --env PGUSER=appuser --env PGPASSWORD=harness-secret --env PGDATABASE=appdb
 }
@@ -201,7 +209,8 @@ start_with() {
     docker run --rm --entrypoint /usr/local/bin/freepod-sshd "$@" "$IMAGE" 2>&1
 }
 good_key=$(cat "$WORK/id.pub")
-base=(--env "FREEPOD_RELEASE_ID=r" --env "PGHOST=h" --env PGPORT=5432
+base=(--env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_LOGIN_USER=$LOGIN_USER"
+      --env "PGHOST=h" --env PGPORT=5432
       --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d)
 
 out=$(start_with "${base[@]}" --env "FREEPOD_PERMIT_OPEN=h:1"); rc=$?
@@ -224,11 +233,29 @@ done
 
 out=$(docker run --rm --entrypoint /usr/local/bin/freepod-sshd \
     --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
+    --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1" "$IMAGE" 2>&1); rc=$?
 expect_nonzero "missing release identity aborts startup" "$rc"
 expect_contains "the message names the release identity" "FREEPOD_RELEASE_ID" "$out"
 
-out=$(start_with --env "FREEPOD_RELEASE_ID=r" --env PGPORT=5432 --env PGUSER=u \
+# The edge authenticates the upstream leg as the deployment name, so a sidecar
+# with no such account refuses every connection with "Invalid user" -- a refusal
+# that looks like an authorization problem from the client end.
+out=$(docker run --rm --entrypoint /usr/local/bin/freepod-sshd \
+    --env "FREEPOD_RELEASE_ID=r" \
+    --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
+    --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1" "$IMAGE" 2>&1); rc=$?
+expect_nonzero "missing login account aborts startup" "$rc"
+expect_contains "the message names the login account" "FREEPOD_LOGIN_USER" "$out"
+
+out=$(start_with --env "FREEPOD_RELEASE_ID=r" \
+    --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
+    --env "FREEPOD_LOGIN_USER=Not A User" \
+    --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1"); rc=$?
+expect_nonzero "malformed login account aborts startup" "$rc"
+expect_contains "the message names the bad account" "FREEPOD_LOGIN_USER" "$out"
+
+out=$(start_with --env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_LOGIN_USER=$LOGIN_USER" --env PGPORT=5432 --env PGUSER=u \
     --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1"); rc=$?
 expect_nonzero "missing database details abort startup" "$rc"
@@ -275,6 +302,11 @@ docker rm -f "$PREFIX-timing" >/dev/null
 
 # --- 5. authentication -----------------------------------------------------
 group "authentication"
+
+read -r _lu_host _lu_port <<< "$(endpoint_of "$PREFIX-app")"
+out=$(ssh -n "${SSH_OPTS[@]}" -i "$WORK/id" -p "$_lu_port" \
+    "$LOGIN_USER@$_lu_host" true 2>&1); rc=$?
+expect_zero "the deployment-name account authenticates (the edge logs in as it)" "$rc"
 
 out=$(ssh_to "$PREFIX-app" true 2>&1); rc=$?
 expect_zero "the supplied key authenticates" "$rc"

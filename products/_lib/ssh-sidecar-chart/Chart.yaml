@@ -1,0 +1,15 @@
+apiVersion: v2
+name: ssh-sidecar
+description: >-
+  Library chart providing SSH access to a Caelus deployment, in one of two
+  access profiles. `sftp` emits the atmoz/sftp sidecar serving read-only access
+  to the deployment's data PVCs; `dev` emits the platform's own SSH sidecar,
+  which opens a shell in the application container, carries the PostgreSQL
+  toolbox and forwards to the database pooler. Both emit the per-deployment
+  credentials Secret, init ConfigMap and Service. See README.md for the
+  contract.
+type: library
+version: 0.4.2
+appVersion: "1.0.0"
+maintainers:
+  - name: Caelus Team

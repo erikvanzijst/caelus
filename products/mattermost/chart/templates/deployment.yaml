@@ -95,9 +95,9 @@ spec:
               mountPath: /mattermost/config
             - name: mattermost-plugins
               mountPath: /mattermost/plugins
-        # Read-only SFTP sidecar (caelus-sftp): exposes the data PVC (uploads/
+        # Read-only SFTP sidecar (ssh-sidecar): exposes the data PVC (uploads/
         # attachments) as /home/<release>/data. Not the postgres or plugins PVCs.
-        {{- include "caelus-sftp.sidecar" (dict "root" . "mounts" (list (dict "volume" "mattermost-data" "path" "data"))) | nindent 8 }}
+        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list (dict "volume" "mattermost-data" "path" "data"))) | nindent 8 }}
       volumes:
         - name: mattermost-data
           persistentVolumeClaim:
@@ -107,4 +107,4 @@ spec:
         - name: mattermost-plugins
           persistentVolumeClaim:
             claimName: {{ include "mattermost.fullname" . }}-plugins
-        {{- include "caelus-sftp.volumes" (dict "root" .) | nindent 8 }}
+        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}

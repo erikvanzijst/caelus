@@ -230,9 +230,9 @@
       },
       "additionalProperties": true
     },
-    "caelus-sftp": {
+    "ssh-sidecar": {
       "type": "object",
-      "description": "Values namespace reserved by the caelus-sftp library dependency (unused)."
+      "description": "Values namespace reserved by the ssh-sidecar library dependency (unused)."
     }
   },
   "required": ["host", "pictrs", "proxy", "postgresql"],

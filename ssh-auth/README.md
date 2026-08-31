@@ -13,9 +13,34 @@ actually does)
 ## Coupling
 
 This directory hardwires its query against the platform's schema, and knows a
-deployment's sidecar is at `<name>-sftp.<namespace>.svc` as the user `<name>`.
+deployment's sidecar is at `<name>-ssh.<namespace>.svc` as the user `<name>`.
 That is deliberate; the design document argues it. The chart must therefore not
 let a product choose a different sidecar user — see `sftp-chart-contract`.
+
+### The `-ssh` naming convention is shared with the charts
+
+`<name>-ssh` is not an internal detail of this resolver. It is the name every
+product chart gives the Service fronting its sidecar, rendered by the
+`ssh-sidecar.service` helper in
+[`products/_lib/ssh-sidecar-chart`](../products/_lib/ssh-sidecar-chart/README.md).
+**Neither side may change it alone.**
+
+The coupling is invisible in both directions, which is what makes it dangerous.
+This resolver names a Service it never validates; a chart names a Service
+nothing in its own release consults. So a unilateral change breaks nothing at
+build time and produces deployments that authenticate successfully and then
+connect to nothing — a failure that surfaces at the edge, far from the line that
+caused it. `convention_test.go` renders both a `sftp` and a `dev` product chart
+and asserts the emitted Service name is the one this query derives; it is the
+only thing in either half that fails when one side moves.
+
+Moving the convention is therefore a coordinated release across the resolver and
+every chart, in a maintenance window, with the fleet unroutable in between —
+which is exactly what the move from `-sftp` to `-ssh` cost.
+
+The **port** is shared the same way: one fleet-wide sidecar port that every
+access profile listens on, so a deployment's profile has no bearing on how the
+edge addresses it. This resolver knows nothing about profiles and must not learn.
 
 It also treats `deployment.name` as globally unique, which the schema does not
 guarantee — only `(namespace, name)`. That is a known wart being fixed at the

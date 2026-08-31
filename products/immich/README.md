@@ -2,7 +2,7 @@
 
 A self-contained Helm chart for [Immich](https://immich.app/), a self-hosted
 photo and video library. The chart renders the entire deployment directly; its
-only dependency is Freepod's own `caelus-sftp` library chart (which provides the
+only dependency is Freepod's own `ssh-sidecar` library chart (which provides the
 read-only SFTP sidecar and its supporting objects).
 
 ## What it deploys
@@ -16,7 +16,7 @@ read-only SFTP sidecar and its supporting objects).
 | Library | PVC `library` (plan-sized) |
 | Config | ConfigMap `<release>-config` (external URL + SMTP) |
 | Ingress | `<release>-ingress` (per-deployment TLS via `caelus.ingress.tls`) |
-| SFTP | Secret + ConfigMap + Service + sshpiper Pipe (`caelus-sftp`) |
+| SFTP | Secret + ConfigMap + Service + sshpiper Pipe (`ssh-sidecar`) |
 
 PostgreSQL uses Immich's own `ghcr.io/immich-app/postgres` image (the
 `vectorchord`/`pgvecto.rs` build); stock PostgreSQL will not work because Immich
@@ -40,12 +40,12 @@ release. Set `smtp.host`/`smtp.from` to enable notification email.
 
 Caelus deploys charts by OCI reference, so the chart must be packaged and pushed
 to the registry before a product template can point at it. `helm dependency
-build` vendors the `caelus-sftp` library into `charts/`; skipping it fails the
+build` vendors the `ssh-sidecar` library into `charts/`; skipping it fails the
 package with a missing-dependency error.
 
 ```bash
 cd products/immich2/chart
-helm dependency build .        # vendor caelus-sftp-*.tgz into charts/
+helm dependency build .        # vendor ssh-sidecar-*.tgz into charts/
 helm lint .
 helm package .                 # -> immich-0.1.1.tgz (named from Chart.yaml)
 helm push immich-0.1.1.tgz oci://registry.home/helm --insecure-skip-tls-verify

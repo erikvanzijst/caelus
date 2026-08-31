@@ -41,6 +41,11 @@ placeholderImage: registry.home/caelus/custom-placeholder:0.1.0
 # addressed but changes only when the platform republishes it.
 pullPolicy: IfNotPresent
 
+# The platform's SSH sidecar, which gives this deployment's owner a shell in
+# their application container, the PostgreSQL toolbox, and a forward to their
+# database.
+sshSidecarImage: ghcr.io/erikvanzijst/freepod/ssh-sidecar:0.2.0
+
 # Port the application is served on. Injected into the container as the `PORT`
 # env var and targeted by the Service, so the contract with tenant images is
 # "bind 0.0.0.0:$PORT" rather than a fixed number — that is Railway's convention,

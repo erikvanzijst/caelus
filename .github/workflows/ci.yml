@@ -74,7 +74,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Run the ssh-sidecar harness
-        run: ./products/_lib/ssh-sidecar/test/run-tests.sh
+        run: ./products/_lib/ssh-sidecar-image/test/run-tests.sh
 
   # The SSH auth resolver's Go suite. The devcontainer's post-create.sh has
   # already created the test db and set CAELUS_TEST_DATABASE_URL and has run

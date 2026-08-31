@@ -2,7 +2,7 @@
 # without this line each package sweeps in the previous release's .tgz and the
 # chart accretes a copy of its own history. They are gitignored artifacts
 # (products/.gitignore) and never belong inside a published chart.
-*.tgz
+/*.tgz
 
 # VCS and editor noise, none of which the registry should carry.
 .git/

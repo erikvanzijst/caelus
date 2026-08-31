@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "custom values",
-  "description": "Validates the fully merged values Helm-side (template defaults + user values + reconciler overrides). This is NOT the tenant-facing schema: the much smaller values_schema_json that drives the deployment form and hostname claiming lives on the DB product template — see products/custom/README.md.",
+  "description": "Validates the fully merged values Helm-side (template defaults + user values + reconciler overrides). This is NOT the tenant-facing schema: the much smaller values_schema_json that drives the deployment form and hostname claiming lives on the DB product template; see products/custom/README.md.",
   "type": "object",
   "properties": {
     "hostname": {
@@ -28,7 +28,16 @@
     },
     "pullPolicy": {
       "type": "string",
-      "enum": ["Always", "IfNotPresent", "Never"]
+      "enum": [
+        "Always",
+        "IfNotPresent",
+        "Never"
+      ]
+    },
+    "sshSidecarImage": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The platform's SSH sidecar image, pinned to an exact version. A system value in the same category as placeholderImage, never tenant-settable: this container holds the platform's trusted key and enters the application container, so a tenant-supplied reference would be a substitution of both. Never a moving tag;  the version a pod runs must not depend on when it last restarted. Matched against products/_lib/ssh-sidecar-image/VERSION by api/tests/test_custom_ssh_sidecar.py."
     },
     "containerPort": {
       "type": "integer",
@@ -39,25 +48,38 @@
     "service": {
       "type": "object",
       "properties": {
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
       },
       "additionalProperties": false
     },
-    "replicas": { "type": "integer", "minimum": 0 },
-    "resources": { "type": "object" },
+    "replicas": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "resources": {
+      "type": "object"
+    },
     "objectStorage": {
       "type": "object",
-      "description": "Whether this chart wires up object storage (an S3 bucket, not a volume). A system value set by the product's catalog entry, never tenant-settable — it is deliberately absent from the tenant-facing values schema. Distinct from caelus.objectStorage, which carries the per-deployment references the reconciler injects.",
+      "description": "Whether this chart wires up object storage (an S3 bucket, not a volume). A system value set by the product's catalog entry, never tenant-settable \u2014 it is deliberately absent from the tenant-facing values schema. Distinct from caelus.objectStorage, which carries the per-deployment references the reconciler injects.",
       "properties": {
-        "enabled": { "type": "boolean" }
+        "enabled": {
+          "type": "boolean"
+        }
       },
       "additionalProperties": false
     },
     "relationalStorage": {
       "type": "object",
-      "description": "Whether this chart wires up a PostgreSQL database. A system value set by the product's catalog entry, never tenant-settable — it is deliberately absent from the tenant-facing values schema. Distinct from caelus.database, which carries the per-deployment references the reconciler injects.",
+      "description": "Whether this chart wires up a PostgreSQL database. A system value set by the product's catalog entry, never tenant-settable \u2014 it is deliberately absent from the tenant-facing values schema. Distinct from caelus.database, which carries the per-deployment references the reconciler injects.",
       "properties": {
-        "enabled": { "type": "boolean" }
+        "enabled": {
+          "type": "boolean"
+        }
       },
       "additionalProperties": false
     },
@@ -68,8 +90,12 @@
         "plan": {
           "type": "object",
           "properties": {
-            "storageBytes": { "type": "integer" },
-            "storageSize": { "type": "string" }
+            "storageBytes": {
+              "type": "integer"
+            },
+            "storageSize": {
+              "type": "string"
+            }
           },
           "additionalProperties": true
         },
@@ -81,7 +107,9 @@
           "type": "object",
           "description": "Deployment owner, injected by the Caelus reconciler",
           "properties": {
-            "email": { "type": "string" },
+            "email": {
+              "type": "string"
+            },
             "id": {
               "type": "integer",
               "description": "Owning user id. The image ownership assertion compares this against the repository half of `image`."
@@ -91,11 +119,17 @@
         },
         "objectStorage": {
           "type": "object",
-          "description": "Per-deployment object storage references injected by the Caelus reconciler. References only — the credentials live in the Secret named by secretName, never in values. The toggle is the top-level objectStorage.enabled, not here: that is a static product declaration, these are per-deployment runtime facts. Optional throughout: a product that has not opted in gets an empty object.",
+          "description": "Per-deployment object storage references injected by the Caelus reconciler. References only \u2014 the credentials live in the Secret named by secretName, never in values. The toggle is the top-level objectStorage.enabled, not here: that is a static product declaration, these are per-deployment runtime facts. Optional throughout: a product that has not opted in gets an empty object.",
           "properties": {
-            "bucket": { "type": "string" },
-            "endpoint": { "type": "string" },
-            "region": { "type": "string" },
+            "bucket": {
+              "type": "string"
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "region": {
+              "type": "string"
+            },
             "secretName": {
               "type": "string",
               "description": "Name of the Secret the reconciler writes into this deployment's namespace, projected into the app container with envFrom."
@@ -105,12 +139,20 @@
         },
         "database": {
           "type": "object",
-          "description": "Per-deployment database references injected by the Caelus reconciler. References only — the password lives in the Secret named by secretName, never in values. The host and port address the pooler, which is the only route a tenant pod has to a database. The toggle is the top-level relationalStorage.enabled, not here. Optional throughout: a product that has not opted in gets an empty object.",
+          "description": "Per-deployment database references injected by the Caelus reconciler. References only \u2014 the password lives in the Secret named by secretName, never in values. The host and port address the pooler, which is the only route a tenant pod has to a database. The toggle is the top-level relationalStorage.enabled, not here. Optional throughout: a product that has not opted in gets an empty object.",
           "properties": {
-            "host": { "type": "string" },
-            "port": { "type": "integer" },
-            "name": { "type": "string" },
-            "user": { "type": "string" },
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            },
+            "user": {
+              "type": "string"
+            },
             "secretName": {
               "type": "string",
               "description": "Name of the Secret the reconciler writes into this deployment's namespace, projected into the app container with envFrom. It carries DATABASE_URL and the discrete PG* variables."
@@ -133,22 +175,47 @@
           "type": "object",
           "description": "Ingress and per-app TLS settings injected by the Caelus reconciler",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "host": { "type": "string" },
+            "enabled": {
+              "type": "boolean"
+            },
+            "host": {
+              "type": "string"
+            },
             "tls": {
               "type": "object",
               "properties": {
-                "wildcard": { "type": "boolean" },
-                "issuer": { "type": "string" },
-                "secretName": { "type": "string" }
+                "wildcard": {
+                  "type": "boolean"
+                },
+                "issuer": {
+                  "type": "string"
+                },
+                "secretName": {
+                  "type": "string"
+                }
               },
               "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        },
+        "ssh": {
+          "type": "object",
+          "description": "The platform SSH edge's public key, injected by the Caelus reconciler for every deployment. The only key the sidecar trusts; the tenant's own keys are checked by the edge on the downstream leg, never in the pod. Reconciler-owned like the rest of this namespace \u2014 system values are merged after user values, so a tenant cannot supply it.",
+          "properties": {
+            "platformPublicKey": {
+              "type": "string",
+              "description": "An OpenSSH public key line. Rendered into FREEPOD_AUTHORIZED_KEYS."
             }
           },
           "additionalProperties": true
         }
       },
       "additionalProperties": true
+    },
+    "ssh-sidecar": {
+      "type": "object",
+      "description": "Values namespace reserved by the ssh-sidecar library dependency (unused; library charts render no values of their own but Helm still reserves the key)."
     }
   },
   "additionalProperties": false

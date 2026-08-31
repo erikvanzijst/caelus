@@ -1,3 +1,3 @@
-{{- /* Read-only SFTP access to the data PVC. See the caelus-sftp library
-       chart (products/_lib/caelus-sftp) for the full contract. */}}
-{{ include "caelus-sftp.resources" (dict "root" .) }}
+{{- /* Read-only SFTP access to the data PVC. See the ssh-sidecar library
+       chart (products/_lib/ssh-sidecar-chart) for the full contract. */}}
+{{ include "ssh-sidecar.sftp.resources" (dict "root" .) }}

@@ -61,6 +61,36 @@ done < <(tr ',[:space:]' '\n\n' <<< "$FREEPOD_PERMIT_OPEN")
 
 (( ${#permit_open[@]} > 0 )) || die "FREEPOD_PERMIT_OPEN is empty. Forwarding must name at least one destination."
 
+# --- login account ---------------------------------------------------------
+# The SSH edge authenticates the upstream leg as the *deployment name*, because
+# that is the one username convention it has: on the `sftp` profile the account
+# atmoz creates IS the release name, and the edge is deliberately ignorant of
+# which profile it is talking to (see ssh-auth/README.md).
+#
+# This server needs uid 0 -- the dispatcher reads another container's process
+# filesystem and enters it -- so the deployment name is added as a second uid-0
+# account rather than the edge being taught a second convention. `root` stays
+# first in /etc/passwd, so getpwuid(0) still resolves to "root" and `whoami`,
+# `ls -l` and friends are unchanged; this name only exists to be logged in as.
+require FREEPOD_LOGIN_USER
+
+[[ $FREEPOD_LOGIN_USER =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] \
+    || die "FREEPOD_LOGIN_USER '${FREEPOD_LOGIN_USER}' is not a valid POSIX user name."
+
+if [[ $FREEPOD_LOGIN_USER != root ]]; then
+    # -o permits the duplicate uid; -M because /root already exists and is the
+    # home both accounts share.
+    #
+    # `-p '*'` is load-bearing. It means "no password will ever match", which is
+    # what root's own entry carries. What it must NOT be is `!`, the LOCKED
+    # marker `useradd` writes by default: with `UsePAM no`, sshd's allowed_user()
+    # refuses a locked account before it ever looks at a key, so the account
+    # would exist and every publickey attempt would still be denied. `*` and `!`
+    # both mean "no password login" and only one of them permits keys.
+    useradd -o -u 0 -g 0 -M -d /root -s /bin/bash -p '*' "$FREEPOD_LOGIN_USER" \
+        || die "could not create the login account '${FREEPOD_LOGIN_USER}'."
+fi
+
 # --- release identity ------------------------------------------------------
 # Required rather than optional: the banner exists so a developer investigating
 # a broken release is not shown a working one during a rollout (D17), and a
@@ -135,5 +165,5 @@ chmod 0600 "$SSHD_CONFIG"
 
 /usr/sbin/sshd -t -f "$SSHD_CONFIG" || die "rendered sshd configuration was rejected by sshd -t."
 
-echo "ssh-sidecar: release ${FREEPOD_RELEASE_ID}, ${keys} trusted key(s), forwarding to ${permit_open[*]}, listening on ${PORT}." >&2
+echo "ssh-sidecar: release ${FREEPOD_RELEASE_ID}, login user ${FREEPOD_LOGIN_USER} (uid 0), ${keys} trusted key(s), forwarding to ${permit_open[*]}, listening on ${PORT}." >&2
 exec /usr/sbin/sshd -D -e -f "$SSHD_CONFIG"

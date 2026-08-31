@@ -5,7 +5,7 @@ description: |
   Deploys Mattermost and a bundled PostgreSQL instance as a single,
   fully self-contained release.
 type: application
-version: 1.0.14
+version: 1.0.15
 appVersion: 11.4.2
 keywords:
   - mattermost
@@ -16,6 +16,6 @@ maintainers:
   - name: Caelus Team
 
 dependencies:
-  - name: caelus-sftp
-    version: "0.3.0"
-    repository: "file://../../_lib/caelus-sftp"
+  - name: ssh-sidecar
+    version: "0.4.2"
+    repository: "file://../../_lib/ssh-sidecar-chart"

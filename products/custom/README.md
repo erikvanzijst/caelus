@@ -188,6 +188,75 @@ credential. The API also refuses to store a var under the `CAELUS_`, `AWS_`,
 `S3_` or `RAILPACK_` prefixes, or named `BUCKET_NAME` or `PORT`; the ordering
 is the second line of defense, because the two fail differently.
 
+## SSH access
+
+`custom` runs the **`dev` access profile**: a platform SSH sidecar rides in the
+application pod, and the deployment's owner reaches it with stock `ssh`, using
+an SSH key registered on their account.
+
+```bash
+ssh <deployment>@dev.freepod.eu               # a login shell IN the application container
+ssh <deployment>@dev.freepod.eu psql          # the PostgreSQL toolbox, in the sidecar
+scp ./file <deployment>@dev.freepod.eu:/app/  # into the application's own filesystem
+```
+
+**The shell lands in the container the tenant built**, not in the sidecar. The
+pod shares its process namespace, so the sidecar reaches the application's
+filesystem and environment and enters it; what a session can do there is a
+property of that image, and a distroless one with no shell ends the session
+saying so.
+
+**Debugging a broken deployment is the point.** A deployment in `error` state is
+still reachable — the Service publishes not-ready addresses and the edge's
+reachability allowlist admits `error` deliberately — because that is the state
+an owner most needs to get inside. The sidecar carries `strace`, and the pod
+grants it `CAP_SYS_PTRACE`, so a debugger or profiler attaches to the running
+application process.
+
+**File transfer needs no separate configuration.** `scp`, `sftp` and `rsync`
+ride the session path into the application container, so there is no read-only
+export, no second credential and no chroot to configure. Each needs its helper
+present in the tenant's own image, exactly as `kubectl cp` needs `tar`: the
+dispatcher says which one is missing.
+
+### Forwarding to the database
+
+One destination is forwardable — the deployment's own database, through the
+pooler — and it must be spelled exactly. **The address is per environment**,
+because it names the pooler Service in that environment's namespace:
+
+| Environment | Forward to |
+|---|---|
+| production (`freepod.eu:22`) | `caelus-tenant-pooler.caelus.svc.cluster.local:6432` |
+| dev (`dev.freepod.eu:23`) | `caelus-tenant-pooler.caelus-dev.svc.cluster.local:6432` |
+
+```bash
+# production
+ssh -N -L 5432:caelus-tenant-pooler.caelus.svc.cluster.local:6432 <deployment>@freepod.eu
+# dev
+ssh -p 23 -N -L 5432:caelus-tenant-pooler.caelus-dev.svc.cluster.local:6432 <deployment>@dev.freepod.eu
+```
+
+Then connect a local client to `localhost:5432`.
+
+The spelling is not cosmetic. `PermitOpen` matches the destination **as the
+client wrote it** and resolves the name afterwards, so
+`caelus-tenant-pooler.caelus.svc:6432` and the fully qualified form above are
+not interchangeable. A mismatch is refused with `administratively prohibited`,
+which reads like a permissions problem rather than a typo. The addresses in this
+table and the value the chart renders into `FREEPOD_PERMIT_OPEN` are one fact
+with two readers, and `api/tests/test_custom_ssh_sidecar.py` fails if they drift
+apart.
+
+Every other destination is refused. Tenant egress reaches the public internet on
+every port, so an unconstrained forwarder would be an authenticated open TCP
+relay originating from the platform's own address.
+
+The database client also works with the application container stopped — the
+connection details are in the *sidecar's* environment, not read out of the
+application process, which is unavailable in precisely the situation an owner is
+investigating.
+
 ## The ownership assertion
 
 `custom.imageRef` in

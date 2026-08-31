@@ -6,7 +6,7 @@ description: >-
   than pinned by the platform; until a build exists the release serves a
   placeholder page.
 type: application
-version: 0.7.0
+version: 0.8.2
 # There is no meaningful upstream app version: the running application is
 # whatever the user built. Tracks the chart version so the field is not
 # misleading.
@@ -16,3 +16,8 @@ keywords:
   - byoi
 maintainers:
   - name: Caelus Team
+
+dependencies:
+  - name: ssh-sidecar
+    version: "0.4.2"
+    repository: "file://../../_lib/ssh-sidecar-chart"

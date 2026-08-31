@@ -41,7 +41,7 @@ This repository is a monorepo with:
   [database-housekeeping-worker](openspec/specs/database-housekeeping-worker/spec.md)
 - **Account SSH keys are the SSH credential.** A user registers SSH public keys
   on their account; they are owned by the user, scoped to no deployment, and are
-  what authenticates every SFTP connection. Adds are owner-only even for
+  what authenticates every SSH connection. Adds are owner-only even for
   administrators, and a key is addressed by its `SHA256:` fingerprint. Spec:
   [ssh-key-api](openspec/specs/ssh-key-api/spec.md),
   [ssh-key-data-model](openspec/specs/ssh-key-data-model/spec.md) · Rationale:
@@ -54,6 +54,28 @@ This repository is a monorepo with:
   [ssh-auth-resolver](openspec/specs/ssh-auth-resolver/spec.md) · Rationale:
   [ssh-grpc-auth-plugin](openspec/changes/archive/2026-08-30-ssh-grpc-auth-plugin/design.md),
   [ssh-auth](ssh-auth/README.md)
+- **Two SSH access profiles, chosen per product, never per connection.** The
+  `ssh-sidecar` library chart (`products/_lib/ssh-sidecar-chart`) offers `sftp`
+  — `atmoz/sftp` over a data PVC, no shell and no writes — and `dev`, the
+  platform's own sidecar image (`products/_lib/ssh-sidecar-image`), which opens
+  a shell **in the application container**, carries the PostgreSQL toolbox and
+  forwards to the deployment's database. The six PVC-bearing products run
+  `sftp`; **`custom` runs `dev`**, and is the product that profile exists for.
+  A product declares its profile by *which helper set it calls* — there is no
+  profile value, deliberately, because `dev` grants a shell and
+  `CAP_SYS_PTRACE` and values are the tenant-influenced channel. Spec:
+  [ssh-dev-profile](openspec/specs/ssh-dev-profile/spec.md) · Rationale:
+  [ssh-dev-profile](openspec/changes/archive/2026-08-31-ssh-dev-profile/design.md)
+- **The `-ssh` Service naming convention is shared between the charts and the
+  resolver, and neither may change it alone.** The edge derives a deployment's
+  upstream address as `<release>-ssh.<namespace>.svc` by string convention; that
+  is the name every product chart renders. The coupling is invisible from both
+  sides — the resolver never validates the Service, and nothing in a chart's own
+  release consults it — so a unilateral change produces deployments that
+  authenticate and then reach nothing. `ssh-auth/convention_test.go` renders
+  both profiles and asserts the two agree; it is the only thing that fails when
+  one side moves. Moving it costs a maintenance window with the fleet
+  unroutable in between.
 - **Vars are the single channel into a pod's environment.** A deployment's
   `vars` become environment variables in its container;
   `deployment.user_values_json` configures the **chart**, not the process, and

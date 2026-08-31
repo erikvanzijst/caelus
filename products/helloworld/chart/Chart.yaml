@@ -2,10 +2,10 @@ apiVersion: v2
 name: helloworld
 description: Nginx serving a generated static HTML file from PVC
 type: application
-version: 0.1.13
+version: 0.1.14
 appVersion: "1.0.4"
 
 dependencies:
-  - name: caelus-sftp
-    version: "0.3.0"
-    repository: "file://../../_lib/caelus-sftp"
+  - name: ssh-sidecar
+    version: "0.4.2"
+    repository: "file://../../_lib/ssh-sidecar-chart"

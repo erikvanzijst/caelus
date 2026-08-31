@@ -36,12 +36,37 @@ indistinguishable from a network fault and gets diagnosed as one.
 | `FREEPOD_AUTHORIZED_KEYS`                            | The public keys the server trusts, one per line. In normal operation this is the single public key of the platform's SSH edge — the tenant's own keys are checked by sshpiper on the downstream leg, never here. Validated with `ssh-keygen -l`. |
 | `FREEPOD_PERMIT_OPEN`                                | The forward allowlist: whitespace- or comma-separated `host:port`. Rendered as sshd's `PermitOpen`. See *Spelling the allowlist* below.                                                                                                          |
 | `FREEPOD_RELEASE_ID`                                 | The release the pod belongs to, reported by the session banner. The chart projects `caelus.dev/release-id` here through the Downward API (D17).                                                                                                  |
+| `FREEPOD_LOGIN_USER`                                 | The account the SSH edge authenticates the upstream leg as: the **deployment name**. Added as a second uid-0 account at startup. See *The login account* below.                                                                                  |
 | `PGHOST` `PGPORT` `PGUSER` `PGPASSWORD` `PGDATABASE` | The deployment's database, in libpq's own variable names so that a bare `psql` connects with no wrapper and no arguments. `PGSSLMODE` and `PGAPPNAME` are passed through if set.                                                                 |
 
 The server listens on **2222**, the platform's sidecar-port convention that the
-tenant NetworkPolicy admits from the SSH edge, and expects the upstream leg to
-authenticate as **`root`** — the dispatcher has to read another container's
-process filesystem and enter it.
+tenant NetworkPolicy admits from the SSH edge.
+
+### The login account
+
+The edge authenticates the upstream leg as the **deployment name**, not as
+`root`. It has exactly one username convention, because on the `sftp` profile the
+account `atmoz/sftp` creates *is* the release name, and the edge is deliberately
+ignorant of which access profile it is addressing (see
+[`ssh-auth/README.md`](../../../ssh-auth/README.md) § *Coupling*).
+
+This server needs uid 0 — the dispatcher reads another container's process
+filesystem and enters it — so rather than teaching the edge a second convention,
+the entrypoint adds `FREEPOD_LOGIN_USER` as a **second uid-0 account**. `root`
+stays first in `/etc/passwd`, so `getpwuid(0)` still resolves to `root` and
+`whoami`, `ls -l` and friends are unchanged; the name exists only to be logged in
+as, and `root` still works.
+
+Its password field is `*`, not `!`. That distinction is load-bearing and easy to
+get wrong: `!` is the *locked* marker `useradd` writes by default, and with
+`UsePAM no` sshd's `allowed_user()` refuses a locked account **before it looks at
+a key**, so the account would exist and every publickey attempt would still be
+denied. Both mean "no password login"; only one of them permits keys.
+
+Without this variable the container exits at startup. Getting it wrong instead —
+the account absent while the server runs — produces `Invalid user <deployment>` in
+this log and `Permission denied (publickey)` at the client, which reads as an
+authorization problem rather than a missing account.
 
 ### Spelling the allowlist
 

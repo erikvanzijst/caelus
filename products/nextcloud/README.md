@@ -2,7 +2,7 @@
 
 A self-contained Nextcloud chart: it renders the Nextcloud application and a
 bundled PostgreSQL database directly, on the official `nextcloud` and `postgres`
-images. Its only dependency is Freepod's `caelus-sftp` library chart, which adds
+images. Its only dependency is Freepod's `ssh-sidecar` library chart, which adds
 read-only SFTP access to the data volume.
 
 ## What it deploys
@@ -15,7 +15,7 @@ read-only SFTP access to the data volume.
 | App secrets | Secret `<release>-app` (admin bootstrap + SMTP)                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | App config  | ConfigMap `<release>-config` (non-secret env via `envFrom`) + ConfigMap `<release>-hooks` (a `before-starting` entrypoint hook that runs `occ db:add-missing-indices/columns/primary-keys` and `occ maintenance:repair --include-expensive` after each upgrade, clearing the "missing indices" and "mimetype migrations available" admin warnings) + ConfigMap `<release>-apache` (`hsts.conf` so Nextcloud's server-side HTTP-headers check sees HSTS; edge Traefik still owns the browser-facing header) |
 | Ingress     | `<release>-ingress` (per-deployment TLS via `caelus.ingress.tls`)                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| SFTP        | Secret + ConfigMap + Service + sshpiper Pipe (`caelus-sftp`, uid 33 to match Nextcloud's `www-data`)                                                                                                                                                                                                                                                                                                                                                                                                       |
+| SFTP        | Secret + ConfigMap + Service + sshpiper Pipe (`ssh-sidecar`, uid 33 to match Nextcloud's `www-data`)                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 The bundled PostgreSQL password is generated on first install and reused from the
 `<release>-db` Secret on upgrade, so it never rotates a live credential. Set
@@ -37,12 +37,12 @@ helm upgrade --install nextcloud products/nextcloud/chart \
 
 Caelus deploys charts by OCI reference, so the chart must be packaged and pushed
 to the registry before a product template can point at it. `helm dependency
-build` vendors the `caelus-sftp` library into `charts/`; skipping it fails the
+build` vendors the `ssh-sidecar` library into `charts/`; skipping it fails the
 package with a missing-dependency error.
 
 ```bash
 cd products/nextcloud/chart
-helm dependency build .        # vendor caelus-sftp-*.tgz into charts/
+helm dependency build .        # vendor ssh-sidecar-*.tgz into charts/
 helm lint .
 helm package .                 # -> nextcloud-0.1.4.tgz
 helm push nextcloud-0.1.4.tgz oci://registry.home/helm --insecure-skip-tls-verify

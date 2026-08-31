@@ -162,7 +162,8 @@ def test_no_container_takes_an_added_capability():
 def test_the_sidecar_image_is_platform_supplied_and_pinned():
     ssh = _container(_render(), "ssh")
     image = ssh["image"]
-    assert image.startswith("ghcr.io/"), image
+    registry = image.split("/", 1)[0]
+    assert registry == "ghcr.io", image
     tag = image.rsplit(":", 1)[1]
     assert tag not in {"latest", "main", "master"}, (
         f"{image} is a moving tag: the version a pod runs would become a "

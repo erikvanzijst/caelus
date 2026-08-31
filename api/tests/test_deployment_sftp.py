@@ -45,13 +45,13 @@ def _create_deployment(client, db_session, *, user_id: int) -> str:
 def stub_sftp(monkeypatch):
     """Stub the provisioner's SFTP availability probe.
 
-    Pass False to simulate a product that exposes no files. The probe reads a
-    Service, not a Secret: nothing in the response is a credential, so the
-    endpoint has no reason to be able to read one.
+    Pass False to simulate a product that exposes no files. The probe reads the
+    sshd-init ConfigMap, not a Secret: nothing in the response is a credential,
+    so the endpoint has no reason to be able to read one.
     """
     def _install(available: bool):
         monkeypatch.setattr(
-            "app.provisioner.provisioner.sftp_is_available",
+            "app.provisioner.provisioner.sftp_credentials_exist",
             lambda **kwargs: available,
         )
     return _install
@@ -219,7 +219,7 @@ def test_cli_parity(cli_runner, monkeypatch):
     from tests.test_cli import _seed_deployment_via_services
 
     runner, cli_app = cli_runner
-    monkeypatch.setattr("app.provisioner.provisioner.sftp_is_available", lambda **kwargs: True)
+    monkeypatch.setattr("app.provisioner.provisioner.sftp_credentials_exist", lambda **kwargs: True)
 
     user_id, deployment_id = _seed_deployment_via_services()
 
@@ -230,7 +230,7 @@ def test_cli_parity(cli_runner, monkeypatch):
     assert "password" not in result.output
 
     # No SFTP service -> stable not-found error, no traceback.
-    monkeypatch.setattr("app.provisioner.provisioner.sftp_is_available", lambda **kwargs: False)
+    monkeypatch.setattr("app.provisioner.provisioner.sftp_credentials_exist", lambda **kwargs: False)
     missing = runner.invoke(cli_app, ["get-deployment-sftp", str(user_id), str(deployment_id)])
     assert missing.exit_code == 1
     assert "Traceback" not in missing.output

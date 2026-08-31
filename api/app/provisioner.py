@@ -81,20 +81,13 @@ class KubeAdapter:
             error_message=f"Failed to label namespace {name}",
         )
 
-    def service_exists_by_label(self, *, namespace: str, selector: str) -> bool:
-        """Whether any Service in ``namespace`` matches ``selector``.
-
-        This is how the platform answers "does this product expose files": the
-        SFTP Service carries the component labels, and its name varies by
-        product (``<release>-sftp`` for wrapper-owned charts, a fixed name for
-        subchart-owned ones). False when the namespace is absent too, which the
-        caller maps to "SFTP not available".
-        """
+    def object_exists_by_label(self, *, kind: str, namespace: str, selector: str) -> bool:
+        """Whether any object of ``kind`` in ``namespace`` matches ``selector``."""
         try:
             result = run_command(
-                ["kubectl", "get", "service", "-n", namespace, "-l", selector, "-o", "json"],
+                ["kubectl", "get", kind, "-n", namespace, "-l", selector, "-o", "json"],
                 runner=self._runner,
-                error_message=f"Failed to look up the SFTP service in namespace {namespace}",
+                error_message=f"Failed to look up {kind} objects in namespace {namespace}",
             )
         except AdapterCommandError as exc:
             text = f"{exc.result.stderr}\n{exc.result.stdout}".lower()
@@ -441,11 +434,12 @@ class Provisioner:
     def namespace_exists(self, *, name: str) -> bool:
         return self.kube.namespace_exists(name)
 
-    def sftp_is_available(self, *, namespace: str, instance: str) -> bool:
-        """Whether this deployment exposes files over SFTP."""
-        return self.kube.service_exists_by_label(
+    def sftp_credentials_exist(self, *, namespace: str, instance: str) -> bool:
+        """Whether this deployment has SFTP credentials to hand out."""
+        return self.kube.object_exists_by_label(
+            kind="configmap",
             namespace=namespace,
-            selector=f"caelus.dev/component=sftp,app.kubernetes.io/instance={instance}",
+            selector=f"caelus.dev/component=ssh,app.kubernetes.io/instance={instance}",
         )
 
     def upsert_secret(

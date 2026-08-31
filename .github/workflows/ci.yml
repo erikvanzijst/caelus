@@ -62,7 +62,7 @@ jobs:
   # `publish-cli.yml` still ships the Python one — so this is a plain test
   # gate until the port takes over the release. Runs in the dev container
   # like api-test rather than on a bare runner: the image already carries
-  # the Rust toolchain, and both jobs share its cached build.
+  # the Rust toolchain, so CI tests the same one developers get locally.
   cli-rust:
     runs-on: ubuntu-latest
     permissions:

@@ -38,3 +38,6 @@ CAELUS_DATABASE_URL="$CAELUS_TEST_DATABASE_URL" uv run alembic upgrade head
 
 cd /workspace/src/cli
 uv sync
+
+cd /workspace/src/cli-rust
+cargo build

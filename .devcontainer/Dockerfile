@@ -68,7 +68,7 @@ RUN printf 'export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH\n' \
       > /etc/profile.d/10-golang.sh
 
 ENV LANG="en_US.UTF-8"
-ENV PATH=/home/vscode/.local/bin:/usr/local/go/bin:/home/vscode/go/bin:$PATH
+ENV PATH=/home/vscode/.cargo/bin:/home/vscode/.local/bin:/usr/local/go/bin:/home/vscode/go/bin:$PATH
 ENV COLORTERM=truecolor
 ENV DOCKER_BUILDKIT=1
 # https://opencode.ai/docs/tools/#websearch
@@ -90,6 +90,7 @@ RUN echo '' >> ~/.bashrc && \
     echo '}'"'"')' >> ~/.bashrc
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN curl -fsSL https://opencode.ai/install | bash
 RUN curl -fsSL https://ampcode.com/install.sh | bash

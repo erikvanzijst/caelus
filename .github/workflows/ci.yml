@@ -58,15 +58,17 @@ jobs:
   cli:
     uses: ./.github/workflows/cli-checks.yml
 
-  # The Rust port of the client. It is not yet the published package —
-  # `publish-cli.yml` still ships the Python one — so this is a plain test
-  # gate until the port takes over the release. Runs in the dev container
-  # like api-test rather than on a bare runner: the image already carries
-  # the Rust toolchain, so CI tests the same one developers get locally.
-  cli-rust:
+  # The shared dev container image, built once per run and pushed when it
+  # lands on master, so the jobs that test inside it (cli-rust, api-test)
+  # use it as a BuildKit cache instead of each building the image from
+  # scratch. The push is filtered to master: pull_request tokens cannot
+  # write to the registry, and the registry should only ever hold an image
+  # that has landed.
+  devcontainer:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
     # The dev container passes through the host's audio device and group for
     # local speech-to-text. Runners are headless and have neither, and docker
     # fails to start a container whose device source is missing, so point both
@@ -78,11 +80,49 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Build and run dev container tests
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build and push the dev container image
         uses: devcontainers/ci@v0.3
         with:
-          # Image name for caching; not pushed
           imageName: ghcr.io/${{ github.repository }}-devcontainer
+          cacheFrom: ghcr.io/${{ github.repository }}-devcontainer
+          push: filter
+          refFilterForPush: refs/heads/master
+
+  # The Rust port of the client. It is not yet the published package —
+  # `publish-cli.yml` still ships the Python one — so this is a plain test
+  # gate until the port takes over the release. Runs in the dev container
+  # like api-test rather than on a bare runner: the image already carries
+  # the Rust toolchain, so CI tests the same one developers get locally.
+  cli-rust:
+    needs: devcontainer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    # The dev container passes through the host's audio device and group for
+    # local speech-to-text. Runners are headless and have neither, and docker
+    # fails to start a container whose device source is missing, so point both
+    # at values that always exist here.
+    env:
+      CAELUS_SND_DEVICE: /dev/null
+      CAELUS_AUDIO_GROUP: root
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Run the Rust test suite in the dev container
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ghcr.io/${{ github.repository }}-devcontainer
+          # The devcontainer job's push is the cache source: when the
+          # Dockerfile has not changed, the local build is a no-op.
+          cacheFrom: ghcr.io/${{ github.repository }}-devcontainer
           push: never
           runCmd: |
             cd cli-rust
@@ -158,9 +198,11 @@ jobs:
         run: ./scripts/build-images.sh --ssh-sidecar --skip-if-published
 
   api-test:
+    needs: devcontainer
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     # The dev container passes through the host's audio device and group for
     # local speech-to-text. Runners are headless and have neither, and docker
     # fails to start a container whose device source is missing, so point both
@@ -172,11 +214,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Build and run dev container tests
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Run the API test suite in the dev container
         uses: devcontainers/ci@v0.3
         with:
-          # Image name for caching; not pushed
           imageName: ghcr.io/${{ github.repository }}-devcontainer
+          # The devcontainer job's push is the cache source: when the
+          # Dockerfile has not changed, the local build is a no-op.
+          cacheFrom: ghcr.io/${{ github.repository }}-devcontainer
           push: never
           runCmd: |
             cd api

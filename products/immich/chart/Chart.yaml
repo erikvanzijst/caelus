@@ -4,7 +4,7 @@ description: >-
   Self-contained Freepod chart for Immich. Renders the full deployment (server,
   machine-learning, valkey, postgres) directly.
 type: application
-version: 0.1.6
+version: 0.1.7
 appVersion: "v2.7.0"
 keywords:
   - immich
@@ -18,6 +18,6 @@ maintainers:
 # Only dependency is Freepod's own SFTP library chart (renders no resources on
 # its own; provides the sidecar + Pipe/Service/Secret helpers).
 dependencies:
-  - name: caelus-sftp
-    version: "0.3.0"
-    repository: "file://../../_lib/caelus-sftp"
+  - name: ssh-sidecar
+    version: "0.4.3"
+    repository: "file://../../_lib/ssh-sidecar-chart"

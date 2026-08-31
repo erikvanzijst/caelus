@@ -20,7 +20,7 @@ this is a bespoke Caelus-native chart in the same style as `nextcloud` and
 | PostgreSQL | StatefulSet `<release>-postgresql` on `postgres:17-alpine` + headless Service; data on PVC `data-<release>-postgresql-0`; in-memory `/dev/shm`                      |
 | Secrets    | Secret `<release>-secrets` — DB credentials, pict-rs API key, and `config.json` (the config minus the admin password)                                              |
 | Ingress    | `<release>-ingress` -> the proxy (per-deployment TLS via `caelus.ingress.tls`)                                                                                     |
-| SFTP       | Secret + ConfigMap + Service + sshpiper Pipe (`caelus-sftp`), sidecar in the pict-rs pod at uid 991, read-only over the media volume                                |
+| SFTP       | Secret + ConfigMap + Service + sshpiper Pipe (`ssh-sidecar`), sidecar in the pict-rs pod at uid 991, read-only over the media volume                                |
 
 Five workloads, one replica each: the backend's federation workers and pict-rs's
 sled index both assume a single writer, so nothing here scales horizontally.
@@ -185,7 +185,7 @@ egress, which federation requires.
 
 ## SFTP
 
-Read-only SFTP over the pict-rs media volume, via the `caelus-sftp` library
+Read-only SFTP over the pict-rs media volume, via the `ssh-sidecar` library
 chart. The sidecar rides in the **pict-rs** pod because an RWO PVC can only be
 shared between containers of one pod, and pict-rs is what mounts the volume.
 
@@ -232,12 +232,12 @@ curl -H 'Accept: application/activity+json' https://lemmy.example.com/
 
 Caelus deploys charts by OCI reference, so the chart must be packaged and pushed
 to the registry before a product template can point at it. `helm dependency
-build` vendors the `caelus-sftp` library into `charts/`; skipping it fails the
+build` vendors the `ssh-sidecar` library into `charts/`; skipping it fails the
 package with a missing-dependency error.
 
 ```bash
 cd products/lemmy/chart
-helm dependency build .        # vendor caelus-sftp-*.tgz into charts/
+helm dependency build .        # vendor ssh-sidecar-*.tgz into charts/
 helm lint .
 helm package .                 # -> lemmy-0.4.0.tgz
 helm push lemmy-0.4.0.tgz oci://registry.home/helm --insecure-skip-tls-verify

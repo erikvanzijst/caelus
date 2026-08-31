@@ -47,14 +47,14 @@ const (
 // (namespace, name), which is a known wart being fixed at the source; LIMIT 1
 // keeps this deterministic rather than merely usually right in the meantime.
 //
-// Reachability is an allowlist, and `error` is in it deliberately: file access
-// matters most when the application is broken, and the SFTP Service publishes
-// not-ready addresses for exactly that reason (var/ssh_access.md D17).
+// Reachability is an allowlist, and `error` is in it deliberately: access
+// matters most when the application is broken, and the sidecar's Service
+// publishes not-ready addresses for exactly that reason (var/ssh_access.md D17).
 const resolveQuery = `
 SELECT d.name,
        d.namespace,
        d.status,
-       d.name || '-sftp.' || d.namespace || '.svc' AS host,
+       d.name || '-ssh.' || d.namespace || '.svc' AS host,
        (k.id IS NOT NULL) AS key_registered
   FROM deployment AS d
   LEFT JOIN user_ssh_key AS k

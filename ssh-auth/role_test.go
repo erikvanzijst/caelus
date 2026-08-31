@@ -113,7 +113,7 @@ func TestTheResolverWorksEndToEndAsTheReadOnlyRole(t *testing.T) {
 	f.registerKey(owner, ownerKey)
 
 	up := newHarness(t, rolePool(t)).mustAdmit(t, "scoped-sss000", ownerKey)
-	want := "tcp://scoped-sss000-sftp." + namespace + ".svc:2222"
+	want := "tcp://scoped-sss000-ssh." + namespace + ".svc:2222"
 	if up.GetUri() != want {
 		t.Errorf("uri = %q, want %q", up.GetUri(), want)
 	}

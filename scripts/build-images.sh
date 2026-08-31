@@ -23,7 +23,7 @@
 # restarting the pods. The sidecar runs in *tenant* pods, one per deployment,
 # which rollout.sh knows nothing about; it reaches them through a chart version
 # bump fanned out by the reconciler. So it takes an immutable version tag from
-# products/_lib/ssh-sidecar/VERSION, is never re-pushed, and building it is a
+# products/_lib/ssh-sidecar-image/VERSION, is never re-pushed, and building it is a
 # deliberate act after that file has been bumped -- which is also why folding it
 # into --all would fail every build that did not bump it. CI publishes it with
 # --skip-if-published instead, so a push lands exactly when VERSION names a
@@ -51,7 +51,7 @@ Options:
   --ui            Build only the UI image.
   --keycloak      Build only the Keycloak image (Freepod theme baked in).
   --ssh-sidecar   Build only the dev-profile SSH sidecar. Ignores TAG: its
-                  version comes from products/_lib/ssh-sidecar/VERSION and an
+                  version comes from products/_lib/ssh-sidecar-image/VERSION and an
                   already-published version is refused rather than overwritten.
   --ssh-resolver  Build only the SSH auth resolver. Ignores TAG: its version
                   comes from ssh-auth/VERSION and an already-published version
@@ -143,7 +143,7 @@ echo "Target: ${TARGET}"
 echo "=============================================="
 
 if [[ "$TARGET" == "ssh-sidecar" ]]; then
-  SIDECAR_CONTEXT=./products/_lib/ssh-sidecar
+  SIDECAR_CONTEXT=./products/_lib/ssh-sidecar-image
   SIDECAR_VERSION=$(tr -d '[:space:]' < "${SIDECAR_CONTEXT}/VERSION")
   SIDECAR_REF="${REGISTRY}/ssh-sidecar:${SIDECAR_VERSION}"
 

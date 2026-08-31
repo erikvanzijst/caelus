@@ -24,10 +24,12 @@ const noDatabase = `
 CAELUS_TEST_DATABASE_URL is not set, or names a database with no schema.
 
 These tests read the platform's real tables, so they need the migrated test
-database the API suite owns. Inside the devcontainer the variable is already
-set; create and migrate the database with a single run of that suite:
+database. Inside the devcontainer the variable is already set and
+.devcontainer/post-create.sh creates and migrates the database when the
+container is built, so an empty one means it was dropped since. Rebuild it --
+the script is idempotent and safe to re-run:
 
-    cd api && uv run --no-sync pytest tests/test_config.py
+    .devcontainer/post-create.sh
 
 `
 

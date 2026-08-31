@@ -8,7 +8,7 @@ juggling the subchart-wrapping charts need. We only override `selector` so the
 Service targets the server pod specifically (the default instance-only selector
 would also match postgres/valkey/ML pods in this namespace).
 */}}
-{{ include "caelus-sftp.resources" (dict
+{{ include "ssh-sidecar.sftp.resources" (dict
      "root" .
      "selector" (dict
        "app.kubernetes.io/name" "server"

@@ -7,7 +7,7 @@ user must run as 33 or `ls` fails with "Permission denied" despite a good login.
 selector targets the nextcloud pod specifically (the default instance-only
 selector would also match the postgres pod).
 */}}
-{{ include "caelus-sftp.resources" (dict
+{{ include "ssh-sidecar.sftp.resources" (dict
      "root" .
      "internalUid" 33
      "internalGid" 33

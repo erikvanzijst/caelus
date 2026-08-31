@@ -47,7 +47,7 @@ def _resolved_dependencies():
     `helm template` refuses a chart whose `Chart.yaml` declares a dependency
     absent from `charts/`, and that directory is a **build artifact**:
     `products/.gitignore` ignores `**/*.tgz`, so a clean checkout has none.
-    Five of these seven depend on `caelus-sftp`.
+    Five of these seven depend on `ssh-sidecar`.
 
     This is the failure mode where a developer's machine and CI disagree, and
     it disagrees in the dangerous direction: a tree that happens to hold the
@@ -55,7 +55,7 @@ def _resolved_dependencies():
     checkout does not. That is precisely how it reached CI.
 
     `build` rather than `update`, so the tracked `Chart.lock` decides what is
-    fetched and is not rewritten. The `caelus-sftp` dependency is a `file://`
+    fetched and is not rewritten. The `ssh-sidecar` dependency is a `file://`
     path into `products/_lib`, so this resolves offline and deterministically.
     """
     for chart in CURATED:
@@ -78,7 +78,7 @@ PLATFORM_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIV5/SURDe/M7JtAheJuxURSGgpF
 def _render(chart: str, values: dict[str, str]) -> str:
     args = [
         "helm", "template", "t", str(PRODUCTS / chart / "chart"),
-        "--set-string", f"caelus.sftp.platformPublicKey={PLATFORM_KEY}",
+        "--set-string", f"caelus.ssh.platformPublicKey={PLATFORM_KEY}",
     ]
     for key, value in values.items():
         args += ["--set", f"{key}={value}"]

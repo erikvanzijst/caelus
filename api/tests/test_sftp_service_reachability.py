@@ -33,7 +33,7 @@ SSH_PORT = 2222
 
 pytestmark = pytest.mark.skipif(shutil.which("helm") is None, reason="helm not installed")
 
-# The six charts that consume `caelus-sftp`, with the minimum values each needs
+# The six charts that consume `ssh-sidecar`, with the minimum values each needs
 # to render standalone -- values a real deployment always has and a bare
 # `helm template` does not. Unrelated to this change.
 CONSUMERS = {
@@ -52,7 +52,7 @@ PLATFORM_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIV5/SURDe/M7JtAheJuxURSGgpF
 
 @pytest.fixture(scope="module", autouse=True)
 def _resolved_dependencies():
-    """Vendor each chart's `caelus-sftp` dependency before anything renders.
+    """Vendor each chart's `ssh-sidecar` dependency before anything renders.
 
     `charts/` is a build artifact -- `products/.gitignore` ignores `**/*.tgz`,
     so a clean checkout has none and `helm template` refuses the chart. `build`
@@ -73,7 +73,7 @@ def _resolved_dependencies():
 def _render(chart: str, *, platform_key: str | None = PLATFORM_KEY) -> list[dict]:
     args = ["helm", "template", "t", str(PRODUCTS / chart / "chart")]
     if platform_key is not None:
-        args += ["--set-string", f"caelus.sftp.platformPublicKey={platform_key}"]
+        args += ["--set-string", f"caelus.ssh.platformPublicKey={platform_key}"]
     for key, value in CONSUMERS[chart].items():
         args += ["--set", f"{key}={value}"]
     result = subprocess.run(args, capture_output=True, text=True)
@@ -86,7 +86,7 @@ def _sftp_secret(docs: list[dict]) -> dict:
         doc
         for doc in docs
         if doc.get("kind") == "Secret"
-        and (doc.get("metadata", {}).get("labels") or {}).get("caelus.dev/component") == "sftp"
+        and (doc.get("metadata", {}).get("labels") or {}).get("caelus.dev/component") == "ssh"
     ]
     assert len(secrets) == 1, f"expected exactly one SFTP Secret, got {len(secrets)}"
     return secrets[0]
@@ -224,7 +224,7 @@ def test_the_sidecar_disables_password_authentication(chart):
         doc
         for doc in _render(chart)
         if doc.get("kind") == "ConfigMap"
-        and (doc.get("metadata", {}).get("labels") or {}).get("caelus.dev/component") == "sftp"
+        and (doc.get("metadata", {}).get("labels") or {}).get("caelus.dev/component") == "ssh"
     ]
     assert len(configmaps) == 1
     init = configmaps[0]["data"]["init.sh"]

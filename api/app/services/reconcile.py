@@ -546,17 +546,17 @@ class DeploymentReconciler:
             cls._build_database_overrides(deployment, database),
             cls._build_vars_overrides(vars_secret),
             cls._build_release_overrides(deployment),
-            cls._build_sftp_overrides(),
+            cls._build_ssh_overrides(),
         ):
             if part:
                 overrides = template_values.deep_merge(overrides, part)
         return overrides or None
 
     @staticmethod
-    def _build_sftp_overrides() -> dict | None:
+    def _build_ssh_overrides() -> dict | None:
         """The platform SSH key every sidecar trusts, from per-environment settings."""
         key = get_settings().sftp_platform_public_key.strip()
-        return {"caelus": {"sftp": {"platformPublicKey": key}}} if key else None
+        return {"caelus": {"ssh": {"platformPublicKey": key}}} if key else None
 
     @staticmethod
     def _build_vars_overrides(vars_secret: str | None) -> dict | None:

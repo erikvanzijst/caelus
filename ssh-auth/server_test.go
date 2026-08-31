@@ -159,7 +159,7 @@ func TestOwnersRegisteredKeyIsAdmitted(t *testing.T) {
 	f.registerKey(owner, ownerKey)
 
 	up := newHarness(t, f.pool).mustAdmit(t, "hello-world-aaa111", ownerKey)
-	want := "tcp://hello-world-aaa111-sftp." + namespace + ".svc:2222"
+	want := "tcp://hello-world-aaa111-ssh." + namespace + ".svc:2222"
 	if up.GetUri() != want {
 		t.Errorf("uri = %q, want %q", up.GetUri(), want)
 	}

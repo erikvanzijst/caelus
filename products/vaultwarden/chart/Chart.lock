@@ -1,6 +1,6 @@
 dependencies:
-- name: caelus-sftp
-  repository: file://../../_lib/caelus-sftp
-  version: 0.3.0
-digest: sha256:7acf794e21d23a9143c4649f99b4de7482beb047c0283863e99c2da96c83a69a
-generated: "2026-08-30T20:11:19.273586525Z"
+- name: ssh-sidecar
+  repository: file://../../_lib/ssh-sidecar-chart
+  version: 0.4.3
+digest: sha256:38b4240540b41374017741cd0013c3b3cebf931b1ee77669bd3082d2af9ac771
+generated: "2026-08-31T19:01:40.779493244Z"

@@ -1,7 +1,7 @@
 {{- /*
 Immich server: the web/API front end and the only pod that mounts the library.
 The read-only SFTP sidecar rides here (RWO volumes can only be shared inside one
-pod). We OWN this pod, so the sidecar comes straight from the caelus-sftp
+pod). We OWN this pod, so the sidecar comes straight from the ssh-sidecar
 helpers -- no upstream extraContainers hook, no fixed internal-user workaround.
 */}}
 apiVersion: v1
@@ -88,7 +88,7 @@ spec:
               mountPath: /config
               readOnly: true
         # Read-only SFTP sidecar: exposes the library at /home/<release>/library.
-        {{- include "caelus-sftp.sidecar" (dict "root" . "mounts" (list
+        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list
              (dict "volume" "library" "path" "library"))) | nindent 8 }}
       volumes:
         - name: library
@@ -97,4 +97,4 @@ spec:
         - name: config
           configMap:
             name: {{ .Release.Name }}-config
-        {{- include "caelus-sftp.volumes" (dict "root" .) | nindent 8 }}
+        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}

@@ -50,7 +50,7 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         # fsGroup owns the PVC files. It must equal the SFTP sidecar's uid (1000,
-        # the caelus-sftp default) or its logins authenticate but cannot read.
+        # the ssh-sidecar default) or its logins authenticate but cannot read.
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
@@ -172,10 +172,10 @@ spec:
         # backup set. The library warns against listing a database PVC, which is
         # aimed at products with a separate postgres volume; here the sqlite file
         # *is* the application data, and the only SFTP user is the vault's owner.
-        {{- include "caelus-sftp.sidecar" (dict "root" . "mounts" (list
+        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list
              (dict "volume" "data" "path" "data"))) | nindent 8 }}
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-data
-        {{- include "caelus-sftp.volumes" (dict "root" .) | nindent 8 }}
+        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}

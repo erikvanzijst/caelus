@@ -3,7 +3,7 @@ selector targets the pict-rs pod specifically -- the library's default
 instance-only selector would also match the backend, frontend, proxy and
 Postgres pods, and the Service would round-robin onto a pod with no sshd.
 */}}
-{{ include "caelus-sftp.resources" (dict
+{{ include "ssh-sidecar.sftp.resources" (dict
      "root" .
      "internalUid" 991
      "internalGid" 991

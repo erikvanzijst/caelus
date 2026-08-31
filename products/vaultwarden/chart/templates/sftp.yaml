@@ -12,7 +12,7 @@ internalUid is left at the library default of 1000, which matches the pod's
 fsGroup — vaultwarden owns its data as an ordinary uid rather than a fixed
 image-mandated one, so there is nothing to override.
 */}}
-{{ include "caelus-sftp.resources" (dict
+{{ include "ssh-sidecar.sftp.resources" (dict
      "root" .
      "selector" (dict
        "app.kubernetes.io/name" "vaultwarden"

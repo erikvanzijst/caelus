@@ -1,0 +1,13 @@
+{{- /*
+The Service the SSH edge reaches this deployment through. `custom` runs the
+`dev` access profile: a shell in the application container, the PostgreSQL
+toolbox, and a forward to the deployment's own database. The sidecar itself is
+spliced into the application pod (see deployment.yaml) — it has to be in that
+pod to see the application's processes at all.
+
+The profile is not configuration. This chart calls the `dev` helper set and can
+render no other; see the ssh-sidecar library chart
+(products/_lib/ssh-sidecar-chart) for why that is a set of helpers rather than a
+values key.
+*/}}
+{{ include "ssh-sidecar.dev.resources" (dict "root" .) }}

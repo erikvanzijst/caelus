@@ -15,6 +15,10 @@ set -uo pipefail
 cd "$(dirname "$0")" || exit 1
 readonly CONTEXT=..
 readonly PREFIX=freepod-sshtest
+# The account the SSH edge authenticates the upstream leg as: the deployment
+# name, not "root". The sidecar adds it as a second uid-0 account, because the
+# edge has one username convention and is ignorant of access profiles.
+readonly LOGIN_USER=custom-user-app-harness
 readonly NET=$PREFIX-net
 readonly APP_IMAGE=$PREFIX/app
 readonly NOSHELL_IMAGE=$PREFIX/noshell
@@ -93,8 +97,11 @@ endpoint_of() {
 SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
           -o LogLevel=ERROR -o BatchMode=yes -o ConnectTimeout=10)
 
-# ssh_to <owner-container> [ssh options] [command] -- runs as root, the
-# username the platform's SSH edge uses upstream. Leading dash arguments are
+# ssh_to <owner-container> [ssh options] [command] -- logs in as root. The edge
+# actually authenticates as the deployment name, which is a second uid-0 account
+# the entrypoint adds; the test above this group's first case proves that
+# account works, and the rest use root because the two are the same uid.
+# Leading dash arguments are
 # ssh's; everything after them is the remote command, which must follow the
 # host on the command line.
 ssh_to() {
@@ -132,8 +139,21 @@ sidecar_env() {
         --env "FREEPOD_AUTHORIZED_KEYS=$(cat "$WORK/id.pub")" \
         --env "FREEPOD_PERMIT_OPEN=$PREFIX-allowed:8080 localhost:8080" \
         --env "FREEPOD_RELEASE_ID=$1" \
+        --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
         --env "PGHOST=$PREFIX-pg" --env PGPORT=5432 \
         --env PGUSER=appuser --env PGPASSWORD=harness-secret --env PGDATABASE=appdb
+}
+
+# sidecar_env_nodb <release-id> -- the same contract for a product with no
+# relational storage: no database variables, and consequently nothing to
+# forward to either. The toolbox is a facility this image offers, not a
+# precondition it imposes, so this configuration must produce a server that
+# starts and serves the session paths unchanged.
+sidecar_env_nodb() {
+    printf '%s\n' \
+        --env "FREEPOD_AUTHORIZED_KEYS=$(cat "$WORK/id.pub")" \
+        --env "FREEPOD_RELEASE_ID=$1" \
+        --env "FREEPOD_LOGIN_USER=$LOGIN_USER"
 }
 
 # --- setup -----------------------------------------------------------------
@@ -177,7 +197,14 @@ run_container "$PREFIX-noshell-app" --network "$NET" "${PUBLISH[@]}" "$NOSHELL_I
 run_container "$PREFIX-noshell-side" --pid="container:$PREFIX-noshell-app" \
     --network "container:$PREFIX-noshell-app" --cap-add SYS_PTRACE "${SIDE_ENV[@]}" "$IMAGE"
 
-for owner in "$PREFIX-app" "$PREFIX-lone" "$PREFIX-noshell-app"; do
+# A deployment of a product with no relational storage: an ordinary application
+# container beside a sidecar configured with no database and no allowlist.
+run_container "$PREFIX-nodb-app" --network "$NET" "${PUBLISH[@]}" "$APP_IMAGE"
+mapfile -t NODB_ENV < <(sidecar_env_nodb release-nodb-uuid)
+run_container "$PREFIX-nodb-side" --pid="container:$PREFIX-nodb-app" \
+    --network "container:$PREFIX-nodb-app" "${NODB_ENV[@]}" "$IMAGE"
+
+for owner in "$PREFIX-app" "$PREFIX-lone" "$PREFIX-noshell-app" "$PREFIX-nodb-app"; do
     wait_for_port "$owner" || { echo "sidecar on $owner never opened its port" >&2; docker logs "${owner/-app/-side}" 2>&1 | tail -20; exit 1; }
 done
 
@@ -201,7 +228,8 @@ start_with() {
     docker run --rm --entrypoint /usr/local/bin/freepod-sshd "$@" "$IMAGE" 2>&1
 }
 good_key=$(cat "$WORK/id.pub")
-base=(--env "FREEPOD_RELEASE_ID=r" --env "PGHOST=h" --env PGPORT=5432
+base=(--env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_LOGIN_USER=$LOGIN_USER"
+      --env "PGHOST=h" --env PGPORT=5432
       --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d)
 
 out=$(start_with "${base[@]}" --env "FREEPOD_PERMIT_OPEN=h:1"); rc=$?
@@ -212,10 +240,6 @@ out=$(start_with "${base[@]}" --env "FREEPOD_PERMIT_OPEN=h:1" --env "FREEPOD_AUT
 expect_nonzero "unparseable trusted key aborts startup" "$rc"
 expect_contains "the message names the unusable key" "FREEPOD_AUTHORIZED_KEYS" "$out"
 
-out=$(start_with "${base[@]}" --env "FREEPOD_AUTHORIZED_KEYS=$good_key"); rc=$?
-expect_nonzero "missing forward allowlist aborts startup" "$rc"
-expect_contains "the message names the allowlist" "FREEPOD_PERMIT_OPEN" "$out"
-
 for malformed in "pooler" "pooler:*" "pooler:not-a-port" "pooler:99999"; do
     out=$(start_with "${base[@]}" --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=$malformed"); rc=$?
     expect_nonzero "malformed allowlist entry '$malformed' aborts startup" "$rc"
@@ -224,15 +248,38 @@ done
 
 out=$(docker run --rm --entrypoint /usr/local/bin/freepod-sshd \
     --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
+    --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1" "$IMAGE" 2>&1); rc=$?
 expect_nonzero "missing release identity aborts startup" "$rc"
 expect_contains "the message names the release identity" "FREEPOD_RELEASE_ID" "$out"
 
-out=$(start_with --env "FREEPOD_RELEASE_ID=r" --env PGPORT=5432 --env PGUSER=u \
+# The edge authenticates the upstream leg as the deployment name, so a sidecar
+# with no such account refuses every connection with "Invalid user" -- a refusal
+# that looks like an authorization problem from the client end.
+out=$(docker run --rm --entrypoint /usr/local/bin/freepod-sshd \
+    --env "FREEPOD_RELEASE_ID=r" \
+    --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
+    --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1" "$IMAGE" 2>&1); rc=$?
+expect_nonzero "missing login account aborts startup" "$rc"
+expect_contains "the message names the login account" "FREEPOD_LOGIN_USER" "$out"
+
+out=$(start_with --env "FREEPOD_RELEASE_ID=r" \
+    --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
+    --env "FREEPOD_LOGIN_USER=Not A User" \
+    --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1"); rc=$?
+expect_nonzero "malformed login account aborts startup" "$rc"
+expect_contains "the message names the bad account" "FREEPOD_LOGIN_USER" "$out"
+
+# A partial database configuration is not an absent one: it means the projection
+# that should have supplied it is broken, and a container that started anyway
+# would surface that as a connection error inside psql, at the moment someone
+# needed the database and furthest from the cause.
+out=$(start_with --env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_LOGIN_USER=$LOGIN_USER" --env PGPORT=5432 --env PGUSER=u \
     --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1"); rc=$?
-expect_nonzero "missing database details abort startup" "$rc"
+expect_nonzero "an incomplete database configuration aborts startup" "$rc"
 expect_contains "the message names the missing database input" "PGHOST" "$out"
+expect_contains "the message names what was supplied" "PGPORT" "$out"
 
 # --- 3. rendered server configuration --------------------------------------
 group "server: rendered configuration"
@@ -275,6 +322,11 @@ docker rm -f "$PREFIX-timing" >/dev/null
 
 # --- 5. authentication -----------------------------------------------------
 group "authentication"
+
+read -r _lu_host _lu_port <<< "$(endpoint_of "$PREFIX-app")"
+out=$(ssh -n "${SSH_OPTS[@]}" -i "$WORK/id" -p "$_lu_port" \
+    "$LOGIN_USER@$_lu_host" true 2>&1); rc=$?
+expect_zero "the deployment-name account authenticates (the edge logs in as it)" "$rc"
 
 out=$(ssh_to "$PREFIX-app" true 2>&1); rc=$?
 expect_zero "the supplied key authenticates" "$rc"
@@ -459,6 +511,39 @@ ssh_to "$PREFIX-app" 'psql -Atc "create table if not exists t (id int); insert i
 ssh_to "$PREFIX-app" 'pg_dump' > "$WORK/dump.sql" 2>/dev/null
 expect_missing "a streamed dump carries no banner text" "freepod:" "$(cat "$WORK/dump.sql")"
 expect_contains "the dump is a real dump" "CREATE TABLE public.t" "$(cat "$WORK/dump.sql")"
+
+# --- 13. a product with no database ----------------------------------------
+# The toolbox and the forward are facilities this profile offers, not
+# preconditions it imposes, so their absence must cost only themselves. Every
+# other session path is the same server as above.
+group "no database: the rest of the session is unchanged"
+
+config=$(docker exec "$PREFIX-nodb-side" cat /etc/ssh/sshd_config)
+# An empty allowlist must be written as `none`, never left out: sshd's default
+# is to permit forwarding to anywhere, so silence would turn "nothing to allow"
+# into "allow everything", from a host with tenant egress to the internet.
+expect_contains "an empty allowlist is written as a refusal" "PermitOpen none" "$config"
+expect_contains "the startup log states there is no database" "database none" \
+    "$(docker logs "$PREFIX-nodb-side" 2>&1)"
+
+expect_eq "a shell session still reads the application's filesystem" \
+    "application-container" "$(ssh_to "$PREFIX-nodb-app" 'cat /etc/app-marker' 2>/dev/null)"
+expect_eq "a shell session still starts in the application's working directory" \
+    "/app" "$(ssh_to "$PREFIX-nodb-app" 'pwd' 2>/dev/null)"
+
+out=$(ssh_to "$PREFIX-nodb-app" 'psql -Atc "select 1"' 2>&1); rc=$?
+expect_nonzero "a database tool is declined rather than left to fail" "$rc"
+expect_contains "the refusal names the cause" "no database" "$out"
+expect_missing "no bare connection failure reaches the user instead" "could not connect" "$out"
+
+out=$(forward_and_get "$PREFIX-nodb-app" "$PREFIX-allowed:8080" "$WORK/fwd-nodb.log")
+expect_missing "every forward is refused" "forward-target-allowed" "$out"
+
+# The staged session environment is the only path by which a database
+# credential could reach a session, so its absence is asserted, not assumed.
+out=$(docker exec "$PREFIX-nodb-side" sh -c 'tr "\0" "\n" < /etc/freepod/session-env')
+expect_missing "no database credential is staged for the session" "PGPASSWORD" "$out"
+expect_contains "the release identity is still staged" "release-nodb-uuid" "$out"
 
 # --- summary ---------------------------------------------------------------
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$PASS" "$FAIL"

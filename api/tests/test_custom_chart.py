@@ -25,6 +25,27 @@ DIGEST = "sha256:" + "a" * 64
 pytestmark = pytest.mark.skipif(shutil.which("helm") is None, reason="helm not installed")
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _resolved_dependencies():
+    """Vendor the chart's `ssh-sidecar` dependency before anything renders.
+
+    `charts/` is a build artifact -- `products/.gitignore` ignores `**/*.tgz`,
+    so a clean checkout has none and `helm template` refuses the chart outright
+    with "found in Chart.yaml, but missing in charts/". This chart had no
+    dependencies until it adopted the `dev` access profile, which is why the
+    fixture arrives later than the tests it serves.
+
+    `build` rather than `update`, so the tracked `Chart.lock` decides what is
+    vendored and is not rewritten.
+    """
+    result = subprocess.run(
+        ["helm", "dependency", "build", str(CHART)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def _render(**values: str) -> list[dict]:
     args = ["helm", "template", "t", str(CHART)]
     for key, value in values.items():

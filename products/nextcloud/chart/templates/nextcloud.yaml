@@ -155,7 +155,7 @@ spec:
             failureThreshold: 30
         # Read-only SFTP sidecar. Exposes ONLY the data/ subPath (the PVC root
         # also holds config/config.php with DB credentials). uid 33 = www-data.
-        {{- include "caelus-sftp.sidecar" (dict "root" . "mounts" (list
+        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list
              (dict "volume" "data" "path" "data" "subPath" "data"))) | nindent 8 }}
       volumes:
         - name: data
@@ -168,4 +168,4 @@ spec:
         - name: apache-conf
           configMap:
             name: {{ .Release.Name }}-apache
-        {{- include "caelus-sftp.volumes" (dict "root" .) | nindent 8 }}
+        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}

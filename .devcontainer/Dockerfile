@@ -4,6 +4,8 @@ FROM docker/compose-bin AS composebin
 FROM bitnami/kubectl AS kubectl
 FROM derailed/k9s AS k9s
 FROM d3fk/helm:latest AS helm
+# Same image ssh-auth/Dockerfile builds the release binary with.
+FROM golang:1.25-bookworm AS golang
 FROM mcr.microsoft.com/devcontainers/python:3.13-trixie
 
 COPY --from=k9s /bin/k9s /usr/local/bin/k9s
@@ -12,6 +14,7 @@ COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=buildxbin /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 COPY --from=composebin /docker-compose /usr/libexec/docker/cli-plugins/docker-compose
 COPY --from=helm /helm /usr/local/bin/helm
+COPY --from=golang /usr/local/go /usr/local/go
 
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
@@ -61,8 +64,11 @@ RUN npm i -g @fission-ai/openspec@latest
 RUN npm i -g @google/gemini-cli
 RUN mkdir -p /workspace/src && chown -R vscode:vscode /workspace
 
+RUN printf 'export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH\n' \
+      > /etc/profile.d/10-golang.sh
+
 ENV LANG="en_US.UTF-8"
-ENV PATH=/home/vscode/.local/bin:$PATH
+ENV PATH=/home/vscode/.local/bin:/usr/local/go/bin:/home/vscode/go/bin:$PATH
 ENV COLORTERM=truecolor
 ENV DOCKER_BUILDKIT=1
 # https://opencode.ai/docs/tools/#websearch

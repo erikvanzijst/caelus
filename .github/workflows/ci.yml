@@ -76,10 +76,34 @@ jobs:
       - name: Run the ssh-sidecar harness
         run: ./products/_lib/ssh-sidecar/test/run-tests.sh
 
+  # The SSH auth resolver's Go suite. The devcontainer's post-create.sh has
+  # already created the test db and set CAELUS_TEST_DATABASE_URL and has run
+  # `alembic upgrade head`.
+  ssh-auth-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CAELUS_SND_DEVICE: /dev/null
+      CAELUS_AUDIO_GROUP: root
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Build and run the resolver tests in the dev container
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ghcr.io/${{ github.repository }}-devcontainer
+          push: never
+          runCmd: |
+            cd ssh-auth
+            go vet ./...
+            go test ./...
+
   publish-images:
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    needs: [ui-test, api-test, catalog-lint, cli, ssh-sidecar-test]
+    needs: [ui-test, api-test, catalog-lint, cli, ssh-sidecar-test, ssh-auth-test]
     permissions:
       contents: read
       packages: write

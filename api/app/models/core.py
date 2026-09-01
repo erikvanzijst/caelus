@@ -625,6 +625,21 @@ class SftpCredentialsRead(SQLModel):
     account_has_ssh_key: bool
 
 
+class SshEdgeRead(SQLModel):
+    """How to reach this environment's SSH edge, and how to verify it.
+
+    `host` and `port` are the user-facing edge values, the same ones the SFTP
+    credentials endpoint reports -- one fact, two readers. `host_key` maps an
+    OpenSSH key type to the base64 public key, so a client can pin the edge in
+    its own known_hosts rather than trusting whatever answers on first use. An
+    environment that has not configured the key reports an empty mapping.
+    """
+
+    host_key: dict[str, str]
+    host: str
+    port: int
+
+
 class DeploymentDatabaseRead(SQLModel):
     """A deployment's database: which one it is, its credential, and its health.
 

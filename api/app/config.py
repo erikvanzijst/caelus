@@ -78,6 +78,9 @@ class CaelusSettings(BaseSettings):
     # The SSH edge's public key, which every sshd sidecar trusts.
     sftp_platform_public_key: str = ""
 
+    # The SSH edge's own host key is the key the edge presents to clients
+    ssh_edge_host_public_key: str = ""
+
     # ── Reconcile job lease ───────────────────────────────────────────────
     # How long a worker may hold a claimed reconcile job before another worker
     # is allowed to steal it. A worker that dies mid-reconcile (pod restart,

@@ -15,20 +15,20 @@
 
 ## 2. Key selection and host verification in the client
 
-- [ ] 2.1 Resolve this machine's registered key for the target environment using the
+- [x] 2.1 Resolve this machine's registered key for the target environment using the
       existing record in `cli/src/freepod/keys.py`, falling back to fingerprint recovery and
       recording what it finds. Verify the recorded path is used directly on the next
       invocation with no search.
-- [ ] 2.2 Offer exactly that key: `-o IdentitiesOnly=yes -i <path>`. Put the reason beside
+- [x] 2.2 Offer exactly that key: `-o IdentitiesOnly=yes -i <path>`. Put the reason beside
       the flag in the code — the edge answers every offered key with a partial success, so
       a populated agent exhausts the authentication budget before the right key is reached.
       Verify with several keys loaded in an agent that exactly one is offered.
-- [ ] 2.3 Write and use a client-managed `known_hosts` beside the token cache, keyed by
+- [x] 2.3 Write and use a client-managed `known_hosts` beside the token cache, keyed by
       environment, populated from the published host key. Verify the user's own
       `known_hosts` is neither consulted as authority nor modified.
-- [ ] 2.4 Refuse a host key that does not match the published value, reporting the mismatch.
+- [x] 2.4 Refuse a host key that does not match the published value, reporting the mismatch.
       Verify no prompt to accept it appears and nothing is recorded.
-- [ ] 2.5 Report a missing `ssh` executable as a named prerequisite rather than an unhandled
+- [x] 2.5 Report a missing `ssh` executable as a named prerequisite rather than an unhandled
       error. Verify on a path with no `ssh`.
 
 ## 3. Pre-flight diagnosis
@@ -67,7 +67,8 @@
 
 - [ ] 5.1 `shell` opens an interactive session that lands in the **application container**.
       Verify by reading a file the application wrote and an environment variable it was
-      started with.
+      started with. Note that interactive sessions over ssh to our sidecar _require_
+      `-tt` passed to `ssh`, or else ForceCommand will not allocate a tty.
 - [ ] 5.2 `db shell` opens an interactive database session server-side. Verify it works on a
       machine with no PostgreSQL client installed, and against a deployment whose
       application container is stopped.

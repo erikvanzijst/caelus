@@ -135,6 +135,17 @@ variable "sshpiper_upstream_private_keys" {
   }
 }
 
+variable "sshpiper_host_private_keys" {
+  description = "OpenSSH private key the edge authenticates to itself with, per Terraform workspace. Set in secrets.auto.tfvars."
+  type        = map(string)
+  sensitive   = true
+
+  validation {
+    condition     = alltrue([for k in ["default", "prod"] : contains(keys(var.sshpiper_host_private_keys), k)])
+    error_message = "sshpiper_host_private_keys must have both a \"default\" (dev) and a \"prod\" key. The dev workspace is named `default`, not `dev`."
+  }
+}
+
 # The resolver image. Immutable tag from ssh-auth/VERSION, never re-pushed, and
 # deliberately not a moving tag like the API's: the SSH edge must not roll
 # because the API rolled. Bump it here to deploy a new resolver.

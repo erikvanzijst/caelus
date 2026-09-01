@@ -1,11 +1,3 @@
-# Per-environment sshpiperd: the single SSH entry point for tenant SSH
-# access. Routes connections by username to per-deployment sidecars, asking
-# the SSH auth resolver (ssh-auth/) which one and whether
-# the offered key may open it.
-resource "tls_private_key" "host_key" {
-  algorithm = "ED25519"
-}
-
 resource "kubernetes_secret" "server_key" {
   metadata {
     name      = "sshpiper-server-key"
@@ -13,7 +5,7 @@ resource "kubernetes_secret" "server_key" {
   }
 
   data = {
-    server_key = tls_private_key.host_key.private_key_openssh
+    server_key = var.sshpiper_host_private_key
   }
 }
 

@@ -19,6 +19,12 @@ variable "rbac_name" {
   type        = string
 }
 
+variable "sshpiper_host_private_key" {
+  description = "OpenSSH private key the edge authenticates to every SFTP sidecar with. One per environment; see tf/app/variables.tf."
+  type        = string
+  sensitive   = true
+}
+
 variable "upstream_private_key" {
   description = "OpenSSH private key the edge authenticates to every SFTP sidecar with. One per environment; see tf/app/variables.tf."
   type        = string

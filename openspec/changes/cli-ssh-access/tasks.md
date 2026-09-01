@@ -65,7 +65,7 @@
 
 ## 5. `freepod shell` and `freepod db shell`
 
-- [ ] 5.1 `shell` opens an interactive session that lands in the **application container**.
+- [x] 5.1 `shell` opens an interactive session that lands in the **application container**.
       Verify by reading a file the application wrote and an environment variable it was
       started with. Note that interactive sessions over ssh to our sidecar _require_
       `-tt` passed to `ssh`, or else ForceCommand will not allocate a tty.

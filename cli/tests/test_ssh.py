@@ -151,6 +151,20 @@ def test_offers_exactly_one_identity():
     assert "IdentitiesOnly=yes" in args
 
 
+def test_the_identity_is_the_private_half_where_one_exists(isolated_home):
+    pub = make_key(isolated_home / "keys", "id_ed25519")
+    private = pub.with_name(pub.name[: -len(".pub")])
+    assert ssh_module.identity_file(pub) == private
+    # And build_args offers that private half, not the world-readable public one.
+    args = _args(key_path=pub)
+    assert args[args.index("-i") + 1] == str(private)
+
+
+def test_the_identity_is_the_public_key_when_no_private_half_exists():
+    """An agent or hardware-token key has no private file; the public key selects it."""
+    assert ssh_module.identity_file(Path("/keys/id_ed25519.pub")) == Path("/keys/id_ed25519.pub")
+
+
 def test_pins_the_edge_to_the_client_store():
     args = _args()
     assert "UserKnownHostsFile=/config/known_hosts" in args
@@ -178,6 +192,17 @@ def test_remote_command_is_appended_last():
     args = _args(command=["psql", "-d", "app"])
     assert args[-3:] == ["psql", "-d", "app"]
     assert "myapp@freepod.eu" in args
+
+
+def test_tty_is_requested_only_when_asked():
+    assert "-tt" not in _args()
+    assert "-tt" in _args(tty=True)
+
+
+def test_tty_sits_with_the_options_before_the_target():
+    """-tt is an option, so it precedes user@host like the rest."""
+    args = _args(tty=True)
+    assert args.index("-tt") < args.index("myapp@freepod.eu")
 
 
 # --- 2.4: the edge is verified, not trusted --------------------------------
@@ -213,6 +238,27 @@ def test_run_returns_success(monkeypatch):
     proc = _completed(0)
     monkeypatch.setattr(ssh_module.subprocess, "run", lambda *a, **k: proc)
     assert ssh_module.run(["ssh", "x@y"], capture_output=True) is proc
+
+
+def test_run_interactive_returns_the_exit_code(monkeypatch):
+    proc = _completed(3)
+    monkeypatch.setattr(ssh_module.subprocess, "run", lambda *a, **k: proc)
+    assert ssh_module.run_interactive(["ssh", "x@y"]) == 3
+
+
+def test_run_interactive_captures_nothing(monkeypatch):
+    """The session owns the terminal, so nothing is captured or re-classified."""
+    seen = {}
+
+    def fake(args, **kwargs):
+        seen.update(kwargs)
+        return _completed(0)
+
+    monkeypatch.setattr(ssh_module.subprocess, "run", fake)
+    ssh_module.run_interactive(["ssh", "x@y"])
+    assert "capture_output" not in seen
+    assert "stdout" not in seen
+    assert "stderr" not in seen
 
 
 def test_nothing_is_recorded_when_the_key_is_wrong():

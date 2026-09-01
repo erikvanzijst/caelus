@@ -122,6 +122,23 @@ def pin_edge(edge: dict) -> tuple[str, int, Path]:
     return host, port, known_hosts
 
 
+def identity_file(key_path: Path) -> Path:
+    """The file to hand to `-i`: the private half, where there is one on disk.
+
+    The record is keyed by the public key, and a key held only in an agent or
+    on a hardware token has no private file at all — for those, the public key
+    is what selects the identity. But a file-based key must be offered by its
+    private half: ssh refuses a world-readable public key as an identity, and a
+    public key cannot sign. Where the private half sits beside the public one
+    (the layout `freepod key add` writes), it is the one that authenticates.
+    """
+    if key_path.name.endswith(".pub"):
+        private = key_path.with_name(key_path.name[: -len(".pub")])
+        if private.is_file():
+            return private
+    return key_path
+
+
 def build_args(
     *,
     user: str,
@@ -131,6 +148,7 @@ def build_args(
     known_hosts: Path,
     command: Optional[List[str]] = None,
     local_forward: Optional[str] = None,
+    tty: bool = False,
 ) -> List[str]:
     """The argv for one connection to the edge.
 
@@ -150,7 +168,7 @@ def build_args(
         "-o",
         "IdentitiesOnly=yes",
         "-i",
-        str(key_path),
+        str(identity_file(key_path)),
         # Pin the edge to the key the platform published, in a store the user
         # does not curate. StrictHostKeyChecking means a mismatch is a refusal,
         # never a prompt, and never a key recorded on first use.
@@ -158,8 +176,14 @@ def build_args(
         f"UserKnownHostsFile={known_hosts}",
         "-o",
         "StrictHostKeyChecking=yes",
-        f"{user}@{host}",
     ]
+    if tty:
+        # Force a remote tty. The sidecar runs under a ForceCommand, which does
+        # not allocate a pseudo-terminal on its own, so an interactive session
+        # comes up without one — and a database client that reads no terminal
+        # sees no prompt — unless we ask for it here.
+        args.append("-tt")
+    args.append(f"{user}@{host}")
     if local_forward is not None:
         # -N: no remote command; the forward is the whole point of the session.
         args += ["-N", "-L", local_forward]
@@ -202,3 +226,14 @@ def run(args: List[str], **subprocess_kwargs) -> subprocess.CompletedProcess:
             "it means something else is answering where the edge should be."
         )
     return proc
+
+
+def run_interactive(args: List[str]) -> int:
+    """Run an interactive session on the user's own terminal; return its exit code.
+
+    The session owns the foreground, so nothing is captured: a host-key mismatch
+    reaches the user's stderr in real time, and the exit code is handed back for
+    the caller to propagate. There is no captured stream to re-classify here —
+    whatever ssh said, the user read.
+    """
+    return subprocess.run(args).returncode

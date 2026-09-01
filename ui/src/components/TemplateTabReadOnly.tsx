@@ -1,5 +1,6 @@
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
 import type { Product, ProductTemplate } from '../api/types'
+import { formatDateTime } from '../utils/format'
 import { LazyMonaco } from './LazyMonaco'
 import { DeployDialogContent } from './DeployDialogContent'
 import { SplitPane } from './SplitPane'
@@ -130,9 +131,17 @@ export function TemplateTabReadOnly({
       </Box>
 
       {/* For a curated product the canonical pointer is catalog state: the
-          reconciler repoints it to whichever template matches the file's spec,
-          so offering the button here would only produce drift. */}
-      <Box>
+           reconciler repoints it to whichever template matches the file's spec,
+           so offering the button here would only produce drift. */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2,
+          flexWrap: 'wrap',
+        }}
+      >
         {product.curated ? (
           <Typography variant="body2" color="text.secondary">
             {isCanonical
@@ -148,6 +157,13 @@ export function TemplateTabReadOnly({
             {isCanonical ? 'Canonical' : 'Make canonical'}
           </Button>
         )}
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}
+        >
+          Created {formatDateTime(template.created_at)}
+        </Typography>
       </Box>
     </Stack>
   )

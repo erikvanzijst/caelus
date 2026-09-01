@@ -45,22 +45,22 @@
 
 ## 4. `freepod db proxy`
 
-- [ ] 4.1 Forward a local port to the destination the database endpoint reports, passing the
-      address through **verbatim**. Verify the requested destination is byte-identical to
+- [x] 4.1 Forward a local port to the destination the database endpoint reports, passing the
+      address through **verbatim**. Verified the requested destination is byte-identical to
       the reported one, and that it matches what the chart renders into the allowlist.
-- [ ] 4.2 Accept a local port and choose a free one when none is given, reporting which.
-      Verify the conventional port being occupied does not fail the command, and that an
+- [x] 4.2 Accept a local port and choose a free one when none is given, reporting which.
+      Verified the conventional port being occupied does not fail the command, and that an
       explicitly requested unavailable port is reported specifically.
-- [ ] 4.3 Compose the connection URL for the **local** end, correctly percent-encoded.
-      Verify with a password containing characters that require encoding — construct one in
+- [x] 4.3 Compose the connection URL for the **local** end, correctly percent-encoded.
+      Verified with a password containing characters that require encoding — constructed in
       the test rather than relying on the current generator, which emits hexadecimal — and
-      assert the parsed URL yields the reported credential exactly.
-- [ ] 4.4 Print the URL on stdout and everything else on stderr, following `freepod log`'s
-      discipline. Verify capturing stdout yields the URL alone.
-- [ ] 4.5 Hold the tunnel in the foreground and close it on interrupt, releasing the port.
-      Verify the port is free afterwards.
-- [ ] 4.6 Explain a forward refused by the far end as a destination that was not permitted,
-      distinguishably from an authentication failure. Verify by requesting a destination
+      asserted the parsed URL yields the reported credential exactly.
+- [x] 4.4 Print the URL on stdout and everything else on stderr, following `freepod log`'s
+      discipline. Verified capturing stdout yields the URL alone.
+- [x] 4.5 Hold the tunnel in the foreground and close it on interrupt, releasing the port.
+      Verified the port is free afterwards.
+- [x] 4.6 Explain a forward refused by the far end as a destination that was not permitted,
+      distinguishably from an authentication failure. Verified by requesting a destination
       outside the allowlist.
 
 ## 5. `freepod shell` and `freepod db shell`

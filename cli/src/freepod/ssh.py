@@ -209,6 +209,28 @@ def is_host_key_mismatch(stderr: Optional[object]) -> bool:
     return _HOST_KEY_MISMATCH in stderr.lower()
 
 
+#: The one phrase ssh's stderr carries when the far end declines a forward.
+#: It is the refusal that reads like an authorization failure in practice: the
+#: key was accepted, the channel opened, and the destination was not permitted.
+_FORWARD_REFUSED = "administratively prohibited"
+
+
+def is_forward_refused(stderr: Optional[object]) -> bool:
+    """Whether ssh's failure was a refused forward, not an auth or network one.
+
+    A forward is refused *after* authentication, so the two failures are
+    distinguishable in ssh's own output: an authentication refusal says
+    "Permission denied", a forward refusal says the destination was
+    administratively prohibited. Naming the cause the client can support —
+    rather than guessing — is what keeps the two from blurring into one.
+    """
+    if stderr is None:
+        return False
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode("utf-8", "replace")
+    return _FORWARD_REFUSED in stderr.lower()
+
+
 def run(args: List[str], **subprocess_kwargs) -> subprocess.CompletedProcess:
     """Run one assembled connection, surfacing a host-key mismatch as its own error.
 

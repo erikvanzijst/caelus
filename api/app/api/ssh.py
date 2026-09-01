@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from app.config import get_settings
-from app.deps import get_current_user
-from app.models import SshEdgeRead, UserORM
+from app.models import SshEdgeRead
 
 router = APIRouter(tags=["ssh"])
 
@@ -31,16 +30,10 @@ def _host_key_dict(openssh_public_key: str) -> dict[str, str]:
     ),
     responses={
         200: {"description": "The edge's address and host key for this environment."},
-        404: {"description": "The request carried no authenticated identity."},
     },
 )
-def get_ssh_edge(current_user: UserORM = Depends(get_current_user)) -> SshEdgeRead:
+def get_ssh_edge() -> SshEdgeRead:
     """Return how to reach this environment's SSH edge, and how to verify it.
-
-    ## Authorization
-    Requires authentication. The response is public key material that confers
-    nothing -- it is the same key the edge presents to every client during the
-    handshake -- so there is no owner or admin restriction.
 
     ## Behavior
     `host` and `port` are the user-facing edge values from per-environment

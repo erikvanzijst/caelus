@@ -68,6 +68,7 @@ resource "helm_release" "oauth2_proxy" {
             "GET=^/api/hostnames/[^/]+/?$",
             "GET=^/api/domains/?$",
             "GET=^/api/cname-target/?$",
+            "GET=^/api/ssh/?$",
 
             # Static files (product icons, etc.).
             "GET=^/api/static/.*",

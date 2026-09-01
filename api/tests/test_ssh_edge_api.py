@@ -56,14 +56,9 @@ def test_ssh_edge_empty_host_key_when_unconfigured(client, edge_settings):
     assert resp.json()["host_key"] == {}
 
 
-def test_ssh_edge_requires_authentication(client):
-    resp = client.get("/api/ssh", headers={"X-Auth-Request-Email": ""})
-    assert resp.status_code == 404
-
-
-def test_ssh_edge_open_to_any_authenticated_user(user_client, edge_settings):
-    c, _ = user_client
+def test_ssh_edge_is_public(client, edge_settings):
+    """No session required: the response is public key material."""
     edge_settings()
-    resp = c.get("/api/ssh")
+    resp = client.get("/api/ssh", headers={"X-Auth-Request-Email": ""})
     assert resp.status_code == 200
     assert resp.json()["host_key"] == {"ssh-ed25519": EDGE_BLOB}

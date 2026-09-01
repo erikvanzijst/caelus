@@ -584,6 +584,86 @@ def _project_deployment(context: Context) -> project.Project:
     return project_file
 
 
+def _refuse_unreachable(deployment, project_file, env_name) -> dict:
+    """The deployment, or a refusal when it has no container to connect to.
+
+    A settled deployment — ready or error — has a stable container, and `error`
+    is precisely the state a shell exists for. Every other state is transitional
+    or gone, and a connection there would be refused for a reason the platform
+    already told us, so it is said rather than discovered the hard way.
+    """
+    name = project_file.deployment_name
+    if deployment is None:
+        raise FreepodError(
+            f"deployment '{name}' no longer exists on '{env_name}' — it may have "
+            f"been deleted. Run `freepod deploy` to create a new one."
+        )
+    status = deployment.get("status")
+    if status not in deploy_module.SETTLED_STATUSES:
+        hint = (
+            "wait for the rollout to finish and try again"
+            if status in ("pending", "provisioning")
+            else "it has no container to connect to"
+        )
+        raise FreepodError(
+            f"deployment '{name}' is {status}, so it has no container to connect "
+            f"to right now — {hint}."
+        )
+    return deployment
+
+
+def _connection_args(
+    context: Context,
+    project_file: project.Project,
+    *,
+    command: Optional[list] = None,
+    require_database: bool = False,
+) -> list:
+    """The argv for a session over the deployment's SSH edge.
+
+    Shared by `shell` and `db shell`: resolve the deployment, refuse the states
+    that have no container to connect to, verify the edge, name the one key to
+    offer, and build the arguments. `command` is what the session runs once it
+    lands — nothing for a shell, `psql` for a database session, which the
+    sidecar routes to its own client rather than the application container.
+    """
+    # A missing ssh is a prerequisite, not a fault of this client; report it
+    # before spending a round trip the connection could not use anyway.
+    ssh_module.require_ssh()
+
+    session = context.session()
+    session.authenticate(interactive=False)
+
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        deployment = _refuse_unreachable(
+            releases_module.read_deployment(api, user_id, project_file.deployment_id),
+            project_file,
+            context.env.name,
+        )
+        if require_database and database_module.read(
+            api, user_id, project_file.deployment_id
+        ) is None:
+            raise FreepodError(
+                f"deployment '{project_file.deployment_name}' has no database, so "
+                f"there is no session to open. The platform provisions one for "
+                f"products with relational storage; check `freepod db status`."
+            )
+        edge = api.ssh_edge()
+        host, port, known_hosts = ssh_module.pin_edge(edge)
+        registered = keys_module.list_keys(api, user_id)
+        key_path = keys_module.resolve_local_key(context.env.name, registered)
+        return ssh_module.build_args(
+            user=deployment["name"],
+            host=host,
+            port=port,
+            key_path=key_path,
+            known_hosts=known_hosts,
+            tty=True,
+            command=command,
+        )
+
+
 @cli.group()
 def var() -> None:
     """Read and change the environment your application runs with.
@@ -789,11 +869,12 @@ def db() -> None:
     """Your app's PostgreSQL database.
 
     `db status` reports which database and role your deployment owns, its
-    password, and how much of its allowance it is using.
+    password, and how much of its allowance it is using. `db shell` opens an
+    interactive session in the database, running server-side.
 
     The database is reachable from your running app, which already has these
-    details in its environment. It is not reachable from this machine, so this
-    command reports no address and no connection URL.
+    details in its environment. It is not reachable from this machine, so
+    `db status` reports no address and no connection URL.
     """
 
 
@@ -823,6 +904,21 @@ def db_status(context: Context, show_password: bool) -> None:
     context.say(
         "\nThis database is reachable from your running app, not from this machine."
     )
+
+
+@db.command("shell")
+@click.pass_obj
+def db_shell(context: Context) -> None:
+    """Open an interactive session in this deployment's database.
+
+    The session runs server-side, in the platform's own PostgreSQL client, so
+    nothing needs to be installed on this machine. It reaches the database even
+    when the application container is down, because the platform connects, not
+    your app. The command's exit code is the session's.
+    """
+    project_file = _project_deployment(context)
+    args = _connection_args(context, project_file, command=["psql"], require_database=True)
+    raise SystemExit(ssh_module.run_interactive(args))
 
 
 @cli.group()
@@ -1148,34 +1244,6 @@ def log_command(
     raise SystemExit(code)
 
 
-def _refuse_unreachable(deployment, project_file, env_name) -> dict:
-    """The deployment, or a refusal when it has no container to connect to.
-
-    A settled deployment — ready or error — has a stable container, and `error`
-    is precisely the state a shell exists for. Every other state is transitional
-    or gone, and a connection there would be refused for a reason the platform
-    already told us, so it is said rather than discovered the hard way.
-    """
-    name = project_file.deployment_name
-    if deployment is None:
-        raise FreepodError(
-            f"deployment '{name}' no longer exists on '{env_name}' — it may have "
-            f"been deleted. Run `freepod deploy` to create a new one."
-        )
-    status = deployment.get("status")
-    if status not in deploy_module.SETTLED_STATUSES:
-        hint = (
-            "wait for the rollout to finish and try again"
-            if status in ("pending", "provisioning")
-            else "it has no container to connect to"
-        )
-        raise FreepodError(
-            f"deployment '{name}' is {status}, so it has no container to connect "
-            f"to right now — {hint}."
-        )
-    return deployment
-
-
 @cli.command()
 @click.pass_obj
 def shell(context: Context) -> None:
@@ -1187,32 +1255,5 @@ def shell(context: Context) -> None:
     inside it is not.
     """
     project_file = _project_deployment(context)
-
-    # A missing ssh is a prerequisite, not a fault of this client; report it
-    # before spending a round trip the connection could not use anyway.
-    ssh_module.require_ssh()
-
-    session = context.session()
-    session.authenticate(interactive=False)
-
-    with context.client(session) as api:
-        user_id = api.me()["id"]
-        deployment = _refuse_unreachable(
-            releases_module.read_deployment(api, user_id, project_file.deployment_id),
-            project_file,
-            context.env.name,
-        )
-        edge = api.ssh_edge()
-        host, port, known_hosts = ssh_module.pin_edge(edge)
-        registered = keys_module.list_keys(api, user_id)
-        key_path = keys_module.resolve_local_key(context.env.name, registered)
-        args = ssh_module.build_args(
-            user=deployment["name"],
-            host=host,
-            port=port,
-            key_path=key_path,
-            known_hosts=known_hosts,
-            tty=True,
-        )
-
+    args = _connection_args(context, project_file)
     raise SystemExit(ssh_module.run_interactive(args))

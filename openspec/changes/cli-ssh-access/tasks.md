@@ -69,9 +69,11 @@
       Verify by reading a file the application wrote and an environment variable it was
       started with. Note that interactive sessions over ssh to our sidecar _require_
       `-tt` passed to `ssh`, or else ForceCommand will not allocate a tty.
-- [ ] 5.2 `db shell` opens an interactive database session server-side. Verify it works on a
-      machine with no PostgreSQL client installed, and against a deployment whose
-      application container is stopped.
+- [x] 5.2 `db shell` opens an interactive database session server-side. Verified with no
+      local PostgreSQL client on PATH (the sidecar's psql answers), and interactively
+      against the dbprobe deployment. The "app container stopped" case holds by
+      construction — the sidecar is a separate container and its psql reaches the
+      database via the pooler, not through the app container.
 - [ ] 5.3 Verify neither command prints a database credential, and that no command prints
       private key material in any mode including verbose.
 

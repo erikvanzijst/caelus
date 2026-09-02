@@ -120,6 +120,77 @@ def test_shell_assembles_one_key_and_a_tty(
     assert "-N" not in args and "-L" not in args
 
 
+def test_shell_runs_a_remote_command_without_a_terminal(
+    stub_api, cached_credential, no_ssh, capture_interactive, tmp_path, monkeypatch
+):
+    project_at(tmp_path)
+    keys_module.generate_keypair(keys_module.generated_key_path())
+    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[key_entry()]))
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        main(["shell", "ls", "-la", "/app"])
+    assert exc.value.code == EXIT_OK
+
+    args = capture_interactive["args"]
+    # The command's own words, in order, after the destination -- ssh joins
+    # them itself, so the remote shell sees what a plain `ssh host ls -la` would.
+    assert args[args.index(f"{DEPLOYMENT_NAME}@{EDGE['host']}") + 1 :] == ["ls", "-la", "/app"]
+    # No pty: it would translate line endings and fold stderr into stdout,
+    # which is corruption for a command whose output is redirected.
+    assert "-tt" not in args
+
+
+def test_shell_forces_a_terminal_when_asked(
+    stub_api, cached_credential, no_ssh, capture_interactive, tmp_path, monkeypatch
+):
+    project_at(tmp_path)
+    keys_module.generate_keypair(keys_module.generated_key_path())
+    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[key_entry()]))
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        main(["shell", "--tty", "top"])
+    assert exc.value.code == EXIT_OK
+
+    args = capture_interactive["args"]
+    assert "-tt" in args
+    assert args[-1] == "top"
+
+
+def test_shell_does_not_parse_the_commands_own_options(
+    stub_api, cached_credential, no_ssh, capture_interactive, tmp_path, monkeypatch
+):
+    """`-t` after the command is the command's, not this client's."""
+    project_at(tmp_path)
+    keys_module.generate_keypair(keys_module.generated_key_path())
+    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[key_entry()]))
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        main(["shell", "sort", "-t", ":", "/etc/passwd"])
+    assert exc.value.code == EXIT_OK
+
+    args = capture_interactive["args"]
+    assert args[-4:] == ["sort", "-t", ":", "/etc/passwd"]
+    # The command asked for `-t`; the session did not.
+    assert "-tt" not in args
+
+
+def test_shell_propagates_the_remote_exit_status(
+    stub_api, cached_credential, no_ssh, tmp_path, monkeypatch
+):
+    project_at(tmp_path)
+    keys_module.generate_keypair(keys_module.generated_key_path())
+    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[key_entry()]))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("freepod.ssh.run_interactive", lambda args: 7)
+
+    with pytest.raises(SystemExit) as exc:
+        main(["shell", "false"])
+    assert exc.value.code == 7
+
+
 def test_shell_refuses_a_deployment_that_is_not_settled(
     stub_api, cached_credential, no_ssh, capture_interactive, tmp_path, monkeypatch, capsys
 ):

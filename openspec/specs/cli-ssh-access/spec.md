@@ -13,13 +13,38 @@ user gets when one of them fails.
 ## Requirements
 
 ### Requirement: Three commands over the deployment the project names
-The client MUST provide a command opening an interactive session in the deployment's application container, a command forwarding a local port to the deployment's database, and a command opening an interactive database session.
+The client MUST provide a command opening a session in the deployment's application container, a command forwarding a local port to the deployment's database, and a command opening an interactive database session.
 
 Each MUST resolve which deployment it acts on the same way every other project-scoped command does, and MUST fail with the same guidance when run outside a project or against a deployment that does not exist.
 
 #### Scenario: Shell reaches the application container
 - **WHEN** a user runs the shell command in a project whose deployment is running
 - **THEN** they are placed in an interactive session in that deployment's application container
+
+### Requirement: The shell command runs a given command instead of opening a session
+The shell command MUST accept a command to run in the application container, and MUST then run it there and exit rather than opening an interactive session. The exit code MUST be the remote command's own.
+
+The platform already serves this path — the session dispatcher routes a requested command into the application container — so a client that only opened sessions was the narrower half of a facility that exists. Words are passed to `ssh` as given and joined by it, so the container's own shell does the interpreting and a quoted pipeline stays whole, which is the behavior anyone reaching for this already knows from `ssh`.
+
+Words after the command MUST be passed through as the remote command's, never parsed as the client's own options, because a command's flags are not the client's to claim.
+
+A terminal MUST NOT be allocated for a given command unless the user asks for one, and MUST be allocated for an interactive session. A pty rewrites what passes through it — line endings translated, standard error folded into standard output — so allocating one for a command whose output is redirected or piped corrupts it; a full-screen program needs one, which is why asking MUST remain possible.
+
+#### Scenario: A command runs in the application container
+- **WHEN** a user runs the shell command with a command in a project whose deployment is running
+- **THEN** the command runs in the application container and the client exits with the command's own exit code
+
+#### Scenario: The command's own options are not the client's
+- **WHEN** the given command carries flags the client also defines
+- **THEN** they reach the remote command unparsed
+
+#### Scenario: Output that is redirected is not rewritten
+- **WHEN** a user redirects the output of a command run this way
+- **THEN** no terminal was allocated for it, and the bytes are the command's own
+
+#### Scenario: A full-screen program is given a terminal
+- **WHEN** a user asks for a terminal alongside a command
+- **THEN** one is allocated for it
 
 #### Scenario: Database session needs no local client
 - **WHEN** a user runs the database shell command

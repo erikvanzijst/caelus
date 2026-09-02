@@ -46,7 +46,7 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 | `freepod deploy`   | Pack, build and release the current project.                                         |
 | `freepod var`      | Read and change the environment your application runs with.                          |
 | `freepod log`      | Stream your application's pod output.                                                |
-| `freepod shell`    | Open a shell in the deployment's application container, over the SSH edge.          |
+| `freepod shell`    | Open a shell in the deployment's application container, or run a command in it.      |
 | `freepod builds`   | List your builds, most recent first.                                                 |
 | `freepod releases` | List this project's rollouts, most recent first; the live one is marked.             |
 | `freepod delete`   | Delete this project's deployment.                                                    |
@@ -71,6 +71,17 @@ The key is the credential for the interactive commands — `shell`, `db shell`,
 and `db proxy` — which reach the deployment over the platform's SSH edge.
 `freepod key list` shows your keys (the one this machine holds is marked `*`),
 and `freepod key rm <fingerprint>` revokes one.
+
+### Running one command
+
+`shell` opens an interactive shell in the pod container. It can also take a
+command directly:
+
+```bash
+freepod shell whoami
+freepod shell 'ls -la /app | head'      # quote a pipeline to keep it whole
+freepod shell cat /app/app.log > local.log
+```
 
 ### Reaching the database from your machine
 

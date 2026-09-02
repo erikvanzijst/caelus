@@ -251,11 +251,13 @@ def run(args: List[str], **subprocess_kwargs) -> subprocess.CompletedProcess:
 
 
 def run_interactive(args: List[str]) -> int:
-    """Run an interactive session on the user's own terminal; return its exit code.
+    """Run a session on the user's own terminal; return its exit code.
 
-    The session owns the foreground, so nothing is captured: a host-key mismatch
-    reaches the user's stderr in real time, and the exit code is handed back for
-    the caller to propagate. There is no captured stream to re-classify here —
-    whatever ssh said, the user read.
+    An interactive session or a single remote command alike: both own the
+    foreground, so nothing is captured. The user's own stdin, stdout and stderr
+    are the session's, which is what lets a command be redirected or piped on
+    either side, and a host-key mismatch reach the user in real time. The exit
+    code is handed back for the caller to propagate; there is no captured
+    stream to re-classify here — whatever ssh said, the user read.
     """
     return subprocess.run(args).returncode

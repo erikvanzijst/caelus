@@ -665,6 +665,7 @@ def _connection_args(
     *,
     command: Optional[list] = None,
     require_database: bool = False,
+    tty: bool = True,
 ) -> list:
     """The argv for a session over the deployment's SSH edge.
 
@@ -683,7 +684,7 @@ def _connection_args(
         port=port,
         key_path=key_path,
         known_hosts=known_hosts,
-        tty=True,
+        tty=tty,
         command=command,
     )
 
@@ -1416,16 +1417,48 @@ def log_command(
     raise SystemExit(code)
 
 
-@cli.command()
+@cli.command(
+    # The first word of COMMAND ends this client's own options, so everything
+    # after it -- `-la`, `-t`, `--help` -- belongs to the remote command and is
+    # passed through untouched. It is where `ssh` draws the same line, and
+    # without it a command's flags would be read as this client's.
+    context_settings={"allow_interspersed_args": False}
+)
+@click.option(
+    "--tty",
+    "-t",
+    "force_tty",
+    is_flag=True,
+    help="allocate a terminal for COMMAND — for a full-screen program such as "
+    "top or an editor, which needs one to draw",
+)
+@click.argument("command", nargs=-1, type=click.UNPROCESSED)
 @click.pass_obj
-def shell(context: Context) -> None:
-    """Open an interactive shell in this deployment's application container.
+def shell(context: Context, force_tty: bool, command: tuple) -> None:
+    """Open a shell in this deployment's application container, or run COMMAND in it.
 
-    The session runs on your own terminal and stays until you leave it; the
-    command's exit code is the shell's. This is the command for a deployment
-    that is up but misbehaving — the container is reachable even when the app
-    inside it is not.
+    With no COMMAND the session runs on your own terminal and stays until you
+    leave it. This is the command for a deployment that is up but misbehaving —
+    the container is reachable even when the app inside it is not.
+
+    With a COMMAND it runs there and exits, the way `ssh host COMMAND` does:
+    the words are joined and interpreted by the container's own shell, so
+    quote a pipeline as one argument to keep it whole. Its input and output are
+    this terminal's, so `freepod shell cat app.log > local.log` works.
+
+    Either way the exit code is the remote side's, with one ambiguity `ssh`
+    itself has: 255 is also what `ssh` reports for its own failures.
     """
     project_file = _project_deployment(context)
-    args = _connection_args(context, project_file)
+    args = _connection_args(
+        context,
+        project_file,
+        command=list(command) or None,
+        # A remote command gets no terminal unless it is asked for: a pty
+        # rewrites its output — line endings translated, stderr folded into
+        # stdout, input echoed — which is corruption for anything redirected
+        # to a file or a pipe. An interactive session is the case that needs
+        # one, and it is the case with no command.
+        tty=force_tty or not command,
+    )
     raise SystemExit(ssh_module.run_interactive(args))

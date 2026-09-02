@@ -195,9 +195,9 @@ application pod, and the deployment's owner reaches it with stock `ssh`, using
 an SSH key registered on their account.
 
 ```bash
-ssh <deployment>@dev.freepod.eu               # a login shell IN the application container
-ssh <deployment>@dev.freepod.eu psql          # the PostgreSQL toolbox, in the sidecar
-scp ./file <deployment>@dev.freepod.eu:/app/  # into the application's own filesystem
+ssh <deployment>@dev.freepod.eu                      # a login shell IN the application container
+ssh <deployment>@dev.freepod.eu psql                 # the PostgreSQL toolbox, in the sidecar
+ssh <deployment>@dev.freepod.eu 'cat > /app/f' < f   # into the application's own filesystem
 ```
 
 **The shell lands in the container the tenant built**, not in the sidecar. The
@@ -209,15 +209,39 @@ saying so.
 **Debugging a broken deployment is the point.** A deployment in `error` state is
 still reachable — the Service publishes not-ready addresses and the edge's
 reachability allowlist admits `error` deliberately — because that is the state
-an owner most needs to get inside. The sidecar carries `strace`, and the pod
-grants it `CAP_SYS_PTRACE`, so a debugger or profiler attaches to the running
-application process.
+an owner most needs to get inside.
 
-**File transfer needs no separate configuration.** `scp`, `sftp` and `rsync`
-ride the session path into the application container, so there is no read-only
-export, no second credential and no chroot to configure. Each needs its helper
-present in the tenant's own image, exactly as `kubectl cp` needs `tar`: the
-dispatcher says which one is missing.
+**Attaching a debugger or profiler is not available yet.** `strace`, `gdb` and
+`py-spy` need `CAP_SYS_PTRACE`, and tenant namespaces enforce Pod Security
+`baseline`, which refuses every non-default capability at admission — a pod
+requesting one never schedules. Raising that is a change to what the platform
+guarantees about tenant pods, so it is tracked separately; see
+[`_dev.tpl`](../_lib/ssh-sidecar-chart/templates/_dev.tpl). Everything else on
+this profile — the shell, file transfer, the toolbox and forwarding — works
+without it.
+
+**File transfer needs no separate configuration, but it does need a helper in
+your image.** Every file-transfer tool runs a helper on the remote side, exactly
+as `kubectl cp` needs `tar`, and here that remote side is the tenant's own
+application container: `sftp-server` for `scp` and `sftp`, `rsync` for rsync.
+**The Railpack base image `custom` builds on carries none of those three.** It
+does carry `sh`, `tar`, `cat` and `gzip`, so pipe over the session path instead —
+that is the transport that works on a stock deployment:
+
+```bash
+# out
+ssh <deployment>@dev.freepod.eu cat /app/app.db > app.db
+ssh <deployment>@dev.freepod.eu tar -cf - -C /app data | tar -xf -
+
+# in
+ssh <deployment>@dev.freepod.eu 'cat > /app/config.yml' < config.yml
+tar -cf - data | ssh <deployment>@dev.freepod.eu 'tar -xf - -C /app'
+```
+
+Do not allocate a terminal for these (no `-t`): a pty translates line endings
+and folds stderr into stdout, which corrupts the stream. `scp`, `sftp` and rsync
+do work unchanged against an image that installs their helper, and the
+dispatcher names the missing one when it is absent.
 
 ### Forwarding to the database
 

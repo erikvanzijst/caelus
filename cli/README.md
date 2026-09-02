@@ -67,8 +67,8 @@ local key this machine holds, so later connections offer exactly that one. With
 no argument it generates a key for you. The key belongs to your account, not to
 one deployment, and applies to every deployment you own.
 
-The key is the credential for the interactive commands — `shell`, `db shell`,
-and `db proxy` — which reach the deployment over the platform's SSH edge.
+The key is the credential for the SSH commands — `shell`, `db shell`, and
+`db proxy` — which reach the deployment over the platform's SSH edge.
 `freepod key list` shows your keys (the one this machine holds is marked `*`),
 and `freepod key rm <fingerprint>` revokes one.
 
@@ -86,20 +86,25 @@ freepod shell cat /app/app.log > local.log
 ### Reaching the database from your machine
 
 The database is reachable from your running app, but not from this machine
-directly — `db proxy` and `db shell` reach it over the SSH edge instead. To take
-a dump, hold the tunnel in one terminal and point a local `pg_dump` at the URL
-it prints from another:
+directly. The platform's own PostgreSQL tools run over the SSH edge, so a dump
+needs neither a local client nor a tunnel:
+
+```bash
+freepod shell pg_dump > backup.sql
+freepod shell psql < backup.sql        # and back again
+```
+
+`db shell` opens an interactive `psql` session against the same tools. `db
+proxy` is for a client that has to run locally — an IDE, a GUI: it forwards a
+local port and prints a connection URL for the local end.
 
 ```bash
 # terminal 1 — hold the tunnel; it prints the URL and waits for Ctrl+C
 freepod db proxy
 
-# terminal 2 — dump against the URL terminal 1 printed
-pg_dump "postgresql://…@localhost:5432/<db>" > backup.sql
+# terminal 2 — a local client, against the URL terminal 1 printed
+psql "postgresql://…@localhost:5432/<db>"
 ```
-
-`db shell` opens an interactive `psql` session server-side, so it needs no
-PostgreSQL client on this machine.
 
 ## Hostnames
 

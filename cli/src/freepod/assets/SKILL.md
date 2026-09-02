@@ -186,11 +186,14 @@ You can reach the database from your machine over the platform's SSH edge, with
 one SSH key registered on your account (`freepod key add`) and `ssh` on your
 PATH:
 
-- `freepod db shell` opens an interactive `psql` session server-side — no
-  PostgreSQL client needed on this machine.
-- `freepod db proxy` forwards a local port to the database and prints a
-  connection URL for the local end, so any client on this machine — a local
-  `psql`, `pg_dump`, an IDE — can use it.
+- `freepod shell <tool>` runs the platform's own PostgreSQL tools — `psql`,
+  `pg_dump`, `pg_restore` — against your database and streams the result here.
+  Nothing to install, no tunnel to hold. **This is the one to reach for.**
+- `freepod db shell` opens an interactive `psql` session server-side. Same
+  tools, driven by a human at a terminal rather than by you.
+- `freepod db proxy` forwards a local port and prints a connection URL for the
+  local end, for when the client has to be a local one — an IDE, a GUI, a tool
+  that is not in the platform's toolbox.
 
 `freepod log` is still the first move for *application* errors. These are the
 errors worth recognizing:
@@ -210,26 +213,45 @@ A one-off query needs neither a tunnel nor a local client: `freepod shell
 "psql -Atc 'select count(*) from users'"` runs it in the platform's own client
 and prints the result. (`freepod db shell` answers the same question
 interactively, which is for a human at a terminal, not for you.) **Do not add REST
-endpoints that prints environment variables or the connection string** — they
+endpoints that print environment variables or the connection string** — they
 would be on the public internet. Print what you need to the log instead, where
 only you can read it.
 
-The most likely first thing you reach for is a dump. Hold the tunnel in one
-terminal and point a local `pg_dump` at the URL `freepod db proxy` prints from
-another:
+The most likely first thing you reach for is a dump, and it is one command.
+`pg_dump` runs in the platform's toolbox and streams to your standard output:
+
+```bash
+freepod shell pg_dump > backup.sql
+freepod shell pg_dump -Fc > backup.dump   # custom format, for pg_restore
+```
+
+Restoring goes back the same way, over standard input:
+
+```bash
+freepod shell psql < backup.sql
+freepod shell 'pg_restore -d "$PGDATABASE"' < backup.dump
+```
+
+Quote only what your own shell would otherwise act on: `$PGDATABASE` is set on
+the far side, so it has to arrive unexpanded rather than being resolved here,
+where it is empty. Plain flags such as `-Fc` need nothing — everything after
+the first word is the remote command's.
+
+Take the dump *before* anything destructive — a schema change you are unsure
+of, a bulk delete, a migration you have not run against real data. It costs one
+command, and there is no undo on the other side.
+
+`freepod db proxy` is the fallback for a client that must run locally: hold the
+tunnel in one terminal and point the local client at the URL it prints from
+another.
 
 ```bash
 # terminal 1 — prints the URL, holds the tunnel until Ctrl+C
 freepod db proxy
 
-# terminal 2 — dump against the URL
-pg_dump "postgresql://…@localhost:5432/<db>" > backup.sql
+# terminal 2 — a local client, against the URL terminal 1 printed
+psql "postgresql://…@localhost:5432/<db>"
 ```
-
-In one shell (how an agent does it): background `freepod db proxy` with stdout
-redirected to a file, read the URL out of it, run `pg_dump`, then kill the
-tunnel. The URL is written to stdout before the tunnel holds, so it is there as
-soon as the process starts.
 
 ## Object storage: the other place state can live
 
@@ -465,9 +487,14 @@ It lands in the app's own working directory with the app's own environment, so
 what it reports is what the app sees. The exit code is the command's — 127 for a
 command the image does not carry — and its output is this terminal's, so
 redirection and pipes work on both sides: `freepod shell cat /app/app.log >
-local.log`. The PostgreSQL tools (`psql`, `pg_dump`) run in the platform's
-sidecar against your database, whether or not the image carries a client. A
+local.log`, and `freepod shell psql < backup.sql` feeds it the other way. A
 full-screen program needs a terminal, which `-t` allocates; nothing else does.
+
+The PostgreSQL tools are the exception to "runs in the application container":
+`psql`, `pg_dump`, `pg_restore` and `pg_isready` run in the platform's own
+sidecar, against your database, whether or not your image carries a client — so
+`freepod shell pg_dump > backup.sql` is a backup in one command. A deployment
+with no database declines them by name rather than failing inside the tool.
 
 This answers the questions logs cannot: which files actually shipped, which
 environment variables actually arrived, whether the process is running at all.

@@ -182,9 +182,9 @@ def test_generation_never_writes_to_dot_ssh(run_key, isolated_home):
     assert not (isolated_home / ".ssh").exists()
 
 
-def test_add_does_not_claim_access_was_granted(run_key, isolated_home, capsys):
+def test_add_states_the_key_is_the_ssh_credential(run_key, isolated_home, capsys):
     run_key(Platform([]), ["key", "add"])
-    assert "grants no access yet" in capsys.readouterr().err
+    assert "SSH credential" in capsys.readouterr().err
 
 
 def test_rerunning_add_does_not_generate_a_second_key(run_key, isolated_home, capsys):

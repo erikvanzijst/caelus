@@ -79,6 +79,11 @@ variable "sftp_platform_public_key" {
   type        = string
 }
 
+variable "ssh_edge_host_public_key" {
+  description = "The SSH edge's own host public key (client->edge hop), published by the API at GET /api/ssh so clients can pin it. Not the upstream key in sftp_platform_public_key."
+  type        = string
+}
+
 variable "sftp_host" {
   description = "User-facing SFTP host advertised by the API/UI (e.g. freepod.eu / dev.freepod.eu)"
   type        = string

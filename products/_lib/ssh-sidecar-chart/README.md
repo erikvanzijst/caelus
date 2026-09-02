@@ -8,15 +8,15 @@ account, connecting to the platform endpoint (`freepod.eu:22` /
 **What that access consists of depends on the product's access profile.** There
 are two, and a product is authored for exactly one:
 
-| | `sftp` | `dev` |
-|---|---|---|
-| Server | `atmoz/sftp` | the platform's own [ssh-sidecar image](../ssh-sidecar-image/README.md) |
-| For | products with user-visible data PVCs | `custom`, which has no PVC at all |
-| Session | SFTP only — **no shell, no writes** | a login shell **in the application container** |
-| Forwarding | refused (`AllowTcpForwarding no`) | to the deployment's database if it has one, allowlisted; otherwise refused |
-| Tooling | none | PostgreSQL 18 client |
-| Pod needs | nothing | `shareProcessNamespace` on the pod |
-| Renders | Secret, ConfigMap, sidecar, Service | sidecar, Service |
+|            | `sftp`                               | `dev`                                                                      |
+|------------|--------------------------------------|----------------------------------------------------------------------------|
+| Server     | `atmoz/sftp`                         | the platform's own [ssh-sidecar image](../ssh-sidecar-image/README.md)     |
+| For        | products with user-visible data PVCs | `custom`, which has no PVC at all                                          |
+| Session    | SFTP only — **no shell, no writes**  | a login shell **in the application container**                             |
+| Forwarding | refused (`AllowTcpForwarding no`)    | to the deployment's database if it has one, allowlisted; otherwise refused |
+| Tooling    | none                                 | PostgreSQL 18 client                                                       |
+| Pod needs  | nothing                              | `shareProcessNamespace` on the pod                                         |
+| Renders    | Secret, ConfigMap, sidecar, Service  | sidecar, Service                                                           |
 
 It is a Helm **library chart** — it renders no resources on its own. A product
 wrapper chart depends on it and calls its named templates.

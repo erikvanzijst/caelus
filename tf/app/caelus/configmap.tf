@@ -16,6 +16,7 @@ resource "kubernetes_config_map" "api" {
     CAELUS_MOLLIE_WEBHOOK_BASE_URL  = "https://${var.domain}/api/"
     CAELUS_SSHPIPER_NAMESPACE       = var.sshpiper_namespace
     CAELUS_SFTP_PLATFORM_PUBLIC_KEY = var.sftp_platform_public_key
+    CAELUS_SSH_EDGE_HOST_PUBLIC_KEY = var.ssh_edge_host_public_key
     CAELUS_SFTP_HOST                = var.sftp_host
     CAELUS_SFTP_PORT                = tostring(var.sftp_port)
 

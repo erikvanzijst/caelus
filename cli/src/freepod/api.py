@@ -295,6 +295,13 @@ class ApiClient:
             raise FreepodError(f"unexpected hostname check response: {body!r}")
         return body
 
+    def ssh_edge(self) -> dict:
+        """`GET /api/ssh` — this environment's edge address and host key."""
+        body = self.get_json("/api/ssh")
+        if not isinstance(body, dict):
+            raise FreepodError(f"unexpected /api/ssh response: {body!r}")
+        return body
+
     # -- internals --------------------------------------------------------
 
     def _headers(self) -> dict:

@@ -18,6 +18,7 @@ __all__ = [
     "PermissionError_",
     "BuildFailed",
     "RolloutFailed",
+    "HostKeyMismatch",
     "EXIT_OK",
     "EXIT_ERROR",
     "EXIT_USAGE",
@@ -26,7 +27,7 @@ __all__ = [
     "EXIT_ROLLOUT_FAILED",
 ]
 
-__version__ = "0.8.2"
+__version__ = "0.9.0"
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -84,3 +85,16 @@ class RolloutFailed(FreepodError):
     """The rollout failed, or waiting for it timed out."""
 
     exit_code = EXIT_ROLLOUT_FAILED
+
+
+class HostKeyMismatch(FreepodError):
+    """The edge presented a host key other than the one the platform publishes.
+
+    A refused connection, not a guess: the mismatch is what `ssh` reported, so
+    unlike a uniform authentication refusal this one names its cause. It is a
+    general error (no row of its own in the exit-code table) rather than an
+    authentication failure, because re-authenticating cannot fix a host that is
+    answering where the edge should be.
+    """
+
+    exit_code = EXIT_ERROR

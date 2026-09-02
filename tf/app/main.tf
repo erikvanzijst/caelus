@@ -23,14 +23,21 @@ data "tls_public_key" "sshpiper_upstream" {
   private_key_openssh = var.sshpiper_upstream_private_keys[terraform.workspace]
 }
 
+# The public half of this environment's edge host key -- the key the edge
+# presents to clients, which the API publishes at GET /api/ssh
+data "tls_public_key" "sshpiper_host" {
+  private_key_openssh = var.sshpiper_host_private_keys[terraform.workspace]
+}
+
 module "sshpiper" {
   source    = "./sshpiper"
   namespace = kubernetes_namespace.sshpiper.metadata[0].name
   ssh_port  = local.sshpiper_port
   rbac_name = "sshpiper-${local.ns_sshpiper}"
 
-  # This environment's upstream credential.
-  upstream_private_key = var.sshpiper_upstream_private_keys[terraform.workspace]
+  # This environment's private keys for both upstream and downstream:
+  sshpiper_host_private_key = var.sshpiper_host_private_keys[terraform.workspace]
+  upstream_private_key      = var.sshpiper_upstream_private_keys[terraform.workspace]
 
   resolver_image = var.ssh_resolver_image
 
@@ -63,6 +70,7 @@ module "caelus" {
   # Every sidecar trusts this; the edge holds the private half. The reconciler
   # injects it into each chart as caelus.sftp.platformPublicKey.
   sftp_platform_public_key = trimspace(data.tls_public_key.sshpiper_upstream.public_key_openssh)
+  ssh_edge_host_public_key = trimspace(data.tls_public_key.sshpiper_host.public_key_openssh)
 
   # Select this workspace's Garage bucket and key. Like the Keycloak clients
   # above, the buckets and keys themselves are created in tf/deps (the singleton

@@ -512,6 +512,26 @@ ssh_to "$PREFIX-app" 'pg_dump' > "$WORK/dump.sql" 2>/dev/null
 expect_missing "a streamed dump carries no banner text" "freepod:" "$(cat "$WORK/dump.sql")"
 expect_contains "the dump is a real dump" "CREATE TABLE public.t" "$(cat "$WORK/dump.sql")"
 
+# The way back: a dump restored by feeding it to the client's standard input,
+# which is what a client offering no upload of its own has to rely on. `ssh_to`
+# passes -n, so this case calls ssh directly -- stdin is the whole point of it.
+ssh_to "$PREFIX-app" 'psql -Atc "drop table t"' >/dev/null 2>&1
+read -r host port <<< "$(endpoint_of "$PREFIX-app")"
+ssh "${SSH_OPTS[@]}" -i "$WORK/id" -p "$port" "root@$host" psql < "$WORK/dump.sql" >/dev/null 2>&1
+expect_eq "a dump restores over standard input" "1" \
+    "$(ssh_to "$PREFIX-app" 'psql -Atc "select count(*) from t"' 2>/dev/null)"
+
+# The custom format needs the other tool and an explicit target database, which
+# is why the connection details are staged as PG* rather than composed into a
+# URL: the name is already in the session's environment, so a restore does not
+# have to be told what it is restoring into.
+ssh_to "$PREFIX-app" 'pg_dump -Fc' > "$WORK/dump.pgc" 2>/dev/null
+ssh_to "$PREFIX-app" 'psql -Atc "drop table t"' >/dev/null 2>&1
+ssh "${SSH_OPTS[@]}" -i "$WORK/id" -p "$port" "root@$host" 'pg_restore -d "$PGDATABASE"' \
+    < "$WORK/dump.pgc" >/dev/null 2>&1
+expect_eq "a custom-format dump restores with pg_restore" "1" \
+    "$(ssh_to "$PREFIX-app" 'psql -Atc "select count(*) from t"' 2>/dev/null)"
+
 # --- 13. a product with no database ----------------------------------------
 # The toolbox and the forward are facilities this profile offers, not
 # preconditions it imposes, so their absence must cost only themselves. Every

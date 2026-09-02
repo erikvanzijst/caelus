@@ -46,6 +46,7 @@ from app.models.core import (  # noqa: F401
     ReleaseVarORM,
     DeploymentDatabaseRead,
     SftpCredentialsRead,
+    SshEdgeRead,
     SQLModel,
     TosAcceptanceCreate,
     TosAcceptanceRead,

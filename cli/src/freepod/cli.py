@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import quote
 
 import click
 
@@ -28,6 +30,7 @@ from . import logs as logs_module
 from . import project
 from . import releases as releases_module
 from . import skill as skill_module
+from . import ssh as ssh_module
 from . import tos
 from . import vars as vars_module
 from .api import ApiClient
@@ -583,6 +586,193 @@ def _project_deployment(context: Context) -> project.Project:
     return project_file
 
 
+def _refuse_unreachable(deployment, project_file, env_name) -> dict:
+    """The deployment, or a refusal when it has no container to connect to.
+
+    A settled deployment — ready or error — has a stable container, and `error`
+    is precisely the state a shell exists for. Every other state is transitional
+    or gone, and a connection there would be refused for a reason the platform
+    already told us, so it is said rather than discovered the hard way.
+    """
+    name = project_file.deployment_name
+    if deployment is None:
+        raise FreepodError(
+            f"deployment '{name}' no longer exists on '{env_name}' — it may have "
+            f"been deleted. Run `freepod deploy` to create a new one."
+        )
+    status = deployment.get("status")
+    if status not in deploy_module.SETTLED_STATUSES:
+        hint = (
+            "wait for the rollout to finish and try again"
+            if status in ("pending", "provisioning")
+            else "it has no container to connect to"
+        )
+        raise FreepodError(
+            f"deployment '{name}' is {status}, so it has no container to connect "
+            f"to right now — {hint}."
+        )
+    return deployment
+
+
+def _connection_setup(
+    context: Context,
+    project_file: project.Project,
+    *,
+    require_database: bool = False,
+) -> tuple[dict, Optional[dict], str, int, Path, Path]:
+    """The pieces a connection to the edge needs, resolved and checked.
+
+    Shared by every command that connects: the deployment (refusing the states
+    that have no container to connect to), the database when the command needs
+    one, the verified edge, and the one key to offer. Returns
+    ``(deployment, database, host, port, key_path, known_hosts)``; ``database``
+    is None unless ``require_database`` is set, in which case it is the
+    deployment's database details or the command is refused.
+    """
+    # A missing ssh is a prerequisite, not a fault of this client; report it
+    # before spending a round trip the connection could not use anyway.
+    ssh_module.require_ssh()
+
+    session = context.session()
+    session.authenticate(interactive=False)
+
+    with context.client(session) as api:
+        user_id = api.me()["id"]
+        deployment = _refuse_unreachable(
+            releases_module.read_deployment(api, user_id, project_file.deployment_id),
+            project_file,
+            context.env.name,
+        )
+        database = None
+        if require_database:
+            database = database_module.read(api, user_id, project_file.deployment_id)
+            if database is None:
+                raise FreepodError(
+                    f"deployment '{project_file.deployment_name}' has no database, so "
+                    f"there is nothing to connect to. The platform provisions one for "
+                    f"products with relational storage; check `freepod db status`."
+                )
+        edge = api.ssh_edge()
+        host, port, known_hosts = ssh_module.pin_edge(edge)
+        registered = keys_module.list_keys(api, user_id)
+        key_path = keys_module.resolve_local_key(context.env.name, registered)
+    return deployment, database, host, port, key_path, known_hosts
+
+
+def _connection_args(
+    context: Context,
+    project_file: project.Project,
+    *,
+    command: Optional[list] = None,
+    require_database: bool = False,
+    tty: bool = True,
+) -> list:
+    """The argv for a session over the deployment's SSH edge.
+
+    Shared by `shell` and `db shell`: resolve the deployment, refuse the states
+    that have no container to connect to, verify the edge, name the one key to
+    offer, and build the arguments. `command` is what the session runs once it
+    lands — nothing for a shell, `psql` for a database session, which the
+    sidecar routes to its own client rather than the application container.
+    """
+    deployment, _database, host, port, key_path, known_hosts = _connection_setup(
+        context, project_file, require_database=require_database
+    )
+    return ssh_module.build_args(
+        user=deployment["name"],
+        host=host,
+        port=port,
+        key_path=key_path,
+        known_hosts=known_hosts,
+        tty=tty,
+        command=command,
+    )
+
+
+def _forward(
+    context: Context,
+    project_file: project.Project,
+    local_port: int,
+) -> tuple[list, dict]:
+    """The argv for a forward to the deployment's database, and its details.
+
+    The destination is the address the platform reports, passed through
+    verbatim: the allowlist at the far end matches it as written, so any
+    difference in spelling produces a refusal that reads like an authorization
+    failure rather than a typo. A forward runs no session, so it needs no tty
+    and no command — the `-L` and `-N` are the whole point of the connection.
+    """
+    deployment, database, host, port, key_path, known_hosts = _connection_setup(
+        context, project_file, require_database=True
+    )
+    local_forward = f"{local_port}:{database['host']}:{database['port']}"
+    args = ssh_module.build_args(
+        user=deployment["name"],
+        host=host,
+        port=port,
+        key_path=key_path,
+        known_hosts=known_hosts,
+        local_forward=local_forward,
+    )
+    return args, database
+
+
+#: The conventional PostgreSQL port, tried first when no local port is given.
+CONVENTIONAL_DB_PORT = 5432
+
+
+def _port_available(port: int) -> bool:
+    """Whether a local TCP port can be bound right now."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
+def _free_local_port() -> int:
+    """A local TCP port the kernel will hand out on demand."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def choose_local_port(requested: Optional[int]) -> int:
+    """The local port a forward binds, or a specific refusal.
+
+    A port the user named that is unavailable is reported as such — choosing a
+    different one silently would bind a port they did not ask for. With no port
+    given, the conventional one is tried first and a free one is chosen when it
+    is occupied, so an occupied default never fails the command.
+    """
+    if requested is not None:
+        if not _port_available(requested):
+            raise FreepodError(
+                f"port {requested} is not available on this machine — it is in use "
+                f"or reserved. Choose another with --port."
+            )
+        return requested
+    if _port_available(CONVENTIONAL_DB_PORT):
+        return CONVENTIONAL_DB_PORT
+    return _free_local_port()
+
+
+def _connection_url(database: dict, host: str, port: int) -> str:
+    """A connection URL addressing the given end, carrying the database's credential.
+
+    The credential is percent-encoded rather than concatenated: a password with
+    characters that have meaning in a URL would otherwise yield a URL that
+    parses to a different password. Today's generated passwords are hexadecimal
+    so concatenation happens to work, which is precisely why this is written
+    against correctness instead of the generator's current output.
+    """
+    role = quote(str(database.get("role", "")), safe="")
+    password = quote(str(database.get("password", "")), safe="")
+    name = quote(str(database.get("database", "")), safe="")
+    return f"postgresql://{role}:{password}@{host}:{port}/{name}"
+
+
 @cli.group()
 def var() -> None:
     """Read and change the environment your application runs with.
@@ -788,11 +978,14 @@ def db() -> None:
     """Your app's PostgreSQL database.
 
     `db status` reports which database and role your deployment owns, its
-    password, and how much of its allowance it is using.
+    password, and how much of its allowance it is using. `db shell` opens an
+    interactive session in the database, running server-side. `db proxy`
+    forwards a local port to it and prints a connection URL for the local end.
 
     The database is reachable from your running app, which already has these
-    details in its environment. It is not reachable from this machine, so this
-    command reports no address and no connection URL.
+    details in its environment. It is not reachable from this machine directly,
+    so `db status` reports no address; `db proxy` and `db shell` reach it over
+    the SSH edge instead.
     """
 
 
@@ -824,6 +1017,82 @@ def db_status(context: Context, show_password: bool) -> None:
     )
 
 
+@db.command("shell")
+@click.pass_obj
+def db_shell(context: Context) -> None:
+    """Open an interactive session in this deployment's database.
+
+    The session runs server-side, in the platform's own PostgreSQL client, so
+    nothing needs to be installed on this machine. It reaches the database even
+    when the application container is down, because the platform connects, not
+    your app. The command's exit code is the session's.
+    """
+    project_file = _project_deployment(context)
+    args = _connection_args(context, project_file, command=["psql"], require_database=True)
+    raise SystemExit(ssh_module.run_interactive(args))
+
+
+@db.command("proxy")
+@click.option(
+    "--port",
+    type=int,
+    metavar="PORT",
+    help="the local port to bind (default: a free one, preferring the conventional "
+    f"{CONVENTIONAL_DB_PORT})",
+)
+@click.pass_obj
+def db_proxy(context: Context, port: Optional[int]) -> None:
+    """Forward a local port to this deployment's database and print a connection URL.
+
+    The tunnel runs in the foreground until you interrupt it, and the local port
+    it binds is released when it closes. The URL it prints addresses the local
+    end of the tunnel, so a client on this machine can use it without knowing how
+    the database is spelled inside the cluster. The URL goes to stdout and
+    everything this client says goes to stderr, so capturing stdout yields the
+    URL and nothing else.
+    """
+    project_file = _project_deployment(context)
+    local_port = choose_local_port(port)
+    args, database = _forward(context, project_file, local_port)
+    url = _connection_url(database, "localhost", local_port)
+
+    if port is None and local_port != CONVENTIONAL_DB_PORT:
+        context.say(
+            f"Port {CONVENTIONAL_DB_PORT} is in use; forwarding on "
+            f"localhost:{local_port} instead."
+        )
+    else:
+        context.say(f"Forwarding localhost:{local_port} to the database.")
+    context.say("Press Ctrl+C to close the tunnel.")
+
+    # The URL is the result and the only thing on stdout.
+    click.echo(url)
+
+    # Captured, not streamed: a forward prints little, and the one failure worth
+    # naming — a refused destination — is only visible in ssh's stderr.
+    try:
+        proc = ssh_module.run(args, capture_output=True)
+    except KeyboardInterrupt:
+        # Interrupting the tunnel is how it ends; the port is released with it.
+        context.say("")
+        raise SystemExit(EXIT_OK)
+    if proc.returncode != 0:
+        if ssh_module.is_forward_refused(proc.stderr):
+            # The key was accepted and the channel opened; the destination was
+            # not permitted. That is not an authentication failure, and saying
+            # so is the difference between a user debugging their key and one
+            # reporting a platform mismatch.
+            raise FreepodError(
+                "the edge refused the forward: the destination was not permitted. "
+                "This is not an authentication failure — the key was accepted, but "
+                "the address the platform reports is not in this deployment's "
+                "allowlist. Please report this; the platform should know the answer."
+            )
+        if proc.stderr:
+            sys.stderr.write(proc.stderr.decode("utf-8", "replace"))
+    raise SystemExit(proc.returncode)
+
+
 @cli.group()
 def key() -> None:
     """Register the SSH public keys that identify you to the platform.
@@ -833,8 +1102,9 @@ def key() -> None:
     machine's, so later connections offer exactly that key rather than trying
     each in turn.
 
-    Nothing reads these keys yet: registering or removing one does not
-    currently grant or withdraw any access.
+    These keys are the SSH credential: the edge resolves every connection to a
+    deployment against them, so `shell`, `db shell`, and `db proxy` need one
+    registered. Removing a key withdraws that access.
     """
 
 
@@ -910,8 +1180,8 @@ def key_add(context: Context, path: Optional[Path], label: Optional[str]) -> Non
     context.say(f"Registered {stored['label']!r} on {env_name}.")
     click.echo(stored["fingerprint"])
     context.say(
-        "This grants no access yet — the platform does not read these keys "
-        "until SSH authentication moves onto them."
+        "This key is now the SSH credential for shell, db shell, and db proxy "
+        "on this environment."
     )
 
 
@@ -1145,3 +1415,50 @@ def log_command(
             context.say("")
             raise SystemExit(EXIT_OK)
     raise SystemExit(code)
+
+
+@cli.command(
+    # The first word of COMMAND ends this client's own options, so everything
+    # after it -- `-la`, `-t`, `--help` -- belongs to the remote command and is
+    # passed through untouched. It is where `ssh` draws the same line, and
+    # without it a command's flags would be read as this client's.
+    context_settings={"allow_interspersed_args": False}
+)
+@click.option(
+    "--tty",
+    "-t",
+    "force_tty",
+    is_flag=True,
+    help="allocate a terminal for COMMAND — for a full-screen program such as "
+    "top or an editor, which needs one to draw",
+)
+@click.argument("command", nargs=-1, type=click.UNPROCESSED)
+@click.pass_obj
+def shell(context: Context, force_tty: bool, command: tuple) -> None:
+    """Open a shell in this deployment's application container, or run COMMAND in it.
+
+    With no COMMAND the session runs on your own terminal and stays until you
+    leave it. This is the command for a deployment that is up but misbehaving —
+    the container is reachable even when the app inside it is not.
+
+    With a COMMAND it runs there and exits, the way `ssh host COMMAND` does:
+    the words are joined and interpreted by the container's own shell, so
+    quote a pipeline as one argument to keep it whole. Its input and output are
+    this terminal's, so `freepod shell cat app.log > local.log` works.
+
+    Either way the exit code is the remote side's, with one ambiguity `ssh`
+    itself has: 255 is also what `ssh` reports for its own failures.
+    """
+    project_file = _project_deployment(context)
+    args = _connection_args(
+        context,
+        project_file,
+        command=list(command) or None,
+        # A remote command gets no terminal unless it is asked for: a pty
+        # rewrites its output — line endings translated, stderr folded into
+        # stdout, input echoed — which is corruption for anything redirected
+        # to a file or a pipe. An interactive session is the case that needs
+        # one, and it is the case with no command.
+        tty=force_tty or not command,
+    )
+    raise SystemExit(ssh_module.run_interactive(args))

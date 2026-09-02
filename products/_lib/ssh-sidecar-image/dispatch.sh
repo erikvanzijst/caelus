@@ -42,7 +42,12 @@ fi
 # allocated. The release identity comes from configuration: during a rollout
 # two releases' pods both serve and the connection lands on one at random, so a
 # developer must be told which one answered (D17).
-[[ -t 2 ]] && say "release ${FREEPOD_RELEASE_ID:-unknown}"
+#
+# The number rather than the id, because it is the one the client shows: a
+# banner naming a uuid tells a user which release answered in a spelling they
+# cannot find in `freepod releases`. The id stays on the sidecar's startup line,
+# where it is read alongside the log stream it keys.
+[[ -t 2 ]] && say "release ${FREEPOD_RELEASE_NUMBER:-unknown}"
 
 # --- routing ---------------------------------------------------------------
 command=${SSH_ORIGINAL_COMMAND:-}

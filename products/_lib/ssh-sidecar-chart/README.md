@@ -112,9 +112,13 @@ input as an environment variable and writes its own `authorized_keys`,
 `atmoz/sftp` reads its user list and startup script off disk. There are two call
 sites rather than three: this profile has no supporting volumes.
 
-**Required value.** `caelus.ssh.platformPublicKey` is the SSH edge's public key,
-the only key either profile's sidecar trusts. The reconciler injects it for
-every deployment.
+**Required values.** `caelus.ssh.platformPublicKey` is the SSH edge's public key,
+the only key either profile's sidecar trusts. `caelus.releaseNumber` is the
+release as `freepod releases` shows it, which the sidecar's session banner
+reports; the release *id* it also records is read from the host chart's
+`caelus.dev/release-id` pod label rather than from a value, so a product chart
+that renders the `dev` profile must render that label too. The reconciler injects
+both for every deployment.
 
 **Required param.** `dev.sidecar` takes `image`, pinned to an exact version and
 supplied as a **system** value — a tenant-settable reference would let a tenant
@@ -128,7 +132,7 @@ application. See [the image's README](../ssh-sidecar-image/README.md).
 ```yaml
 dependencies:
   - name: ssh-sidecar
-    version: "0.4.2"
+    version: "0.4.4"
     repository: "file://../../_lib/ssh-sidecar-chart"
 ```
 

@@ -318,7 +318,12 @@ class DeploymentReconciler:
         database = self._ensure_database(deployment)
         vars_secret = self._ensure_vars_secret(deployment, release)
         merged_values = self._build_merged_values(
-            deployment, template, storage=storage, database=database, vars_secret=vars_secret
+            deployment,
+            template,
+            release=release,
+            storage=storage,
+            database=database,
+            vars_secret=vars_secret,
         )
 
         outcome = self._provisioner.helm_upgrade_install(
@@ -508,13 +513,18 @@ class DeploymentReconciler:
         deployment: DeploymentORM,
         template: ProductTemplateVersionORM,
         *,
+        release: DeploymentReleaseORM,
         storage: object_storage.ObjectStorageCredentials | None = None,
         database: relational_storage.DatabaseCredentials | None = None,
         vars_secret: str | None = None,
     ) -> dict:
         template_values.validate_user_values(deployment.user_values_json, template.values_schema_json)
         system_overrides = self._build_system_overrides(
-            deployment, storage=storage, database=database, vars_secret=vars_secret
+            deployment,
+            release=release,
+            storage=storage,
+            database=database,
+            vars_secret=vars_secret,
         )
         return template_values.merge_values_scoped(
             template.system_values_json,
@@ -527,6 +537,7 @@ class DeploymentReconciler:
         cls,
         deployment: DeploymentORM,
         *,
+        release: DeploymentReleaseORM,
         storage: object_storage.ObjectStorageCredentials | None = None,
         database: relational_storage.DatabaseCredentials | None = None,
         vars_secret: str | None = None,
@@ -545,7 +556,7 @@ class DeploymentReconciler:
             cls._build_object_storage_overrides(deployment, storage),
             cls._build_database_overrides(deployment, database),
             cls._build_vars_overrides(vars_secret),
-            cls._build_release_overrides(deployment),
+            cls._build_release_overrides(release),
             cls._build_ssh_overrides(),
         ):
             if part:
@@ -570,26 +581,13 @@ class DeploymentReconciler:
         return {"caelus": {"vars": {"secretName": vars_secret}}}
 
     @staticmethod
-    def _build_release_overrides(deployment: DeploymentORM) -> dict | None:
-        """Project the desired release's identifier into ``caelus.releaseId``.
-
-        Offered to **every** product with no per-product condition. Rendering it
-        is each chart's decision: `custom` turns it into the
-        `caelus.dev/release-id` pod label, and the curated charts ignore it and
-        apply exactly as before (all of them set
-        `caelus.additionalProperties: true`, and `mattermost` has no schema at
-        all). Adopting it in another chart is therefore a chart-only change.
-
-        It arrives as a *system* override, applied after user values by
-        `merge_values_scoped`, so a tenant cannot claim another release's id.
-
-        Only the id travels. No build reference, no release number, nothing
-        else release-shaped: chart values carry what a chart renders.
-        """
-        release_id = getattr(deployment, "desired_release_id", None)
-        if release_id is None:
-            return None
-        return {"caelus": {"releaseId": str(release_id)}}
+    def _build_release_overrides(release: DeploymentReleaseORM) -> dict:
+        return {
+            "caelus": {
+                "releaseId": str(release.id),
+                "releaseNumber": str(release.number),
+            }
+        }
 
     @staticmethod
     def _build_object_storage_overrides(

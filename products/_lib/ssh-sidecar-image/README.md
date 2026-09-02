@@ -35,7 +35,8 @@ indistinguishable from a network fault and gets diagnosed as one.
 |------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `FREEPOD_AUTHORIZED_KEYS`                            | The public keys the server trusts, one per line. In normal operation this is the single public key of the platform's SSH edge — the tenant's own keys are checked by sshpiper on the downstream leg, never here. Validated with `ssh-keygen -l`. |
 | `FREEPOD_PERMIT_OPEN`                                | *Optional.* The forward allowlist: whitespace- or comma-separated `host:port`. Rendered as sshd's `PermitOpen`; absent, the server writes `PermitOpen none` and refuses every forward. See *Spelling the allowlist* below.                        |
-| `FREEPOD_RELEASE_ID`                                 | The release the pod belongs to, reported by the session banner. The chart projects `caelus.dev/release-id` here through the Downward API (D17).                                                                                                  |
+| `FREEPOD_RELEASE_ID`                                 | The release the pod belongs to, as the uuid the log pipeline keys a stream on. Recorded on the startup line. The chart projects `caelus.dev/release-id` here through the Downward API (D17).                                                     |
+| `FREEPOD_RELEASE_NUMBER`                             | The same release as the client shows it — the number in `freepod releases` — reported by the session banner. The chart projects `caelus.releaseNumber` here directly (D17).                                                                      |
 | `FREEPOD_LOGIN_USER`                                 | The account the SSH edge authenticates the upstream leg as: the **deployment name**. Added as a second uid-0 account at startup. See *The login account* below.                                                                                  |
 | `PGHOST` `PGPORT` `PGUSER` `PGPASSWORD` `PGDATABASE` | *Optional as a set, all-or-nothing individually.* The deployment's database, in libpq's own variable names so that a bare `psql` connects with no wrapper and no arguments. `PGSSLMODE` and `PGAPPNAME` are passed through if set. See *No database* below. |
 
@@ -169,7 +170,10 @@ that image:
 
 ### The banner
 
-Interactive sessions print `freepod: release <id>` on **standard error**.
+Interactive sessions print `freepod: release <number>` on **standard error** —
+the number `freepod releases` shows, not the uuid. A banner naming the uuid
+answers the question in a spelling the user cannot look up; the uuid stays on the
+startup line, where it is read next to the log stream it keys.
 
 Standard output is a protocol channel for file transfer and dump streams, so a
 banner written there corrupts the transfer and produces a data error far from its

@@ -103,6 +103,10 @@
           "type": "string",
           "description": "Identifier of the rollout being applied, injected by the Caelus reconciler. Rendered onto the pod template as the caelus.dev/release-id label and relabelled by Promtail into a Loki stream label, so one release's output is selectable even while two rollouts' pods write concurrently. Empty when the chart renders standalone, in which case no label is emitted."
         },
+        "releaseNumber": {
+          "type": "string",
+          "description": "The same rollout as the client shows it: the per-deployment number in `freepod releases`, injected by the Caelus reconciler. Handed to the SSH sidecar, whose session banner reports it, so a developer is told which release answered in the spelling they can look up. A string rather than an integer so that the standalone default is distinguishable from release 0; the sidecar refuses to start on an empty one."
+        },
         "owner": {
           "type": "object",
           "description": "Deployment owner, injected by the Caelus reconciler",

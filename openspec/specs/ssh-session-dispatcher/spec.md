@@ -125,9 +125,15 @@ The dispatcher MUST report the identity of the release whose pod the session rea
 
 During a rollout, two releases' pods can both be serving and the connection lands on one of them unpredictably. Without this, a developer investigating a broken release can be shown a working one and conclude nothing is wrong.
 
+The identity reported MUST be the release **number** the client shows its user, not the platform's internal identifier for that release. The banner exists to answer "which release did I land on", and an answer spelled in an identifier that appears nowhere in the client's own output leaves the user unable to act on it. The internal identifier is reported elsewhere by the container, where it is read next to the logs it keys.
+
 #### Scenario: Session states its release
 - **WHEN** a user opens an interactive session
 - **THEN** the session reports the release identity it reached
+
+#### Scenario: The reported identity is the one the client shows
+- **WHEN** a user compares the identity a session reports against the releases the client lists
+- **THEN** it is one of the numbers listed there, not an identifier absent from that listing
 
 #### Scenario: Identity comes from configuration
 - **WHEN** the release identity is reported

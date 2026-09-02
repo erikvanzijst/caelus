@@ -396,6 +396,18 @@ def test_the_release_id_is_declared_in_values_and_schema():
     assert schema["properties"]["caelus"]["properties"]["releaseId"]["type"] == "string"
 
 
+def test_the_release_number_is_declared_in_values_and_schema():
+    """A *string*, and empty by default. As an integer the standalone default
+    would render `0`, which the sidecar cannot tell from release 0 -- it refuses
+    to start on an empty value precisely so a missing projection is a pod that
+    does not run rather than a banner naming a release nobody made.
+    """
+    values = yaml.safe_load((CHART / "values.yaml").read_text())
+    assert values["caelus"]["releaseNumber"] == ""
+    schema = json.loads((CHART / "values.schema.json").read_text())
+    assert schema["properties"]["caelus"]["properties"]["releaseNumber"]["type"] == "string"
+
+
 # ---------------------------------------------------------------------------
 # Detecting a startup that fails
 # ---------------------------------------------------------------------------

@@ -88,12 +88,20 @@ container that knows what is wrong.
     {{- end }}
     # From the pod label rather than from `caelus.releaseId`, which is the same
     # fact and one fewer indirection. The label is what the log pipeline
-    # relabels into the release stream, so a session and the logs of the pod it
-    # landed on cannot disagree. Two independent projections can; one cannot.
+    # relabels into the release stream, so the sidecar's startup line and the
+    # logs of the pod it wrote them to cannot disagree. Two independent
+    # projections can; one cannot.
     - name: FREEPOD_RELEASE_ID
       valueFrom:
         fieldRef:
           fieldPath: metadata.labels['caelus.dev/release-id']
+    # The same release, spelled the way the client shows it: the number in
+    # `freepod releases`, which is what the session banner reports. Straight
+    # from the value, not through a label -- the id goes the long way round
+    # because a label already existed for the log pipeline to consume, and a
+    # second one carrying the number would exist for nothing but this variable.
+    - name: FREEPOD_RELEASE_NUMBER
+      value: {{ $caelus.releaseNumber | default "" | quote }}
     # The account the SSH edge authenticates the upstream leg as. The edge has
     # ONE username convention -- the deployment name -- because on the `sftp`
     # profile that is the account atmoz creates, and the edge is deliberately

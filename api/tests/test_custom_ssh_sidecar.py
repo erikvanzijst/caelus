@@ -55,6 +55,7 @@ BASE = {
 }
 STRINGS = {
     "caelus.releaseId": "42",
+    "caelus.releaseNumber": "7",
     "caelus.ssh.platformPublicKey": PLATFORM_KEY,
 }
 
@@ -204,10 +205,17 @@ def test_the_sidecar_receives_every_input_the_image_requires():
     assert env["FREEPOD_PERMIT_OPEN"]["value"] == f"{POOLER}:6432"
 
     # From the pod label, not from `caelus.releaseId`. The label is what the log
-    # pipeline relabels into the release stream, so a session and the logs of
-    # the pod it landed on cannot disagree.
+    # pipeline relabels into the release stream, so the sidecar's startup line
+    # and the logs of the pod it wrote them to cannot disagree.
     field = env["FREEPOD_RELEASE_ID"]["valueFrom"]["fieldRef"]["fieldPath"]
     assert field == "metadata.labels['caelus.dev/release-id']"
+
+    # The number the session banner reports, straight from the value: the id
+    # goes the long way round only because a label already existed for the log
+    # pipeline to consume, and a second one carrying the number would exist for
+    # nothing but this variable.
+    assert env["FREEPOD_RELEASE_NUMBER"]["value"] == "7"
+    assert "valueFrom" not in env["FREEPOD_RELEASE_NUMBER"]
 
     # The account the edge authenticates as upstream. It has one username
     # convention -- the deployment name -- and knows nothing about profiles, so
@@ -282,7 +290,12 @@ def test_a_deployment_with_no_database_still_gets_the_profile():
     )
 
     # Everything the profile is actually for is still here.
-    assert {"FREEPOD_AUTHORIZED_KEYS", "FREEPOD_RELEASE_ID", "FREEPOD_LOGIN_USER"} <= env
+    assert {
+        "FREEPOD_AUTHORIZED_KEYS",
+        "FREEPOD_RELEASE_ID",
+        "FREEPOD_RELEASE_NUMBER",
+        "FREEPOD_LOGIN_USER",
+    } <= env
     assert _pod(docs).get("shareProcessNamespace") is True
     assert any(
         d["kind"] == "Service" and any(p.get("port") == SSH_PORT for p in d["spec"]["ports"])

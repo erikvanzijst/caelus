@@ -17,5 +17,5 @@ maintainers:
 # Only dependency is Freepod's own SFTP library chart.
 dependencies:
   - name: ssh-sidecar
-    version: "0.4.3"
+    version: "0.4.4"
     repository: "file://../../_lib/ssh-sidecar-chart"

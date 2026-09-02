@@ -44,7 +44,7 @@ pullPolicy: IfNotPresent
 # The platform's SSH sidecar, which gives this deployment's owner a shell in
 # their application container, the PostgreSQL toolbox, and a forward to their
 # database.
-sshSidecarImage: ghcr.io/erikvanzijst/freepod/ssh-sidecar:0.3.0
+sshSidecarImage: ghcr.io/erikvanzijst/freepod/ssh-sidecar:0.4.0
 
 # Port the application is served on. Injected into the container as the `PORT`
 # env var and targeted by the Service, so the contract with tenant images is
@@ -97,6 +97,13 @@ caelus:
   # default so the chart renders standalone, in which case no label is emitted
   # and collection behaves exactly as it did before.
   releaseId: ""
+  # The same release as `freepod releases` shows it. Not rendered by this chart
+  # itself: the `ssh-sidecar` dev profile hands it to the sidecar, whose session
+  # banner reports it, because a banner naming the uuid above answers "which
+  # release did I land on" in a spelling the user cannot look up. A string, so
+  # that the standalone default is distinguishable from release 0 -- the sidecar
+  # refuses to start on an empty one.
+  releaseNumber: ""
   # owner.id is required whenever `image` is set. With the default empty image the
   # chart renders the placeholder and never reads it, which is what keeps a
   # standalone render working.

@@ -865,8 +865,8 @@ application container, `db shell` opens `psql` server-side, and `db proxy`
 forwards a local port to the database and prints a URL for the local end. The
 client drives the system `ssh`; it implements no SSH of its own.
 
-Spec: [cli-ssh-access](../openspec/changes/cli-ssh-access/specs/cli-ssh-access/spec.md) ·
-Rationale: [cli-ssh-access](../openspec/changes/cli-ssh-access/design.md)
+Spec: [cli-ssh-access](../openspec/specs/cli-ssh-access/spec.md) ·
+Rationale: [cli-ssh-access](../openspec/changes/archive/2026-09-02-cli-ssh-access/design.md)
 
 ### The known-hosts store
 

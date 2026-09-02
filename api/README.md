@@ -307,9 +307,9 @@ actually renders, so both access profiles report available rather than the
 older profile's marker reporting no access for every deployment on the newer
 one.
 
-Spec: [ssh-edge-host-key](../openspec/changes/cli-ssh-access/specs/ssh-edge-host-key/spec.md),
-[sftp-credentials-api](../openspec/changes/cli-ssh-access/specs/sftp-credentials-api/spec.md) ·
-Rationale: [cli-ssh-access](../openspec/changes/cli-ssh-access/design.md)
+Spec: [ssh-edge-host-key](../openspec/specs/ssh-edge-host-key/spec.md),
+[sftp-credentials-api](../openspec/specs/sftp-credentials-api/spec.md) ·
+Rationale: [cli-ssh-access](../openspec/changes/archive/2026-09-02-cli-ssh-access/design.md)
 
 ## Product Catalog (Curated Products)
 

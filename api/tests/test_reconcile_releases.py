@@ -65,19 +65,23 @@ def test_the_reconciler_creates_no_releases(db_session):
     assert len(after) == len(before) == 1
 
 
-def test_the_release_id_reaches_helm_as_a_system_value_and_nothing_else_does(db_session):
+def test_the_release_identity_reaches_helm_as_a_system_value_and_nothing_else_does(db_session):
     deployment_id = _seed_deployment(db_session)
     provisioner = FakeProvisioner()
     DeploymentReconciler(session=db_session, provisioner=provisioner).reconcile(deployment_id)
 
     deployment = db_session.get(DeploymentORM, deployment_id)
+    release = _desired_release(db_session, deployment_id)
     values = next(c[1] for c in provisioner.calls if c[0] == "helm_upgrade_install")["values"]
     assert values["caelus"]["releaseId"] == str(deployment.desired_release_id)
-    # Chart values carry what a chart renders. A build reference never is, and
-    # neither is a release number.
+    # Both spellings of the one release travel, because they answer to different
+    # readers: the id is what the log pipeline keys a stream on, the number is
+    # what `freepod releases` shows and what the SSH session banner reports.
+    # A string, so an absent value is distinguishable from release 0.
+    assert values["caelus"]["releaseNumber"] == str(release.number)
+    # Chart values carry what a chart renders, and a build reference never is.
     assert "buildId" not in values["caelus"]
     assert "build_id" not in values["caelus"]
-    assert "releaseNumber" not in values["caelus"]
 
 
 def test_a_tenant_cannot_forge_the_release_id_through_user_values(db_session):

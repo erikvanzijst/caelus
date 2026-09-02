@@ -1,11 +1,12 @@
-"""The seven curated charts are handed `caelus.releaseId` and ignore it.
+"""The seven curated charts are handed the release identity and ignore it.
 
-The reconciler supplies the value to *every* product with no per-product
-condition — rendering it is each chart's decision, and only `custom` renders it.
-This asserts the other half of that: a chart that ignores the value applies
-normally and its pods carry no release label, so the deployment's logs stay
-fully readable at `{namespace, instance}` granularity with only release pinning
-unavailable.
+The reconciler supplies `caelus.releaseId` and `caelus.releaseNumber` to *every*
+product with no per-product condition — rendering them is each chart's decision,
+and only `custom` does (the id as a pod label, the number by handing it to the
+SSH sidecar). This asserts the other half of that: a chart that ignores them
+applies normally and its pods carry no release label, so the deployment's logs
+stay fully readable at `{namespace, instance}` granularity with only release
+pinning unavailable.
 
 Schema rejection was never the risk — every curated chart sets
 `caelus.additionalProperties: true` and `mattermost` has no schema at all — so
@@ -24,6 +25,7 @@ import yaml
 
 PRODUCTS = Path(__file__).resolve().parents[2] / "products"
 RELEASE_ID = "3f2a9c14-0b6d-4e18-9a77-5c1e8d4b2f60"
+RELEASE = {"caelus.releaseId": RELEASE_ID, "caelus.releaseNumber": "7"}
 
 pytestmark = pytest.mark.skipif(shutil.which("helm") is None, reason="helm not installed")
 
@@ -90,7 +92,7 @@ def _render(chart: str, values: dict[str, str]) -> str:
 @pytest.mark.parametrize("chart", sorted(CURATED))
 def test_a_curated_chart_applies_while_ignoring_the_release_id(chart):
     baseline = CURATED[chart]
-    with_id = _render(chart, {**baseline, "caelus.releaseId": RELEASE_ID})
+    with_id = _render(chart, {**baseline, **RELEASE})
 
     # It rendered, and no pod carries a release label.
     assert "caelus.dev/release-id" not in with_id
@@ -135,8 +137,6 @@ def test_the_release_id_does_not_change_a_curated_pod_template(chart):
     """
     baseline = CURATED[chart]
     without = _pod_template_labels(_render(chart, baseline))
-    with_id = _pod_template_labels(
-        _render(chart, {**baseline, "caelus.releaseId": RELEASE_ID})
-    )
+    with_id = _pod_template_labels(_render(chart, {**baseline, **RELEASE}))
     assert without == with_id
     assert without, f"{chart} rendered no workload pod template to compare"

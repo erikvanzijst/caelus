@@ -93,10 +93,20 @@ if [[ $FREEPOD_LOGIN_USER != root ]]; then
 fi
 
 # --- release identity ------------------------------------------------------
-# Required rather than optional: the banner exists so a developer investigating
-# a broken release is not shown a working one during a rollout (D17), and a
-# banner that cannot name its release is the failure it was added to prevent.
+# Both required rather than optional: the banner exists so a developer
+# investigating a broken release is not shown a working one during a rollout
+# (D17), and a banner that cannot name its release is the failure it was added
+# to prevent.
+#
+# Two spellings because they answer to different readers. The number is what
+# `freepod releases` shows and the only one a user can act on, so it is what the
+# session banner reports; the id is globally unique and is what the log pipeline
+# keys a stream on, so it is what the startup line below records. Neither
+# substitutes for the other, and a pod that had only one would leave either a
+# banner naming a release the user cannot find or a log stream nothing can be
+# correlated against.
 require FREEPOD_RELEASE_ID
+require FREEPOD_RELEASE_NUMBER
 
 # --- database connection details -------------------------------------------
 # These reach the toolbox from the sidecar's own environment, never from the
@@ -133,7 +143,8 @@ fi
 # the same NUL-delimited form as /proc/<pid>/environ, which the dispatcher can
 # read back without quoting or re-evaluating anything.
 install -m 0600 /dev/null "$SESSION_ENV"
-for var in PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE PGSSLMODE PGAPPNAME FREEPOD_RELEASE_ID; do
+for var in PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE PGSSLMODE PGAPPNAME \
+    FREEPOD_RELEASE_ID FREEPOD_RELEASE_NUMBER; do
     [[ -n ${!var:-} ]] && printf '%s=%s\0' "$var" "${!var}" >> "$SESSION_ENV"
 done
 
@@ -187,5 +198,5 @@ chmod 0600 "$SSHD_CONFIG"
 
 /usr/sbin/sshd -t -f "$SSHD_CONFIG" || die "rendered sshd configuration was rejected by sshd -t."
 
-echo "ssh-sidecar: release ${FREEPOD_RELEASE_ID}, login user ${FREEPOD_LOGIN_USER} (uid 0), ${keys} trusted key(s), forwarding to ${permit_open[*]:-nothing}, database ${database}, listening on ${PORT}." >&2
+echo "ssh-sidecar: release ${FREEPOD_RELEASE_NUMBER} (${FREEPOD_RELEASE_ID}), login user ${FREEPOD_LOGIN_USER} (uid 0), ${keys} trusted key(s), forwarding to ${permit_open[*]:-nothing}, database ${database}, listening on ${PORT}." >&2
 exec /usr/sbin/sshd -D -e -f "$SSHD_CONFIG"

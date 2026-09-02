@@ -93,7 +93,9 @@ The application container MUST NOT be granted anything by this profile.
 - **THEN** it holds no capability the profile added
 
 ### Requirement: The chart supplies every runtime input the sidecar requires
-The chart MUST supply the sidecar with all of the inputs its image declares as required: the platform's trusted public key, the release identity, and the account the edge authenticates as. The sidecar exits rather than starting when any is missing, so an omission is a pod that will not run, not a pod that runs wrongly.
+The chart MUST supply the sidecar with all of the inputs its image declares as required: the platform's trusted public key, both spellings of the release identity, and the account the edge authenticates as. The sidecar exits rather than starting when any is missing, so an omission is a pod that will not run, not a pod that runs wrongly.
+
+The two spellings reach the sidecar by different routes, and MUST. The platform's own identifier is read from the release label the host chart already stamps on the pod template for the log pipeline, so that identifier and the stream it keys cannot disagree. The number is read from a platform-projected value directly, because no label carries it and one added would exist for nothing but this variable — an indirection, not a shared fact. A product chart rendering this profile therefore MUST also render that pod label.
 
 Where the product has a database, the chart MUST additionally supply the forward allowlist and the connection details, and MUST supply the connection details as a complete set. A partial set MUST abort startup: it means the projection that should have supplied them is broken, and a sidecar that started anyway would surface that as a connection error at the moment someone needed the database and furthest from its cause.
 
@@ -110,6 +112,10 @@ Every one of these MUST come from values the platform projects, never from value
 #### Scenario: The release identity is the deployment's own
 - **WHEN** a session reports the release it landed on
 - **THEN** the reported identity is that pod's release, not a value derived from the pod's name
+
+#### Scenario: Each spelling comes from its own route
+- **WHEN** a rendered `dev` sidecar's release inputs are inspected
+- **THEN** the platform identifier is projected from the pod's release label and the number is projected from a platform value
 
 #### Scenario: Tenant values cannot supply these inputs
 - **WHEN** a tenant sets values attempting to change the trusted key, the forward allowlist, or the database details given to the sidecar

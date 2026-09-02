@@ -133,18 +133,20 @@ http_get() {
     exec 3<&- 3>&-
 }
 
-# sidecar_env <release-id> -- the runtime configuration contract, in one place.
+# sidecar_env <release-id> <release-number> -- the runtime configuration
+# contract, in one place.
 sidecar_env() {
     printf '%s\n' \
         --env "FREEPOD_AUTHORIZED_KEYS=$(cat "$WORK/id.pub")" \
         --env "FREEPOD_PERMIT_OPEN=$PREFIX-allowed:8080 localhost:8080" \
         --env "FREEPOD_RELEASE_ID=$1" \
+        --env "FREEPOD_RELEASE_NUMBER=$2" \
         --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
         --env "PGHOST=$PREFIX-pg" --env PGPORT=5432 \
         --env PGUSER=appuser --env PGPASSWORD=harness-secret --env PGDATABASE=appdb
 }
 
-# sidecar_env_nodb <release-id> -- the same contract for a product with no
+# sidecar_env_nodb <release-id> <release-number> -- the same contract for a product with no
 # relational storage: no database variables, and consequently nothing to
 # forward to either. The toolbox is a facility this image offers, not a
 # precondition it imposes, so this configuration must produce a server that
@@ -153,6 +155,7 @@ sidecar_env_nodb() {
     printf '%s\n' \
         --env "FREEPOD_AUTHORIZED_KEYS=$(cat "$WORK/id.pub")" \
         --env "FREEPOD_RELEASE_ID=$1" \
+        --env "FREEPOD_RELEASE_NUMBER=$2" \
         --env "FREEPOD_LOGIN_USER=$LOGIN_USER"
 }
 
@@ -184,7 +187,7 @@ done
 
 run_container "$PREFIX-app" --network "$NET" "${PUBLISH[@]}" \
     -e APP_ONLY_VAR=from-the-application "$APP_IMAGE"
-mapfile -t SIDE_ENV < <(sidecar_env release-7-uuid)
+mapfile -t SIDE_ENV < <(sidecar_env release-7-uuid 7)
 run_container "$PREFIX-side" --pid="container:$PREFIX-app" --network "container:$PREFIX-app" \
     --cap-add SYS_PTRACE "${SIDE_ENV[@]}" "$IMAGE"
 
@@ -200,7 +203,7 @@ run_container "$PREFIX-noshell-side" --pid="container:$PREFIX-noshell-app" \
 # A deployment of a product with no relational storage: an ordinary application
 # container beside a sidecar configured with no database and no allowlist.
 run_container "$PREFIX-nodb-app" --network "$NET" "${PUBLISH[@]}" "$APP_IMAGE"
-mapfile -t NODB_ENV < <(sidecar_env_nodb release-nodb-uuid)
+mapfile -t NODB_ENV < <(sidecar_env_nodb release-nodb-uuid 3)
 run_container "$PREFIX-nodb-side" --pid="container:$PREFIX-nodb-app" \
     --network "container:$PREFIX-nodb-app" "${NODB_ENV[@]}" "$IMAGE"
 
@@ -228,7 +231,8 @@ start_with() {
     docker run --rm --entrypoint /usr/local/bin/freepod-sshd "$@" "$IMAGE" 2>&1
 }
 good_key=$(cat "$WORK/id.pub")
-base=(--env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_LOGIN_USER=$LOGIN_USER"
+base=(--env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_RELEASE_NUMBER=1"
+      --env "FREEPOD_LOGIN_USER=$LOGIN_USER"
       --env "PGHOST=h" --env PGPORT=5432
       --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d)
 
@@ -247,23 +251,35 @@ for malformed in "pooler" "pooler:*" "pooler:not-a-port" "pooler:99999"; do
 done
 
 out=$(docker run --rm --entrypoint /usr/local/bin/freepod-sshd \
+    --env "FREEPOD_RELEASE_NUMBER=1" \
     --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1" "$IMAGE" 2>&1); rc=$?
 expect_nonzero "missing release identity aborts startup" "$rc"
 expect_contains "the message names the release identity" "FREEPOD_RELEASE_ID" "$out"
 
+# Both spellings are required. The banner reports the number, so a sidecar
+# without one starts a server that cannot answer the question the banner exists
+# for -- the same failure as a missing id, and refused the same way.
+out=$(docker run --rm --entrypoint /usr/local/bin/freepod-sshd \
+    --env "FREEPOD_RELEASE_ID=r" \
+    --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
+    --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
+    --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1" "$IMAGE" 2>&1); rc=$?
+expect_nonzero "missing release number aborts startup" "$rc"
+expect_contains "the message names the release number" "FREEPOD_RELEASE_NUMBER" "$out"
+
 # The edge authenticates the upstream leg as the deployment name, so a sidecar
 # with no such account refuses every connection with "Invalid user" -- a refusal
 # that looks like an authorization problem from the client end.
 out=$(docker run --rm --entrypoint /usr/local/bin/freepod-sshd \
-    --env "FREEPOD_RELEASE_ID=r" \
+    --env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_RELEASE_NUMBER=1" \
     --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1" "$IMAGE" 2>&1); rc=$?
 expect_nonzero "missing login account aborts startup" "$rc"
 expect_contains "the message names the login account" "FREEPOD_LOGIN_USER" "$out"
 
-out=$(start_with --env "FREEPOD_RELEASE_ID=r" \
+out=$(start_with --env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_RELEASE_NUMBER=1" \
     --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_LOGIN_USER=Not A User" \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1"); rc=$?
@@ -274,7 +290,8 @@ expect_contains "the message names the bad account" "FREEPOD_LOGIN_USER" "$out"
 # that should have supplied it is broken, and a container that started anyway
 # would surface that as a connection error inside psql, at the moment someone
 # needed the database and furthest from the cause.
-out=$(start_with --env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_LOGIN_USER=$LOGIN_USER" --env PGPORT=5432 --env PGUSER=u \
+out=$(start_with --env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_RELEASE_NUMBER=1" \
+    --env "FREEPOD_LOGIN_USER=$LOGIN_USER" --env PGPORT=5432 --env PGUSER=u \
     --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1"); rc=$?
 expect_nonzero "an incomplete database configuration aborts startup" "$rc"
@@ -489,9 +506,17 @@ expect_zero "the client invoked with no arguments connects to the deployment's d
 group "banner"
 
 out=$(ssh_to "$PREFIX-app" -tt 'true' 2>&1 </dev/null | tr -d '\r')
-expect_contains "an interactive session reports its release" "freepod: release release-7-uuid" "$out"
+expect_contains "an interactive session reports its release" "freepod: release 7" "$out"
+# The number the client shows, not the uuid: a banner naming the uuid answers
+# "which release did I land on" in a spelling the user cannot look up.
+expect_missing "the banner does not report the release uuid" "release-7-uuid" "$out"
 # The identity is the configured value, not the pod's or container's name.
 expect_missing "the identity is not derived from the container name" "$PREFIX-app" "$out"
+
+# The uuid is what the log pipeline keys a stream on, so it stays on the startup
+# line where it is read next to that stream.
+out=$(docker logs "$PREFIX-side" 2>&1)
+expect_contains "the startup line records both spellings" "release 7 (release-7-uuid)" "$out"
 
 expect_eq "no banner reaches standard output" "BODY" "$(ssh_to "$PREFIX-app" 'echo BODY' 2>/dev/null)"
 
@@ -564,6 +589,7 @@ expect_missing "every forward is refused" "forward-target-allowed" "$out"
 out=$(docker exec "$PREFIX-nodb-side" sh -c 'tr "\0" "\n" < /etc/freepod/session-env')
 expect_missing "no database credential is staged for the session" "PGPASSWORD" "$out"
 expect_contains "the release identity is still staged" "release-nodb-uuid" "$out"
+expect_contains "the release number is still staged" "FREEPOD_RELEASE_NUMBER=3" "$out"
 
 # --- summary ---------------------------------------------------------------
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$PASS" "$FAIL"

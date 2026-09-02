@@ -138,8 +138,11 @@ def test_reconcile_apply_happy_path_returns_ready_and_applied_template(db_sessio
             },
             "owner": {"email": "reconcile-user@example.com", "id": deployment.user_id},
             # Offered to every product with no per-product condition; whether a
-            # chart renders it is the chart's business.
+            # chart renders them is the chart's business. Both spellings of the
+            # one release: the id keys the log stream, the number is what
+            # `freepod releases` shows and what the SSH banner reports.
             "releaseId": str(deployment.desired_release_id),
+            "releaseNumber": "1",
         },
     }
 

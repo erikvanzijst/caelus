@@ -180,11 +180,13 @@ The server MUST listen on the platform's conventional sidecar SSH port rather th
 - **THEN** an SSH handshake completes
 
 ### Requirement: Configuration is supplied at runtime and validated before the server starts
-Everything that varies per deployment — the trusted public key, the permitted forward destinations, the identity the session banner reports, and the deployment's database connection details — MUST be supplied to the container at startup rather than built in.
+Everything that varies per deployment — the trusted public key, the permitted forward destinations, the release identity, and the deployment's database connection details — MUST be supplied to the container at startup rather than built in.
 
 Supplied configuration MUST be validated before the SSH server starts, and a container given invalid configuration MUST fail loudly rather than start in a degraded state. The contract MUST be documented, since it is the interface a chart will target.
 
-Not every input is required. Those describing the server itself — the trusted key, the banner identity, the login account — are; those describing a facility a deployment may not have — the forward allowlist, the database connection details — are not. The documentation MUST say which are which, because the difference is what decides whether an absent value is a pod that will not start or a deployment that simply has no database.
+The release identity MUST be taken as **two** inputs, both required: the number a user sees, which the session banner reports, and the platform's own identifier for the release, which the image records where it can be read beside the logs that identifier keys. Neither substitutes for the other, and a container given only one MUST refuse to start: with only the identifier the banner would name the release in a spelling no user can look up, and with only the number nothing the pod writes could be correlated with the release it belongs to.
+
+Not every input is required. Those describing the server itself — the trusted key, both spellings of the release identity, the login account — are; those describing a facility a deployment may not have — the forward allowlist, the database connection details — are not. The documentation MUST say which are which, because the difference is what decides whether an absent value is a pod that will not start or a deployment that simply has no database.
 
 #### Scenario: Configuration contract is documented
 - **WHEN** an operator or a chart author needs to run the image
@@ -193,6 +195,10 @@ Not every input is required. Those describing the server itself — the trusted 
 #### Scenario: Invalid configuration fails fast
 - **WHEN** the container is given a malformed forward allowlist
 - **THEN** it exits with a non-zero status and an error identifying the input, rather than starting with forwarding misconfigured
+
+#### Scenario: Half a release identity is not a release identity
+- **WHEN** the container is given either spelling of the release identity but not the other
+- **THEN** it exits with a non-zero status and an error naming the missing one
 
 ### Requirement: The image runs as root and holds no capability beyond its purpose
 The SSH server runs as root because the dispatcher must read another container's process filesystem and enter it. The image MUST NOT require additional privilege beyond what the pod grants it, MUST NOT assume it can mount filesystems, and MUST NOT require a privileged container.

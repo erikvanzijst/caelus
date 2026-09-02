@@ -177,9 +177,9 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 /**
  * Manages the account's SSH public keys.
  *
- * The copy deliberately does not say that adding or removing a key grants or
- * withdraws access, because today it does neither: nothing reads these keys
- * yet. That sentence has to change when SSH authentication moves onto them.
+ * The keys are the SSH credential the edge resolves connections against, but
+ * this panel is about registering and revoking them; the copy says what a key
+ * is, not what a connection does.
  */
 export function SshKeysPanel() {
   const { user } = useAuth()

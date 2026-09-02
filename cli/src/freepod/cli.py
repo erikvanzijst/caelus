@@ -1101,8 +1101,9 @@ def key() -> None:
     machine's, so later connections offer exactly that key rather than trying
     each in turn.
 
-    Nothing reads these keys yet: registering or removing one does not
-    currently grant or withdraw any access.
+    These keys are the SSH credential: the edge resolves every connection to a
+    deployment against them, so `shell`, `db shell`, and `db proxy` need one
+    registered. Removing a key withdraws that access.
     """
 
 
@@ -1178,8 +1179,8 @@ def key_add(context: Context, path: Optional[Path], label: Optional[str]) -> Non
     context.say(f"Registered {stored['label']!r} on {env_name}.")
     click.echo(stored["fingerprint"])
     context.say(
-        "This grants no access yet — the platform does not read these keys "
-        "until SSH authentication moves onto them."
+        "This key is now the SSH credential for shell, db shell, and db proxy "
+        "on this environment."
     )
 
 

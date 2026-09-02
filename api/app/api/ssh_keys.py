@@ -47,8 +47,9 @@ def list_ssh_keys(
     normalized public key body and when it was registered. No response on any
     path contains private key material; none is ever stored.
 
-    Registering a key currently grants no access: nothing reads these keys
-    yet, and SSH still authenticates with per-deployment passwords.
+    These keys are the SSH credential: the edge resolves every connection to a
+    deployment against them, so `shell`, `db shell`, and `db proxy` need one
+    registered on the account.
 
     ## Errors
     - **403 Forbidden** — listing another account's keys without administrator
@@ -112,7 +113,8 @@ def add_ssh_key(
     `ssh-dss` is refused. The key type is read out of the key blob and must
     match the declared prefix.
 
-    Registering a key grants no access today; nothing reads these keys yet.
+    The key is now usable as the SSH credential for the account's deployments:
+    the edge resolves connections against it.
 
     ## Errors
     - **400 Bad Request** — the submission failed a validation check; `code`
@@ -206,8 +208,8 @@ def delete_ssh_key(
     reporting success for a key that was never there would tell them they had
     revoked something they had not.
 
-    Revocation currently withdraws no access, because these keys grant none
-    yet.
+    Revoking a key withdraws its use as an SSH credential: the edge stops
+    resolving connections against it.
 
     ## Errors
     - **403 Forbidden** — deleting another account's key without administrator

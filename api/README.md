@@ -295,6 +295,22 @@ Spec: [ssh-key-api](../openspec/specs/ssh-key-api/spec.md),
 [ssh-key-data-model](../openspec/specs/ssh-key-data-model/spec.md) · Rationale:
 [account-ssh-keys](../openspec/changes/archive/2026-08-28-account-ssh-keys/design.md)
 
+## The SSH Edge
+
+`GET /api/ssh` publishes this environment's SSH edge — host, port, and the
+public half of its host key, keyed by OpenSSH key type — publicly, and not
+gated on any deployment: the key is a per-environment fact a client needs
+before it knows which deployment to address, and an unconfigured key is
+reported empty (refused, never trusted) rather than fabricated. The SFTP
+credentials endpoint's availability check tracks what a deployment's chart
+actually renders, so both access profiles report available rather than the
+older profile's marker reporting no access for every deployment on the newer
+one.
+
+Spec: [ssh-edge-host-key](../openspec/changes/cli-ssh-access/specs/ssh-edge-host-key/spec.md),
+[sftp-credentials-api](../openspec/changes/cli-ssh-access/specs/sftp-credentials-api/spec.md) ·
+Rationale: [cli-ssh-access](../openspec/changes/cli-ssh-access/design.md)
+
 ## Product Catalog (Curated Products)
 
 Products come in two kinds, and the difference is a single column, `curated`:

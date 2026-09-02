@@ -177,15 +177,23 @@ An accidental `DROP TABLE` is gone. If the data matters, export it to the
 deployment's bucket on a schedule you control. Deleting the deployment revokes
 access immediately and destroys the data after a short retention period.
 
+A one-off dump is available from your machine — `freepod db proxy` plus a local
+`pg_dump` (see Debugging it).
+
 ### Debugging it
 
-**You cannot connect to the database from your machine.** It is reachable only
-from the deployment's own pod — there is no tunnel and no public endpoint.
-Everything below is therefore done through the app's own output, or through
-`freepod db status` for database-level state.
+You can reach the database from your machine over the platform's SSH edge, with
+one SSH key registered on your account (`freepod key add`) and `ssh` on your
+PATH:
 
-`freepod log` is the first move, always. These are the errors worth
-recognizing:
+- `freepod db shell` opens an interactive `psql` session server-side — no
+  PostgreSQL client needed on this machine.
+- `freepod db proxy` forwards a local port to the database and prints a
+  connection URL for the local end, so any client on this machine — a local
+  `psql`, `pg_dump`, an IDE — can use it.
+
+`freepod log` is still the first move for *application* errors. These are the
+errors worth recognizing:
 
 | What you see                                               | What it means                                                                  |
 |------------------------------------------------------------|--------------------------------------------------------------------------------|
@@ -198,10 +206,27 @@ recognizing:
 | `canceling statement due to statement timeout`             | your own 30s limit; raise it for that session if the work is legitimate        |
 | rollout fails with *"plan declares no database allowance"* | a platform-side plan misconfiguration, not an app bug — report it              |
 
-A one-off query is best answered by making the app answer it: log the result at
-startup, or add a route that returns it. **Do not add an endpoint that prints
-environment variables or the connection string** — it would be on the public
-internet. Print what you need to the log instead, where only you can read it.
+A one-off query is answered directly by `freepod db shell`. **Do not add an
+endpoint that prints environment variables or the connection string** — it
+would be on the public internet. Print what you need to the log instead, where
+only you can read it.
+
+The most likely first thing you reach for is a dump. Hold the tunnel in one
+terminal and point a local `pg_dump` at the URL `freepod db proxy` prints from
+another:
+
+```bash
+# terminal 1 — prints the URL, holds the tunnel until Ctrl+C
+freepod db proxy
+
+# terminal 2 — dump against the URL
+pg_dump "postgresql://…@localhost:5432/<db>" > backup.sql
+```
+
+In one shell (how an agent does it): background `freepod db proxy` with stdout
+redirected to a file, read the URL out of it, run `pg_dump`, then kill the
+tunnel. The URL is written to stdout before the tunnel holds, so it is there as
+soon as the process starts.
 
 ## Object storage: the other place state can live
 
@@ -427,11 +452,15 @@ app is wrong."
 | `freepod init`     | Set up the directory; prompts for a hostname.                                                                                                                    |
 | `freepod deploy`   | Pack, build, release. Prints the URL on stdout.                                                                                                                  |
 | `freepod log`      | Read the application's output. `-f` follows, `-r N` pins one release, `-t` adds timestamps.                                                                      |
+| `freepod shell`    | Open a shell in the deployment's application container, over the SSH edge. Needs a registered key (`freepod key add`) and `ssh`.                               |
 | `freepod builds`   | List this account's builds, most recent first.                                                                                                                   |
 | `freepod releases` | List this project's rollouts, newest first, marking the live one. Where `log -r N` gets its N.                                                                   |
 | `freepod var`      | Read and change the app's environment: `var list`, `var get KEY`, `var set KEY=VALUE`, `var rm KEY`. `--secret` stores write-only; `--stage` defers the rollout. |
 | `freepod delete`   | Delete the deployment **and everything it stores**. Destructive; confirm with the user first, and note it prompts unless given `-y`.                             |
 | `freepod db`       | Read this deployment's database: `db status` reports database name, role, password (masked by default; `--show-password` reveals), and quota state. No host, no URL. |
+| `freepod db shell` | Open an interactive `psql` session server-side; no local PostgreSQL client needed. Needs a registered key and `ssh`.                                            |
+| `freepod db proxy` | Forward a local port to the database and print a connection URL for the local end; the tunnel runs until Ctrl+C. Needs a registered key and `ssh`.              |
+| `freepod key`      | Register the SSH keys that identify you: `key add` (generates one if you name no file), `key list`, `key rm <fingerprint>`. The prerequisite for the SSH commands. |
 | `freepod logout`   | Forget the cached credential.                                                                                                                                    |
 
 Exit codes: `0` ok, `2` usage, `3` not authenticated, `4` build failed,

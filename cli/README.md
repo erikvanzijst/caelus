@@ -32,6 +32,10 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
   it in the environment, so bind `0.0.0.0:$PORT` (`process.env.PORT`,
   `os.environ["PORT"]`, …) rather than a fixed number. An app that picks its own
   port receives no traffic.
+- **`ssh`, for the interactive commands.** `shell`, `db shell`, and `db proxy`
+  drive the system `ssh` to reach the deployment over the platform's SSH edge;
+  the client does not implement the protocol itself. Everything else — login,
+  deploy, log, var, `db status` — needs no `ssh`.
 
 ## Commands
 
@@ -42,6 +46,7 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 | `freepod deploy`   | Pack, build and release the current project.                                         |
 | `freepod var`      | Read and change the environment your application runs with.                          |
 | `freepod log`      | Stream your application's pod output.                                                |
+| `freepod shell`    | Open a shell in the deployment's application container, over the SSH edge.          |
 | `freepod builds`   | List your builds, most recent first.                                                 |
 | `freepod releases` | List this project's rollouts, most recent first; the live one is marked.             |
 | `freepod delete`   | Delete this project's deployment.                                                    |
@@ -49,14 +54,41 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 | `freepod logout`   | Forget the stored credential.                                                        |
 | `freepod key`      | Register the SSH public keys that identify you to the platform.                      |
 | `freepod db`       | Report this deployment's database: name, role, password (masked), and quota state.   |
+| `freepod db shell` | Open an interactive session in the deployment's database, server-side.               |
+| `freepod db proxy` | Forward a local port to the database and print a connection URL for the local end.   |
 | `freepod skill`    | Install deployment instructions for your coding agents.                              |
 
 `freepod --help` and `freepod <command> --help` cover the flags.
 
 ## SSH keys
 
-`freepod key add` registers an SSH public key on your account. SSH is used as
-transport for commands including `freepod db` and `freepod shell`.
+`freepod key add` registers an SSH public key on your account and records which
+local key this machine holds, so later connections offer exactly that one. With
+no argument it generates a key for you. The key belongs to your account, not to
+one deployment, and applies to every deployment you own.
+
+The key is the credential for the interactive commands — `shell`, `db shell`,
+and `db proxy` — which reach the deployment over the platform's SSH edge.
+`freepod key list` shows your keys (the one this machine holds is marked `*`),
+and `freepod key rm <fingerprint>` revokes one.
+
+### Reaching the database from your machine
+
+The database is reachable from your running app, but not from this machine
+directly — `db proxy` and `db shell` reach it over the SSH edge instead. To take
+a dump, hold the tunnel in one terminal and point a local `pg_dump` at the URL
+it prints from another:
+
+```bash
+# terminal 1 — hold the tunnel; it prints the URL and waits for Ctrl+C
+freepod db proxy
+
+# terminal 2 — dump against the URL terminal 1 printed
+pg_dump "postgresql://…@localhost:5432/<db>" > backup.sql
+```
+
+`db shell` opens an interactive `psql` session server-side, so it needs no
+PostgreSQL client on this machine.
 
 ## Hostnames
 

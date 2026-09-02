@@ -33,14 +33,14 @@
 
 ## 3. Pre-flight diagnosis
 
-- [ ] 3.1 Before connecting, check `account_has_ssh_key` and the deployment's state, and
+- [x] 3.1 Before connecting, check `account_has_ssh_key` and the deployment's state, and
       explain a predictable failure in those terms rather than attempting a connection that
       will be refused. Verify against an account with no key and against a deployment the
       platform does not admit connections for.
-- [ ] 3.2 When the checks pass and the edge still refuses, report the refusal and what was
+- [x] 3.2 When the checks pass and the edge still refuses, report the refusal and what was
       verified, and **assert no cause** (design.md § *The client states only what the
       platform told it*). Verify the message names no specific reason.
-- [ ] 3.3 Verify a deployment whose application container is failing is still connected to,
+- [x] 3.3 Verify a deployment whose application container is failing is still connected to,
       not blocked by the pre-flight — that state is what these commands exist for.
 
 ## 4. `freepod db proxy`
@@ -74,29 +74,31 @@
       against the dbprobe deployment. The "app container stopped" case holds by
       construction — the sidecar is a separate container and its psql reaches the
       database via the pooler, not through the app container.
-- [ ] 5.3 Verify neither command prints a database credential, and that no command prints
+- [x] 5.3 Verify neither command prints a database credential, and that no command prints
       private key material in any mode including verbose.
 
 ## 6. Verification
 
-- [ ] 6.1 End to end on dev against a `custom` deployment, from a machine with no prior
+- [x] 6.1 End to end on dev against a `custom` deployment, from a machine with no prior
       state: register a key, then shell, proxy and db shell each work with no arguments
       beyond the command.
-- [ ] 6.2 Verify the same three commands behave sensibly against a deployment on the `sftp`
+- [x] 6.2 Verify the same three commands behave sensibly against a deployment on the `sftp`
       profile — which offers no shell and no forwarding — reporting the platform's refusal
       rather than appearing to hang or claiming a cause.
-- [ ] 6.3 Verify an unregistered key, a revoked key, and an account with no keys each
+- [x] 6.3 Verify an unregistered key, a revoked key, and an account with no keys each
       produce the intended message.
-- [ ] 6.4 Verify a local client connects through the proxy and can query the deployment's
+- [x] 6.4 Verify a local client connects through the proxy and can query the deployment's
       own database.
 
 ## 7. Documentation
 
-- [ ] 7.1 Update `cli/README.md`: the three commands, and `ssh` as a runtime requirement.
-- [ ] 7.2 Update `cli/DEVELOPMENT.md`: the known-hosts store's location and per-environment
+- [x] 7.1 Update `cli/README.md`: the three commands, and `ssh` as a runtime requirement.
+- [x] 7.2 Update `cli/DEVELOPMENT.md`: the known-hosts store's location and per-environment
       keying, why exactly one identity is offered, and why the forward address is passed
       through unmodified.
-- [ ] 7.3 Update `api/README.md` for the published host key and the corrected availability
-      check.
-- [ ] 7.4 Document how to take a database dump over these commands, since it works today and
+- [x] 7.3 Update `api/README.md` for the published host key and the corrected availability
+      check. Be very terse and just link to the appropriate spec design doc!
+- [x] 7.4 Update `SKILL.md` with the new commands and their usage. Include the use of `pg_dump`
+      as an example use-case.
+- [x] 7.5 Document how to take a database dump over these commands, since it works today and
       is the most likely first thing a user reaches for.

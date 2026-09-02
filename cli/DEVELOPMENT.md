@@ -107,6 +107,7 @@ that locks users out until they upgrade.
 | `tos.py`      | Terms acceptance: the gate, the prompt, and recording an acceptance.                        |
 | `keys.py`     | `freepod key`: the account's keys, the local key record, and fingerprint recovery.          |
 | `database.py` | `freepod db`: the deployment's database, the masking rule, and the absence shape.           |
+| `ssh.py`      | The SSH assembly shared by `shell`, `db shell`, and `db proxy`: the one key to offer, the pinned host key, and the argument list. |
 | `skill.py`    | The packaged agent instructions: reading `assets/SKILL.md`, and where to install it.        |
 
 ## Environments
@@ -852,6 +853,58 @@ requirement is what makes the answer useful.
 
 Spec: [cli-database-status](../openspec/specs/cli-database-status/spec.md) ·
 Rationale: [database-connection-details](../openspec/changes/archive/2026-08-29-database-connection-details/design.md)
+
+## SSH access: `shell`, `db shell`, and `db proxy`
+
+The three interactive commands reach the deployment over the platform's SSH
+edge. They share one connection assembly — `_connection_setup` in `cli.py`,
+backed by `ssh.py` — that resolves the deployment (refusing the states with no
+container to connect to), the database when the command needs one, the
+verified edge, and the one key to offer. `shell` opens a session in the
+application container, `db shell` opens `psql` server-side, and `db proxy`
+forwards a local port to the database and prints a URL for the local end. The
+client drives the system `ssh`; it implements no SSH of its own.
+
+Spec: [cli-ssh-access](../openspec/changes/cli-ssh-access/specs/cli-ssh-access/spec.md) ·
+Rationale: [cli-ssh-access](../openspec/changes/cli-ssh-access/design.md)
+
+### The known-hosts store
+
+The client keeps its own `known_hosts` at
+`${XDG_CONFIG_HOME:-~/.config}/freepod/known_hosts`, mode 0600, beside the
+token cache — **never the user's `~/.ssh/known_hosts`**. A mismatch must be
+this client's failure to report, not a modification of a file the user curates,
+and a user who keeps their own entry for the edge should not have it silently
+overridden.
+
+The file holds one line per environment's edge, keyed by `host:port` (port-
+qualified unless the port is 22). Each environment's edge is a different
+endpoint, so the file accumulates one entry per environment as you use them;
+`pin_edge` upserts the line for the endpoint it is pinning and leaves the rest
+alone. The line is the value the platform published on `GET /api/ssh`, so a
+later `StrictHostKeyChecking=yes` connection accepts the real edge and refuses
+anything else. An environment that has not published a key is refused as
+"cannot verify" — never treated as permission to trust on first use.
+
+### One identity, always
+
+`build_args` offers exactly one key: `-o IdentitiesOnly=yes -i <path>`. The
+edge answers *every* offered key with a partial success, so a client that
+offers several — which a populated agent does by default — exhausts the
+server's authentication budget and is refused before it reaches the right key.
+The reason sits beside the flag in the code, because the flag looks like
+belt-and-braces until the day someone removes it as redundant.
+
+### The forward address is passed through, never reconstructed
+
+`db proxy`'s `-L` destination is the address the database endpoint reports,
+byte-for-byte: `{host}:{port}`. The allowlist at the far end (`PermitOpen`)
+matches the destination as the client wrote it and resolves it afterwards, so
+a client that "helpfully" resolves, normalises, or shortens the address
+produces a refusal that reads like an authorization failure. Passing the
+platform's string through unchanged makes the chart's rendered allowlist and
+the client's `-L` argument the same fact with two readers — nothing is
+duplicated, so nothing has to be kept in agreement.
 
 ## The agent skill
 

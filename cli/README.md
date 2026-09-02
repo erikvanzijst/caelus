@@ -115,7 +115,7 @@ freepod shell pg_dump > backup.sql
 freepod shell psql < backup.sql
 ```
 
-Use `freepod proxy` to connect from an IDE, or other local DB client: it forwards a
+Use `freepod db proxy` to connect from an IDE, or other local DB client: it forwards a
 local port and prints a connection URL for the local end.
 
 ```bash

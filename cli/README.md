@@ -64,11 +64,11 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 
 `freepod key add` registers an SSH public key on your account and records which
 local key this machine holds, so later connections offer exactly that one. With
-no argument it generates a key for you. The key belongs to your account, not to
+no argument, it generates a key for you. The key belongs to your account, not to
 one deployment, and applies to every deployment you own.
 
-The key is the credential for the SSH commands — `shell`, `db shell`, and
-`db proxy` — which reach the deployment over the platform's SSH edge.
+The key is the credential for `shell`, `db shell`, and `db proxy`, which use ssh
+to connect to your pod.
 `freepod key list` shows your keys (the one this machine holds is marked `*`),
 and `freepod key rm <fingerprint>` revokes one.
 
@@ -83,29 +83,6 @@ freepod shell 'ls -la /app | head'      # quote a pipeline to keep it whole
 freepod shell cat /app/app.log > local.log
 ```
 
-### Reaching the database from your machine
-
-The database is reachable from your running app, but not from this machine
-directly. The platform's own PostgreSQL tools run over the SSH edge, so a dump
-needs neither a local client nor a tunnel:
-
-```bash
-freepod shell pg_dump > backup.sql
-freepod shell psql < backup.sql        # and back again
-```
-
-`db shell` opens an interactive `psql` session against the same tools. `db
-proxy` is for a client that has to run locally — an IDE, a GUI: it forwards a
-local port and prints a connection URL for the local end.
-
-```bash
-# terminal 1 — hold the tunnel; it prints the URL and waits for Ctrl+C
-freepod db proxy
-
-# terminal 2 — a local client, against the URL terminal 1 printed
-psql "postgresql://…@localhost:5432/<db>"
-```
-
 ## Hostnames
 
 `init` asks for one. A bare name becomes a subdomain of the platform: `myapp` is
@@ -113,7 +90,7 @@ served at `myapp.freepod.eu`. To use a domain of your own, point a CNAME at
 `freepod.eu` first, then give `init` the full name. Certificates are issued and
 renewed for you either way.
 
-## Persistence
+## Persistence (object and relational)
 
 Deployments have no persistent disks or volumes. Whatever the app writes to its
 own filesystem is gone when it restarts, and at every release.
@@ -127,6 +104,27 @@ Each deployment also gets its own PostgreSQL database. Nothing to set up:
 any ORM or `psql` connects as-is.
 
 `freepod db status` shows the database name, role, password, and quota usage.
+
+To connect directly to your pod's database from your local machine:
+
+```bash
+freepod db shell                      # interactive SQL shell
+
+# backup and restore:
+freepod shell pg_dump > backup.sql
+freepod shell psql < backup.sql
+```
+
+Use `freepod proxy` to connect from an IDE, or other local DB client: it forwards a
+local port and prints a connection URL for the local end.
+
+```bash
+# terminal 1: hold the tunnel; it prints the URL and waits for Ctrl+C
+freepod db proxy
+
+# terminal 2: a local client, against the URL terminal 1 printed
+psql "postgresql://…@localhost:5432/<db>"
+```
 
 ## Environment variables
 

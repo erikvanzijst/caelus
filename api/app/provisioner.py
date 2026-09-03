@@ -434,13 +434,19 @@ class Provisioner:
     def namespace_exists(self, *, name: str) -> bool:
         return self.kube.namespace_exists(name)
 
-    def sftp_credentials_exist(self, *, namespace: str, instance: str) -> bool:
-        """Whether this deployment has SFTP credentials to hand out."""
+    SSH_ACCESS_KIND = "service"
+
+    def ssh_access_exists(self, *, namespace: str, instance: str) -> bool:
+        """Whether this deployment offers SSH access at all."""
         return self.kube.object_exists_by_label(
-            kind="configmap",
+            kind=self.SSH_ACCESS_KIND,
             namespace=namespace,
-            selector=f"caelus.dev/component=ssh,app.kubernetes.io/instance={instance}",
+            selector=self.ssh_access_selector(instance),
         )
+
+    @staticmethod
+    def ssh_access_selector(instance: str) -> str:
+        return f"caelus.dev/component=ssh,app.kubernetes.io/instance={instance}"
 
     def upsert_secret(
         self, *, namespace: str, name: str, string_data: dict[str, str], labels: dict[str, str]

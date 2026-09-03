@@ -483,3 +483,51 @@ def test_ssh_access_does_not_make_a_redeploy_cycle_the_pod(chart):
         f"{chart}: the release identity reached a pod template label, so every "
         "redeploy now cycles this deployment's pods"
     )
+
+
+# --- the gate the API hides the feature on ---------------------------------
+
+@pytest.mark.parametrize("chart", WITH_SSH)
+def test_the_api_finds_the_object_it_gates_file_access_on(chart):
+    """The deployment card's Files panel is hidden when the API answers 404,
+    and the API answers 404 when it cannot find this object in the namespace.
+
+    Every test of that endpoint stubs the lookup, so nothing else ties it to
+    what a chart renders: the gate once named an object the charts stopped
+    rendering, and the only symptom was a button quietly vanishing from the UI.
+    """
+    from app.provisioner import Provisioner
+
+    kind = Provisioner.SSH_ACCESS_KIND
+    wanted = dict(
+        pair.split("=", 1) for pair in Provisioner.ssh_access_selector("t").split(",")
+    )
+
+    matches = [
+        doc
+        for doc in _render(chart)
+        if doc.get("kind", "").lower() == kind
+        and wanted.items() <= ((doc.get("metadata") or {}).get("labels") or {}).items()
+    ]
+    assert matches, (
+        f"{chart}: renders no {kind} matching {wanted}, so the API reports no file "
+        "access for it and the UI hides the Files panel"
+    )
+
+
+@pytest.mark.parametrize("chart", WITHOUT_SSH)
+def test_a_product_with_no_ssh_renders_nothing_the_gate_would_find(chart):
+    from app.provisioner import Provisioner
+
+    kind = Provisioner.SSH_ACCESS_KIND
+    wanted = dict(
+        pair.split("=", 1) for pair in Provisioner.ssh_access_selector("t").split(",")
+    )
+    for doc in _render(chart):
+        if doc.get("kind", "").lower() != kind:
+            continue
+        labels = (doc.get("metadata") or {}).get("labels") or {}
+        assert not wanted.items() <= labels.items(), (
+            f"{chart}: renders a {kind} the gate would find, so the UI would offer "
+            "file access for a deployment that has none"
+        )

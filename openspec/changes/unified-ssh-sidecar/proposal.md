@@ -83,9 +83,12 @@ served from the sidecar's own.
 - **`cli/`** — the `cp` command and its tests.
 - **`api/tests/`** — the render assertions become an exhaustive classification of every
   product chart.
+- **`api/app/provisioner.py`** — the lookup that decides whether a deployment has file
+  access to report. It keyed on the sshd-init ConfigMap, which nothing renders any more, so
+  it moves to the Service: the one object the contract guarantees for every session root,
+  and the only one left once a deployment holds no credential.
 - **Unaffected** — the SSH edge, the auth resolver, the Service naming convention, the
-  username convention, the reachability rules, and the credentials API's absence semantics
-  (a deployment with a sidecar renders the Service that endpoint keys on, as before).
+  username convention, and the reachability rules.
 
 Deliberately **not** in scope: the deployment view's file-access panel states that access is
 read-only for every deployment that has any SSH access. That is inaccurate for `custom`

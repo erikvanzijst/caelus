@@ -153,10 +153,9 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 30
-        # Read-only SFTP sidecar. Exposes ONLY the data/ subPath (the PVC root
-        # also holds config/config.php with DB credentials). uid 33 = www-data.
-        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list
-             (dict "volume" "data" "path" "data" "subPath" "data"))) | nindent 8 }}
+        {{- include "ssh-sidecar.sidecar" (dict "root" . "image" .Values.sshSidecarImage
+             "sessionRoot" "volume:/data"
+             "mounts" (list (dict "volume" "data" "path" "/data" "subPath" "data"))) | nindent 8 }}
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -168,4 +167,3 @@ spec:
         - name: apache-conf
           configMap:
             name: {{ .Release.Name }}-apache
-        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}

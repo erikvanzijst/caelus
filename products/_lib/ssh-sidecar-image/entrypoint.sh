@@ -41,6 +41,40 @@ done <<< "$FREEPOD_AUTHORIZED_KEYS"
 
 (( keys > 0 )) || die "FREEPOD_AUTHORIZED_KEYS contains no public key. Refusing to start a server nobody can authenticate to."
 
+require FREEPOD_SESSION_ROOT
+
+# The jail and the paths of the file-transfer program inside it, resolved from
+# `ldd` when the image was built (D3).
+# shellcheck source=/dev/null
+. /etc/freepod/sftp-server.env
+
+case $FREEPOD_SESSION_ROOT in
+    app-container)
+        session_root_note="the application container"
+        ;;
+    volume:/*)
+        session_path=${FREEPOD_SESSION_ROOT#volume:}
+        session_path=${session_path%/}
+        if [[ $session_path == *//* || $session_path == */../* || $session_path == */.. ]]; then
+            die "FREEPOD_SESSION_ROOT path '${session_path}' is not a plain absolute path."
+        fi
+        # The chart mounts the product's volume inside the jail, so the session
+        # is chrooted into the jail and started here. A missing directory means
+        # the chart declared one path and mounted another, which would otherwise
+        # surface as an empty session that looks like missing data.
+        mount_point=${FREEPOD_SESSION_JAIL}${session_path}
+        [[ -d $mount_point ]] \
+            || die "FREEPOD_SESSION_ROOT is '${FREEPOD_SESSION_ROOT}', but ${mount_point} is not a directory. The chart must mount the product's volume there."
+        session_root_note="${session_path} (mounted)"
+        ;;
+    volume:*)
+        die "FREEPOD_SESSION_ROOT '${FREEPOD_SESSION_ROOT}' names a relative path. A volume session root is absolute, as in 'volume:/data'."
+        ;;
+    *)
+        die "FREEPOD_SESSION_ROOT '${FREEPOD_SESSION_ROOT}' is not a session root. It is 'app-container' or 'volume:/<path>'; there is no default."
+        ;;
+esac
+
 # --- forward allowlist -----------------------------------------------------
 # Optional. A deployment with no forwardable endpoint gets a server that refuses
 # every forward -- which is `PermitOpen none`, written explicitly below. What it
@@ -144,7 +178,7 @@ fi
 # read back without quoting or re-evaluating anything.
 install -m 0600 /dev/null "$SESSION_ENV"
 for var in PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE PGSSLMODE PGAPPNAME \
-    FREEPOD_RELEASE_ID FREEPOD_RELEASE_NUMBER; do
+    FREEPOD_RELEASE_ID FREEPOD_RELEASE_NUMBER FREEPOD_SESSION_ROOT; do
     [[ -n ${!var:-} ]] && printf '%s=%s\0' "$var" "${!var}" >> "$SESSION_ENV"
 done
 
@@ -198,5 +232,5 @@ chmod 0600 "$SSHD_CONFIG"
 
 /usr/sbin/sshd -t -f "$SSHD_CONFIG" || die "rendered sshd configuration was rejected by sshd -t."
 
-echo "ssh-sidecar: release ${FREEPOD_RELEASE_NUMBER} (${FREEPOD_RELEASE_ID}), login user ${FREEPOD_LOGIN_USER} (uid 0), ${keys} trusted key(s), forwarding to ${permit_open[*]:-nothing}, database ${database}, listening on ${PORT}." >&2
+echo "ssh-sidecar: release ${FREEPOD_RELEASE_NUMBER} (${FREEPOD_RELEASE_ID}), login user ${FREEPOD_LOGIN_USER} (uid 0), ${keys} trusted key(s), session rooted at ${session_root_note}, forwarding to ${permit_open[*]:-nothing}, database ${database}, listening on ${PORT}." >&2
 exec /usr/sbin/sshd -D -e -f "$SSHD_CONFIG"

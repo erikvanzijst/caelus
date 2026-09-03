@@ -6,11 +6,19 @@
     "image": {
       "type": "object",
       "properties": {
-        "repository": { "type": "string" },
-        "tag": { "type": "string" },
+        "repository": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
         "pullPolicy": {
           "type": "string",
-          "enum": ["Always", "IfNotPresent", "Never"]
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
         }
       },
       "additionalProperties": false
@@ -18,34 +26,66 @@
     "service": {
       "type": "object",
       "properties": {
-        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        "type": {
+          "type": "string",
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
       },
       "additionalProperties": false
     },
     "ingress": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "className": { "type": "string" },
-        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
-        "host": { "type": "string", "title": "hostname" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "host": {
+          "type": "string",
+          "title": "hostname"
+        }
       },
       "additionalProperties": false
     },
     "storage": {
       "type": "object",
       "properties": {
-        "size": { "type": "string" },
+        "size": {
+          "type": "string"
+        },
         "accessModes": {
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"]
+            "enum": [
+              "ReadWriteOnce",
+              "ReadOnlyMany",
+              "ReadWriteMany",
+              "ReadWriteOncePod"
+            ]
           },
           "minItems": 1
         },
-        "storageClassName": { "type": "string" }
+        "storageClassName": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
@@ -59,7 +99,9 @@
           "description": "Text rendered in the generated index.html"
         }
       },
-      "required": ["message"],
+      "required": [
+        "message"
+      ],
       "additionalProperties": false
     },
     "caelus": {
@@ -69,29 +111,47 @@
         "plan": {
           "type": "object",
           "properties": {
-            "storageBytes": { "type": "integer" },
-            "storageSize": { "type": "string" }
+            "storageBytes": {
+              "type": "integer"
+            },
+            "storageSize": {
+              "type": "string"
+            }
           },
           "additionalProperties": true
         },
         "owner": {
           "type": "object",
           "description": "Deployment owner, injected by the Caelus reconciler",
-          "properties": { "email": { "type": "string" } },
+          "properties": {
+            "email": {
+              "type": "string"
+            }
+          },
           "additionalProperties": true
         },
         "ingress": {
           "type": "object",
           "description": "Ingress and per-app TLS settings injected by the Caelus reconciler",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "host": { "type": "string" },
+            "enabled": {
+              "type": "boolean"
+            },
+            "host": {
+              "type": "string"
+            },
             "tls": {
               "type": "object",
               "properties": {
-                "wildcard": { "type": "boolean" },
-                "issuer": { "type": "string" },
-                "secretName": { "type": "string" }
+                "wildcard": {
+                  "type": "boolean"
+                },
+                "issuer": {
+                  "type": "string"
+                },
+                "secretName": {
+                  "type": "string"
+                }
               },
               "additionalProperties": true
             }
@@ -104,8 +164,15 @@
     "ssh-sidecar": {
       "type": "object",
       "description": "Values namespace for the ssh-sidecar library dependency (unused; library charts render no values but Helm still reserves the key)."
+    },
+    "sshSidecarImage": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The platform's SSH sidecar image, pinned to an exact version. Matched against products/_lib/ssh-sidecar-image/VERSION by api/tests/test_ssh_chart_contract.py."
     }
   },
-  "required": ["user"],
+  "required": [
+    "user"
+  ],
   "additionalProperties": false
 }

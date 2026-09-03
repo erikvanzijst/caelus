@@ -43,6 +43,8 @@ Confinement to the session root is applied to a session once it has started, and
 ### Requirement: The session root is declared, and the image serves nothing outside it
 The image MUST take the session root as a declared input naming one of two things: a path the container has mounted, or the filesystem of the application container sharing the pod. It MUST confine every session to that root, and MUST NOT serve any path outside it.
 
+A confined session runs a program, and that program's own prerequisites MUST be reachable inside the confinement. Where the declared root cannot supply them — a mounted path holds the product's data and nothing else — the image MUST supply them itself, and a session MUST then begin at the declared path rather than wherever those prerequisites live. What the image supplies MUST hold nothing of the tenant's and nothing of the platform's: it exists so that a transfer can run, and carries no credential, no configuration and no data.
+
 The image MUST decide what a session may do from this declaration alone, never by testing what the pod happens to expose. A capability that is granted because a facility was found is a capability that appears when unrelated configuration changes.
 
 A declared application-container root that cannot be resolved — because the pod does not share a process namespace, or no application process is identifiable — MUST be reported as such and MUST NOT fall back to serving the container's own filesystem. The sidecar's filesystem holds none of the user's data and is not a lesser version of what was asked for.
@@ -54,6 +56,14 @@ A declared application-container root that cannot be resolved — because the po
 #### Scenario: The declaration decides, not the pod
 - **WHEN** a container declaring a mounted-path session root runs in a pod that shares a process namespace
 - **THEN** its sessions are still rooted at the mounted path
+
+#### Scenario: A session begins at the declared path
+- **WHEN** a session opens against a deployment whose declared root is a mounted path
+- **THEN** it starts at that path, and the paths it reports for the product's data are the ones the product documents
+
+#### Scenario: What the image supplies to run a transfer holds nothing of anyone's
+- **WHEN** a session inspects everything reachable outside the declared path
+- **THEN** it finds only what the transfer program itself requires, and no credential, configuration or data of the tenant's or the platform's
 
 #### Scenario: An unresolvable application root is reported
 - **WHEN** a container declaring an application-container root cannot identify the application process
@@ -77,7 +87,9 @@ A tenant's image is theirs and commonly contains no such helper — the image th
 - **THEN** the server uses its own tooling regardless of what the application image contains
 
 ### Requirement: Whether a session may write follows from the filesystem
-Whether a session may modify what it can reach MUST be taken from the session root's own filesystem rather than from a separate setting. A session root that is mounted read-only MUST be served read-only.
+Whether a session may modify what it can reach MUST be taken from the filesystem of the declared path rather than from a separate setting. A declared path that is mounted read-only MUST be served read-only.
+
+It MUST be taken from the declared path specifically, and not from whatever the confinement happens to be rooted at: where the image supplies a session's prerequisites itself, those live in the container's own writable layer, and reading the answer from there would report a read-only mount as writable.
 
 Two independent statements of the same intent can disagree, and the one that would be wrong is the one inside the container. The kernel already knows the answer, refuses a write regardless of the user the session runs as, and cannot be overridden by a container holding no capability to remount.
 

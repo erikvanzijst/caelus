@@ -205,11 +205,15 @@ identity, and the account the edge authenticates as. The sidecar exits rather th
 when any is missing, so an omission is a pod that will not run rather than one that runs
 wrongly.
 
-The two spellings of the release identity reach the sidecar by different routes, and MUST.
-The platform's own identifier is read from the release label the host chart already stamps
-on the pod template for the log pipeline, so that identifier and the stream it keys cannot
-disagree. The number is read from a platform-projected value directly, because no label
-carries it. A chart rendering a sidecar MUST therefore also render that pod label.
+Both spellings of the release identity MUST be read from platform-projected values
+directly, and neither MUST be taken from a pod label. A label carrying either would be the
+same fact by a longer route, and it would make the pod template's hash change on every
+apply — so a redeploy with identical values would cycle the deployment's pod rather than
+being a no-op, which is a cost no product should pay merely for having SSH access. One
+value, read once in one render, is also what makes the two spellings unable to disagree.
+
+A product MAY render a release label for its own reasons — a log pipeline keyed on it, say
+— and that is independent of this contract.
 
 Where the product has a database and the deployment is application-rooted, the chart MUST
 additionally supply the forward allowlist and the connection details, and MUST supply the
@@ -231,10 +235,14 @@ developer is most likely connecting to investigate.
 - **WHEN** a session reports the release it landed on
 - **THEN** the reported identity is that pod's release, not a value derived from the pod's name
 
-#### Scenario: Each spelling comes from its own route
+#### Scenario: Neither spelling is read from a pod label
 - **WHEN** a rendered sidecar's release inputs are inspected
-- **THEN** the platform identifier is projected from the pod's release label and the number is
-  projected from a platform value
+- **THEN** both are projected from platform values, and neither depends on a label
+
+#### Scenario: SSH access does not make a redeploy cycle the pod
+- **WHEN** a deployment with SSH access is rendered twice with identical values and a
+  different release identity each time
+- **THEN** its pod template is unchanged, so a redeploy with identical values remains a no-op
 
 #### Scenario: Tenant values cannot supply these inputs
 - **WHEN** a tenant sets values attempting to change the trusted key, the session root, the

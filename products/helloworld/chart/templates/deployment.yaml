@@ -39,11 +39,12 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /usr/share/nginx/html
-        # Read-only SFTP sidecar (ssh-sidecar library chart). Exposes the data
-        # PVC as /home/<release>/data; never mount the DB/state volumes here.
-        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list (dict "volume" "data" "path" "data"))) | nindent 8 }}
+        # The SSH sidecar, rooted at a read-only mount of the data PVC, which
+        # the session sees as /data. Never mount a DB or state volume here.
+        {{- include "ssh-sidecar.sidecar" (dict "root" . "image" .Values.sshSidecarImage
+             "sessionRoot" "volume:/data"
+             "mounts" (list (dict "volume" "data" "path" "/data"))) | nindent 8 }}
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "hello-static.fullname" . }}-data
-        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}

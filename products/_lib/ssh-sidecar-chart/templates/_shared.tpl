@@ -1,22 +1,17 @@
 {{- /*
-ssh-sidecar library chart — what both access profiles share.
+ssh-sidecar library chart — what every deployment's SSH access shares.
 
-A product chart is authored for exactly one profile and calls that profile's
-helper set: `ssh-sidecar.sftp.*` (_sftp.tpl) or `ssh-sidecar.dev.*` (_dev.tpl).
-There is no `profile` parameter and no profile string anywhere — see README.md
-and design.md § *The profile is which helpers a chart calls*. Calling one
-profile's `resources` beside the other's `sidecar` renders an incoherent chart;
-the render assertions in api/tests/ are what catch that.
-
-Everything in this file is profile-independent. The Service especially: it is
-the one object the SSH edge depends on, the edge knows nothing about profiles,
-and a per-profile copy would only ask two authors to keep agreeing.
+The sidecar itself and what a session may do live in _sidecar.tpl and follow
+from one declaration, `sessionRoot`. Everything in this file is independent of
+that declaration. The Service especially: it is the one object the SSH edge
+depends on, the edge knows nothing about session roots, and a second copy would
+only ask two authors to keep agreeing.
 
 All helpers take a dict; `root` is always the top-level chart context (needed
 for .Release.* and cluster lookups).
 */}}
 
-{{- /* Common labels for every SSH resource, whichever profile emitted it. */ -}}
+{{- /* Common labels for every SSH resource. */ -}}
 {{- define "ssh-sidecar.labels" -}}
 app.kubernetes.io/instance: {{ .root.Release.Name }}
 app.kubernetes.io/managed-by: caelus
@@ -24,8 +19,8 @@ caelus.dev/component: ssh
 {{- end -}}
 
 {{- /*
-ssh-sidecar.service — the Service fronting the sidecar. Emitted by BOTH
-profiles through this one helper, never copied into either.
+ssh-sidecar.service — the Service fronting the sidecar. Whatever a deployment's
+session is rooted at, it presents this same Service to the edge.
 
 The name follows the platform's single naming convention, `<release>-ssh`,
 which the SSH edge uses to derive a deployment's upstream address. **That

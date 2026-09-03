@@ -3,51 +3,108 @@
   "title": "Caelus Nextcloud chart values",
   "type": "object",
   "properties": {
-    "host": { "type": "string", "title": "hostname", "minLength": 1, "maxLength": 253 },
+    "host": {
+      "type": "string",
+      "title": "hostname",
+      "minLength": 1,
+      "maxLength": 253
+    },
     "trustedProxies": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "description": "Reverse-proxy source IPs/CIDRs trusted for X-Forwarded-* headers"
     },
     "image": {
       "type": "object",
       "properties": {
-        "repository": { "type": "string", "minLength": 1 },
-        "tag": { "type": "string" },
-        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
       },
       "additionalProperties": false
     },
     "admin": {
       "type": "object",
       "properties": {
-        "username": { "type": "string", "minLength": 1 },
-        "password": { "type": "string", "minLength": 1 }
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1
+        }
       },
-      "required": ["username", "password"],
+      "required": [
+        "username",
+        "password"
+      ],
       "additionalProperties": false
     },
     "ingress": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "className": { "type": "string" },
-        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
       },
-      "required": ["enabled", "className"],
+      "required": [
+        "enabled",
+        "className"
+      ],
       "additionalProperties": false
     },
     "smtp": {
       "type": "object",
       "properties": {
-        "host": { "type": "string" },
-        "port": { "type": "integer" },
-        "fromAddress": { "type": "string" },
-        "domain": { "type": "string" },
-        "secure": { "type": "string" },
-        "authtype": { "type": "string" },
-        "username": { "type": "string" },
-        "password": { "type": "string" }
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "fromAddress": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "secure": {
+          "type": "string"
+        },
+        "authtype": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
@@ -57,53 +114,126 @@
         "data": {
           "type": "object",
           "properties": {
-            "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] },
-            "size": { "type": "string", "minLength": 1 },
-            "storageClassName": { "type": "string" }
+            "accessMode": {
+              "type": "string",
+              "enum": [
+                "ReadWriteOnce",
+                "ReadOnlyMany",
+                "ReadWriteMany",
+                "ReadWriteOncePod"
+              ]
+            },
+            "size": {
+              "type": "string",
+              "minLength": 1
+            },
+            "storageClassName": {
+              "type": "string"
+            }
           },
-          "required": ["accessMode", "size", "storageClassName"],
+          "required": [
+            "accessMode",
+            "size",
+            "storageClassName"
+          ],
           "additionalProperties": false
         }
       },
-      "required": ["data"],
+      "required": [
+        "data"
+      ],
       "additionalProperties": false
     },
     "postgresql": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
+        "enabled": {
+          "type": "boolean"
+        },
         "image": {
           "type": "object",
           "properties": {
-            "repository": { "type": "string", "minLength": 1 },
-            "tag": { "type": "string", "minLength": 1 },
-            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+            "repository": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "pullPolicy": {
+              "type": "string",
+              "enum": [
+                "Always",
+                "IfNotPresent",
+                "Never"
+              ]
+            }
           },
-          "required": ["repository", "tag", "pullPolicy"],
+          "required": [
+            "repository",
+            "tag",
+            "pullPolicy"
+          ],
           "additionalProperties": false
         },
         "auth": {
           "type": "object",
           "properties": {
-            "username": { "type": "string", "minLength": 1 },
-            "password": { "type": "string", "description": "Empty auto-generates a stable password; set a value to pin one" },
-            "database": { "type": "string", "minLength": 1 }
+            "username": {
+              "type": "string",
+              "minLength": 1
+            },
+            "password": {
+              "type": "string",
+              "description": "Empty auto-generates a stable password; set a value to pin one"
+            },
+            "database": {
+              "type": "string",
+              "minLength": 1
+            }
           },
-          "required": ["username", "password", "database"],
+          "required": [
+            "username",
+            "password",
+            "database"
+          ],
           "additionalProperties": false
         },
         "persistence": {
           "type": "object",
           "properties": {
-            "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] },
-            "size": { "type": "string", "minLength": 1 },
-            "storageClassName": { "type": "string" }
+            "accessMode": {
+              "type": "string",
+              "enum": [
+                "ReadWriteOnce",
+                "ReadOnlyMany",
+                "ReadWriteMany",
+                "ReadWriteOncePod"
+              ]
+            },
+            "size": {
+              "type": "string",
+              "minLength": 1
+            },
+            "storageClassName": {
+              "type": "string"
+            }
           },
-          "required": ["accessMode", "size", "storageClassName"],
+          "required": [
+            "accessMode",
+            "size",
+            "storageClassName"
+          ],
           "additionalProperties": false
         }
       },
-      "required": ["enabled", "image", "auth", "persistence"],
+      "required": [
+        "enabled",
+        "image",
+        "auth",
+        "persistence"
+      ],
       "additionalProperties": false
     },
     "caelus": {
@@ -113,28 +243,46 @@
         "plan": {
           "type": "object",
           "properties": {
-            "storageBytes": { "type": "integer" },
-            "storageSize": { "type": "string" }
+            "storageBytes": {
+              "type": "integer"
+            },
+            "storageSize": {
+              "type": "string"
+            }
           },
           "additionalProperties": true
         },
         "owner": {
           "type": "object",
           "description": "Deployment owner, injected by the Caelus reconciler",
-          "properties": { "email": { "type": "string" } },
+          "properties": {
+            "email": {
+              "type": "string"
+            }
+          },
           "additionalProperties": true
         },
         "ingress": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "host": { "type": "string" },
+            "enabled": {
+              "type": "boolean"
+            },
+            "host": {
+              "type": "string"
+            },
             "tls": {
               "type": "object",
               "properties": {
-                "wildcard": { "type": "boolean" },
-                "issuer": { "type": "string" },
-                "secretName": { "type": "string" }
+                "wildcard": {
+                  "type": "boolean"
+                },
+                "issuer": {
+                  "type": "string"
+                },
+                "secretName": {
+                  "type": "string"
+                }
               },
               "additionalProperties": true
             }
@@ -147,8 +295,17 @@
     "ssh-sidecar": {
       "type": "object",
       "description": "Values namespace reserved by the ssh-sidecar library dependency (unused)."
+    },
+    "sshSidecarImage": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The platform's SSH sidecar image, pinned to an exact version. Matched against products/_lib/ssh-sidecar-image/VERSION by api/tests/test_ssh_chart_contract.py."
     }
   },
-  "required": ["host", "storage", "postgresql"],
+  "required": [
+    "host",
+    "storage",
+    "postgresql"
+  ],
   "additionalProperties": false
 }

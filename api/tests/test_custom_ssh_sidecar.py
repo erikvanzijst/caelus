@@ -1,15 +1,16 @@
-"""`custom` runs the `dev` access profile, and what that grants is load-bearing.
+"""`custom` declares an application-container session root, and what that grants
+is load-bearing.
 
-The profile puts a shell in the tenant's application container and the ability
-to trace its processes into one container beside it. Three properties make that
-acceptable rather than alarming, and each is one field that would fail silently
-if it were dropped:
+It puts a shell in the tenant's own application container, and file transfer
+into it, from one container beside it. Three properties make that acceptable
+rather than alarming, and each is one field that would fail silently if it were
+dropped:
 
 * the shared process namespace is the **pod's**, never the node's -- process
   identifiers resolve within the namespace that shares them, so this is what
   bounds the sidecar to the tenant's own containers;
-* `CAP_SYS_PTRACE` is on the **sidecar alone**, and the application container
-  gains nothing from the profile;
+* the application container gains **nothing** from the declaration, and no
+  container takes an added capability;
 * the image reference is a **system value pinned to an exact version**, because
   that container holds the platform's trusted key.
 
@@ -17,8 +18,10 @@ None of the three has a runtime symptom when wrong -- a `hostPID` pod works, an
 application container with extra capabilities works, a moving tag works until
 two nodes disagree -- so they are asserted here.
 
-The last test is the obligation the image's own README places on any chart that
-adopts it: the referenced tag must be one that was actually built.
+What every product's chart must render, and the classification of the catalog
+that keeps a product from acquiring SSH access by omission, live in
+`test_ssh_chart_contract.py`. This file is only about what `custom` gets that a
+curated product does not.
 """
 
 from __future__ import annotations
@@ -90,13 +93,12 @@ def _container(docs: list[dict], name: str) -> dict:
     return next(c for c in _pod(docs)["containers"] if c["name"] == name)
 
 
-def test_the_dev_profile_renders_a_sidecar_and_a_service_and_nothing_else():
-    """This profile defines no Secret and no ConfigMap.
+def test_it_renders_a_sidecar_and_a_service_and_nothing_else():
+    """The chart renders no Secret and no ConfigMap.
 
     The sidecar takes every input as an environment variable and writes its own
     `authorized_keys`, `sshd_config` and host key at startup, so an object of
-    either kind would be one nothing reads. `sftp` renders both because
-    `atmoz/sftp` reads its user list and startup script off disk.
+    either kind would be one nothing reads.
     """
     docs = _render()
 
@@ -117,7 +119,7 @@ def test_the_dev_profile_renders_a_sidecar_and_a_service_and_nothing_else():
         and (d["metadata"].get("labels") or {}).get("caelus.dev/component") == "ssh"
     ]
     assert ssh_owned == [], (
-        f"the dev profile rendered {[d['kind'] for d in ssh_owned]}, which nothing reads"
+        f"the chart rendered {[d['kind'] for d in ssh_owned]}, which nothing reads"
     )
 
 
@@ -126,8 +128,8 @@ def test_the_pod_shares_its_own_process_namespace_and_not_the_nodes():
     pod = _pod(_render())
     assert pod.get("shareProcessNamespace") is True, (
         "without a shared process namespace the sidecar cannot reach the "
-        "application's filesystem at /proc/<pid>/root, and the dev profile's "
-        "whole purpose is gone -- silently, since the container still serves"
+        "application's filesystem at /proc/<pid>/root, and an application-container "
+        "session root is gone -- silently, since the container still serves"
     )
     assert pod.get("hostPID") is not True, (
         "hostPID shares the NODE's process namespace, which would let this "
@@ -141,11 +143,11 @@ def test_no_container_takes_an_added_capability():
     and the Helm upgrade fails with `violates PodSecurity "baseline:latest"`
     rather than anything naming the chart.
 
-    So the `dev` profile takes none. It wants `CAP_SYS_PTRACE` for `strace`,
-    `gdb` and `py-spy`; granting it means raising the namespace to `privileged`
-    for products on this profile, which is tracked separately. Entering the
-    application container needs only `CAP_SYS_CHROOT` from the default set, so
-    everything else this profile offers is unaffected.
+    So this chart takes none. `CAP_SYS_PTRACE` would buy `strace`, `gdb` and
+    `py-spy`; granting it means raising the namespace, which is tracked
+    separately. Entering the application container needs only `CAP_SYS_CHROOT`
+    from the default set, so the shell, file transfer, the toolbox and
+    forwarding are all unaffected.
     """
     docs = _render()
 
@@ -180,8 +182,9 @@ def test_a_tenant_cannot_choose_the_sidecar_image_or_the_trusted_key():
     """Rejected at the API, before Helm ever sees the value.
 
     `custom`'s tenant-facing schema is closed and admits `hostname` and `image`
-    only. Both properties this guards are ones a tenant substituting them would
-    use to replace the container holding the platform's private-key counterpart.
+    only. Every property this guards is one a tenant substituting it would use to
+    replace the container holding the platform's private-key counterpart, or to
+    change what its sessions are allowed to do.
     """
     catalog = yaml.safe_load((PRODUCTS / "catalog" / "custom.yaml").read_text())
     schema = catalog["template"]["values_schema"]
@@ -190,6 +193,7 @@ def test_a_tenant_cannot_choose_the_sidecar_image_or_the_trusted_key():
     for attempt in (
         {"hostname": "a.example.test", "sshSidecarImage": "evil/sidecar:1"},
         {"hostname": "a.example.test", "caelus": {"ssh": {"platformPublicKey": "ssh-ed25519 AAAA attacker"}}},
+        {"hostname": "a.example.test", "sessionRoot": "app-container"},
     ):
         with pytest.raises(Exception):
             validate_user_values(attempt, schema)
@@ -204,26 +208,26 @@ def test_the_sidecar_receives_every_input_the_image_requires():
     assert env["FREEPOD_AUTHORIZED_KEYS"]["value"] == PLATFORM_KEY
     assert env["FREEPOD_PERMIT_OPEN"]["value"] == f"{POOLER}:6432"
 
-    # From the pod label, not from `caelus.releaseId`. The label is what the log
-    # pipeline relabels into the release stream, so the sidecar's startup line
-    # and the logs of the pod it wrote them to cannot disagree.
-    field = env["FREEPOD_RELEASE_ID"]["valueFrom"]["fieldRef"]["fieldPath"]
-    assert field == "metadata.labels['caelus.dev/release-id']"
-
-    # The number the session banner reports, straight from the value: the id
-    # goes the long way round only because a label already existed for the log
-    # pipeline to consume, and a second one carrying the number would exist for
-    # nothing but this variable.
+    # Both spellings straight from the reconciler's values. `custom` also stamps
+    # `caelus.dev/release-id` on its pod for the log pipeline, but the sidecar
+    # does not read it from there: a chart that had to render a label to get SSH
+    # access would put the release identity into every pod-template hash.
+    assert env["FREEPOD_RELEASE_ID"]["value"] == "42"
     assert env["FREEPOD_RELEASE_NUMBER"]["value"] == "7"
-    assert "valueFrom" not in env["FREEPOD_RELEASE_NUMBER"]
+    for name in ("FREEPOD_RELEASE_ID", "FREEPOD_RELEASE_NUMBER"):
+        assert "valueFrom" not in env[name], f"{name} is read from the pod"
 
     # The account the edge authenticates as upstream. It has one username
     # convention -- the deployment name -- and knows nothing about profiles, so
     # a sidecar without this account refuses every connection with `Invalid
     # user`, which reads at the client as an authorization failure.
+    assert env["FREEPOD_SESSION_ROOT"]["value"] == "app-container", (
+        "the session root is what grants the shell, the remote commands and the "
+        "database tooling; the sidecar checks the declaration and never the pod"
+    )
     assert env["FREEPOD_LOGIN_USER"]["value"] == "t", (
         "the sidecar must accept the release name as a login account; the edge "
-        "does not know this deployment runs the dev profile and will not send root"
+        "has one username convention and will not send root"
     )
 
     # The database variables reach the sidecar's OWN environment: a developer
@@ -261,15 +265,15 @@ def test_the_forward_allowlist_is_spelled_as_a_client_will_write_it():
         )
 
 
-def test_a_deployment_with_no_database_still_gets_the_profile():
-    """The toolbox is a facility this profile offers, not a precondition it
+def test_a_deployment_with_no_database_still_gets_a_session():
+    """The toolbox is a facility the sidecar offers, not a precondition it
     imposes.
 
     `custom` has relational storage today, but that is a property of the product
-    rather than of the profile: a shell in the application container is worth
-    having with or without a database. Coupling the two would surface as a pod
-    that never starts, for the first product to adopt `dev` without one -- and
-    `custom` will not stay the only such product.
+    rather than of the session root: a shell in the application container is
+    worth having with or without a database. Coupling the two would surface as a
+    pod that never starts, for the first product to declare an application root
+    without one -- and `custom` will not stay the only such product.
 
     So the chart renders the sidecar either way, with the two database-derived
     pieces absent together. The image then writes `PermitOpen none` and declines
@@ -289,8 +293,9 @@ def test_a_deployment_with_no_database_still_gets_the_profile():
         f"the sidecar takes {ssh.get('envFrom')!r} from a deployment with no database"
     )
 
-    # Everything the profile is actually for is still here.
+    # Everything the session root is actually for is still here.
     assert {
+        "FREEPOD_SESSION_ROOT",
         "FREEPOD_AUTHORIZED_KEYS",
         "FREEPOD_RELEASE_ID",
         "FREEPOD_RELEASE_NUMBER",
@@ -303,60 +308,13 @@ def test_a_deployment_with_no_database_still_gets_the_profile():
     ), "the deployment is unroutable at the SSH edge without its Service"
 
 
-def test_the_dev_profile_mounts_no_tenant_volume():
-    """No SFTP subsystem, no chroot, and nothing of the tenant's mounted in."""
+def test_an_application_session_root_mounts_no_tenant_volume():
+    """Nothing of the tenant's is mounted in: the session is rooted at the
+    application container's own filesystem, which the sidecar reaches through
+    the shared process namespace rather than through a mount."""
     ssh = _container(_render(), "ssh")
     assert not ssh.get("volumeMounts"), (
-        f"the dev sidecar mounts {ssh.get('volumeMounts')!r}. File transfer is "
-        "served by the session path, which lands in the application container's "
-        "own filesystem; a mounted view would be a second, weaker answer"
-    )
-
-
-def test_both_profiles_present_the_same_service_to_the_edge():
-    """The edge derives an upstream address by convention and knows nothing
-    about profiles, so the two Services must differ only in their names."""
-    dev = next(
-        d
-        for d in _render()
-        if d["kind"] == "Service"
-        and any(p.get("port") == SSH_PORT for p in d["spec"]["ports"])
-    )
-
-    args = [
-        "helm", "template", "t", str(PRODUCTS / "helloworld" / "chart"),
-        "--set-string", f"caelus.ssh.platformPublicKey={PLATFORM_KEY}",
-    ]
-    subprocess.run(
-        ["helm", "dependency", "build", str(PRODUCTS / "helloworld" / "chart")],
-        capture_output=True, text=True, check=True,
-    )
-    rendered = subprocess.run(args, capture_output=True, text=True)
-    assert rendered.returncode == 0, rendered.stderr
-    sftp = next(
-        d
-        for d in yaml.safe_load_all(rendered.stdout)
-        if isinstance(d, dict)
-        and d["kind"] == "Service"
-        and any(p.get("port") == SSH_PORT for p in d["spec"]["ports"])
-    )
-
-    assert dev["metadata"]["name"] == sftp["metadata"]["name"] == "t-ssh"
-    assert dev["spec"]["ports"] == sftp["spec"]["ports"]
-    assert dev["spec"]["publishNotReadyAddresses"] is True
-    assert sftp["spec"]["publishNotReadyAddresses"] is True
-    assert dev["metadata"]["labels"] == sftp["metadata"]["labels"]
-
-
-def test_the_referenced_tag_is_one_that_was_built():
-    """The obligation the image's README places on the chart that adopts it.
-
-    Without this a chart can reference a version nobody published, which fails
-    tenant-side as an `ImagePullBackOff` naming no cause.
-    """
-    version = (PRODUCTS / "_lib" / "ssh-sidecar-image" / "VERSION").read_text().strip()
-    values = yaml.safe_load((CHART / "values.yaml").read_text())
-    assert values["sshSidecarImage"].endswith(f":{version}"), (
-        f"the chart references {values['sshSidecarImage']!r} but "
-        f"products/_lib/ssh-sidecar-image/VERSION says {version!r}"
+        f"the sidecar mounts {ssh.get('volumeMounts')!r}. File transfer lands in the "
+        "application container's own filesystem; a mounted view beside it would be "
+        "a second, weaker answer"
     )

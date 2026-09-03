@@ -1,6 +1,6 @@
 dependencies:
 - name: ssh-sidecar
   repository: file://../../_lib/ssh-sidecar-chart
-  version: 0.4.4
-digest: sha256:5b3045a00849fd9436aeb5fef77d411aaed554f40f41237bd8d372b0cc5d6d88
-generated: "2026-09-02T15:39:36.351290557Z"
+  version: 0.5.0
+digest: sha256:5d07fb0c73bc7ecd24f0c0693551dc1c14d3510a2525cd55cc4f425f12d73e54
+generated: "2026-09-02T22:43:52.643067729Z"

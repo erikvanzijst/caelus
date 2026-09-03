@@ -5,66 +5,51 @@ release name), and its owner authenticates with an SSH key registered on their
 account, connecting to the platform endpoint (`freepod.eu:22` /
 `dev.freepod.eu:23`).
 
-**What that access consists of depends on the product's access profile.** There
-are two, and a product is authored for exactly one:
+One server serves every product: the platform's own
+[ssh-sidecar image](../ssh-sidecar-image/README.md). **A product declares
+exactly one thing — its session root — and everything else follows from it.**
 
-|            | `sftp`                               | `dev`                                                                      |
-|------------|--------------------------------------|----------------------------------------------------------------------------|
-| Server     | `atmoz/sftp`                         | the platform's own [ssh-sidecar image](../ssh-sidecar-image/README.md)     |
-| For        | products with user-visible data PVCs | `custom`, which has no PVC at all                                          |
-| Session    | SFTP only — **no shell, no writes**  | a login shell **in the application container**                             |
-| Forwarding | refused (`AllowTcpForwarding no`)    | to the deployment's database if it has one, allowlisted; otherwise refused |
-| Tooling    | none                                 | PostgreSQL 18 client                                                       |
-| Pod needs  | nothing                              | `shareProcessNamespace` on the pod                                         |
-| Renders    | Secret, ConfigMap, sidecar, Service  | sidecar, Service                                                           |
+|                    | `volume:/<path>`                                   | `app-container`                                       |
+|--------------------|----------------------------------------------------|-------------------------------------------------------|
+| Session rooted at  | a read-only mount of the data the product exposes  | the filesystem the tenant's own code runs in          |
+| For                | products with user-visible data                    | `custom`, whose owner wrote the code in the pod       |
+| Session offers     | file transfer, and nothing else                    | a shell, remote commands, file transfer               |
+| Writable           | no — the mount is read-only                        | as the application's own mounts allow                 |
+| Tooling            | none                                               | PostgreSQL 18 client and dump/restore                 |
+| Forwarding         | refused (no allowlist is supplied)                 | to the deployment's database, allowlisted             |
+| Pod needs          | the volume, mounted by this chart                  | `shareProcessNamespace: true`                         |
+| Renders            | sidecar, Service                                   | sidecar, Service                                      |
 
 It is a Helm **library chart** — it renders no resources on its own. A product
 wrapper chart depends on it and calls its named templates.
 
-Spec: [sftp-chart-contract](../../../openspec/specs/sftp-chart-contract/spec.md),
-[ssh-dev-profile](../../../openspec/specs/ssh-dev-profile/spec.md),
+Spec: [ssh-chart-contract](../../../openspec/specs/ssh-chart-contract/spec.md),
 [sftp-edge-routing](../../../openspec/specs/sftp-edge-routing/spec.md) ·
-Rationale: [ssh-grpc-auth-plugin](../../../openspec/changes/archive/2026-08-30-ssh-grpc-auth-plugin/design.md)
+Rationale: [unified-ssh-sidecar](../../../openspec/changes/unified-ssh-sidecar/design.md),
+[ssh-grpc-auth-plugin](../../../openspec/changes/archive/2026-08-30-ssh-grpc-auth-plugin/design.md)
 
-## The profile is which helpers you call
-
-There is **no `profile` value and no profile string anywhere.** The library
-exposes two helper sets over one shared Service helper, and a product chart calls
-the set it was written for:
+## One helper set
 
 ```
-ssh-sidecar.service        ← shared; both profiles emit the Service through it
-ssh-sidecar.podSelector
-ssh-sidecar.labels
-
-ssh-sidecar.sftp.resources     ssh-sidecar.dev.resources
-ssh-sidecar.sftp.sidecar       ssh-sidecar.dev.sidecar
-ssh-sidecar.sftp.volumes       (none — the dev profile mounts nothing)
+ssh-sidecar.resources      the Service, and nothing else
+ssh-sidecar.sidecar        the sidecar container, to splice into a pod
+ssh-sidecar.service        \
+ssh-sidecar.podSelector     >  shared internals
+ssh-sidecar.labels         /
+ssh-sidecar.sessionJail    where a volume session is rooted; see below
 ```
-
-A profile parameter would model something that does not vary. A product chart
-cannot render the other profile: its pod template either shares its process
-namespace or does not, and either mounts data PVCs into a sidecar or does not.
-And which profile a deployment runs is security-relevant — `dev` grants a shell
-in the application container and the ability to trace its processes — so keeping
-that decision out of values entirely beats admitting it there and defending it
-with a schema.
-
-The cost is that a chart's call sites must agree: `sftp.resources` beside
-`dev.sidecar` renders an incoherent chart. Nothing in Helm catches that, so the
-render assertions in `api/tests/` do.
 
 ## Architecture in one line
 
 `client → sshpiper (asks the SSH auth resolver who this is and where it goes)
-→ this deployment's sidecar → its PVC (sftp) or its application container (dev)`.
+→ this deployment's sidecar → its data mount, or its application container`.
 
 The chart renders no routing object: the edge resolves the route and the user's
 key from the platform database on every connection (`ssh-auth/`).
 
-The sidecar rides **inside the app pod** — on `sftp` because RWO PVCs can only be
-shared by containers in the same pod, and on `dev` because a shared process
-namespace is what lets it reach the application at all.
+The sidecar rides **inside the app pod** — for a volume root because RWO PVCs
+can only be shared by containers in the same pod, and for an application root
+because a shared process namespace is what lets it reach the application at all.
 
 ## The `-ssh` naming convention is shared with the resolver
 
@@ -78,52 +63,30 @@ The coupling is invisible in both directions — the resolver names a Service it
 never validates, and this chart names a Service nothing in its own release
 consults — so a unilateral change breaks nothing at build time and produces
 deployments that authenticate successfully and then reach nothing.
-`ssh-auth/convention_test.go` renders both a `sftp` and a `dev` product and
-asserts the name matches what the resolver derives.
 
-The **port** (2222) is shared the same way. Both profiles listen on it, so the
-edge never has to know which profile a deployment runs.
+The **port** (2222) is shared the same way, and the edge never has to know
+which one a deployment declared.
 
-## What each profile renders
+## The session jail is shared with the image
 
-### `sftp`
+`ssh-sidecar.sessionJail` is `/srv/session`, and a volume mount is rendered at
+`<jail><path>` — `volume:/data` is mounted at `/srv/session/data`.
 
-`ssh-sidecar.sftp.resources` emits:
+## What it renders
 
-| Object                             | Purpose                                                             |
-|------------------------------------|---------------------------------------------------------------------|
-| Secret `<release>-ssh-credentials` | username, `users.conf` (no password), and the platform's public key |
-| ConfigMap `<release>-ssh-scripts`  | sshd init: force `internal-sftp -R`, port 2222, no password auth    |
-| Service `<release>-ssh`            | routes sshpiper → sidecar on 2222, publishing not-ready addresses   |
+`ssh-sidecar.resources` emits the Service and **nothing else**, whatever the
+session root. `ssh-sidecar.sidecar` emits the container.
 
-Nothing in the Secret is secret: a username, a uid/gid line, and a public key.
+**Required values.** `caelus.ssh.platformPublicKey` is the SSH edge's public
+key, the only key the sidecar trusts. `caelus.releaseNumber` is the release as
+`freepod releases` shows it, which the session banner reports, and
+`caelus.releaseId` is the uuid the sidecar records on its startup line. The
+reconciler injects all three for every deployment.
 
-`ssh-sidecar.sftp.sidecar` and `ssh-sidecar.sftp.volumes` emit the atmoz/sftp
-container and its supporting volumes, to splice into the app pod.
-
-### `dev`
-
-`ssh-sidecar.dev.resources` emits the Service and **nothing else**;
-`ssh-sidecar.dev.sidecar` emits the container.
-
-There is no Secret and no ConfigMap, because the platform sidecar takes every
-input as an environment variable and writes its own `authorized_keys`,
-`sshd_config` and host key at startup. `sftp` needs both objects only because
-`atmoz/sftp` reads its user list and startup script off disk. There are two call
-sites rather than three: this profile has no supporting volumes.
-
-**Required values.** `caelus.ssh.platformPublicKey` is the SSH edge's public key,
-the only key either profile's sidecar trusts. `caelus.releaseNumber` is the
-release as `freepod releases` shows it, which the sidecar's session banner
-reports; the release *id* it also records is read from the host chart's
-`caelus.dev/release-id` pod label rather than from a value, so a product chart
-that renders the `dev` profile must render that label too. The reconciler injects
-both for every deployment.
-
-**Required param.** `dev.sidecar` takes `image`, pinned to an exact version and
+**Required param.** `sidecar` takes `image`, pinned to an exact version and
 supplied as a **system** value — a tenant-settable reference would let a tenant
-substitute the container that holds the platform's trusted key and enters their
-application. See [the image's README](../ssh-sidecar-image/README.md).
+substitute the container that holds the platform's trusted key and reads their
+data. See [the image's README](../ssh-sidecar-image/README.md).
 
 ## Wiring it into a product
 
@@ -132,7 +95,7 @@ application. See [the image's README](../ssh-sidecar-image/README.md).
 ```yaml
 dependencies:
   - name: ssh-sidecar
-    version: "0.4.4"
+    version: "0.5.0"
     repository: "file://../../_lib/ssh-sidecar-chart"
 ```
 
@@ -141,63 +104,54 @@ Then `helm dependency build ./chart` (vendors it into `charts/`).
 If your chart has a `.helmignore` ignoring `*.tgz`, **anchor it** (`/*.tgz`) —
 unanchored it also strips the vendored dependency out of `charts/`.
 
-### 2. On the `sftp` profile
-
-`templates/sftp.yaml`:
-
-```yaml
-{{ include "ssh-sidecar.sftp.resources" (dict "root" .) }}
-```
-
-**Wrapper owns the pod** (helloworld, mattermost): splice the sidecar and its
-volumes into your Deployment/StatefulSet template.
-
-```yaml
-      containers:
-        # ... app containers ...
-        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list
-             (dict "volume" "data" "path" "data"))) | nindent 8 }}
-      volumes:
-        # ... app volumes (incl. the `data` PVC volume) ...
-        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}
-```
-
-**Upstream subchart owns the pod** (nextcloud, immich, vaultwarden): you cannot
-edit its pod template. Use the upstream chart's `extraContainers` /
-`extraVolumes` values, and pass `selector` so the Service finds the upstream pod:
-
-```yaml
-{{ include "ssh-sidecar.sftp.resources" (dict "root" . "selector"
-     (dict "app.kubernetes.io/instance" .Release.Name
-           "app.kubernetes.io/name" "nextcloud")) }}
-```
-
-If an upstream chart supports neither `extraContainers` nor a sidecar hook, SSH
-is not offered for that product (document it and move on).
-
-### 3. On the `dev` profile
+### 2. Render the Service
 
 `templates/ssh.yaml`:
 
 ```yaml
-{{ include "ssh-sidecar.dev.resources" (dict "root" .) }}
+{{ include "ssh-sidecar.resources" (dict "root" .) }}
 ```
 
-and in the pod template — note `shareProcessNamespace`, which no container
-helper can set for you:
+Products whose sidecar rides in an upstream subchart's pod must pass `selector`
+so the Service targets that pod rather than every pod carrying the instance
+label:
+
+```yaml
+{{ include "ssh-sidecar.resources" (dict "root" . "selector"
+     (dict "app.kubernetes.io/instance" .Release.Name
+           "app.kubernetes.io/name" "nextcloud")) }}
+```
+
+### 3. Splice in the sidecar
+
+**A volume session root**, with the volume already declared by your pod:
+
+```yaml
+      containers:
+        # ... app containers ...
+        {{- include "ssh-sidecar.sidecar" (dict "root" . "image" .Values.sshSidecarImage
+             "sessionRoot" "volume:/data"
+             "mounts" (list (dict "volume" "data" "path" "/data"))) | nindent 8 }}
+```
+
+**An application-container session root** — note `shareProcessNamespace`, which
+no container helper can set for you:
 
 ```yaml
     spec:
       shareProcessNamespace: true
       containers:
         # ... app container ...
-        {{- include "ssh-sidecar.dev.sidecar"
-             (dict "root" . "image" .Values.sshSidecarImage) | nindent 8 }}
+        {{- include "ssh-sidecar.sidecar" (dict "root" . "image" .Values.sshSidecarImage
+             "sessionRoot" "app-container") | nindent 8 }}
 ```
+
+If an upstream chart supports neither `extraContainers` nor a sidecar hook, SSH
+is not offered for that product (document it and move on).
 
 ## Rules (do not skip)
 
-### Both profiles
+### Whatever the session root
 
 - **The Service name and port are not yours to change.** See *The `-ssh` naming
   convention* above. Overriding `serviceName` makes the deployment unroutable.
@@ -213,70 +167,73 @@ helper can set for you:
 - **The sidecar is liveness-probed, and that is load-bearing.** With readiness
   no longer gating routing, the `livenessProbe` (a `tcpSocket` check on 2222) is
   the only thing that stops connections being routed to a wedged `sshd`. Neither
-  probe may reference the application container, the exposed PVCs, or any
-  credential — a sidecar whose PVC mount is unhappy is still worth reaching,
-  since that may be the thing being debugged.
-
-### `sftp` only
-
-- **Never expose a database PVC.** Only mount PVCs holding user-visible data
-  (uploads, media, config the user should see). Postgres/MariaDB/Valkey data
-  dirs are off-limits — mounting a live DB data dir over SFTP is a corruption
-  and data-exfiltration footgun. When in doubt, expose nothing.
-- **Nothing to expose renders nothing.** A product on this profile with no
-  user-visible data must not call these helpers at all: its sidecar would offer
-  an empty session. `ssh-sidecar.sftp.sidecar` fails the render on empty
-  `mounts` rather than letting that happen quietly. This is a property of *this
-  profile*, not of the chart contract — `dev` mounts no tenant volume at all and
-  is correct doing so.
-- **Multiple PVCs** become sibling subdirectories: pass several `mounts` entries
-  with distinct `path`s.
-- **Match the sidecar uid to the data owner.** If the app locks its data dir to
-  its own uid (nextcloud → `0770 www-data=33`), a default uid-1000 sftp user
-  gets "Permission denied" on `ls` despite a good login. Pass `internalUid` (and
-  `internalGid` if different) equal to the uid that owns the files.
-- **subPath for shared PVCs.** If the exposable data lives in a subdirectory of
-  a PVC that also holds app source or secrets (nextcloud's `config/config.php`
-  has DB credentials), mount only that subdir via `subPath`.
-- **Mount paths must not be pre-created in the user spec.** The user spec lives
-  in `users.conf` with no directory list, precisely because atmoz/sftp would
-  `mkdir`/`chown` any listed dir and fail against a read-only mount.
-- **If you override `credsSecret` or `scriptsConfigMap`, pass the same value to
-  `sftp.volumes`.** Those volumes name the objects `sftp.resources` renders, and
-  a mismatch is a pod referencing a Secret nobody emitted.
-
-### `dev` only
-
-- **The pod must set `shareProcessNamespace: true`,** and must **not** set
-  `hostPID`. The shared namespace is what lets the sidecar reach the
-  application; that it is the *pod's* and not the *node's* is what bounds
-  `CAP_SYS_PTRACE` to this tenant's own containers. Every warning treating that
-  capability as a container-breakout vector assumes the node's namespace.
-- **`CAP_SYS_PTRACE` is not granted yet, so the template requests no
-  capability.** Tenant namespaces enforce Pod Security `baseline`, which refuses
-  every non-default capability at admission; a pod asking for one never
-  schedules. `strace`, `gdb` and `py-spy` are consequently unavailable, and
-  nothing else is: entering the application container needs `CAP_SYS_CHROOT`,
-  which is in the default set. The bullets around this one are the invariants
-  that must hold when the capability is granted.
-- **Both containers must keep the same AppArmor profile.** Neither declares one,
-  so both run the node default under enforcement, and its peer clause matches
-  when tracer and tracee carry the same profile name. Giving the application
-  container a profile of its own breaks tracing with a permission error that
-  mentions nothing about AppArmor.
-- **The capability goes on the sidecar alone.** The application container gains
-  nothing from this profile.
-- **Nothing secret may ever be mounted into the sidecar.** The shared process
-  namespace is symmetric: the application container can see the sidecar's
-  processes and files. That is safe only because the sidecar holds one public
-  key and its own generated host key.
+  probe may reference the application container, the mounted data, or any
+  credential — a sidecar whose mount is unhappy is still worth reaching, since
+  that may be the thing being debugged.
+- **Nothing secret may ever be mounted into the sidecar.** It holds one public
+  key and its own generated host key, and that is what makes it safe to place
+  beside a tenant's containers.
 - **The image reference is a system value, pinned to an exact version.** Never a
   moving tag: the version a pod runs would become a function of when it last
   restarted and what its node had cached.
+- **No container may request a capability.** Tenant namespaces enforce Pod
+  Security `baseline`, which refuses every non-default capability at admission;
+  a pod asking for one never schedules, and the Helm upgrade fails with
+  `violates PodSecurity "baseline:latest"` rather than anything naming the
+  chart. Everything the sidecar does needs only the default set.
+
+### A volume session root
+
+- **Never mount a database volume.** Only volumes holding user-visible data
+  (uploads, media, config the user should see). Postgres/MariaDB/Valkey data
+  dirs are off-limits — exposing a live DB data dir is a corruption and
+  data-exfiltration footgun. When in doubt, expose nothing.
+- **Nothing to expose renders nothing.** A product with no user-visible data
+  must not call these helpers at all: its sidecar would offer an empty session.
+  `ssh-sidecar.sidecar` fails the render on empty `mounts` rather than letting
+  that happen quietly.
+- **Read-only is the mount, and nothing else is trusted to provide it.** Every
+  mount is rendered `readOnly: true`. A write is `EROFS` regardless of the uid
+  the session runs as, and `mount -o remount,rw` needs `CAP_SYS_ADMIN`, which
+  `baseline` refuses at admission.
+- **There is no uid to match.** The session runs as root and reads the tree
+  whatever the application wrote it as, which is what removed the per-product
+  `internalUid` and its coupling to uid conventions inside upstream images. That
+  is sound **only** because nothing writes: if a product is ever given
+  read-write access, the uid comes back, because uploads would land root-owned
+  in a tree the application owns as another user and cannot modify.
+- **`subPath` for shared volumes.** If the exposable data lives in a
+  subdirectory of a volume that also holds app config or secrets (nextcloud's
+  `config/config.php` has DB credentials), mount only that subdirectory.
+- **Multiple volumes** become sibling directories in the session: pass several
+  `mounts` entries with distinct `path`s. `sessionRoot` names the one the
+  session starts in.
+- **The session survives the application.** The sidecar's mount is its own and
+  independent of the application container's, which is what keeps a deployment's
+  data reachable while its application is crash-looping or cannot pull its
+  image — the state in which retrieving it matters most.
+
+### An application-container session root
+
+- **The pod must set `shareProcessNamespace: true`,** and must **not** set
+  `hostPID`. The shared namespace is what lets the sidecar reach the
+  application; that it is the *pod's* and not the *node's* is what bounds it to
+  this tenant's own containers. Without it the container still starts and
+  serves — forwarding and the toolbox work — and a session that needs the
+  application container says what is missing.
+- **The application container gains nothing.** Everything the session root
+  grants is on the sidecar.
+- **The shared process namespace is symmetric.** The application container can
+  see the sidecar's processes and files, which is safe only because the sidecar
+  holds nothing worth seeing.
+- **Debuggers are deliberately not offered.** `strace`, `gdb` and `py-spy` need
+  `CAP_SYS_PTRACE`, which `baseline` refuses. Granting it means raising the
+  namespace's enforcement level, which is a change to what the platform
+  guarantees about tenant pods and is decided separately. Entering the
+  application container needs only `CAP_SYS_CHROOT`, from the default set.
 - **The database is optional, and its absence costs only the database.** A
-  product with no relational storage renders this profile with no allowlist and
-  no `PG*` environment; the image writes `PermitOpen none` and declines the
-  database tools by name, and the shell, file transfer and session paths are
-  unchanged. The toolbox is a facility the profile offers, not a precondition it
-  imposes — `custom` has a database today, but that is a property of the product
-  and it will not stay the only one on this profile.
+  product with no relational storage renders no allowlist and no `PG*`
+  environment; the image writes `PermitOpen none` and declines the database
+  tools by name, and the shell, remote commands and file transfer are
+  unchanged. The toolbox is a facility the sidecar offers, not a precondition it
+  imposes.

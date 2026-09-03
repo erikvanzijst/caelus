@@ -17,10 +17,16 @@ See [proposal.md](proposal.md) § *Why*. The facts that shape the approach:
   even to root. This is what an application-container session root is, and its writability is
   the point — it is what an owner's upload into their own deployment writes to.
 - **A volume session root never goes through `/proc`.** The sidecar mounts the volume into
-  *itself*, read-only, and the session is chrooted into that mount. The same volume is
-  mounted read-write in the application container, and the two mounts are independent. This
-  is what keeps file access serving while the application container is broken, and it is
-  where read-only is enforced.
+  *itself*, read-only, and the session is chrooted there. The same volume is mounted
+  read-write in the application container, and the two mounts are independent. This is what
+  keeps file access serving while the application container is broken, and it is where
+  read-only is enforced.
+- **A chrooted `sftp-server` needs four things inside the new root**, because `chroot(2)`
+  runs before `execvp` and every path is resolved afterwards: its loader, its libraries,
+  `/dev/null` (opened unconditionally by `sanitise_stdfd`), and a `passwd` entry for uid 0
+  (`getpwuid` is fatal on failure). An application container supplies all four — the runtime
+  mounts `/dev` and `/proc` in every container, and the image the platform builds carries
+  `/etc/passwd`. A bare volume mount supplies none, so the image ships them.
 - **Root cannot defeat a read-only mount.** A write is `EROFS` regardless of uid, and
   `mount -o remount,rw` is `EPERM` without `CAP_SYS_ADMIN`, which Pod Security `baseline`
   refuses at admission. This is the whole of the read-only guarantee; nothing inside the
@@ -64,7 +70,7 @@ the application container. Everything else follows:
 
 | | `volume:<path>` | `app-container` |
 |---|---|---|
-| what the session is chrooted into | the sidecar's own mount | `/proc/<app pid>/root` |
+| what the session is chrooted into | the jail holding the sidecar's own mount | `/proc/<app pid>/root` |
 | `shareProcessNamespace` on the pod | not set | required |
 | writable | no — the mount is read-only | as the app's own mounts allow |
 | shell, remote commands, database tooling | refused | served |
@@ -111,32 +117,61 @@ checked first.
 
 `dispatch.sh` currently searches `$app_root` for a helper and dies when there is none. It
 instead always runs its own, chrooted into the session root. A chrooted process cannot exec
-a binary outside the new root by path, so the loader is invoked through `/proc`:
+a binary outside the new root by path, so the loader is invoked through a prefix that is
+reachable from inside:
 
 ```
-chroot "$root" $S/lib64/ld-linux-x86-64.so.2 \
-       --library-path $S/lib/x86_64-linux-gnu:$S/usr/lib/x86_64-linux-gnu \
-       $S/usr/lib/openssh/sftp-server
+chroot "$root" $P/lib64/ld-linux-x86-64.so.2 \
+       --library-path $P/lib/x86_64-linux-gnu \
+       $P/usr/lib/openssh/sftp-server [-R] [-d start]
 ```
 
-`$S` is `/proc/<a sidecar pid>/root`, kept resolvable from inside the chroot because the
-runtime mounts `/proc` in every container. Verified end to end: a Debian sidecar's
-`sftp-server` runs inside an Alpine target and reads that target's filesystem.
+`$P` is the only thing that differs between the two session roots, and the loader, library
+and server paths under it are resolved from `ldd` at build time rather than written out here.
+
+- **An application-container root** takes `$P=/proc/<a sidecar pid>/root`, which stays
+  resolvable from inside the chroot because the runtime mounts `/proc` in every container.
+  `/dev/null` and `/etc/passwd` come from the tenant's own image. Verified end to end: a
+  Debian sidecar's `sftp-server` runs inside an Alpine target and reads that target's
+  filesystem.
+- **A volume root** takes `$P=/.freepod`, a directory the image ships inside the session
+  jail at `/srv/session`, holding a copy of the loader, the libraries and the server under
+  their own paths. The jail also carries `dev/null` and a one-line `etc/passwd`, and the
+  chart mounts the product's volume inside it. A session is chrooted into the jail and
+  started in the mount, so its paths are the ones the product already documents.
+
+The jail is the price of one file-transfer implementation. What a curated tenant sees beside
+their data directory is two directories holding a device node and a line of `passwd`, plus a
+hidden `.freepod`; today they see a `.ssh` that `atmoz/sftp` leaves there.
 
 - **Not a static build.** The loader indirection needs no change to the image and no second
-  copy of the binary to keep current with the base image's OpenSSH.
-- **Not sshd's `ChrootDirectory`.** It is static configuration, cannot name a per-connection
-  pid, and requires root-owned path components a tenant's data directory will not satisfy.
-  It would also confine forwarding, which must stay unconfined to resolve its target.
+  copy of the binary to keep current with the base image's OpenSSH. It would not help
+  either: `/dev/null` and `/etc/passwd` are needed whatever the binary is linked against.
+- **Not sshd's `ChrootDirectory` with `internal-sftp`.** It is the one mechanism that needs
+  nothing inside the root — sshd chroots after loading and after resolving the user — and it
+  cannot serve an application-container root, because `ChrootDirectory` expands only `%%`,
+  `%h`, `%u` and `%U` and so cannot name `/proc/<app pid>/root`, which is not knowable at
+  render time and changes whenever the application restarts. Adopting it for volume roots
+  alone would mean two file-transfer implementations, two server configurations and two sets
+  of failure modes to serve one facility.
+
+  Its other costs were measured rather than assumed. It confines port forwarding: on one
+  server with both spellings allowlisted, a forward to `192.168.48.2:8080` carried traffic
+  and a forward to `fp-target:8080` failed silently, because the forwarding process inherits
+  the chroot and has no resolver configuration there. That is fatal for the only deployments
+  that forward, which are application-rooted. Its ownership rule, by contrast, is not an
+  obstacle: `safely_chroot()` checks the chroot directory and its parents, never its
+  contents, so an image-owned jail holding tenant-owned data satisfies it — pointed straight
+  at a `33:33` `0770` directory sshd refuses with `bad ownership or modes for chroot
+  directory`, and pointed at a `root:root 0755` parent of the same data it serves it.
 - **Not the tenant's own helper, even when present.** One path exercised by every session on
   every deployment, rather than a fallback that is rarely taken and therefore rarely known to
   work. It also removes a way for a tenant's image to change what the platform serves.
-- **Not `internal-sftp`.** It is implemented inside sshd and confined by `ChrootDirectory`,
-  so it inherits that mechanism's limits.
 
 The dependence is on `/proc` being mounted in the target container, which is a property of
 the container runtime rather than of the image, and on the loader and library paths of the
-sidecar's own base image — which the image owns and a test pins.
+sidecar's own base image — which the image owns, resolves at build time, and proves with a
+build-time transfer into the jail.
 
 ### D4: Sessions run as root; read-only comes from the mount
 
@@ -150,9 +185,10 @@ capability `baseline` refuses. **If a curated product is ever given read-write a
 uid comes back** — uploads would land root-owned in a tree the application owns as another
 user and cannot modify.
 
-Whether a session may write is read from the filesystem (`statvfs` → `ST_RDONLY` → `-R`)
-rather than passed as a flag, so the setting inside the container cannot disagree with the
-mount outside it.
+Whether a session may write is read from the filesystem rather than passed as a flag, so the
+setting inside the container cannot disagree with the mount outside it. It is read from the
+*declared path* — the mount — and not from the chroot root, which for a volume session is the
+jail and therefore part of the container's own writable layer.
 
 ### D5: `freepod cp` drives `sftp`, and reuses the existing connection assembly
 
@@ -179,8 +215,15 @@ which old and new disagree. The curated charts change image, drop two objects an
 
 - **The loader path is base-image-specific** → an image whose base changes architecture or
   library layout breaks every session at once. Mitigated by resolving the loader at build
-  time into a known location and by the image's own test harness exercising a real transfer,
-  so the failure lands in CI rather than in a tenant's pod.
+  time into a known location, by staging the jail from that same resolution, by a build-time
+  transfer through the jail, and by the image's own test harness exercising a real transfer
+  against both session roots — so the failure lands in the build or in CI rather than in a
+  tenant's pod.
+- **An application image carrying no `/etc/passwd`** → a session rooted at a `scratch` image
+  with no user database fails `getpwuid`, so file transfer is refused there while a shell
+  still works. The image the platform's own build pipeline produces carries one, so this
+  reaches only a hand-built minimal image; the dispatcher names the cause rather than letting
+  it surface as a protocol error.
 - **`sessionRoot` is a string where the split used to be two helper sets** → a chart author
   can type the wrong one. Mitigated by the exhaustive classification assertion over
   `products/*/chart`: the dangerous value has to be written in the chart *and* in the

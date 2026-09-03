@@ -140,3 +140,5 @@ caelus:
   # platform injects it; empty here so a standalone install falls back to the
   # chart-generated admin password.
   vars: {}
+
+sshSidecarImage: ghcr.io/erikvanzijst/freepod/ssh-sidecar:0.5.0

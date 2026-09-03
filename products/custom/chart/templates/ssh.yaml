@@ -1,13 +1,14 @@
 {{- /*
-The Service the SSH edge reaches this deployment through. `custom` runs the
-`dev` access profile: a shell in the application container, the PostgreSQL
-toolbox, and a forward to the deployment's own database. The sidecar itself is
-spliced into the application pod (see deployment.yaml) — it has to be in that
-pod to see the application's processes at all.
+The Service the SSH edge reaches this deployment through. `custom` declares an
+**application-container session root**: a shell in the container the tenant's
+own code runs in, file transfer into it, the PostgreSQL toolbox, and a forward
+to the deployment's own database. The sidecar itself is spliced into the
+application pod (see deployment.yaml) — it has to be in that pod to see the
+application's processes at all, which is also why that pod sets
+`shareProcessNamespace: true`.
 
-The profile is not configuration. This chart calls the `dev` helper set and can
-render no other; see the ssh-sidecar library chart
-(products/_lib/ssh-sidecar-chart) for why that is a set of helpers rather than a
-values key.
+See the ssh-sidecar library chart (products/_lib/ssh-sidecar-chart) for the
+contract, and openspec/changes/unified-ssh-sidecar/design.md for why the session
+root is the only thing a product declares.
 */}}
-{{ include "ssh-sidecar.dev.resources" (dict "root" .) }}
+{{ include "ssh-sidecar.resources" (dict "root" .) }}

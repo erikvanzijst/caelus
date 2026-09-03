@@ -61,9 +61,6 @@ spec:
         {{- include "lemmy.componentSelector" (dict "root" . "name" "pictrs") | nindent 8 }}
     spec:
       securityContext:
-        # fsGroup only. runAsUser/runAsGroup are set on the pict-rs container
-        # rather than here because a pod-level value would also apply to the
-        # SFTP sidecar, and atmoz/sftp must start as root to run sshd.
         fsGroup: 991
       containers:
         - name: pictrs
@@ -114,16 +111,10 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-        # Read-only SFTP over the media volume. Rides here because the PVC is
-        # RWO and can only be shared inside one pod. The whole volume is
-        # exposed: /mnt holds the blob store, the sled index that maps aliases
-        # to it, and exports -- together a restorable copy, where the blobs
-        # alone would be unusable. It carries no credentials (the pict-rs API
-        # key arrives by env).
-        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list
-             (dict "volume" "data" "path" "media"))) | nindent 8 }}
+        {{- include "ssh-sidecar.sidecar" (dict "root" . "image" .Values.sshSidecarImage
+             "sessionRoot" "volume:/media"
+             "mounts" (list (dict "volume" "data" "path" "/media"))) | nindent 8 }}
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-pictrs
-        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}

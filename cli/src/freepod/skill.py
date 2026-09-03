@@ -8,9 +8,9 @@ that on the first release. `pip install --upgrade freepod` followed by
 `freepod skill install` is the whole update story.
 
 `SKILL.md` with YAML frontmatter is a cross-agent format: Claude Code, Codex,
-OpenCode, Amp and Gemini all read the same file, differing only in where they
-look for it. So one document serves every agent and this module is only a table
-of directories.
+OpenCode, Amp, Gemini and Qwen Code all read the same file, differing only in
+where they look for it. So one document serves every agent and this module is
+only a table of directories.
 
 **That table is the part that will go stale.** Each agent's path is recorded
 below with where it was confirmed from, because these conventions are young and
@@ -106,6 +106,16 @@ def agents() -> List[Agent]:
             config_dir=home / ".gemini",
             user_skills=home / ".gemini" / "skills",
             project_skills=Path(".gemini/skills"),
+        ),
+        # A fork of Gemini CLI whose layout mirrors it: personal skills in
+        # `~/.qwen/skills/`, project skills in `.qwen/skills/`, per its own
+        # skills documentation and `skill-manager.ts` in qwen-code.
+        Agent(
+            key="qwencode",
+            label="Qwen Code",
+            config_dir=home / ".qwen",
+            user_skills=home / ".qwen" / "skills",
+            project_skills=Path(".qwen/skills"),
         ),
     ]
 

@@ -934,8 +934,8 @@ every supported coding agent it finds on the machine. `freepod skill show`
 writes the same text to stdout for a runtime that keeps such files elsewhere.
 
 `SKILL.md` with YAML frontmatter is a **cross-agent format** — Claude Code,
-Codex, OpenCode, Amp and Gemini all read the same document — so there is one
-skill and `skill.py` is little more than a table of destinations:
+Codex, OpenCode, Amp, Gemini and Qwen Code all read the same document — so there
+is one skill and `skill.py` is little more than a table of destinations:
 
 | Agent       | Detected by            | User skills                    | `--project`       |
 |-------------|------------------------|--------------------------------|-------------------|
@@ -944,6 +944,7 @@ skill and `skill.py` is little more than a table of destinations:
 | OpenCode    | `~/.config/opencode`   | `~/.config/opencode/skills`    | `.opencode/skills`|
 | Amp         | `~/.config/amp`        | `~/.config/agents/skills`      | `.agents/skills`  |
 | Gemini CLI  | `~/.gemini`            | `~/.gemini/skills`             | `.gemini/skills`  |
+| Qwen Code   | `~/.qwen`              | `~/.qwen/skills`               | `.qwen/skills`    |
 
 `CLAUDE_CONFIG_DIR` and `CODEX_HOME` override their rows; `XDG_CONFIG_HOME`
 moves the two under `~/.config`. **Amp is the row where detection and

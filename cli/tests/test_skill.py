@@ -90,7 +90,14 @@ def test_the_skill_states_the_load_bearing_facts(fact):
 
 
 def test_every_agent_the_readme_promises_is_supported():
-    assert set(agent_keys()) == {"claude", "codex", "opencode", "amp", "gemini"}
+    assert set(agent_keys()) == {
+        "claude",
+        "codex",
+        "opencode",
+        "amp",
+        "gemini",
+        "qwencode",
+    }
 
 
 def test_each_agent_installs_to_its_own_directory():
@@ -104,7 +111,7 @@ def test_each_agent_installs_to_its_own_directory():
 
 @pytest.mark.parametrize("agent", agents(), ids=lambda agent: agent.key)
 def test_the_layout_is_the_cross_agent_one(agent):
-    """`<skills dir>/<skill name>/SKILL.md`, which is what all five read."""
+    """`<skills dir>/<skill name>/SKILL.md`, which is what all six read."""
     for project in (False, True):
         target = target_for(agent, project)
         assert target.name == "SKILL.md"
@@ -127,6 +134,8 @@ def test_project_destinations_are_relative_to_the_working_directory():
         # configuration directory — the one row where the two differ.
         ("amp", "agents/skills"),
         ("gemini", ".gemini/skills"),
+        # Qwen Code is a Gemini CLI fork whose skills layout mirrors it.
+        ("qwencode", ".qwen/skills"),
     ],
 )
 def test_the_confirmed_paths(key, suffix):

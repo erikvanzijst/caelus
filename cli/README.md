@@ -4,7 +4,9 @@ Take a local project directory to a running deployment on
 [freepod.eu](https://freepod.eu).
 
 ```bash
-pip install freepod || uv tool install freepod
+brew install erikvanzijst/tap/freepod     # Mac, Linux
+uv tool install freepod                   # Mac, Linux, Windows
+pip install freepod                       # Mac, Linux, Windows
 ```
 
 ```bash
@@ -26,7 +28,7 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 
 - **A Freepod account.** `freepod login` opens the sign-in page, which is also
   where you can register.
-- **Python 3.9 or newer**, for the CLI itself. The project you deploy can be in
+- **Python 3.9 or newer**, or Homebrew. The project you deploy can be in
   any language Railpack supports.
 - **An app that listens on `$PORT`.** The platform assigns the port and passes
   it in the environment, so bind `0.0.0.0:$PORT` (`process.env.PORT`,

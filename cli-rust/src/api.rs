@@ -453,4 +453,13 @@ impl ApiClient {
         }
         Ok(body)
     }
+
+    /// `GET /api/ssh` — this environment's edge address and host key.
+    pub async fn ssh_edge(&mut self) -> Result<Value> {
+        let body = self.get_json("/api/ssh", None).await?;
+        if !body.is_object() {
+            return Err(freepod(format!("unexpected /api/ssh response: {body}")));
+        }
+        Ok(body)
+    }
 }

@@ -27,6 +27,13 @@ pub enum Error {
     BuildFailed(String),
     /// The rollout failed, or waiting for it timed out — exit 5.
     RolloutFailed(String),
+    /// The edge presented a host key other than the one the platform
+    /// publishes. A refused connection, not a guess: the mismatch is what
+    /// `ssh` reported, so unlike a uniform authentication refusal this one
+    /// names its cause. It is a general error rather than an authentication
+    /// failure, because re-authenticating cannot fix a host that is answering
+    /// where the edge should be — exit 1.
+    HostKeyMismatch(String),
 }
 
 impl Error {
@@ -37,6 +44,7 @@ impl Error {
             Error::Authentication(_) => EXIT_NOT_AUTHENTICATED,
             Error::BuildFailed(_) => EXIT_BUILD_FAILED,
             Error::RolloutFailed(_) => EXIT_ROLLOUT_FAILED,
+            Error::HostKeyMismatch(_) => EXIT_ERROR,
         }
     }
 
@@ -47,7 +55,8 @@ impl Error {
             | Error::Authentication(m)
             | Error::Permission(m)
             | Error::BuildFailed(m)
-            | Error::RolloutFailed(m) => m,
+            | Error::RolloutFailed(m)
+            | Error::HostKeyMismatch(m) => m,
         }
     }
 
@@ -63,6 +72,7 @@ impl Error {
             Error::Permission(_) => Error::Permission(msg),
             Error::BuildFailed(_) => Error::BuildFailed(msg),
             Error::RolloutFailed(_) => Error::RolloutFailed(msg),
+            Error::HostKeyMismatch(_) => Error::HostKeyMismatch(msg),
         }
     }
 }
@@ -93,6 +103,9 @@ pub fn build_failed(msg: impl Into<String>) -> Error {
 }
 pub fn rollout_failed(msg: impl Into<String>) -> Error {
     Error::RolloutFailed(msg.into())
+}
+pub fn host_key_mismatch(msg: impl Into<String>) -> Error {
+    Error::HostKeyMismatch(msg.into())
 }
 
 /// The result type used throughout the client.

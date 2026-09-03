@@ -137,11 +137,15 @@ enum Commands {
     /// Your app's PostgreSQL database.
     ///
     /// `db status` reports which database and role your deployment owns, its
-    /// password, and how much of its allowance it is using.
+    /// password, and how much of its allowance it is using. `db shell` opens
+    /// an interactive session in the database, running server-side. `db proxy`
+    /// forwards a local port to it and prints a connection URL for the local
+    /// end.
     ///
     /// The database is reachable from your running app, which already has
     /// these details in its environment. It is not reachable from this
-    /// machine, so this command reports no address and no connection URL.
+    /// machine directly, so `db status` reports no address; `db proxy` and
+    /// `db shell` reach it over the SSH edge instead.
     Db {
         #[command(subcommand)]
         command: DbCommands,
@@ -153,8 +157,9 @@ enum Commands {
     /// this machine's, so later connections offer exactly that key rather
     /// than trying each in turn.
     ///
-    /// Nothing reads these keys yet: registering or removing one does not
-    /// currently grant or withdraw any access.
+    /// These keys are the SSH credential: the edge resolves every connection
+    /// to a deployment against them, so `shell`, `db shell`, and `db proxy`
+    /// need one registered. Removing a key withdraws that access.
     Key {
         #[command(subcommand)]
         command: KeyCommands,
@@ -163,6 +168,33 @@ enum Commands {
     Skill {
         #[command(subcommand)]
         command: SkillCommands,
+    },
+    /// Open a shell in this deployment's application container, or run
+    /// COMMAND in it.
+    ///
+    /// With no COMMAND the session runs on your own terminal and stays until
+    /// you leave it. This is the command for a deployment that is up but
+    /// misbehaving — the container is reachable even when the app inside it
+    /// is not.
+    ///
+    /// With a COMMAND it runs there and exits, the way `ssh host COMMAND`
+    /// does: the words are joined and interpreted by the container's own
+    /// shell, so quote a pipeline as one argument to keep it whole. Its input
+    /// and output are this terminal's, so `freepod shell cat app.log >
+    /// local.log` works.
+    ///
+    /// Either way the exit code is the remote side's, with one ambiguity `ssh`
+    /// itself has: 255 is also what `ssh` reports for its own failures.
+    Shell {
+        /// allocate a terminal for COMMAND — for a full-screen program such as
+        /// top or an editor, which needs one to draw
+        #[arg(short = 't', long = "tty")]
+        tty: bool,
+        /// the command to run in the container; the first word ends this
+        /// client's own options, so everything after it belongs to the remote
+        /// command
+        #[arg(trailing_var_arg = true, value_name = "COMMAND")]
+        command: Vec<String>,
     },
 }
 
@@ -216,6 +248,29 @@ enum DbCommands {
         /// print the password instead of masking it
         #[arg(long)]
         show_password: bool,
+    },
+    /// Open an interactive session in this deployment's database.
+    ///
+    /// The session runs server-side, in the platform's own PostgreSQL client,
+    /// so nothing needs to be installed on this machine. It reaches the
+    /// database even when the application container is down, because the
+    /// platform connects, not your app. The command's exit code is the
+    /// session's.
+    Shell,
+    /// Forward a local port to this deployment's database and print a
+    /// connection URL.
+    ///
+    /// The tunnel runs in the foreground until you interrupt it, and the local
+    /// port it binds is released when it closes. The URL it prints addresses
+    /// the local end of the tunnel, so a client on this machine can use it
+    /// without knowing how the database is spelled inside the cluster. The URL
+    /// goes to stdout and everything this client says goes to stderr, so
+    /// capturing stdout yields the URL and nothing else.
+    Proxy {
+        /// the local port to bind (default: a free one, preferring the
+        /// conventional 5432)
+        #[arg(long, value_name = "PORT")]
+        port: Option<u16>,
     },
 }
 
@@ -442,6 +497,8 @@ async fn async_main() -> i32 {
         }
         Some(Commands::Db { command }) => match command {
             DbCommands::Status { show_password } => cmd_db_status(&ctx, *show_password).await,
+            DbCommands::Shell => cmd_db_shell(&ctx).await,
+            DbCommands::Proxy { port } => cmd_db_proxy(&ctx, *port).await,
         },
         Some(Commands::Key { command }) => match command {
             KeyCommands::List => cmd_key_list(&ctx).await,
@@ -468,6 +525,9 @@ async fn async_main() -> i32 {
             }
             SkillCommands::Show => cmd_skill_show(&ctx).await,
         },
+        Some(Commands::Shell { tty, command }) => {
+            cmd_shell(&ctx, *tty, command.to_vec()).await
+        }
     };
 
     match outcome {
@@ -926,6 +986,224 @@ fn project_deployment(ctx: &Context) -> Result<crate::project::Project> {
     Ok(project_file)
 }
 
+/// The deployment, or a refusal when it has no container to connect to.
+///
+/// A settled deployment — ready or error — has a stable container, and `error`
+/// is precisely the state a shell exists for. Every other state is transitional
+/// or gone, and a connection there would be refused for a reason the platform
+/// already told us, so it is said rather than discovered the hard way.
+fn refuse_unreachable(
+    deployment: Option<&Value>,
+    project_file: &crate::project::Project,
+    env_name: &str,
+) -> Result<Value> {
+    let name = project_file.deployment_name().unwrap_or("");
+    let Some(deployment) = deployment else {
+        return Err(freepod(format!(
+            "deployment '{name}' no longer exists on '{env_name}' — it may have \
+             been deleted. Run `freepod deploy` to create a new one."
+        )));
+    };
+    let status = deployment
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if !crate::deploy::SETTLED_STATUSES.contains(&status) {
+        let hint = if matches!(status, "pending" | "provisioning") {
+            "wait for the rollout to finish and try again"
+        } else {
+            "it has no container to connect to"
+        };
+        return Err(freepod(format!(
+            "deployment '{name}' is {status}, so it has no container to connect \
+             to right now — {hint}."
+        )));
+    }
+    Ok(deployment.clone())
+}
+
+/// The pieces a connection to the edge needs, resolved and checked.
+///
+/// Shared by every command that connects: the deployment (refusing the states
+/// that have no container to connect to), the database when the command needs
+/// one, the verified edge, and the one key to offer. `database` is None unless
+/// `require_database` is set, in which case it is the deployment's database
+/// details or the command is refused.
+struct ConnectionSetup {
+    deployment: Value,
+    database: Option<Value>,
+    host: String,
+    port: u16,
+    key_path: std::path::PathBuf,
+    known_hosts: std::path::PathBuf,
+}
+
+impl ConnectionSetup {
+    /// The argv for a session over the deployment's SSH edge. `command` is
+    /// what the session runs once it lands — nothing for a shell, `psql` for a
+    /// database session, which the sidecar routes to its own client rather
+    /// than the application container.
+    fn args(&self, command: Option<Vec<String>>, tty: bool) -> Vec<String> {
+        crate::ssh::build_args(&crate::ssh::Connection {
+            user: self
+                .deployment
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            host: self.host.clone(),
+            port: self.port,
+            key_path: self.key_path.clone(),
+            known_hosts: self.known_hosts.clone(),
+            command,
+            local_forward: None,
+            tty,
+        })
+    }
+
+    /// The argv for a forward to the deployment's database. The destination is
+    /// the address the platform reports, passed through verbatim: the
+    /// allowlist at the far end matches it as written, so any difference in
+    /// spelling produces a refusal that reads like an authorization failure
+    /// rather than a typo. A forward runs no session, so it needs no tty and
+    /// no command — the `-L` and `-N` are the whole point of the connection.
+    fn forward(&self, local_port: u16) -> Vec<String> {
+        let database = self.database.as_ref().unwrap();
+        let local_forward = format!(
+            "{}:{}:{}",
+            local_port,
+            database.get("host").and_then(|v| v.as_str()).unwrap_or(""),
+            database.get("port").and_then(|v| v.as_u64()).unwrap_or(0)
+        );
+        crate::ssh::build_args(&crate::ssh::Connection {
+            user: self
+                .deployment
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            host: self.host.clone(),
+            port: self.port,
+            key_path: self.key_path.clone(),
+            known_hosts: self.known_hosts.clone(),
+            command: None,
+            local_forward: Some(local_forward),
+            tty: false,
+        })
+    }
+}
+
+async fn connection_setup(
+    ctx: &Context,
+    project_file: &crate::project::Project,
+    require_database: bool,
+) -> Result<ConnectionSetup> {
+    // A missing ssh is a prerequisite, not a fault of this client; report it
+    // before spending a round trip the connection could not use anyway.
+    crate::ssh::require_ssh()?;
+
+    let mut session = ctx.session(None)?;
+    session.authenticate(&ctx.http, false, false).await?;
+    let mut api = ctx.client(session);
+    let user_id = api
+        .me()
+        .await?
+        .get("id")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let deployment_id = project_file.deployment_id().unwrap().to_string();
+    let deployment = refuse_unreachable(
+        crate::releases::read_deployment(&mut api, user_id, &deployment_id)
+            .await
+            .as_ref(),
+        project_file,
+        ctx.env.name,
+    )?;
+    let mut database = None;
+    if require_database {
+        database = crate::database::read(&mut api, user_id, &deployment_id).await?;
+        if database.is_none() {
+            return Err(freepod(format!(
+                "deployment '{}' has no database, so there is nothing to connect \
+                 to. The platform provisions one for products with relational \
+                 storage; check `freepod db status`.",
+                project_file.deployment_name().unwrap_or("")
+            )));
+        }
+    }
+    let edge = api.ssh_edge().await?;
+    let (host, port, known_hosts) = crate::ssh::pin_edge(&edge)?;
+    let registered = crate::keys::list_keys(&mut api, user_id).await?;
+    let key_path = crate::keys::resolve_local_key(ctx.env.name, &registered)?;
+    Ok(ConnectionSetup {
+        deployment,
+        database,
+        host,
+        port,
+        key_path,
+        known_hosts,
+    })
+}
+
+/// The conventional PostgreSQL port, tried first when no local port is given.
+pub const CONVENTIONAL_DB_PORT: u16 = 5432;
+
+/// Whether a local TCP port can be bound right now.
+pub fn port_available(port: u16) -> bool {
+    std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
+/// A local TCP port the kernel will hand out on demand.
+pub fn free_local_port() -> u16 {
+    std::net::TcpListener::bind(("127.0.0.1", 0))
+        .and_then(|listener| listener.local_addr())
+        .map(|addr| addr.port())
+        .unwrap_or(0)
+}
+
+/// The local port a forward binds, or a specific refusal.
+///
+/// A port the user named that is unavailable is reported as such — choosing a
+/// different one silently would bind a port they did not ask for. With no port
+/// given, the conventional one is tried first and a free one is chosen when it
+/// is occupied, so an occupied default never fails the command.
+pub fn choose_local_port(requested: Option<u16>) -> Result<u16> {
+    if let Some(port) = requested {
+        if !port_available(port) {
+            return Err(freepod(format!(
+                "port {port} is not available on this machine — it is in use or \
+                 reserved. Choose another with --port."
+            )));
+        }
+        return Ok(port);
+    }
+    if port_available(CONVENTIONAL_DB_PORT) {
+        return Ok(CONVENTIONAL_DB_PORT);
+    }
+    Ok(free_local_port())
+}
+
+/// A connection URL addressing the given end, carrying the database's
+/// credential.
+///
+/// The credential is percent-encoded rather than concatenated: a password with
+/// characters that have meaning in a URL would otherwise yield a URL that
+/// parses to a different password. Today's generated passwords are hexadecimal
+/// so concatenation happens to work, which is precisely why this is written
+/// against correctness instead of the generator's current output.
+pub fn connection_url(database: &Value, host: &str, port: u16) -> String {
+    let role = crate::api::encode_segment(
+        database.get("role").and_then(|v| v.as_str()).unwrap_or(""),
+    );
+    let password = crate::api::encode_segment(
+        database.get("password").and_then(|v| v.as_str()).unwrap_or(""),
+    );
+    let name = crate::api::encode_segment(
+        database.get("database").and_then(|v| v.as_str()).unwrap_or(""),
+    );
+    format!("postgresql://{role}:{password}@{host}:{port}/{name}")
+}
+
 async fn cmd_var_list(ctx: &Context, as_json: bool) -> Result<i32> {
     let project_file = project_deployment(ctx)?;
     let deployment_id = project_file.deployment_id().unwrap().to_string();
@@ -1215,6 +1493,113 @@ async fn cmd_db_status(ctx: &Context, show_password: bool) -> Result<i32> {
     Ok(0)
 }
 
+async fn cmd_shell(ctx: &Context, force_tty: bool, command: Vec<String>) -> Result<i32> {
+    let project_file = project_deployment(ctx)?;
+    let setup = connection_setup(ctx, &project_file, false).await?;
+    let interactive = command.is_empty();
+    let args = setup.args(
+        if interactive { None } else { Some(command) },
+        // A remote command gets no terminal unless it is asked for: a pty
+        // rewrites its output — line endings translated, stderr folded into
+        // stdout, input echoed — which is corruption for anything redirected
+        // to a file or a pipe. An interactive session is the case that needs
+        // one, and it is the case with no command.
+        force_tty || interactive,
+    );
+    crate::ssh::run_interactive(&args)
+}
+
+async fn cmd_db_shell(ctx: &Context) -> Result<i32> {
+    let project_file = project_deployment(ctx)?;
+    let setup = connection_setup(ctx, &project_file, true).await?;
+    // psql runs server-side, appended as the session's command, under a forced
+    // tty.
+    let args = setup.args(Some(vec!["psql".to_string()]), true);
+    crate::ssh::run_interactive(&args)
+}
+
+async fn cmd_db_proxy(ctx: &Context, port: Option<u16>) -> Result<i32> {
+    let project_file = project_deployment(ctx)?;
+    let local_port = choose_local_port(port)?;
+    let setup = connection_setup(ctx, &project_file, true).await?;
+    let args = setup.forward(local_port);
+    let url = connection_url(
+        setup.database.as_ref().unwrap(),
+        "localhost",
+        local_port,
+    );
+
+    if port.is_none() && local_port != CONVENTIONAL_DB_PORT {
+        ctx.say(&format!(
+            "Port {CONVENTIONAL_DB_PORT} is in use; forwarding on \
+             localhost:{local_port} instead."
+        ));
+    } else {
+        ctx.say(&format!("Forwarding localhost:{local_port} to the database."));
+    }
+    ctx.say("Press Ctrl+C to close the tunnel.");
+
+    // The URL is the result and the only thing on stdout.
+    println!("{url}");
+
+    // Captured, not streamed: a forward prints little, and the one failure
+    // worth naming — a refused destination — is only visible in ssh's stderr.
+    let child = tokio::process::Command::new(&args[0])
+        .args(&args[1..])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| freepod(format!("cannot run ssh: {e}")))?;
+    let pid = child.id();
+
+    // Biased: interrupting the tunnel is how it ends, and when Ctrl+C reaches
+    // the foreground group the child dies at the same instant — the interrupt
+    // must win that race, not report the child's signal exit as a failure.
+    tokio::select! {
+        biased;
+        _ = tokio::signal::ctrl_c() => {
+            // Interrupting the tunnel is how it ends; the port is released with
+            // it. The child is in this process's foreground group, so it got
+            // the same SIGINT; the kill covers the case where it did not.
+            if let Some(pid) = pid {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
+            }
+            ctx.say("");
+            Ok(0)
+        }
+        result = child.wait_with_output() => {
+            let output = result.map_err(|e| freepod(format!("cannot run ssh: {e}")))?;
+            if !output.status.success() {
+                if crate::ssh::is_host_key_mismatch(&output.stderr) {
+                    return Err(crate::ssh::mismatch_error());
+                }
+                if crate::ssh::is_forward_refused(&output.stderr) {
+                    // The key was accepted and the channel opened; the
+                    // destination was not permitted. That is not an
+                    // authentication failure, and saying so is the difference
+                    // between a user debugging their key and one reporting a
+                    // platform mismatch.
+                    return Err(freepod(
+                        "the edge refused the forward: the destination was not \
+                         permitted. This is not an authentication failure — the \
+                         key was accepted, but the address the platform reports \
+                         is not in this deployment's allowlist. Please report \
+                         this; the platform should know the answer.",
+                    ));
+                }
+                if !output.stderr.is_empty() {
+                    use std::io::Write;
+                    let _ = std::io::stderr().write_all(&output.stderr);
+                }
+            }
+            Ok(output.status.code().unwrap_or(crate::errors::EXIT_ERROR))
+        }
+    }
+}
+
 async fn cmd_key_list(ctx: &Context) -> Result<i32> {
     let env_name = ctx.env.name;
     let mut session = ctx.session(None)?;
@@ -1308,8 +1693,8 @@ async fn cmd_key_add(
     ctx.say(&format!("Registered '{stored_label}' on {env_name}."));
     println!("{fingerprint}");
     ctx.say(
-        "This grants no access yet — the platform does not read these keys \
-         until SSH authentication moves onto them.",
+        "This key is now the SSH credential for shell, db shell, and db proxy \
+         on this environment.",
     );
     Ok(0)
 }
@@ -1463,4 +1848,150 @@ async fn cmd_skill_show(_ctx: &Context) -> Result<i32> {
     // No trailing newline: the skill is a file, and this is how to read it.
     print!("{}", crate::skill::read_skill());
     Ok(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    // --- the connection URL -----------------------------------------------
+
+    #[test]
+    fn connection_url_encodes_the_credential() {
+        let db = serde_json::json!({
+            "role": "myrole",
+            "password": "p@ss:word/with?specials",
+            "database": "mydb"
+        });
+        assert_eq!(
+            connection_url(&db, "localhost", 5432),
+            "postgresql://myrole:p%40ss%3Aword%2Fwith%3Fspecials@localhost:5432/mydb"
+        );
+    }
+
+    #[test]
+    fn connection_url_leaves_a_plain_credential_untouched() {
+        let db = serde_json::json!({
+            "role": "dpl_abc",
+            "password": "deadbeef",
+            "database": "dpl_abc"
+        });
+        assert_eq!(
+            connection_url(&db, "localhost", 5432),
+            "postgresql://dpl_abc:deadbeef@localhost:5432/dpl_abc"
+        );
+    }
+
+    // --- choosing the local port ------------------------------------------
+
+    #[test]
+    fn choose_local_port_honours_an_available_request() {
+        let port = free_local_port();
+        assert_eq!(choose_local_port(Some(port)).unwrap(), port);
+    }
+
+    #[test]
+    fn choose_local_port_refuses_an_unavailable_request() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let err = choose_local_port(Some(port)).unwrap_err();
+        assert!(err.message().contains(&format!("port {port} is not available")));
+    }
+
+    #[test]
+    fn choose_local_port_prefers_the_conventional_port_when_free() {
+        if port_available(CONVENTIONAL_DB_PORT) {
+            assert_eq!(choose_local_port(None).unwrap(), CONVENTIONAL_DB_PORT);
+        } else {
+            let port = choose_local_port(None).unwrap();
+            assert_ne!(port, CONVENTIONAL_DB_PORT);
+        }
+    }
+
+    // --- refusing an unreachable deployment -------------------------------
+
+    fn project_with(name: &str) -> crate::project::Project {
+        let mut deployment = HashMap::new();
+        deployment.insert("id".to_string(), "dpl_test".to_string());
+        deployment.insert("name".to_string(), name.to_string());
+        crate::project::Project {
+            root: PathBuf::from("/tmp"),
+            env: "dev".to_string(),
+            user_values: HashMap::new(),
+            deployment: Some(deployment),
+            version: 1,
+        }
+    }
+
+    #[test]
+    fn refuse_unreachable_refuses_a_missing_deployment() {
+        let p = project_with("myapp");
+        let err = refuse_unreachable(None, &p, "dev").unwrap_err();
+        assert!(err.message().contains("no longer exists"));
+    }
+
+    #[test]
+    fn refuse_unreachable_hints_to_wait_for_a_pending_deployment() {
+        let p = project_with("myapp");
+        for status in ["pending", "provisioning"] {
+            let d = serde_json::json!({"status": status});
+            let err = refuse_unreachable(Some(&d), &p, "dev").unwrap_err();
+            assert!(err.message().contains("wait for the rollout to finish"));
+        }
+    }
+
+    #[test]
+    fn refuse_unreachable_names_no_container_for_a_gone_deployment() {
+        let p = project_with("myapp");
+        let d = serde_json::json!({"status": "deleted"});
+        let err = refuse_unreachable(Some(&d), &p, "dev").unwrap_err();
+        assert!(err.message().contains("it has no container to connect to"));
+    }
+
+    #[test]
+    fn refuse_unreachable_allows_a_settled_deployment() {
+        let p = project_with("myapp");
+        for status in ["ready", "error"] {
+            let d = serde_json::json!({"status": status});
+            assert!(refuse_unreachable(Some(&d), &p, "dev").is_ok());
+        }
+    }
+
+    // --- the assembled argv ------------------------------------------------
+
+    fn setup() -> ConnectionSetup {
+        ConnectionSetup {
+            deployment: serde_json::json!({"name": "myapp"}),
+            database: Some(serde_json::json!({"host": "caelus-db", "port": 5432})),
+            host: "freepod.eu".to_string(),
+            port: 22,
+            key_path: PathBuf::from("/keys/id_ed25519.pub"),
+            known_hosts: PathBuf::from("/config/known_hosts"),
+        }
+    }
+
+    #[test]
+    fn setup_args_runs_the_command_on_the_edge() {
+        let args = setup().args(Some(vec!["psql".to_string()]), true);
+        assert!(args.contains(&"myapp@freepod.eu".to_string()));
+        assert!(args.contains(&"-tt".to_string()));
+        assert_eq!(args.last().unwrap(), "psql");
+    }
+
+    #[test]
+    fn setup_args_with_no_command_is_a_bare_shell() {
+        let args = setup().args(None, false);
+        assert!(args.contains(&"myapp@freepod.eu".to_string()));
+        assert!(!args.contains(&"-tt".to_string()));
+        assert_eq!(args.last().unwrap(), "myapp@freepod.eu");
+    }
+
+    #[test]
+    fn setup_forward_targets_the_database_verbatim() {
+        let args = setup().forward(5432);
+        let l = args.iter().position(|a| a == "-L").unwrap();
+        assert_eq!(args[l + 1], "5432:caelus-db:5432");
+        assert!(args.contains(&"-N".to_string()));
+    }
 }

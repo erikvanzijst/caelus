@@ -309,10 +309,6 @@ pub fn recover(registered: &[Value]) -> Vec<PathBuf> {
 /// The key this machine should offer, adopting one by fingerprint if needed.
 ///
 /// Never adopts on a near match: exactly one candidate, or the caller is asked.
-///
-/// No command calls this yet: `key list` only marks, and the SSH transport
-/// that will offer a key is not in the client.
-#[allow(dead_code)]
 pub fn resolve_local_key(env: &str, registered: &[Value]) -> Result<PathBuf> {
     if let Some((fingerprint, path)) = local_key(env) {
         let path = PathBuf::from(&path);
@@ -488,10 +484,7 @@ fn hostname() -> String {
 mod tests {
     use super::*;
 
-    /// Serialize the tests that repoint `HOME`/`XDG_CONFIG_HOME`: the
-    /// environment is process-wide, so two of them running at once would
-    /// read each other's directories.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    use crate::testutil::ENV_LOCK;
 
     struct IsolatedHome {
         home: PathBuf,

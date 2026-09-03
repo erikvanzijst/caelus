@@ -32,27 +32,37 @@ pub fn known_hosts_path() -> PathBuf {
     config_dir().join("known_hosts")
 }
 
-/// The system `ssh`, or a named-prerequisite error naming what to install.
+/// One system tool, or a named-prerequisite error naming what to install.
 ///
-/// A missing `ssh` is a prerequisite, not a fault of this client, so it is
-/// reported by name with the fix rather than surfacing as an unhandled spawn
-/// failure deep in a subprocess call.
-pub fn require_ssh() -> Result<String> {
+/// A missing OpenSSH tool is a prerequisite, not a fault of this client, so it
+/// is reported by name with the fix rather than surfacing as an unhandled
+/// spawn failure deep in a subprocess call.
+fn require_tool(name: &str, purpose: &str) -> Result<String> {
     let path = std::env::var_os("PATH").unwrap_or_default();
     for dir in std::env::split_paths(&path) {
         if dir.as_os_str().is_empty() {
             continue;
         }
-        let candidate = dir.join("ssh");
+        let candidate = dir.join(name);
         if candidate.is_file() && is_executable(&candidate) {
             return Ok(candidate.to_string_lossy().into_owned());
         }
     }
-    Err(freepod(
-        "the system `ssh` executable is required but was not found on your \
-         PATH. Install OpenSSH — for example `apt-get install openssh-client` \
-         or `brew install openssh` — and try again.",
-    ))
+    Err(freepod(format!(
+        "the system `{name}` executable is required to {purpose} but was not \
+         found on your PATH. Install OpenSSH — for example `apt-get install \
+         openssh-client` or `brew install openssh` — and try again.",
+    )))
+}
+
+/// The system `ssh`, which opens a session.
+pub fn require_ssh() -> Result<String> {
+    require_tool("ssh", "open a session")
+}
+
+/// The system `sftp`, which carries a copy.
+pub fn require_sftp() -> Result<String> {
+    require_tool("sftp", "copy files")
 }
 
 #[cfg(unix)]
@@ -212,6 +222,28 @@ pub struct Connection {
 
 /// The argv for one connection to the edge.
 ///
+/// The `-o` options both `ssh` and `sftp` need to reach the edge: one identity,
+/// and the edge pinned to the key the platform published.
+pub fn edge_options(key_path: &Path, known_hosts: &Path) -> Vec<String> {
+    vec![
+        // One identity, and only that one. The edge answers *every* offered key
+        // with a partial success, so a client that offers several — which a
+        // populated agent does by default — exhausts the server's authentication
+        // budget and is refused before it reaches the right key.
+        "-o".to_string(),
+        "IdentitiesOnly=yes".to_string(),
+        "-i".to_string(),
+        identity_file(key_path).to_string_lossy().into_owned(),
+        // Pin the edge to the key the platform published, in a store the user
+        // does not curate. StrictHostKeyChecking means a mismatch is a refusal,
+        // never a prompt, and never a key recorded on first use.
+        "-o".to_string(),
+        format!("UserKnownHostsFile={}", known_hosts.display()),
+        "-o".to_string(),
+        "StrictHostKeyChecking=yes".to_string(),
+    ]
+}
+
 /// Exactly one identity is offered, and the edge's host key is pinned to the
 /// value the platform published. The options that make a host-key mismatch a
 /// refusal rather than a prompt sit beside their reason, because each looks
@@ -221,22 +253,8 @@ pub fn build_args(c: &Connection) -> Vec<String> {
         "ssh".to_string(),
         "-p".to_string(),
         c.port.to_string(),
-        // One identity, and only that one. The edge answers *every* offered key
-        // with a partial success, so a client that offers several — which a
-        // populated agent does by default — exhausts the server's authentication
-        // budget and is refused before it reaches the right key.
-        "-o".to_string(),
-        "IdentitiesOnly=yes".to_string(),
-        "-i".to_string(),
-        identity_file(&c.key_path).to_string_lossy().into_owned(),
-        // Pin the edge to the key the platform published, in a store the user
-        // does not curate. StrictHostKeyChecking means a mismatch is a refusal,
-        // never a prompt, and never a key recorded on first use.
-        "-o".to_string(),
-        format!("UserKnownHostsFile={}", c.known_hosts.display()),
-        "-o".to_string(),
-        "StrictHostKeyChecking=yes".to_string(),
     ];
+    args.extend(edge_options(&c.key_path, &c.known_hosts));
     if c.tty {
         // Force a remote tty. The sidecar runs under a ForceCommand, which does
         // not allocate a pseudo-terminal on its own, so an interactive session
@@ -254,6 +272,27 @@ pub fn build_args(c: &Connection) -> Vec<String> {
     if let Some(command) = &c.command {
         args.extend(command.iter().cloned());
     }
+    args
+}
+
+/// The argv for `sftp` in batch mode: the same edge options as `ssh`, the port
+/// under sftp's capital `-P`, and `-b -` to read the script from stdin.
+pub fn build_sftp_args(
+    user: &str,
+    host: &str,
+    port: u16,
+    key_path: &Path,
+    known_hosts: &Path,
+) -> Vec<String> {
+    let mut args = vec![
+        "sftp".to_string(),
+        "-P".to_string(),
+        port.to_string(),
+    ];
+    args.extend(edge_options(key_path, known_hosts));
+    args.push("-b".to_string());
+    args.push("-".to_string());
+    args.push(format!("{user}@{host}"));
     args
 }
 
@@ -290,6 +329,39 @@ pub fn run_interactive(argv: &[String]) -> Result<i32> {
         .args(&argv[1..])
         .status()
         .map_err(|e| freepod(format!("cannot run ssh: {e}")))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        // Terminated by a signal: report it, the way the shell would.
+        Ok(status.code().unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
+    }
+    #[cfg(not(unix))]
+    Ok(status.code().unwrap_or(1))
+}
+
+/// Drive one file transfer, returning sftp's own exit code.
+///
+/// The batch script rides on stdin and is closed once written; stdout is the
+/// script echoed back and a line per directory entered — this command's own
+/// plumbing — so it is discarded. stderr is the user's, so whatever sftp said
+/// about a path it could not read reaches them as it was written.
+pub fn run_sftp(argv: &[String], script: &str) -> Result<i32> {
+    let mut child = std::process::Command::new(&argv[0])
+        .args(&argv[1..])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+        .map_err(|e| freepod(format!("cannot run sftp: {e}")))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        stdin
+            .write_all(script.as_bytes())
+            .map_err(|e| freepod(format!("cannot write to sftp: {e}")))?;
+    }
+    let status = child
+        .wait()
+        .map_err(|e| freepod(format!("cannot wait for sftp: {e}")))?;
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
@@ -380,11 +452,31 @@ mod tests {
 
         /// A fake `ssh` that records its argv and exits with the given code.
         fn fake_ssh(&self, exit_code: i32) -> PathBuf {
-            let path = self.dir.join("ssh");
+            self.fake_tool("ssh", exit_code, false)
+        }
+
+        /// A fake `sftp` that records its argv and the batch script on stdin,
+        /// and exits with the given code.
+        fn fake_sftp(&self, exit_code: i32) -> PathBuf {
+            self.fake_tool("sftp", exit_code, true)
+        }
+
+        fn fake_tool(&self, name: &str, exit_code: i32, read_stdin: bool) -> PathBuf {
+            let path = self.dir.join(name);
+            // `PATH` is isolated to this directory, so the script may use only
+            // bash builtins: `mapfile` reads the whole of stdin, line by line.
+            let stdin_line = if read_stdin {
+                format!(
+                    "mapfile -t _fp_lines\nprintf '%s\\n' \"${{_fp_lines[@]}}\" > {}/stdin.txt\n",
+                    self.dir.display()
+                )
+            } else {
+                String::new()
+            };
             std::fs::write(
                 &path,
                 format!(
-                    "#!/bin/bash\nprintf '%s\\n' \"$@\" > {}/argv.txt\nexit {exit_code}\n",
+                    "#!/bin/bash\nprintf '%s\\n' \"$@\" > {}/argv.txt\n{stdin_line}exit {exit_code}\n",
                     self.dir.display()
                 ),
             )
@@ -429,6 +521,23 @@ mod tests {
         let err = require_ssh().unwrap_err();
         let msg = err.message();
         assert!(msg.contains("ssh"));
+        assert!(msg.to_lowercase().contains("openssh"));
+        assert!(msg.contains("PATH"));
+    }
+
+    #[test]
+    fn require_sftp_returns_the_executable() {
+        let path = IsolatedPath::new("sftp-found");
+        let sftp = path.fake_sftp(0);
+        assert_eq!(require_sftp().unwrap(), sftp.to_string_lossy());
+    }
+
+    #[test]
+    fn require_sftp_names_the_prerequisite_when_missing() {
+        let _path = IsolatedPath::new("sftp-missing");
+        let err = require_sftp().unwrap_err();
+        let msg = err.message();
+        assert!(msg.contains("sftp"));
         assert!(msg.to_lowercase().contains("openssh"));
         assert!(msg.contains("PATH"));
     }
@@ -632,6 +741,70 @@ mod tests {
             args.iter().position(|a| a == "-tt").unwrap()
                 < args.iter().position(|a| a == "myapp@freepod.eu").unwrap()
         );
+    }
+
+    // --- sftp: the same edge, a capital port, a script on stdin ------------
+
+    fn sftp_args() -> Vec<String> {
+        build_sftp_args(
+            "myapp",
+            "freepod.eu",
+            2222,
+            Path::new("/keys/id_ed25519.pub"),
+            Path::new("/config/known_hosts"),
+        )
+    }
+
+    #[test]
+    fn sftp_targets_the_edge_with_the_deployment_as_user() {
+        let args = sftp_args();
+        assert_eq!(args[0], "sftp");
+        assert!(args.contains(&"myapp@freepod.eu".to_string()));
+    }
+
+    #[test]
+    fn sftp_spells_the_port_capital_and_reads_a_batch_from_stdin() {
+        let args = sftp_args();
+        let p = args.iter().position(|a| a == "-P").unwrap();
+        assert_eq!(args[p + 1], "2222");
+        assert!(!args.contains(&"-p".to_string()));
+        let b = args.iter().position(|a| a == "-b").unwrap();
+        assert_eq!(args[b + 1], "-");
+    }
+
+    #[test]
+    fn sftp_shares_the_edge_options_and_allocates_no_tty() {
+        let args = sftp_args();
+        assert_eq!(args.iter().filter(|a| **a == "-i").count(), 1);
+        let identity = &args[args.iter().position(|a| a == "-i").unwrap() + 1];
+        assert_eq!(identity, "/keys/id_ed25519.pub");
+        assert!(args.contains(&"IdentitiesOnly=yes".to_string()));
+        assert!(args.contains(&"UserKnownHostsFile=/config/known_hosts".to_string()));
+        assert!(args.contains(&"StrictHostKeyChecking=yes".to_string()));
+        assert!(!args.contains(&"-tt".to_string()));
+        assert!(!args.contains(&"-t".to_string()));
+    }
+
+    #[test]
+    fn run_sftp_feeds_the_script_on_stdin_and_returns_the_exit_code() {
+        let path = IsolatedPath::new("sftp-run");
+        let sftp = path.fake_sftp(0);
+        let code = run_sftp(
+            &[sftp.to_string_lossy().into_owned(), "-b".to_string(), "-".to_string()],
+            "put -r \"a\" \"/app/a\"\n",
+        )
+        .unwrap();
+        assert_eq!(code, 0);
+        let stdin = std::fs::read_to_string(path.dir.join("stdin.txt")).unwrap();
+        assert_eq!(stdin, "put -r \"a\" \"/app/a\"\n");
+    }
+
+    #[test]
+    fn run_sftp_reports_a_failed_transfer() {
+        let path = IsolatedPath::new("sftp-fail");
+        let sftp = path.fake_sftp(1);
+        let code = run_sftp(&[sftp.to_string_lossy().into_owned()], "put -r \"a\" \"b\"\n").unwrap();
+        assert_eq!(code, 1);
     }
 
     // --- the edge is verified, not trusted --------------------------------

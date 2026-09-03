@@ -169,6 +169,24 @@ enum Commands {
         #[command(subcommand)]
         command: SkillCommands,
     },
+    /// Copy a file or directory between here and this deployment.
+    ///
+    /// Mark the deployment's side with a leading colon; the other side is
+    /// local, and which one is marked decides the direction:
+    ///
+    ///   freepod cp report.csv :/app/report.csv   copy in
+    ///   freepod cp :/app/out.log ./out.log       copy out
+    ///   freepod cp ./assets :/app/assets         a whole tree, no flag needed
+    ///
+    /// A relative remote path means what it means in `freepod shell`.
+    /// Directories carry their structure and their files' modes; owners and
+    /// timestamps are not preserved. Directories are always copied
+    /// recursively. Nothing has to be installed in your image for this to
+    /// work.
+    Cp {
+        source: String,
+        destination: String,
+    },
     /// Open a shell in this deployment's application container, or run
     /// COMMAND in it.
     ///
@@ -525,6 +543,9 @@ async fn async_main() -> i32 {
             }
             SkillCommands::Show => cmd_skill_show(&ctx).await,
         },
+        Some(Commands::Cp { source, destination }) => {
+            cmd_cp(&ctx, source.clone(), destination.clone()).await
+        }
         Some(Commands::Shell { tty, command }) => {
             cmd_shell(&ctx, *tty, command.to_vec()).await
         }
@@ -1091,6 +1112,22 @@ impl ConnectionSetup {
             tty: false,
         })
     }
+
+    /// The argv for a file transfer over the deployment's SSH edge.
+    fn sftp_args(&self) -> Vec<String> {
+        let user = self
+            .deployment
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        crate::ssh::build_sftp_args(
+            user,
+            &self.host,
+            self.port,
+            &self.key_path,
+            &self.known_hosts,
+        )
+    }
 }
 
 async fn connection_setup(
@@ -1491,6 +1528,26 @@ async fn cmd_db_status(ctx: &Context, show_password: bool) -> Result<i32> {
         "\nThis database is reachable from your running app, not from this machine.",
     );
     Ok(0)
+}
+
+async fn cmd_cp(ctx: &Context, source: String, destination: String) -> Result<i32> {
+    let project_file = project_deployment(ctx)?;
+    let deployment_name = project_file.deployment_name().unwrap_or("");
+
+    // Every refusal that does not need a connection happens before we spend one.
+    let dir = crate::copy::direction(&source, &destination, deployment_name)?;
+    crate::copy::check_local(&dir.local, dir.upload)?;
+    crate::ssh::require_sftp()?;
+
+    let setup = connection_setup(ctx, &project_file, false).await?;
+    let args = setup.sftp_args();
+    let code = crate::copy::run(&args, &crate::copy::batch(&dir.local, &dir.remote, dir.upload))?;
+    if code == 0 {
+        ctx.say(&format!("Copied {source} to {destination}."));
+    }
+    // Otherwise sftp has already said which path it could not read, on the
+    // user's own stderr, and nothing here claims the copy finished.
+    Ok(code)
 }
 
 async fn cmd_shell(ctx: &Context, force_tty: bool, command: Vec<String>) -> Result<i32> {

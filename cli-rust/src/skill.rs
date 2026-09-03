@@ -111,6 +111,16 @@ pub fn agents() -> Vec<Agent> {
             user_skills: home.join(".gemini").join("skills"),
             project_skills: PathBuf::from(".gemini/skills"),
         },
+        // A fork of Gemini CLI whose layout mirrors it: personal skills in
+        // `~/.qwen/skills/`, project skills in `.qwen/skills/`, per its own
+        // skills documentation and `skill-manager.ts` in qwen-code.
+        Agent {
+            key: "qwencode",
+            label: "Qwen Code",
+            config_dir: home.join(".qwen"),
+            user_skills: home.join(".qwen").join("skills"),
+            project_skills: PathBuf::from(".qwen/skills"),
+        },
     ]
 }
 
@@ -281,7 +291,7 @@ mod tests {
         let chosen = select(&[], true).unwrap();
         assert_eq!(
             chosen.iter().map(|a| a.key).collect::<Vec<_>>(),
-            vec!["claude", "codex", "opencode", "amp", "gemini"]
+            vec!["claude", "codex", "opencode", "amp", "gemini", "qwencode"]
         );
     }
 

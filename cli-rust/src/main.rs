@@ -9,6 +9,7 @@ mod auth;
 mod build;
 mod cli;
 mod config;
+mod copy;
 mod database;
 mod delete;
 mod deploy;

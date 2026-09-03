@@ -1,0 +1,1 @@
+{{ include "ssh-sidecar.resources" (dict "root" .) }}

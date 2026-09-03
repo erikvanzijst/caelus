@@ -47,6 +47,7 @@ PHP, Ruby, Rust and more — and builds an image from your source as it is.
 | `freepod var`      | Read and change the environment your application runs with.                          |
 | `freepod log`      | Stream your application's pod output.                                                |
 | `freepod shell`    | Open a shell in the deployment's application container, or run a command in it.      |
+| `freepod cp`       | Copy a file or directory between here and the deployment, either direction.          |
 | `freepod builds`   | List your builds, most recent first.                                                 |
 | `freepod releases` | List this project's rollouts, most recent first; the live one is marked.             |
 | `freepod delete`   | Delete this project's deployment.                                                    |
@@ -80,8 +81,21 @@ command directly:
 ```bash
 freepod shell whoami
 freepod shell 'ls -la /app | head'      # quote a pipeline to keep it whole
-freepod shell cat /app/app.log > local.log
 ```
+
+### Copying files
+
+`cp` recursively transfers files and directories to and from your pod. Mark
+the deployment's side with a leading colon; the other side is local, and which
+one is marked decides the direction:
+
+```bash
+freepod cp report.csv :/app/report.csv     # copy in
+freepod cp :/app/app.log ./app.log         # copy out
+freepod cp ./assets :/app/assets           # a whole tree, no flag needed
+```
+
+Owners and timestamps are not preserved.
 
 ## Hostnames
 

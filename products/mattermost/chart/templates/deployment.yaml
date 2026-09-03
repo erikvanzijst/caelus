@@ -95,9 +95,12 @@ spec:
               mountPath: /mattermost/config
             - name: mattermost-plugins
               mountPath: /mattermost/plugins
-        # Read-only SFTP sidecar (ssh-sidecar): exposes the data PVC (uploads/
-        # attachments) as /home/<release>/data. Not the postgres or plugins PVCs.
-        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list (dict "volume" "mattermost-data" "path" "data"))) | nindent 8 }}
+        # The SSH sidecar, rooted at a read-only mount of the data PVC (uploads
+        # and attachments), which the session sees as /data. Not the postgres or
+        # plugins PVCs.
+        {{- include "ssh-sidecar.sidecar" (dict "root" . "image" .Values.sshSidecarImage
+             "sessionRoot" "volume:/data"
+             "mounts" (list (dict "volume" "mattermost-data" "path" "/data"))) | nindent 8 }}
       volumes:
         - name: mattermost-data
           persistentVolumeClaim:
@@ -107,4 +110,3 @@ spec:
         - name: mattermost-plugins
           persistentVolumeClaim:
             claimName: {{ include "mattermost.fullname" . }}-plugins
-        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}

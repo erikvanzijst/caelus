@@ -17,9 +17,10 @@ import (
 // the resolver derives for the same deployment name. It is the only test in
 // either repository half that would fail if one side moved alone.
 //
-// Both access profiles are checked. `helloworld` runs `sftp` and `custom` runs
-// `dev`; the edge is deliberately ignorant of that difference, so a Service that
-// varied by profile would be a routing bug this catches at build time.
+// Both session roots are checked. `helloworld` declares a volume root and
+// `custom` an application-container one; the edge is deliberately ignorant of
+// that difference, so a Service that varied by session root would be a routing
+// bug this catches at build time.
 func TestChartsRenderTheServiceNameTheResolverDerives(t *testing.T) {
 	helm, err := exec.LookPath("helm")
 	if err != nil {
@@ -33,23 +34,20 @@ func TestChartsRenderTheServiceNameTheResolverDerives(t *testing.T) {
 	want := release + "-ssh"
 
 	for _, c := range []struct {
-		name    string
-		chart   string
-		profile string
-		args    []string
+		name  string
+		chart string
+		args  []string
 	}{
 		{
-			name:    "sftp profile",
-			chart:   "../products/helloworld/chart",
-			profile: "sftp",
+			name:  "volume session root",
+			chart: "../products/helloworld/chart",
 			args: []string{
 				"--set-string", "caelus.ssh.platformPublicKey=" + platformKeyLine,
 			},
 		},
 		{
-			name:    "dev profile",
-			chart:   "../products/custom/chart",
-			profile: "dev",
+			name:  "application-container session root",
+			chart: "../products/custom/chart",
 			args: []string{
 				"--set-string", "caelus.ssh.platformPublicKey=" + platformKeyLine,
 				"--set", "hostname=app.example.test",
@@ -71,10 +69,10 @@ func TestChartsRenderTheServiceNameTheResolverDerives(t *testing.T) {
 				t.Fatalf("helm template: %v\n%s", err, out)
 			}
 			if !strings.Contains(string(out), "name: "+want+"\n") {
-				t.Errorf("the %s profile renders no Service named %q, which is the "+
-					"address this resolver dials. One side of the shared naming "+
+				t.Errorf("a chart with a %s renders no Service named %q, which is "+
+					"the address this resolver dials. One side of the shared naming "+
 					"convention moved without the other; see resolve.go and "+
-					"products/_lib/ssh-sidecar-chart/README.md.", c.profile, want)
+					"products/_lib/ssh-sidecar-chart/README.md.", c.name, want)
 			}
 		})
 	}

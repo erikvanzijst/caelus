@@ -109,9 +109,11 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
         {{- /*
-        The platform's SSH sidecar (ssh-sidecar library chart, `dev` profile).
-        It runs as root, which is what reading and entering another container's
-        process filesystem requires; the application container above gains
-        nothing from this profile.
+        The platform's SSH sidecar, rooted at the application container: a shell
+        in the tenant's own filesystem, file transfer into it, the PostgreSQL
+        toolbox and a forward to the deployment's database. It runs as root,
+        which is what reading and entering another container's process
+        filesystem requires; the application container above gains nothing.
         */}}
-        {{- include "ssh-sidecar.dev.sidecar" (dict "root" . "image" .Values.sshSidecarImage) | nindent 8 }}
+        {{- include "ssh-sidecar.sidecar" (dict "root" . "image" .Values.sshSidecarImage
+             "sessionRoot" "app-container") | nindent 8 }}

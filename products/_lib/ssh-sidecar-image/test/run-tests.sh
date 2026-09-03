@@ -22,8 +22,17 @@ readonly LOGIN_USER=custom-user-app-harness
 readonly NET=$PREFIX-net
 readonly APP_IMAGE=$PREFIX/app
 readonly NOSHELL_IMAGE=$PREFIX/noshell
+readonly ALPINE_IMAGE=$PREFIX/alpine
 readonly PG_IMAGE=postgres:18-alpine
 readonly BUSYBOX_IMAGE=busybox:latest
+# The path a volume-rooted session is started in, and the path the chart mounts
+# the product's volume at inside the sidecar's session jail.
+readonly VOLUME_SESSION_PATH=/data
+readonly DATA_VOLUME=$PREFIX-data
+# Owned by a uid the sidecar is not, with a mode that excludes everyone else:
+# the sidecar reads it as root, which is what removes the per-product uid the
+# `sftp` profile needed.
+readonly DATA_UID=33
 
 IMAGE=""
 while (( $# )); do
@@ -46,6 +55,7 @@ cleanup() {
     done
     [[ -n ${SELF_CONTAINER:-} ]] && docker network disconnect "$NET" "$SELF_CONTAINER" >/dev/null 2>&1
     docker network rm "$NET" >/dev/null 2>&1
+    docker volume rm -f "$DATA_VOLUME" >/dev/null 2>&1
     rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -142,6 +152,7 @@ sidecar_env() {
         --env "FREEPOD_RELEASE_ID=$1" \
         --env "FREEPOD_RELEASE_NUMBER=$2" \
         --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
+        --env "FREEPOD_SESSION_ROOT=app-container" \
         --env "PGHOST=$PREFIX-pg" --env PGPORT=5432 \
         --env PGUSER=appuser --env PGPASSWORD=harness-secret --env PGDATABASE=appdb
 }
@@ -156,7 +167,21 @@ sidecar_env_nodb() {
         --env "FREEPOD_AUTHORIZED_KEYS=$(cat "$WORK/id.pub")" \
         --env "FREEPOD_RELEASE_ID=$1" \
         --env "FREEPOD_RELEASE_NUMBER=$2" \
-        --env "FREEPOD_LOGIN_USER=$LOGIN_USER"
+        --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
+        --env "FREEPOD_SESSION_ROOT=app-container"
+}
+
+# sidecar_env_volume <release-id> <release-number> -- a curated product's
+# deployment: the session is rooted at a read-only mount of the data the
+# product exposes, and the deployment has no database and nothing to forward
+# to. Everything the other two get beyond file transfer, this one is refused.
+sidecar_env_volume() {
+    printf '%s\n' \
+        --env "FREEPOD_AUTHORIZED_KEYS=$(cat "$WORK/id.pub")" \
+        --env "FREEPOD_RELEASE_ID=$1" \
+        --env "FREEPOD_RELEASE_NUMBER=$2" \
+        --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
+        --env "FREEPOD_SESSION_ROOT=volume:$VOLUME_SESSION_PATH"
 }
 
 # --- setup -----------------------------------------------------------------
@@ -167,6 +192,7 @@ if [[ -z $IMAGE ]]; then
 fi
 docker build -q -f Dockerfile.app -t "$APP_IMAGE" . >/dev/null || exit 1
 docker build -q -f Dockerfile.noshell -t "$NOSHELL_IMAGE" . >/dev/null || exit 1
+docker build -q -f Dockerfile.alpine -t "$ALPINE_IMAGE" . >/dev/null || exit 1
 echo "testing image: $IMAGE"
 
 ssh-keygen -q -t ed25519 -N '' -C harness -f "$WORK/id"
@@ -196,6 +222,12 @@ run_container "$PREFIX-side" --pid="container:$PREFIX-app" --network "container:
 # database toolbox and forwarding must still work.
 run_container "$PREFIX-lone" --network "$NET" "${PUBLISH[@]}" "${SIDE_ENV[@]}" "$IMAGE"
 
+# A tenant image whose shell is reached through an absolute symlink.
+run_container "$PREFIX-alpine-app" --network "$NET" "${PUBLISH[@]}" "$ALPINE_IMAGE"
+mapfile -t ALPINE_ENV < <(sidecar_env_nodb release-alpine-uuid 2)
+run_container "$PREFIX-alpine-side" --pid="container:$PREFIX-alpine-app" \
+    --network "container:$PREFIX-alpine-app" "${ALPINE_ENV[@]}" "$IMAGE"
+
 run_container "$PREFIX-noshell-app" --network "$NET" "${PUBLISH[@]}" "$NOSHELL_IMAGE"
 run_container "$PREFIX-noshell-side" --pid="container:$PREFIX-noshell-app" \
     --network "container:$PREFIX-noshell-app" --cap-add SYS_PTRACE "${SIDE_ENV[@]}" "$IMAGE"
@@ -207,7 +239,39 @@ mapfile -t NODB_ENV < <(sidecar_env_nodb release-nodb-uuid 3)
 run_container "$PREFIX-nodb-side" --pid="container:$PREFIX-nodb-app" \
     --network "container:$PREFIX-nodb-app" "${NODB_ENV[@]}" "$IMAGE"
 
-for owner in "$PREFIX-app" "$PREFIX-lone" "$PREFIX-noshell-app" "$PREFIX-nodb-app"; do
+# A curated product's deployment. The data is written by a uid the sidecar is
+# not, with a mode that admits nobody else -- which is what the `sftp` profile
+# needed a per-product uid for and this one reads as root. It is mounted into
+# the sidecar read-only, inside the session jail, exactly as the chart does it.
+docker volume rm -f "$DATA_VOLUME" >/dev/null 2>&1
+docker volume create "$DATA_VOLUME" >/dev/null
+docker run --rm -v "$DATA_VOLUME:/seed" "$BUSYBOX_IMAGE" sh -c "
+    mkdir -p /seed/sub
+    echo volume-rooted-data > /seed/marker.txt
+    echo nested > /seed/sub/deep.txt
+    chown -R $DATA_UID:$DATA_UID /seed
+    chmod -R 0770 /seed" >/dev/null
+
+mapfile -t VOL_ENV < <(sidecar_env_volume release-vol-uuid 5)
+run_container "$PREFIX-vol-side" --network "$NET" "${PUBLISH[@]}" \
+    --mount "source=$DATA_VOLUME,target=/srv/session$VOLUME_SESSION_PATH,readonly" \
+    "${VOL_ENV[@]}" "$IMAGE"
+
+# The same, in a pod that DOES share a process namespace with an application
+# container and DOES hold database variables. Nothing about that may change what
+# a volume-rooted session is allowed to do: the declaration decides, never the
+# pod (D2).
+run_container "$PREFIX-volshared-app" --network "$NET" "${PUBLISH[@]}" "$APP_IMAGE"
+mapfile -t VOLSHARED_ENV < <(sidecar_env_volume release-volshared-uuid 6)
+run_container "$PREFIX-volshared-side" --pid="container:$PREFIX-volshared-app" \
+    --network "container:$PREFIX-volshared-app" \
+    --mount "source=$DATA_VOLUME,target=/srv/session$VOLUME_SESSION_PATH,readonly" \
+    "${VOLSHARED_ENV[@]}" \
+    --env "PGHOST=$PREFIX-pg" --env PGPORT=5432 --env PGUSER=appuser \
+    --env PGPASSWORD=harness-secret --env PGDATABASE=appdb "$IMAGE"
+
+for owner in "$PREFIX-app" "$PREFIX-lone" "$PREFIX-noshell-app" "$PREFIX-nodb-app" \
+             "$PREFIX-alpine-app" "$PREFIX-vol-side" "$PREFIX-volshared-app"; do
     wait_for_port "$owner" || { echo "sidecar on $owner never opened its port" >&2; docker logs "${owner/-app/-side}" 2>&1 | tail -20; exit 1; }
 done
 
@@ -233,6 +297,7 @@ start_with() {
 good_key=$(cat "$WORK/id.pub")
 base=(--env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_RELEASE_NUMBER=1"
       --env "FREEPOD_LOGIN_USER=$LOGIN_USER"
+      --env "FREEPOD_SESSION_ROOT=app-container"
       --env "PGHOST=h" --env PGPORT=5432
       --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d)
 
@@ -252,6 +317,7 @@ done
 
 out=$(docker run --rm --entrypoint /usr/local/bin/freepod-sshd \
     --env "FREEPOD_RELEASE_NUMBER=1" \
+    --env "FREEPOD_SESSION_ROOT=app-container" \
     --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1" "$IMAGE" 2>&1); rc=$?
@@ -263,6 +329,7 @@ expect_contains "the message names the release identity" "FREEPOD_RELEASE_ID" "$
 # for -- the same failure as a missing id, and refused the same way.
 out=$(docker run --rm --entrypoint /usr/local/bin/freepod-sshd \
     --env "FREEPOD_RELEASE_ID=r" \
+    --env "FREEPOD_SESSION_ROOT=app-container" \
     --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_LOGIN_USER=$LOGIN_USER" \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1" "$IMAGE" 2>&1); rc=$?
@@ -274,12 +341,14 @@ expect_contains "the message names the release number" "FREEPOD_RELEASE_NUMBER" 
 # that looks like an authorization problem from the client end.
 out=$(docker run --rm --entrypoint /usr/local/bin/freepod-sshd \
     --env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_RELEASE_NUMBER=1" \
+    --env "FREEPOD_SESSION_ROOT=app-container" \
     --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1" "$IMAGE" 2>&1); rc=$?
 expect_nonzero "missing login account aborts startup" "$rc"
 expect_contains "the message names the login account" "FREEPOD_LOGIN_USER" "$out"
 
 out=$(start_with --env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_RELEASE_NUMBER=1" \
+    --env "FREEPOD_SESSION_ROOT=app-container" \
     --env "PGHOST=h" --env PGPORT=5432 --env PGUSER=u --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_LOGIN_USER=Not A User" \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1"); rc=$?
@@ -291,12 +360,43 @@ expect_contains "the message names the bad account" "FREEPOD_LOGIN_USER" "$out"
 # would surface that as a connection error inside psql, at the moment someone
 # needed the database and furthest from the cause.
 out=$(start_with --env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_RELEASE_NUMBER=1" \
+    --env "FREEPOD_SESSION_ROOT=app-container" \
     --env "FREEPOD_LOGIN_USER=$LOGIN_USER" --env PGPORT=5432 --env PGUSER=u \
     --env PGPASSWORD=p --env PGDATABASE=d \
     --env "FREEPOD_AUTHORIZED_KEYS=$good_key" --env "FREEPOD_PERMIT_OPEN=h:1"); rc=$?
 expect_nonzero "an incomplete database configuration aborts startup" "$rc"
 expect_contains "the message names the missing database input" "PGHOST" "$out"
 expect_contains "the message names what was supplied" "PGPORT" "$out"
+
+# The session root is the one thing a product declares, and there is no default:
+# a product wanting no SSH access renders no sidecar at all, so a container that
+# started without a declaration is misconfigured rather than modest.
+session_base=(--env "FREEPOD_RELEASE_ID=r" --env "FREEPOD_RELEASE_NUMBER=1"
+              --env "FREEPOD_LOGIN_USER=$LOGIN_USER"
+              --env "FREEPOD_AUTHORIZED_KEYS=$good_key")
+
+out=$(start_with "${session_base[@]}"); rc=$?
+expect_nonzero "a missing session root aborts startup" "$rc"
+expect_contains "the message names the missing input" "FREEPOD_SESSION_ROOT" "$out"
+expect_missing "no session root is chosen for it" "app-container" "$out"
+
+for bad_root in "shell" "volume" "volume:data" "volume:../etc" "app_container"; do
+    out=$(start_with "${session_base[@]}" --env "FREEPOD_SESSION_ROOT=$bad_root"); rc=$?
+    expect_nonzero "session root '$bad_root' aborts startup" "$rc"
+    expect_contains "the message names the input for '$bad_root'" "FREEPOD_SESSION_ROOT" "$out"
+done
+
+# A volume root the chart never mounted is a chart that declared one path and
+# mounted another, which would otherwise open as an empty session that reads
+# like missing data.
+out=$(start_with "${session_base[@]}" --env "FREEPOD_SESSION_ROOT=volume:/nowhere"); rc=$?
+expect_nonzero "a volume root with nothing mounted at it aborts startup" "$rc"
+expect_contains "the message names the path the chart must mount" "/srv/session/nowhere" "$out"
+
+expect_contains "the startup line states where the session is rooted" "rooted at /data" \
+    "$(docker logs "$PREFIX-vol-side" 2>&1)"
+expect_contains "an application root says so on the startup line" "rooted at the application container" \
+    "$(docker logs "$PREFIX-side" 2>&1)"
 
 # --- 3. rendered server configuration --------------------------------------
 group "server: rendered configuration"
@@ -419,6 +519,16 @@ expect_contains "the failure names the cause" "provides no shell" "$out"
 expect_missing "no raw execution failure reaches the user" "No such file or directory" "$out"
 expect_missing "the session is not opened in the sidecar instead" "postgresql" \
     "$(ssh_to "$PREFIX-noshell-app" 'ls -d /usr/lib/postgresql' 2>&1)"
+
+# The shell is found through an absolute symlink, which `-x` alone cannot see
+# from the sidecar's root.
+expect_eq "a shell reached through an absolute symlink is found" \
+    "alpine-application-container" "$(ssh_to "$PREFIX-alpine-app" 'cat /etc/app-marker' 2>/dev/null)"
+expect_eq "and an interactive session opens in it" "/app" \
+    "$(ssh_to "$PREFIX-alpine-app" 'pwd' 2>/dev/null)"
+out=$(ssh_to "$PREFIX-alpine-app" 2>&1 </dev/null); rc=$?
+expect_zero "a session with no command opens too" "$rc"
+expect_missing "and is not refused as shell-less" "provides no shell" "$out"
 
 out=$(ssh_to "$PREFIX-app" 'definitely-not-a-command' 2>&1); rc=$?
 expect_eq "a command absent from the application container exits 127" "127" "$rc"
@@ -590,6 +700,142 @@ out=$(docker exec "$PREFIX-nodb-side" sh -c 'tr "\0" "\n" < /etc/freepod/session
 expect_missing "no database credential is staged for the session" "PGPASSWORD" "$out"
 expect_contains "the release identity is still staged" "release-nodb-uuid" "$out"
 expect_contains "the release number is still staged" "FREEPOD_RELEASE_NUMBER=3" "$out"
+
+# --- 14. file transfer is served by this image, not by the tenant's ---------
+# The application image carries no sftp-server, scp or rsync, which is what the
+# image the platform's own build pipeline produces looks like. A transfer that
+# works against it worked because the sidecar served it.
+group "file transfer: served from the sidecar"
+
+out=$(docker run --rm --entrypoint sh "$APP_IMAGE" -c '
+    command -v scp rsync sftp-server 2>/dev/null
+    ls /usr/lib/openssh/sftp-server /usr/libexec/openssh/sftp-server 2>/dev/null
+    echo NO_HELPER')
+expect_eq "the application image carries no transfer helper at all" "NO_HELPER" "$out"
+
+head -c 200000 /dev/urandom > "$WORK/served.bin"
+read -r host port <<< "$(endpoint_of "$PREFIX-app")"
+scp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$port" "$WORK/served.bin" "root@$host:/tmp/served.bin" >/dev/null 2>&1
+expect_zero "a copy into an image with no helper succeeds" "$?"
+expect_eq "it is byte-identical in the application container" \
+    "$(sha256sum < "$WORK/served.bin" | cut -d' ' -f1)" \
+    "$(docker exec "$PREFIX-app" sha256sum /tmp/served.bin 2>/dev/null | cut -d' ' -f1)"
+expect_contains "it did not land in the sidecar" "No such file" \
+    "$(docker exec "$PREFIX-side" sh -c 'ls /tmp/served.bin 2>&1')"
+
+# A relative remote path must mean what it means in a shell session, or the two
+# commands disagree about where a bare name points.
+expect_contains "a transfer starts where a shell session starts" "/app" \
+    "$(printf 'pwd\nquit\n' | sftp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$port" "root@$host" 2>&1)"
+expect_eq "which is the application's own working directory" "/app" \
+    "$(ssh_to "$PREFIX-app" 'pwd' 2>/dev/null)"
+
+# A hand-built image with no user database at all cannot host a transfer: the
+# transfer program resolves the user it runs as before it does anything else.
+# It is refused rather than served, and refused without leaving a partial file.
+# The reason reaches a shell session, which is the channel that shows text --
+# sshd forwards no stderr for a subsystem request, so a client copying gets a
+# closed connection and a non-zero status and nothing more.
+scp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$(endpoint_of "$PREFIX-noshell-app" | cut -d' ' -f2)" \
+    "$WORK/served.bin" "root@$(endpoint_of "$PREFIX-noshell-app" | cut -d' ' -f1):/served.bin" >/dev/null 2>&1
+expect_nonzero "a copy into an image with no user database fails" "$?"
+# The image has no shell to look with, so the check is made from the sidecar,
+# through the same view of the application container the transfer would have used.
+expect_contains "and nothing was written into the application container" "No such file" \
+    "$(docker exec "$PREFIX-noshell-side" bash -c '
+        for p in /proc/[0-9]*; do
+            [[ -e $p/root/idle ]] && { ls "$p/root/served.bin" 2>&1; exit; }
+        done
+        echo "No such file"' 2>&1 | head -1)"
+expect_contains "and nothing was written into the sidecar either" "No such file" \
+    "$(docker exec "$PREFIX-noshell-side" sh -c 'ls /served.bin 2>&1')"
+
+# --- 15. a volume-rooted deployment ----------------------------------------
+# File transfer within the session root and nothing else. Every refusal here is
+# the difference between a curated product and `custom`, so each is asserted
+# rather than assumed.
+group "volume session root: files only"
+
+read -r vhost vport <<< "$(endpoint_of "$PREFIX-vol-side")"
+vssh() { ssh -n "${SSH_OPTS[@]}" -i "$WORK/id" -p "$vport" "root@$vhost" "$@"; }
+
+out=$(printf 'ls\nquit\n' | sftp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$vport" "root@$vhost" 2>&1)
+expect_contains "the exposed data is listable" "marker.txt" "$out"
+expect_contains "and its subdirectories with it" "sub" "$out"
+
+out=$(printf 'pwd\nquit\n' | sftp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$vport" "root@$vhost" 2>&1)
+expect_contains "the session starts at the declared path" "$VOLUME_SESSION_PATH" "$out"
+
+scp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$vport" "root@$vhost:$VOLUME_SESSION_PATH/sub/deep.txt" "$WORK/vol.txt" >/dev/null 2>&1
+expect_zero "data owned by another uid with mode 0770 is readable" "$?"
+expect_eq "and it is the file that was written" "nested" "$(cat "$WORK/vol.txt" 2>/dev/null)"
+
+# Read-only is the mount, not a setting inside the container: nothing here is
+# trusted to provide it, and root cannot defeat it.
+echo attempt > "$WORK/upload.txt"
+out=$(scp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$vport" "$WORK/upload.txt" "root@$vhost:$VOLUME_SESSION_PATH/upload.txt" 2>&1); rc=$?
+expect_nonzero "a write into a volume session root is refused" "$rc"
+expect_missing "and nothing was created" "upload.txt" \
+    "$(printf 'ls\nquit\n' | sftp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$vport" "root@$vhost" 2>&1)"
+
+out=$(printf 'ls /etc\nls /..\nquit\n' | sftp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$vport" "root@$vhost" 2>&1)
+expect_missing "the sidecar's own filesystem is not reachable" "postgresql" "$out"
+out=$(printf "get /etc/shadow $WORK/stolen\nquit\n" | sftp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$vport" "root@$vhost" 2>&1)
+expect_missing "and neither is anything outside the jail" "Fetching" "$out"
+
+out=$(vssh 2>&1 </dev/null); rc=$?
+expect_nonzero "a shell is refused" "$rc"
+expect_contains "the refusal names the session root" "$VOLUME_SESSION_PATH" "$out"
+expect_contains "and says where to go instead" "scp" "$out"
+expect_missing "no raw execution failure reaches the user" "No such file or directory" "$out"
+
+out=$(vssh 'cat /data/marker.txt' 2>&1); rc=$?
+expect_nonzero "a remote command is refused" "$rc"
+expect_contains "the refusal names the reason" "file transfer" "$out"
+expect_missing "and does not surface as an execution failure" "not found" "$out"
+
+out=$(vssh 'psql -Atc "select 1"' 2>&1); rc=$?
+expect_nonzero "the database tooling is refused" "$rc"
+expect_contains "the refusal names the tool" "psql" "$out"
+
+lport=$(( (RANDOM % 20000) + 20000 ))
+ssh -n "${SSH_OPTS[@]}" -i "$WORK/id" -p "$vport" -N -f -o ExitOnForwardFailure=yes \
+    -L "127.0.0.1:$lport:$PREFIX-allowed:8080" "root@$vhost" 2>/dev/null
+sleep 0.5
+out=$(http_get 127.0.0.1 "$lport" 2>/dev/null)
+pkill -f "127.0.0.1:$lport:$PREFIX-allowed:8080" >/dev/null 2>&1
+expect_missing "every forward is refused" "forward-target-allowed" "$out"
+
+# --- 16. the pod does not grant a capability -------------------------------
+# The same declaration in a pod that shares a process namespace with an
+# application container and holds database variables. If routing were decided by
+# what the dispatcher can find rather than by the declaration, this deployment
+# would hand every tenant of that product a shell in the application container.
+group "volume session root: the declaration decides, not the pod"
+
+read -r shost sport <<< "$(endpoint_of "$PREFIX-volshared-app")"
+sssh() { ssh -n "${SSH_OPTS[@]}" -i "$WORK/id" -p "$sport" "root@$shost" "$@"; }
+
+expect_contains "an application container really is visible to this sidecar" "application-container" \
+    "$(docker exec "$PREFIX-volshared-side" sh -c 'for p in /proc/[0-9]*; do cat $p/root/etc/app-marker 2>/dev/null; done' | head -1)"
+
+out=$(sssh 2>&1 </dev/null); rc=$?
+expect_nonzero "a shell is still refused" "$rc"
+expect_contains "and refused for the declared reason" "$VOLUME_SESSION_PATH" "$out"
+expect_missing "not because no application process was found" "process namespace" "$out"
+
+out=$(sssh 'cat /etc/app-marker' 2>&1); rc=$?
+expect_nonzero "a remote command is still refused" "$rc"
+expect_missing "and nothing ran in the application container" "application-container" "$out"
+
+out=$(sssh 'psql -Atc "select current_database()"' 2>&1); rc=$?
+expect_nonzero "the database tooling is refused although the details are present" "$rc"
+expect_contains "and refused on the session root, not on a missing database" "$VOLUME_SESSION_PATH" "$out"
+expect_missing "the refusal does not claim there is no database" "no database" "$out"
+
+out=$(printf 'ls\nquit\n' | sftp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$sport" "root@$shost" 2>&1)
+expect_contains "file transfer still reads the mount, not the application" "marker.txt" "$out"
+expect_missing "and not the application container's filesystem" "app-marker" "$out"
 
 # --- summary ---------------------------------------------------------------
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$PASS" "$FAIL"

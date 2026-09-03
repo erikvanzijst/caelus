@@ -1,9 +1,11 @@
 #!/bin/bash
 # The session dispatcher. sshd runs this as ForceCommand, so it sees the
 # requested command in SSH_ORIGINAL_COMMAND and decides where the session
-# lands: a shell in the application container, a platform tool in the sidecar,
-# or nothing at all. Port forwarding is a `direct-tcpip` channel and opens no
-# session, so it never reaches this program (D3).
+# lands: file transfer served from this image, a shell in the application
+# container, a platform tool in the sidecar, or nothing at all. What is on
+# offer follows from the declared session root and from nothing else (D1, D2).
+# Port forwarding is a `direct-tcpip` channel and opens no session, so it never
+# reaches this program (D3).
 #
 # The requested command is attacker-influenced input arriving at an
 # authenticated boundary. This program never evaluates it. Where a command has
@@ -14,8 +16,8 @@
 set -uo pipefail
 
 readonly SESSION_ENV=/etc/freepod/session-env
+readonly SFTP_ENV=/etc/freepod/sftp-server.env
 readonly SHELLS=(/bin/bash /bin/sh /bin/ash /busybox/sh)
-readonly SFTP_SERVERS=(/usr/lib/openssh/sftp-server /usr/libexec/openssh/sftp-server /usr/lib/ssh/sftp-server)
 
 # Tools that live here and nowhere else. Membership is decided on the command
 # itself, never on arguments a client controls.
@@ -34,6 +36,44 @@ if [[ -r $SESSION_ENV ]]; then
         [[ $entry =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && export "${entry?}"
     done < "$SESSION_ENV"
 fi
+
+. "$SFTP_ENV"
+
+case ${FREEPOD_SESSION_ROOT:-} in
+    app-container) session_kind=app ;;
+    volume:/*)     session_kind=volume; session_path=${FREEPOD_SESSION_ROOT#volume:} ;;
+    *)             die "this deployment declares no session root, so there is nothing to serve. The sidecar was started without one; see the image README." ;;
+esac
+readonly session_kind
+
+serve_transfer() {
+    local root=$1 prefix=$2 start=$3
+    local args=()
+
+    # Every path below is spelled as the chrooted process will resolve it, so
+    # what is checked here is what it will run.
+    [[ -x ${root}${prefix}${FREEPOD_SFTP_LOADER} ]] \
+        || die "file transfer cannot be served into this session root: ${prefix} is not reachable from inside it. The application container has no /proc mounted, which the platform's own images always do."
+    [[ -c ${root}/dev/null ]] \
+        || die "file transfer cannot be served into this session root: it has no /dev/null, which the transfer program opens before it does anything else."
+    [[ -r ${root}/etc/passwd ]] \
+        || die "file transfer cannot be served into this session root: it has no /etc/passwd, so the transfer program cannot resolve the user it runs as. Add one to the image to copy files into it."
+
+    is_readonly "$start" && args+=(-R)
+    [[ -n $start ]] && args+=(-d "$start")
+
+    exec chroot "$root" \
+        "${prefix}${FREEPOD_SFTP_LOADER}" \
+        --library-path "${prefix}${FREEPOD_SFTP_LIBPATH//:/:${prefix}}" \
+        "${prefix}${FREEPOD_SFTP_SERVER}" "${args[@]}"
+}
+
+is_readonly() {
+    local opts
+    [[ -n $1 ]] || return 1
+    opts=$(findmnt -n -o OPTIONS --target "$1" 2>/dev/null) || return 1
+    [[ ,${opts}, == *,ro,* ]]
+}
 
 # --- banner ----------------------------------------------------------------
 # Standard output is a protocol channel for file transfer and dump streams, so
@@ -61,19 +101,42 @@ set -- $command
 set +f
 verb=${1:-}
 
+# A subsystem request arrives as its configured command name; modern scp and
+# sftp both use it.
+is_transfer=false
+if [[ $verb == internal-sftp || $verb == sftp-server ]] && (( $# == 1 )); then
+    is_transfer=true
+fi
+readonly is_transfer
+
+is_platform_command=false
 for platform_command in "${PLATFORM_COMMANDS[@]}"; do
-    if [[ $verb == "$platform_command" ]]; then
-        # The tools are in this image unconditionally; the connection details
-        # are not. A product without relational storage runs the same sidecar,
-        # so the database tools are declined by name here rather than left to
-        # fail inside psql with a connection error that names no cause.
-        [[ -n ${PGHOST:-} ]] || die "this deployment has no database, so '${verb}' has nothing to connect to. A command given as a path runs in the application container instead."
-        # The tool and its connection details are here, so this runs here. The
-        # string still goes to a shell as one argument, so pipes and
-        # redirections work the way a remote command should.
-        exec /bin/sh -c "$command"
-    fi
+    [[ $verb == "$platform_command" ]] && { is_platform_command=true; break; }
 done
+readonly is_platform_command
+
+# --- a session rooted at a mounted path ------------------------------------
+# File transfer within the session root, and nothing else. There is no code of
+# the user's to run here and the mount is not theirs to execute in, so a shell,
+# a remote command and the database tooling are each refused by name rather
+# than left to surface as an execution failure.
+if [[ $session_kind == volume ]]; then
+    if $is_transfer; then
+        serve_transfer "$FREEPOD_SESSION_JAIL" "$FREEPOD_SESSION_JAIL_PREFIX" "$session_path"
+    fi
+    if $is_platform_command; then
+        die "this deployment's session is rooted at ${session_path}, a read-only view of its data, so '${verb}' is not served here. It offers file transfer and nothing else."
+    fi
+    [[ -z $command ]] \
+        && die "this deployment's session is rooted at ${session_path}, a read-only view of its data. There is no shell to open in it; copy files with scp, sftp or 'freepod cp'."
+    die "this deployment's session offers file transfer and nothing else."
+fi
+
+# --- the platform's database tooling ---------------------------------------
+if $is_platform_command; then
+    [[ -n ${PGHOST:-} ]] || die "this deployment has no database."
+    exec /bin/sh -c "$command"
+fi
 
 # --- identify the application container ------------------------------------
 # Candidates are grouped by cgroup. The dispatcher's own cgroup is excluded,
@@ -122,23 +185,32 @@ esac
 readonly app_pid
 readonly app_root=/proc/$app_pid/root
 
-# A subsystem request arrives as its configured command name. Modern scp and
-# sftp use it, so it is mapped onto the application container's own
-# sftp-server -- the same helper-on-the-remote-side model every file transfer
-# tool uses, and the same reason `kubectl cp` needs tar in the target.
-if [[ $verb == internal-sftp || $verb == sftp-server ]] && (( $# == 1 )); then
-    for candidate in "${SFTP_SERVERS[@]}"; do
-        if [[ -x $app_root$candidate ]]; then
-            exec chroot "$app_root" "$candidate"
-        fi
-    done
-    die "the application image contains no sftp-server, so file transfer over SFTP is not available. Copy with 'scp -O', with rsync, or over tar, and check that the tool exists in your image."
+app_cwd=$(readlink "/proc/$app_pid/cwd" 2>/dev/null) || app_cwd=/
+
+if $is_transfer; then
+    serve_transfer "$app_root" "/proc/$PPID/root" "$app_cwd"
 fi
 
 # --- enter the application container ---------------------------------------
+# A symlink has to be resolved by hand, because an absolute target under
+# /proc/<pid>/root resolves against the SIDECAR's root rather than the app's:
+# `-x /proc/1/root/bin/sh` is false for Alpine's `/bin/sh -> /bin/busybox`,
+# which chroot then runs perfectly well. Debian's relative `sh -> dash` never
+# showed it.
+app_executable() {
+    local path=$1 target
+    for _ in 1 2 3 4 5 6 7 8; do
+        [[ -L $app_root$path ]] || { [[ -x $app_root$path ]]; return; }
+        target=$(readlink "$app_root$path") || return 1
+        [[ $target == /* ]] || target=${path%/*}/$target
+        path=$target
+    done
+    return 1
+}
+
 app_shell=""
 for candidate in "${SHELLS[@]}"; do
-    [[ -x $app_root$candidate ]] && { app_shell=$candidate; break; }
+    app_executable "$candidate" && { app_shell=$candidate; break; }
 done
 
 if [[ -z $app_shell ]]; then
@@ -148,8 +220,6 @@ if [[ -z $app_shell ]]; then
     # instead would have them debug a container that is not theirs.
     die "the application image provides no shell (looked for ${SHELLS[*]}), so no session can be opened in it. Add one to the image to use 'freepod shell'."
 fi
-
-app_cwd=$(readlink "/proc/$app_pid/cwd" 2>/dev/null) || app_cwd=/
 
 # The application process's own environment, read from the sidecar rather than
 # reconstructed. Read NUL-delimited so a value holding a newline -- a private

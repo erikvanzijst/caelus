@@ -21,6 +21,7 @@ from urllib.parse import quote
 import click
 
 from . import EXIT_ERROR, EXIT_OK, FreepodError, UsageError
+from . import copy as copy_module
 from . import database as database_module
 from . import delete as delete_module
 from . import deploy as deploy_module
@@ -1414,6 +1415,52 @@ def log_command(
             # the deployment and nothing should suggest otherwise.
             context.say("")
             raise SystemExit(EXIT_OK)
+    raise SystemExit(code)
+
+
+@cli.command()
+@click.argument("source")
+@click.argument("destination")
+@click.pass_obj
+def cp(context: Context, source: str, destination: str) -> None:
+    """Copy a file or directory between here and this deployment.
+
+    Mark the deployment's side with a leading colon; the other side is local,
+    and which one is marked decides the direction:
+
+    \b
+      freepod cp report.csv :/app/report.csv     copy in
+      freepod cp :/app/out.log ./out.log         copy out
+      freepod cp ./assets :/app/assets           a whole tree, no flag needed
+
+    A relative remote path means what it means in `freepod shell`. Directories
+    carry their structure and their files' modes; owners and timestamps are
+    not preserved. Directories are always copied recursively.
+    Nothing has to be installed in your image for this to work.
+    """
+    project_file = _project_deployment(context)
+    deployment_name = project_file.deployment_name
+
+    # Every refusal that does not need a connection happens before we spend one.
+    local, remote, upload = copy_module.direction(source, destination, deployment_name)
+    copy_module.check_local(local, upload=upload)
+    ssh_module.require_sftp()
+
+    deployment, _database, host, port, key_path, known_hosts = _connection_setup(
+        context, project_file
+    )
+    args = ssh_module.build_sftp_args(
+        user=deployment["name"],
+        host=host,
+        port=port,
+        key_path=key_path,
+        known_hosts=known_hosts,
+    )
+    code = copy_module.run(args, copy_module.batch(local, remote, upload=upload))
+    if code == EXIT_OK:
+        context.say(f"Copied {source} to {destination}.")
+    # Otherwise sftp has already said which path it could not read, on the
+    # user's own stderr, and nothing here claims the copy finished.
     raise SystemExit(code)
 
 

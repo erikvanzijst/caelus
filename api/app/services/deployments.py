@@ -506,7 +506,7 @@ def get_sftp_credentials(
     if deployment.status == DEPLOYMENT_STATUS_DELETED:
         raise NotFoundException("Deployment not found")
 
-    if not prov.sftp_credentials_exist(namespace=deployment.namespace, instance=deployment.name):
+    if not prov.ssh_access_exists(namespace=deployment.namespace, instance=deployment.name):
         raise NotFoundException("SFTP access is not available for this deployment")
 
     settings = get_settings()

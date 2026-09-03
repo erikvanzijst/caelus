@@ -59,10 +59,6 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
-            # Vaultwarden needs no root and writes only to /data. These live on
-            # the container rather than the pod because the SFTP sidecar is
-            # atmoz/sftp, which needs root to build the chroot and run sshd — a
-            # pod-wide runAsNonRoot would break it.
             runAsNonRoot: true
             runAsUser: 1000
             runAsGroup: 1000
@@ -167,15 +163,10 @@ spec:
               mountPath: /data
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-        # Read-only SFTP sidecar exposing the whole of /data: the sqlite vault,
-        # attachments, sends and rsa_key.pem — exactly vaultwarden's documented
-        # backup set. The library warns against listing a database PVC, which is
-        # aimed at products with a separate postgres volume; here the sqlite file
-        # *is* the application data, and the only SFTP user is the vault's owner.
-        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list
-             (dict "volume" "data" "path" "data"))) | nindent 8 }}
+        {{- include "ssh-sidecar.sidecar" (dict "root" . "image" .Values.sshSidecarImage
+             "sessionRoot" "volume:/data"
+             "mounts" (list (dict "volume" "data" "path" "/data"))) | nindent 8 }}
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-data
-        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}

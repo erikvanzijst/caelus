@@ -86,29 +86,30 @@ that locks users out until they upgrade.
 
 ## Module map
 
-| Module        | Holds                                                                                       |
-|---------------|---------------------------------------------------------------------------------------------|
-| `__init__.py` | The error hierarchy and the exit codes. A leaf module, so the imports stay acyclic.         |
-| `cli.py`      | The `click` entry point: flags, per-command wiring, and `main()`'s error→exit-code mapping. |
-| `config.py`   | The two environments, the OAuth client ids, wait defaults, and on-disk paths.               |
-| `auth.py`     | Both OAuth2 flows, the token cache, and `Session` — acquisition and renewal only.           |
-| `api.py`      | The HTTP client, the 401/403 contract, and retries for safe methods.                        |
-| `project.py`  | `.freepod.json`: load, save, project-root discovery.                                        |
-| `values.py`   | Schema-driven prompting and hostname normalization.                                         |
-| `archive.py`  | Packing the working tree: ignore layering, pruning, and the tar stream.                     |
-| `build.py`    | Upload slot, presigned POST, build creation, and log streaming.                             |
-| `deploy.py`   | The pipeline: preflight → pack → upload → build → release, plus rollout following.          |
-| `delete.py`   | The teardown: confirming it, requesting it, and following it to gone.                       |
-| `history.py`  | The build history: reading the account's builds and rendering the table.                    |
-| `releases.py` | The release history: this project's deployment's rollouts, and the live mark.               |
-| `vars.py`     | `freepod var`: the vars sub-resource, input parsing, and the hidden-value table.             |
-| `table.py`    | Shared listing rendering: timestamps, durations, digest abbreviation, columns. A leaf.      |
-| `logs.py`     | `freepod log`: SSE parsing, the resume cursor, and reconnection.                            |
-| `tos.py`      | Terms acceptance: the gate, the prompt, and recording an acceptance.                        |
-| `keys.py`     | `freepod key`: the account's keys, the local key record, and fingerprint recovery.          |
-| `database.py` | `freepod db`: the deployment's database, the masking rule, and the absence shape.           |
-| `ssh.py`      | The SSH assembly shared by `shell`, `db shell`, and `db proxy`: the one key to offer, the pinned host key, and the argument list. |
-| `skill.py`    | The packaged agent instructions: reading `assets/SKILL.md`, and where to install it.        |
+| Module        | Holds                                                                                                                                  |
+|---------------|----------------------------------------------------------------------------------------------------------------------------------------|
+| `__init__.py` | The error hierarchy and the exit codes. A leaf module, so the imports stay acyclic.                                                    |
+| `cli.py`      | The `click` entry point: flags, per-command wiring, and `main()`'s error→exit-code mapping.                                            |
+| `config.py`   | The two environments, the OAuth client ids, wait defaults, and on-disk paths.                                                          |
+| `auth.py`     | Both OAuth2 flows, the token cache, and `Session` — acquisition and renewal only.                                                      |
+| `api.py`      | The HTTP client, the 401/403 contract, and retries for safe methods.                                                                   |
+| `project.py`  | `.freepod.json`: load, save, project-root discovery.                                                                                   |
+| `values.py`   | Schema-driven prompting and hostname normalization.                                                                                    |
+| `archive.py`  | Packing the working tree: ignore layering, pruning, and the tar stream.                                                                |
+| `build.py`    | Upload slot, presigned POST, build creation, and log streaming.                                                                        |
+| `deploy.py`   | The pipeline: preflight → pack → upload → build → release, plus rollout following.                                                     |
+| `delete.py`   | The teardown: confirming it, requesting it, and following it to gone.                                                                  |
+| `history.py`  | The build history: reading the account's builds and rendering the table.                                                               |
+| `releases.py` | The release history: this project's deployment's rollouts, and the live mark.                                                          |
+| `vars.py`     | `freepod var`: the vars sub-resource, input parsing, and the hidden-value table.                                                       |
+| `table.py`    | Shared listing rendering: timestamps, durations, digest abbreviation, columns. A leaf.                                                 |
+| `logs.py`     | `freepod log`: SSE parsing, the resume cursor, and reconnection.                                                                       |
+| `tos.py`      | Terms acceptance: the gate, the prompt, and recording an acceptance.                                                                   |
+| `keys.py`     | `freepod key`: the account's keys, the local key record, and fingerprint recovery.                                                     |
+| `database.py` | `freepod db`: the deployment's database, the masking rule, and the absence shape.                                                      |
+| `ssh.py`      | The SSH assembly shared by `shell`, `cp`, `db shell` and `db proxy`: the one key to offer, the pinned host key, and the argument list. |
+| `copy.py`     | `freepod cp`: which side is the deployment's, the refusals made before connecting, and the transfer script.                            |
+| `skill.py`    | The packaged agent instructions: reading `assets/SKILL.md`, and where to install it.                                                   |
 
 ## Environments
 
@@ -139,17 +140,17 @@ Spec: [cli-environments](../openspec/specs/cli-environments/spec.md) · Rational
 
 ## The command surface
 
-| Command  | What it does                                                                   | Adds                                |
-|----------|--------------------------------------------------------------------------------|-------------------------------------|
-| `login`  | Authenticate and cache the credential. Offers the terms if outstanding.        | `--loopback`, `--device`, `--force` |
-| `logout` | Discard the **local** credential for the selected environment.                 |                                     |
-| `whoami` | Report who the cached credential authenticates as. Never opens a browser.      |                                     |
-| `init`   | Write `.freepod.json` for the current directory. Reads only — creates nothing. | `--force`                           |
-| `deploy` | Preflight → pack → upload → build → release.                                   | `--recreate`, `--no-gitignore`      |
-| `delete` | Tear down the project's deployment, and follow the teardown to gone.           | `--yes/-y`, `--no-wait`             |
-| `builds` | List the **account's** builds, marking the one this project runs.              | `--limit`, `--all`                  |
-| `log`    | Stream the project deployment's application output.                            | `-f`, `-n`, `-r`, `-t`              |
-| `db`     | Group holding the deployment's database. `db status` reports identity, credential (masked), and quota state. | `--show-password` (status) |
+| Command  | What it does                                                                                                 | Adds                                |
+|----------|--------------------------------------------------------------------------------------------------------------|-------------------------------------|
+| `login`  | Authenticate and cache the credential. Offers the terms if outstanding.                                      | `--loopback`, `--device`, `--force` |
+| `logout` | Discard the **local** credential for the selected environment.                                               |                                     |
+| `whoami` | Report who the cached credential authenticates as. Never opens a browser.                                    |                                     |
+| `init`   | Write `.freepod.json` for the current directory. Reads only — creates nothing.                               | `--force`                           |
+| `deploy` | Preflight → pack → upload → build → release.                                                                 | `--recreate`, `--no-gitignore`      |
+| `delete` | Tear down the project's deployment, and follow the teardown to gone.                                         | `--yes/-y`, `--no-wait`             |
+| `builds` | List the **account's** builds, marking the one this project runs.                                            | `--limit`, `--all`                  |
+| `log`    | Stream the project deployment's application output.                                                          | `-f`, `-n`, `-r`, `-t`              |
+| `db`     | Group holding the deployment's database. `db status` reports identity, credential (masked), and quota state. | `--show-password` (status)          |
 
 Global: `--env`, `--verbose`, `--quiet`, `--timeout`, `--version`, `-h/--help`.
 `--verbose` and `--quiet` together are a usage error.
@@ -854,19 +855,39 @@ requirement is what makes the answer useful.
 Spec: [cli-database-status](../openspec/specs/cli-database-status/spec.md) ·
 Rationale: [database-connection-details](../openspec/changes/archive/2026-08-29-database-connection-details/design.md)
 
-## SSH access: `shell`, `db shell`, and `db proxy`
+## SSH access: `shell`, `cp`, `db shell`, and `db proxy`
 
-The three interactive commands reach the deployment over the platform's SSH
-edge. They share one connection assembly — `_connection_setup` in `cli.py`,
-backed by `ssh.py` — that resolves the deployment (refusing the states with no
-container to connect to), the database when the command needs one, the
-verified edge, and the one key to offer. `shell` opens a session in the
-application container, `db shell` opens `psql` server-side, and `db proxy`
-forwards a local port to the database and prints a URL for the local end. The
-client drives the system `ssh`; it implements no SSH of its own.
+The four commands reach the deployment over the platform's SSH edge. They share
+one connection assembly — `_connection_setup` in `cli.py`, backed by `ssh.py` —
+that resolves the deployment (refusing the states with no container to connect
+to), the database when the command needs one, the verified edge, and the one
+key to offer. `shell` opens a session in the application container, `cp` copies
+files either way, `db shell` opens `psql` server-side, and `db proxy` forwards a
+local port to the database and prints a URL for the local end. The client drives
+the system `ssh` and `sftp`; it implements no SSH and no transfer protocol of
+its own.
 
 Spec: [cli-ssh-access](../openspec/specs/cli-ssh-access/spec.md) ·
 Rationale: [cli-ssh-access](../openspec/changes/archive/2026-09-02-cli-ssh-access/design.md)
+
+### `cp` drives `sftp`, and the marker is a prefix
+
+The transfer is `sftp`'s, driven by a one-line batch script on its stdin rather
+than by arguments — which is what keeps a path holding a space or a glob
+character out of argv parsing. `-r` is always passed and never asked for: the
+protocol recurses and a single file is unaffected. `-p` is not, because it would
+preserve timestamps as well as modes and only modes are promised.
+
+Which side is the deployment's is decided by a **prefix**: a leading `:`, or the
+project's own deployment name and one. A prefix rule is what lets a local file
+called `notes:draft.txt` stay local, which `scp`'s "colon before the first
+slash" cannot manage. A path naming some *other* deployment matches neither, so
+it is refused as unmarked — with a message naming what it saw, because silently
+copying to this project's deployment instead would be the worst outcome.
+
+sftp's stdout is discarded and its stderr is the user's. In batch mode stdout is
+the script echoed back and a line per directory entered — this command's own
+plumbing — while every failure it can report arrives on stderr.
 
 ### The known-hosts store
 

@@ -87,9 +87,11 @@ spec:
             - name: config
               mountPath: /config
               readOnly: true
-        # Read-only SFTP sidecar: exposes the library at /home/<release>/library.
-        {{- include "ssh-sidecar.sftp.sidecar" (dict "root" . "mounts" (list
-             (dict "volume" "library" "path" "library"))) | nindent 8 }}
+        # The SSH sidecar, rooted at a read-only mount of the photo library,
+        # which the session sees as /library.
+        {{- include "ssh-sidecar.sidecar" (dict "root" . "image" .Values.sshSidecarImage
+             "sessionRoot" "volume:/library"
+             "mounts" (list (dict "volume" "library" "path" "/library"))) | nindent 8 }}
       volumes:
         - name: library
           persistentVolumeClaim:
@@ -97,4 +99,3 @@ spec:
         - name: config
           configMap:
             name: {{ .Release.Name }}-config
-        {{- include "ssh-sidecar.sftp.volumes" (dict "root" .) | nindent 8 }}

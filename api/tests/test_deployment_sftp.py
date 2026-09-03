@@ -51,7 +51,7 @@ def stub_sftp(monkeypatch):
     """
     def _install(available: bool):
         monkeypatch.setattr(
-            "app.provisioner.provisioner.sftp_credentials_exist",
+            "app.provisioner.provisioner.ssh_access_exists",
             lambda **kwargs: available,
         )
     return _install
@@ -219,7 +219,7 @@ def test_cli_parity(cli_runner, monkeypatch):
     from tests.test_cli import _seed_deployment_via_services
 
     runner, cli_app = cli_runner
-    monkeypatch.setattr("app.provisioner.provisioner.sftp_credentials_exist", lambda **kwargs: True)
+    monkeypatch.setattr("app.provisioner.provisioner.ssh_access_exists", lambda **kwargs: True)
 
     user_id, deployment_id = _seed_deployment_via_services()
 
@@ -230,7 +230,7 @@ def test_cli_parity(cli_runner, monkeypatch):
     assert "password" not in result.output
 
     # No SFTP service -> stable not-found error, no traceback.
-    monkeypatch.setattr("app.provisioner.provisioner.sftp_credentials_exist", lambda **kwargs: False)
+    monkeypatch.setattr("app.provisioner.provisioner.ssh_access_exists", lambda **kwargs: False)
     missing = runner.invoke(cli_app, ["get-deployment-sftp", str(user_id), str(deployment_id)])
     assert missing.exit_code == 1
     assert "Traceback" not in missing.output

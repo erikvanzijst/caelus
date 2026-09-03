@@ -1,15 +1,15 @@
 apiVersion: v2
 name: ssh-sidecar
 description: >-
-  Library chart providing SSH access to a Caelus deployment, in one of two
-  access profiles. `sftp` emits the atmoz/sftp sidecar serving read-only access
-  to the deployment's data PVCs; `dev` emits the platform's own SSH sidecar,
-  which opens a shell in the application container, carries the PostgreSQL
-  toolbox and forwards to the database pooler. Both emit the per-deployment
-  credentials Secret, init ConfigMap and Service. See README.md for the
-  contract.
+  Library chart providing SSH access to a Caelus deployment. One sidecar, the
+  platform's own image, for every product: a product declares its session root
+  and everything else follows from it. `volume:/<path>` roots the session at a
+  read-only mount of the data the product exposes and serves file transfer and
+  nothing else; `app-container` roots it at the filesystem the tenant's code
+  runs in and adds a shell, remote commands and the PostgreSQL toolbox. Renders
+  the sidecar and the Service, and no credential of any kind. See README.md.
 type: library
-version: 0.4.4
+version: 0.5.0
 appVersion: "1.0.0"
 maintainers:
   - name: Caelus Team

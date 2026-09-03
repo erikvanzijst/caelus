@@ -15,7 +15,7 @@ actually does)
 This directory hardwires its query against the platform's schema, and knows a
 deployment's sidecar is at `<name>-ssh.<namespace>.svc` as the user `<name>`.
 That is deliberate; the design document argues it. The chart must therefore not
-let a product choose a different sidecar user — see `sftp-chart-contract`.
+let a product choose a different sidecar user — see `ssh-chart-contract`.
 
 ### The `-ssh` naming convention is shared with the charts
 

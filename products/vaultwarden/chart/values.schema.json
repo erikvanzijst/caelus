@@ -276,6 +276,11 @@
     "ssh-sidecar": {
       "type": "object",
       "description": "Values namespace reserved by the ssh-sidecar library dependency (unused)."
+    },
+    "sshSidecarImage": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The platform's SSH sidecar image, pinned to an exact version. Matched against products/_lib/ssh-sidecar-image/VERSION by api/tests/test_ssh_chart_contract.py."
     }
   },
   "required": [

@@ -121,3 +121,5 @@ caelus:
   # reconciler in a real deployment — the empty default only lets `helm template`
   # get far enough to report the missing value.
   owner: {}
+
+sshSidecarImage: ghcr.io/erikvanzijst/freepod/ssh-sidecar:0.5.1

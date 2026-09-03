@@ -1,23 +1,23 @@
 # ssh-sidecar
 
-The SSH server for the **`dev` access profile**. It rides in a tenant's app pod
-and serves three different intentions on one daemon: a shell in the tenant's own
-application container, the platform's PostgreSQL tooling, and a port forward to
-the database pooler that opens no session at all.
+**The** SSH server: one image in every deployment that offers SSH access at all.
+It rides in a tenant's app pod and serves four intentions on one daemon: file
+transfer, a shell in the tenant's own application container, the platform's
+PostgreSQL tooling, and a port forward to the database pooler that opens no
+session at all.
 
-`atmoz/sftp` — which the `sftp` profile still uses, unchanged — can be none of
-them. It hardcodes `AllowTcpForwarding no`, forces `internal-sftp`, chroots every
-session, and carries no toolbox. Two of those are not configuration problems:
-chroot is incompatible with port forwarding at all, because the process that
-opens a forwarded connection inherits it and has no resolver configuration
-there. See [`var/ssh_access.md`](../../../var/ssh_access.md) D2–D4, D6, D14 and
-D17 for the access design this implements.
+What a given deployment gets follows from **one declared input**,
+`FREEPOD_SESSION_ROOT`, and from nothing the container discovers about the pod it
+is in. See
+[`openspec/changes/unified-ssh-sidecar/design.md`](../../../openspec/changes/unified-ssh-sidecar/design.md)
+for the design, and [`var/ssh_access.md`](../../../var/ssh_access.md) D2–D4, D6,
+D14 and D17 for the access decisions it inherits.
 
 ## Architecture in one line
 
 `client → sshpiper (routes by username, authenticates the user's key) → this
-sidecar in the app pod → a shell in the app container, psql here, or a forward
-to the pooler`.
+sidecar in the app pod → files from its own mount, or a shell, files, psql and a
+forward against the application container`.
 
 ## Runtime configuration contract
 
@@ -35,20 +35,36 @@ indistinguishable from a network fault and gets diagnosed as one.
 |------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `FREEPOD_AUTHORIZED_KEYS`                            | The public keys the server trusts, one per line. In normal operation this is the single public key of the platform's SSH edge — the tenant's own keys are checked by sshpiper on the downstream leg, never here. Validated with `ssh-keygen -l`. |
 | `FREEPOD_PERMIT_OPEN`                                | *Optional.* The forward allowlist: whitespace- or comma-separated `host:port`. Rendered as sshd's `PermitOpen`; absent, the server writes `PermitOpen none` and refuses every forward. See *Spelling the allowlist* below.                        |
-| `FREEPOD_RELEASE_ID`                                 | The release the pod belongs to, as the uuid the log pipeline keys a stream on. Recorded on the startup line. The chart projects `caelus.dev/release-id` here through the Downward API (D17).                                                     |
+| `FREEPOD_RELEASE_ID`                                 | The release the pod belongs to, as the uuid the log pipeline keys a stream on. Recorded on the startup line. The chart projects `caelus.releaseId` here directly (D17).                                                     |
 | `FREEPOD_RELEASE_NUMBER`                             | The same release as the client shows it — the number in `freepod releases` — reported by the session banner. The chart projects `caelus.releaseNumber` here directly (D17).                                                                      |
 | `FREEPOD_LOGIN_USER`                                 | The account the SSH edge authenticates the upstream leg as: the **deployment name**. Added as a second uid-0 account at startup. See *The login account* below.                                                                                  |
+| `FREEPOD_SESSION_ROOT`                               | **The one thing a product declares.** `app-container`, or `volume:/<absolute path>` naming where in the session the product's data appears. No default and no fallback: a container given none exits. See *The session root* below.               |
 | `PGHOST` `PGPORT` `PGUSER` `PGPASSWORD` `PGDATABASE` | *Optional as a set, all-or-nothing individually.* The deployment's database, in libpq's own variable names so that a bare `psql` connects with no wrapper and no arguments. `PGSSLMODE` and `PGAPPNAME` are passed through if set. See *No database* below. |
 
 The server listens on **2222**, the platform's sidecar-port convention that the
 tenant NetworkPolicy admits from the SSH edge.
 
+### The session root
+
+Everything a session may do follows from this one input, and it is checked
+against the **declaration** rather than inferred from what the pod exposes.
+
+`volume:` requires the chart to have mounted the product's volume at
+`/srv/session<path>`; a container whose chart mounted it elsewhere exits at
+startup naming the path it looked at, rather than opening an empty session that
+reads like missing data.
+
+`app-container` requires `shareProcessNamespace: true` on the pod. Without it
+the container still starts and serves — forwarding and the toolbox work — and a
+session that needs the application container says what is missing.
+
 ### The login account
 
 The edge authenticates the upstream leg as the **deployment name**, not as
-`root`. It has exactly one username convention, because on the `sftp` profile the
-account `atmoz/sftp` creates *is* the release name, and the edge is deliberately
-ignorant of which access profile it is addressing (see
+`root`. It has exactly one username convention — the deployment name — which it
+derives from the deployment's own record, reading no cluster object, so no
+product can choose a different one and the edge stays ignorant of what any
+deployment's sessions are rooted at (see
 [`ssh-auth/README.md`](../../../ssh-auth/README.md) § *Coupling*).
 
 This server needs uid 0 — the dispatcher reads another container's process
@@ -110,16 +126,21 @@ furthest from the cause.
 The dispatcher runs as sshd's `ForceCommand`, so every session passes through it
 and no session can avoid it. Port forwarding is a `direct-tcpip` channel, opens
 no session, and therefore never reaches it — which is also why the dispatcher
-cannot break forwarding, and why the `sftp` profile has to disable forwarding
-explicitly rather than relying on `ForceCommand` to do it.
+cannot break forwarding: a deployment that must forward nothing is given an
+empty allowlist rather than a dispatcher that refuses, because the dispatcher is
+never asked.
 
-| The client runs                      | Lands in                                                        |
-|--------------------------------------|-----------------------------------------------------------------|
-| `ssh <deployment>`                   | a login shell in the **application container**                  |
-| `ssh <deployment> psql …`            | the **sidecar**, where the tools and the connection details are |
-| `ssh <deployment> '<anything else>'` | the **application container**                                   |
-| `scp` / `sftp`                       | the application container's own `sftp-server`                   |
-| `ssh -N -L …`                        | nowhere — the dispatcher is not involved                        |
+| The client runs                      | `app-container`                                                 | `volume:/<path>`                       |
+|--------------------------------------|-----------------------------------------------------------------|----------------------------------------|
+| `ssh <deployment>`                   | a login shell in the **application container**                  | refused, naming the session root       |
+| `ssh <deployment> psql …`            | the **sidecar**, where the tools and the connection details are | refused, naming the session root       |
+| `ssh <deployment> '<anything else>'` | the **application container**                                   | refused, naming the session root       |
+| `scp` / `sftp`                       | **this image's own `sftp-server`**, chrooted into the app       | the same, chrooted into the jail       |
+| `ssh -N -L …`                        | nowhere — the dispatcher is not involved                        | refused: no allowlist is supplied      |
+
+The session root is read **first**, before the command is looked at, so a
+refusal is a property of the deployment rather than of what the dispatcher could
+find.
 
 The platform allowlist is `psql`, `pg_dump`, `pg_dumpall`, `pg_restore` and
 `pg_isready`, decided on the **command** and never on arguments a client
@@ -152,21 +173,20 @@ the session with a message naming the likely cause. A developer placed in the
 wrong container would debug something that is not their application and draw
 conclusions from it; a refusal costs them a question, and a wrong container costs
 them an afternoon. Multi-container products are consequently not supported on
-this profile.
+an application-container session root.
 
 ### What the application image has to provide
 
-The session runs in the tenant's own image, so what it can do is a property of
-that image:
+A **shell** session runs in the tenant's own image, so what it can do is a
+property of that image: a distroless image ends the session with a message
+saying so. `docker exec` and `kubectl exec` fail here too; the image is the
+user's own and adding a shell to it is a change they can make. The session is
+*not* redirected into the sidecar, which would have them debugging a container
+that is not theirs.
 
-- **No shell, no session.** A distroless image ends the session with a message
-  saying so. `docker exec` and `kubectl exec` fail here too; the image is the
-  user's own and adding a shell to it is a change they can make. The session is
-  *not* redirected into the sidecar, which would have them debugging a container
-  that is not theirs.
-- **File transfer needs its helper on the remote side**, exactly as `kubectl cp`
-  needs `tar`: `sftp-server` for `scp` and `sftp`, `rsync` for rsync. Absent, the
-  dispatcher says which one is missing.
+**File transfer** needs nothing of the tenant's, with one exception: a
+hand-built image carrying no `/etc/passwd` at all cannot host one, because the
+transfer program resolves the user it runs as before it does anything else.
 
 ### The banner
 
@@ -198,15 +218,16 @@ working one and concluding nothing is wrong.
   `AllowTcpForwarding local` with the allowlist, no remote forwarding, no agent
   forwarding, no X11, no gateway ports, and the dispatcher as `ForceCommand`.
 - **An Ed25519 host key generated per container start**, never persisted and
-  never baked in. Only Ed25519: `atmoz/sftp` generates an RSA 4096 key on every
-  start, which is seconds before anything listens, and buys nothing here — the
-  identity a developer verifies is the platform edge's, and the hop from the edge
-  to this server does not pin this key.
+  never baked in. Only Ed25519, which costs milliseconds: an RSA-4096 key costs
+  seconds before anything listens and buys nothing here — the identity a
+  developer verifies is the platform edge's, and the hop from the edge to this
+  server does not pin this key.
 - **No credential, key, password or tenant data of any kind.** Everything needed
   to authenticate a session arrives at runtime.
 
 It runs as **root**, which is what reading and entering another container's
-process filesystem requires. It takes no capability beyond what the pod grants,
+process filesystem requires, and what reads a product's data whatever uid the
+application wrote it as — sound only because a volume session cannot write. It takes no capability beyond what the pod grants,
 mounts nothing, and needs no privileged mode. `CAP_SYS_CHROOT` is in the default
 set and is what entering the application container needs; the pod supplies
 `shareProcessNamespace: true`, and `CAP_SYS_PTRACE` — needed only by `strace`,
@@ -225,9 +246,12 @@ namespace, and the harness needs only docker, ssh and bash:
 ```
 
 It stands up a PostgreSQL server, two forward targets, an ordinary application
-container, a distroless one, a sidecar with no application beside it at all, and
-a sidecar configured with no database and no allowlist, then asserts every
-behavior above. The negative cases are each a security
+container **carrying no transfer tooling at all**, a distroless one, a sidecar
+with no application beside it, a sidecar with no database and no allowlist, a
+volume-rooted sidecar over a read-only mount owned by another uid, and a
+volume-rooted sidecar in a pod that *does* share a process namespace and *does*
+hold database variables — which must change nothing, because the declaration
+decides. It then asserts every behavior above. The negative cases are each a security
 property rather than a feature, so they are asserted rather than assumed:
 password authentication refused, unknown key refused, unlisted forward
 destination refused, remote and agent forwarding refused, a command's
@@ -296,10 +320,12 @@ package to public after the first push and confirm with an unauthenticated pull.
 ## Two obligations this places on the chart that adopts it
 
 1. **A render assertion tying the chart's referenced tag to `VERSION`**, in the
-   shape of `api/tests/test_sftp_service_reachability.py`. Without it a chart can
+   shape of `api/tests/test_ssh_chart_contract.py`. Without it a chart can
    reference a version nobody built.
 2. **`imagePullPolicy: IfNotPresent` on the sidecar container**, stated
    explicitly. With an immutable tag, tag and content are one to one, which makes
-   caching correct rather than accidental — today's `caelus-sftp` sets no policy
-   at all, and on `atmoz/sftp:alpine` that means the version a tenant runs is
-   whichever one their node cached first.
+   caching correct rather than accidental.
+3. **A volume session root mounted at `/srv/session<path>`, read-only.** The jail
+   path is shared between this image and the library chart the same way the
+   `-ssh` Service name is shared with the resolver, and read-only is the whole of
+   the guarantee: nothing inside the container is trusted to provide it.

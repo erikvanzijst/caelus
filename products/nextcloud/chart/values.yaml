@@ -70,3 +70,5 @@ caelus:
   ingress:
     enabled: false
     tls: {}
+
+sshSidecarImage: ghcr.io/erikvanzijst/freepod/ssh-sidecar:0.5.1

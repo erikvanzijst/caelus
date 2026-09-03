@@ -1,12 +1,10 @@
 {{- /*
-selector targets the pict-rs pod specifically -- the library's default
+`selector` targets the pict-rs pod specifically -- the library's default
 instance-only selector would also match the backend, frontend, proxy and
 Postgres pods, and the Service would round-robin onto a pod with no sshd.
 */}}
-{{ include "ssh-sidecar.sftp.resources" (dict
+{{ include "ssh-sidecar.resources" (dict
      "root" .
-     "internalUid" 991
-     "internalGid" 991
      "selector" (dict
        "app.kubernetes.io/name" "pictrs"
        "app.kubernetes.io/instance" .Release.Name)) }}

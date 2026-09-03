@@ -44,7 +44,7 @@ pullPolicy: IfNotPresent
 # The platform's SSH sidecar, which gives this deployment's owner a shell in
 # their application container, the PostgreSQL toolbox, and a forward to their
 # database.
-sshSidecarImage: ghcr.io/erikvanzijst/freepod/ssh-sidecar:0.4.0
+sshSidecarImage: ghcr.io/erikvanzijst/freepod/ssh-sidecar:0.5.1
 
 # Port the application is served on. Injected into the container as the `PORT`
 # env var and targeted by the Service, so the contract with tenant images is

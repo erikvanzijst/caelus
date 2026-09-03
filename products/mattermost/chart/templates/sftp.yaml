@@ -1,7 +1,0 @@
-{{- /* Read-only SFTP access to the Mattermost data PVC (file uploads and
-       attachments). The postgres and plugins PVCs are intentionally not
-       exposed. See products/_lib/ssh-sidecar-chart for the contract. */}}
-{{- /* uid 2000 = the mattermost image's runtime user, which owns the data
-       PVC files; the sftp user must match to read them (see ssh-sidecar
-       README on the uid-ownership rule). */}}
-{{ include "ssh-sidecar.sftp.resources" (dict "root" . "internalUid" 2000) }}

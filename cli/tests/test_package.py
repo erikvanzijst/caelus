@@ -21,6 +21,7 @@ EXPECTED_MODULES = {
     "__init__",
     "__main__",
     "cli",
+    "copy",
     "config",
     "auth",
     "api",

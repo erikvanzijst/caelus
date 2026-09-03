@@ -50,22 +50,24 @@ This repository is a monorepo with:
   (sshpiperd) asks the SSH auth resolver — `ssh-auth/`, a gRPC plugin — rather
   than reading cluster objects, so the reconciler owns nothing for this feature.
   Spec: [sftp-edge-routing](openspec/specs/sftp-edge-routing/spec.md),
-  [sftp-chart-contract](openspec/specs/sftp-chart-contract/spec.md),
+  [ssh-chart-contract](openspec/specs/ssh-chart-contract/spec.md),
   [ssh-auth-resolver](openspec/specs/ssh-auth-resolver/spec.md) · Rationale:
   [ssh-grpc-auth-plugin](openspec/changes/archive/2026-08-30-ssh-grpc-auth-plugin/design.md),
   [ssh-auth](ssh-auth/README.md)
-- **Two SSH access profiles, chosen per product, never per connection.** The
-  `ssh-sidecar` library chart (`products/_lib/ssh-sidecar-chart`) offers `sftp`
-  — `atmoz/sftp` over a data PVC, no shell and no writes — and `dev`, the
-  platform's own sidecar image (`products/_lib/ssh-sidecar-image`), which opens
-  a shell **in the application container**, carries the PostgreSQL toolbox and
-  forwards to the deployment's database. The six PVC-bearing products run
-  `sftp`; **`custom` runs `dev`**, and is the product that profile exists for.
-  A product declares its profile by *which helper set it calls* — there is no
-  profile value, deliberately, because `dev` grants a shell and
-  `CAP_SYS_PTRACE` and values are the tenant-influenced channel. Spec:
-  [ssh-dev-profile](openspec/specs/ssh-dev-profile/spec.md) · Rationale:
-  [ssh-dev-profile](openspec/changes/archive/2026-08-31-ssh-dev-profile/design.md)
+- **One SSH sidecar for every product, and a product declares one thing: its
+  session root.** The `ssh-sidecar` library chart
+  (`products/_lib/ssh-sidecar-chart`) renders the platform's own image
+  (`products/_lib/ssh-sidecar-image`) for every deployment that has SSH access
+  at all. `volume:/<path>` roots a session at a read-only mount of the data the
+  product exposes; `app-container` roots it at the filesystem the tenant's code
+  runs in. **The six data-bearing products declare a volume root; `custom`
+  declares `app-container`**, and a product that declares nothing renders no
+  sidecar and is not routable. Spec:
+  [ssh-chart-contract](openspec/specs/ssh-chart-contract/spec.md),
+  [ssh-sidecar-image](openspec/specs/ssh-sidecar-image/spec.md),
+  [ssh-session-dispatcher](openspec/specs/ssh-session-dispatcher/spec.md) ·
+  Rationale:
+  [unified-ssh-sidecar](openspec/changes/unified-ssh-sidecar/design.md)
 - **The `-ssh` Service naming convention is shared between the charts and the
   resolver, and neither may change it alone.** The edge derives a deployment's
   upstream address as `<release>-ssh.<namespace>.svc` by string convention; that
@@ -73,8 +75,8 @@ This repository is a monorepo with:
   sides — the resolver never validates the Service, and nothing in a chart's own
   release consults it — so a unilateral change produces deployments that
   authenticate and then reach nothing. `ssh-auth/convention_test.go` renders
-  both profiles and asserts the two agree; it is the only thing that fails when
-  one side moves. Moving it costs a maintenance window with the fleet
+  both session roots and asserts the two agree; it is the only thing that fails
+  when one side moves. Moving it costs a maintenance window with the fleet
   unroutable in between.
 - **Vars are the single channel into a pod's environment.** A deployment's
   `vars` become environment variables in its container;

@@ -80,45 +80,45 @@
 
 ## 4. The client
 
-- [ ] 4.1 Add `freepod cp SRC DST` to `cli.py`, resolving the deployment with
+- [x] 4.1 Add `freepod cp SRC DST` to `cli.py`, resolving the deployment with
       `_project_deployment` and the connection with `_connection_setup`. Verify the assembled
       argv carries `IdentitiesOnly=yes`, the client's own `UserKnownHostsFile`, exactly one
       `-i`, and no allocated terminal.
-- [ ] 4.2 Parse the remote marker: a path is remote iff it starts with `:` or
+- [x] 4.2 Parse the remote marker: a path is remote iff it starts with `:` or
       `<deployment>:`. Verify both directions, a local path containing a colon, the long form
       naming this project's deployment, the long form naming a different one, neither side
       marked, and both marked — each refusal naming which case it was.
-- [ ] 4.3 Drive `sftp` for the transfer, in both directions, for a file and for a directory
+- [x] 4.3 Drive `sftp` for the transfer, in both directions, for a file and for a directory
       tree with no recursion flag. Verify a binary round-trips byte-for-byte and an
       executable stays executable.
-- [ ] 4.4 Report a missing local source and an unwritable local destination before
+- [x] 4.4 Report a missing local source and an unwritable local destination before
       connecting; report a missing remote path as the deployment's, distinguishably from a
       local miss; report missing local `sftp` as a named prerequisite. Verify each.
-- [ ] 4.5 Exit non-zero on an incomplete transfer and print no success line for one. Verify
+- [x] 4.5 Exit non-zero on an incomplete transfer and print no success line for one. Verify
       with an interrupted stream.
-- [ ] 4.6 Add `cp` to `test_surface.py`'s command inventory and to `cli/README.md`'s command
+- [x] 4.6 Add `cp` to `test_surface.py`'s command inventory and to `cli/README.md`'s command
       table, with a file-transfer section replacing the `freepod shell cat`/`tar` recipes.
       Verify the surface test passes and the examples run as written.
 
 ## 5. Documentation
 
-- [ ] 5.1 Rewrite `products/custom/README.md` § SSH access for the served transfer: `scp`,
+- [x] 5.1 Rewrite `products/custom/README.md` § SSH access for the served transfer: `scp`,
       `sftp` and `freepod cp` work with nothing added to the image; drop the pipe-over-shell
       recipes and the helper-in-your-image rule. Verify the examples run against a stock
       deployment.
-- [ ] 5.2 Update each curated product's README where it describes file access: the platform
+- [x] 5.2 Update each curated product's README where it describes file access: the platform
       sidecar rather than `atmoz/sftp`, no credentials Secret or sshd-init ConfigMap, and the
       session root it mounts. `immich` and `vaultwarden` also still list an sshpiper `Pipe`
       that no chart renders; drop it. Verify each README's stated objects and path match what
       the chart renders.
-- [ ] 5.3 Add `cp` to the instructions `freepod skill` installs. Verify the installed text
+- [x] 5.3 Add `cp` to the instructions `freepod skill` installs. Verify the installed text
       names the command.
 
 ## 6. Cut over
 
-- [ ] 6.1 Publish the sidecar image at its new version and repoint every chart's pinned tag.
+- [x] 6.1 Publish the sidecar image at its new version and repoint every chart's pinned tag.
       Verify the referenced tag is one that was built.
-- [ ] 6.2 Roll the seven charts in one release and confirm on a live deployment of each
+- [x] 6.2 Roll the seven charts in one release and confirm on a live deployment of each
       product: a curated deployment lists and downloads its data and is refused a shell; a
       `custom` deployment gets a shell, `scp` in both directions, `psql`, and a database
       forward. Verify a curated deployment stays reachable while its application container is

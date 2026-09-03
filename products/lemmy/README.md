@@ -20,7 +20,7 @@ this is a bespoke Caelus-native chart in the same style as `nextcloud` and
 | PostgreSQL | StatefulSet `<release>-postgresql` on `postgres:17-alpine` + headless Service; data on PVC `data-<release>-postgresql-0`; in-memory `/dev/shm`                      |
 | Secrets    | Secret `<release>-secrets` — DB credentials, pict-rs API key, and `config.json` (the config minus the admin password)                                              |
 | Ingress    | `<release>-ingress` -> the proxy (per-deployment TLS via `caelus.ingress.tls`)                                                                                     |
-| SFTP       | Secret + ConfigMap + Service + sshpiper Pipe (`ssh-sidecar`), sidecar in the pict-rs pod at uid 991, read-only over the media volume                                |
+| File access | Service `<release>-ssh` only (`ssh-sidecar`), sidecar in the pict-rs pod; session rooted at `volume:/media`, read-only                                             |
 
 Five workloads, one replica each: the backend's federation workers and pict-rs's
 sled index both assume a single writer, so nothing here scales horizontally.
@@ -177,25 +177,26 @@ initialised instance.
 - **`postgresql.enabled: false` requires `postgresql.host`.** The flag alone
   would leave the config pointing at a Service the release never creates; set
   the host to an external Postgres alongside it.
-- **SFTP exposes the media volume only** — see below.
+- **File access exposes the media volume only** — see below.
 
 The platform's tenant NetworkPolicy already accommodates this chart: it allows
 free traffic within the namespace (proxy → backend → Postgres/pict-rs) and public
 egress, which federation requires.
 
-## SFTP
+## File access
 
-Read-only SFTP over the pict-rs media volume, via the `ssh-sidecar` library
-chart. The sidecar rides in the **pict-rs** pod because an RWO PVC can only be
-shared between containers of one pod, and pict-rs is what mounts the volume.
+The platform's SSH sidecar, rooted at a read-only mount of the pict-rs media
+volume. It rides in the **pict-rs** pod because an RWO PVC can only be shared
+between containers of one pod, and pict-rs is what mounts the volume. Spec:
+[ssh-chart-contract](../../openspec/specs/ssh-chart-contract/spec.md).
 
 ### What a client actually sees
 
-The whole volume, under `media/`:
+The whole volume, at `/media`:
 
 ```
-media/files/01/a0/33/db/1e/9a/77/10/94/e2/60039c1f4605.png
-media/sled-repo/v0.5.0/{conf,db}
+/media/files/01/a0/33/db/1e/9a/77/10/94/e2/60039c1f4605.png
+/media/sled-repo/v0.5.0/{conf,db}
 ```
 
 Both halves are exposed on purpose. `files/` alone is unusable — the sled repo
@@ -368,11 +369,11 @@ being committed:
 - emptyDir writability was checked **on the dev cluster**, not just in Docker: a
   pod running the frontend image as its own non-root user writes the file and
   the backend image reads it (both uid 1000, file mode 0644).
-- SFTP was exercised end to end on the dev cluster in a PSA `baseline` namespace:
-  both containers reach Ready, a real pict-rs upload lands on the volume, the
-  release-name user logs in, `ls` works at uid 991, and the downloaded blob is
+- File access was exercised end to end on the dev cluster in a PSA `baseline`
+  namespace: both containers reach Ready, a real pict-rs upload lands on the
+  volume, the release-name user logs in, `ls` works, and the downloaded blob is
   byte-identical to what was uploaded. `put`, `mkdir` and `rm` are all refused
-  with "Permission denied", and the volume is unchanged afterwards.
+  by the read-only mount, and the volume is unchanged afterwards.
 - Reconciler injection was rendered both ways: wildcard TLS (no `tls` block, no
   issuer annotation) and a custom domain (cert-manager issuer + `tls` block),
   and `caelus.plan.storageSize` was confirmed to size the pict-rs PVC while the

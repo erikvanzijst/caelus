@@ -127,36 +127,32 @@ unaffected — an owner invites them from the web vault under Organization → M
 which is why `INVITATIONS_ALLOWED` stays on. The console has no backup function, so nothing is lost
 there; users export their vault from the web vault instead.
 
-## SFTP
+## File access
 
-A read-only `atmoz/sftp` sidecar rides in the vaultwarden pod, with the standalone objects
-(credentials Secret, sshd-init ConfigMap, Service, sshpiper Pipe) in `templates/sftp.yaml`.
-Login is the release name; the password is generated once and reused from the
-`<release>-sftp-credentials` Secret, readable through the existing
-`provisioner.read_sftp_credentials` path.
-
-It exposes the whole of `/data` — the sqlite vault, `attachments`, `sends` and `rsa_key.pem`,
-which is exactly vaultwarden's documented backup set. The library warns against listing a
-database PVC; that targets products with a separate postgres volume, whereas here the sqlite
-file *is* the application data and the only SFTP user is the vault's owner. Read-only is
-enforced twice over: `ForceCommand internal-sftp -R` and `readOnly: true` mounts.
+The platform's SSH sidecar rides in the vaultwarden pod, rooted at a read-only
+mount of the whole of `/data` — the sqlite vault, `attachments`, `sends` and
+`rsa_key.pem`, which is exactly vaultwarden's documented backup set. The library
+warns against mounting a database volume; that targets products with a separate
+postgres volume, whereas here the sqlite file *is* the application data and the
+only account that reaches it is the vault's owner. The release renders one SSH
+object, the `<release>-ssh` Service, and holds no credential of its own. Spec:
+[ssh-chart-contract](../../openspec/specs/ssh-chart-contract/spec.md).
 
 Two details worth knowing:
 
-- **`runAsNonRoot` moved from the pod to the vaultwarden container.** `atmoz/sftp` needs root
-  to build the chroot and run sshd, so a pod-wide `runAsNonRoot` would break the sidecar. The
-  app container keeps the full hardening; the pod keeps `fsGroup` and `seccompProfile`.
-- **The Service selector names the app pod explicitly.** The library's default instance-only
-  selector would also match the bootstrap Job's pod, which does not listen on 2222, so the
-  Service would publish a dead endpoint for as long as that Job exists.
-
-`fsGroup: 1000` matches the library's default `internalUid`, so no override is needed — unlike
-nextcloud, which pins uid 33 because its image mandates www-data.
+- **`runAsNonRoot` moved from the pod to the vaultwarden container.** The
+  sidecar runs as root — which is what reads this data whatever uid wrote it —
+  so a pod-wide `runAsNonRoot` would break it. The app container keeps the full
+  hardening; the pod keeps `fsGroup` and `seccompProfile`.
+- **The Service selector names the app pod explicitly.** The library's default
+  instance-only selector would also match the bootstrap Job's pod, which does
+  not listen on 2222, so the Service would publish a dead endpoint for as long
+  as that Job exists.
 
 **Backup caveat:** `ENABLE_DB_WAL` is on, so a naive copy of `db.sqlite3` alone can be
 inconsistent — the `-wal` file is part of the state. For a guaranteed-consistent personal
-backup, the web vault's own export (Tools → Export vault) is the better route; SFTP is for a
-full instance snapshot.
+backup, the web vault's own export (Tools → Export vault) is the better route; file access is
+for a full instance snapshot.
 
 ## Client IP
 
@@ -191,8 +187,8 @@ The pod runs as uid/gid 1000 with `runAsNonRoot`, `seccompProfile: RuntimeDefaul
 `allowPrivilegeEscalation: false`, `capabilities: drop [ALL]`, and
 `automountServiceAccountToken: false`. Vaultwarden needs no root and writes only to `/data`.
 
-`fsGroup: 1000` owns the PVC files. A future SFTP sidecar must run as the same uid or its logins
-will authenticate but fail to read anything.
+`fsGroup: 1000` owns the PVC files. The SSH sidecar reads them as root regardless, so there is
+no uid for this chart to keep in step with.
 
 `readOnlyRootFilesystem` is **not** set — vaultwarden's writable paths outside `/data` have not
 been audited. That is the next hardening step, not an oversight.
@@ -205,7 +201,7 @@ been audited. That is the next hardening step, not an oversight.
 | PVC | `<release>-data` |
 | Secret (admin token) | `<release>-admin` |
 | Ingress | `<release>-ingress` |
-| SFTP Service / Secret / Pipe | `<release>-sftp`, `<release>-sftp-credentials`, `<release>` |
+| SSH Service | `<release>-ssh` |
 | Job (bootstrap hook) | `<release>-bootstrap` |
 
 The Deployment uses `strategy: Recreate`: with a single RWO volume, a rolling update would

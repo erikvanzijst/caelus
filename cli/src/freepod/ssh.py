@@ -1,4 +1,4 @@
-"""SSH connection assembly for `shell`, `db proxy` and `db shell`.
+"""SSH connection assembly for `shell`, `cp`, `db proxy` and `db shell`.
 
 The client does not implement SSH; it drives the system `ssh`. This module is
 the assembly those commands share: it names the one key to offer, pins the
@@ -29,21 +29,31 @@ def known_hosts_path() -> Path:
     return config_dir() / "known_hosts"
 
 
-def require_ssh() -> str:
-    """The system `ssh`, or a named-prerequisite error naming what to install.
+def _require_tool(name: str, purpose: str) -> str:
+    """One system tool, or a named-prerequisite error naming what to install.
 
-    A missing `ssh` is a prerequisite, not a fault of this client, so it is
-    reported by name with the fix rather than surfacing as an unhandled
+    A missing OpenSSH tool is a prerequisite, not a fault of this client, so it
+    is reported by name with the fix rather than surfacing as an unhandled
     `FileNotFoundError` deep in a subprocess call.
     """
-    path = shutil.which("ssh")
+    path = shutil.which(name)
     if path is None:
         raise FreepodError(
-            "the system `ssh` executable is required but was not found on your "
-            "PATH. Install OpenSSH — for example `apt-get install openssh-client` "
-            "or `brew install openssh` — and try again."
+            f"the system `{name}` executable is required to {purpose} but was not "
+            f"found on your PATH. Install OpenSSH — for example "
+            f"`apt-get install openssh-client` or `brew install openssh` — and try again."
         )
     return path
+
+
+def require_sftp() -> str:
+    """The system `sftp`, which carries a copy."""
+    return _require_tool("sftp", "copy files")
+
+
+def require_ssh() -> str:
+    """The system `ssh`, which opens a session."""
+    return _require_tool("ssh", "open a session")
 
 
 def _host_part(host: str, port: int) -> str:
@@ -139,6 +149,57 @@ def identity_file(key_path: Path) -> Path:
     return key_path
 
 
+def edge_options(key_path: Path, known_hosts: Path) -> List[str]:
+    """The options every connection to the edge carries, whichever tool makes it.
+
+    Shared by `ssh` and `sftp`, which differ only in the program name and how
+    they spell the port. Each option here looks like belt-and-braces until the
+    day someone removes one, so each sits beside its reason.
+    """
+    return [
+        # One identity, and only that one. The edge answers *every* offered key
+        # with a partial success, so a client that offers several — which a
+        # populated agent does by default — exhausts the server's authentication
+        # budget and is refused before it reaches the right key.
+        "-o",
+        "IdentitiesOnly=yes",
+        "-i",
+        str(identity_file(key_path)),
+        # Pin the edge to the key the platform published, in a store the user
+        # does not curate. StrictHostKeyChecking means a mismatch is a refusal,
+        # never a prompt, and never a key recorded on first use.
+        "-o",
+        f"UserKnownHostsFile={known_hosts}",
+        "-o",
+        "StrictHostKeyChecking=yes",
+    ]
+
+
+def build_sftp_args(
+    *,
+    user: str,
+    host: str,
+    port: int,
+    key_path: Path,
+    known_hosts: Path,
+) -> List[str]:
+    """The argv for one file transfer over the edge, reading its script on stdin.
+
+    `sftp` spells the port `-P` and takes no remote command; the transfer is
+    driven by batch lines rather than arguments, which is what keeps a path
+    holding a space or a glob character out of argv parsing entirely.
+    """
+    return [
+        "sftp",
+        "-P",
+        str(port),
+        *edge_options(key_path, known_hosts),
+        "-b",
+        "-",
+        f"{user}@{host}",
+    ]
+
+
 def build_args(
     *,
     user: str,
@@ -157,26 +218,7 @@ def build_args(
     refusal rather than a prompt sit beside their reason, because each looks
     like belt-and-braces until the day someone removes one.
     """
-    args = [
-        "ssh",
-        "-p",
-        str(port),
-        # One identity, and only that one. The edge answers *every* offered key
-        # with a partial success, so a client that offers several — which a
-        # populated agent does by default — exhausts the server's authentication
-        # budget and is refused before it reaches the right key.
-        "-o",
-        "IdentitiesOnly=yes",
-        "-i",
-        str(identity_file(key_path)),
-        # Pin the edge to the key the platform published, in a store the user
-        # does not curate. StrictHostKeyChecking means a mismatch is a refusal,
-        # never a prompt, and never a key recorded on first use.
-        "-o",
-        f"UserKnownHostsFile={known_hosts}",
-        "-o",
-        "StrictHostKeyChecking=yes",
-    ]
+    args = ["ssh", "-p", str(port), *edge_options(key_path, known_hosts)]
     if tty:
         # Force a remote tty. The sidecar runs under a ForceCommand, which does
         # not allocate a pseudo-terminal on its own, so an interactive session

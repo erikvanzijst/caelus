@@ -190,14 +190,21 @@ is the second line of defense, because the two fail differently.
 
 ## SSH access
 
-`custom` runs the **`dev` access profile**: a platform SSH sidecar rides in the
-application pod, and the deployment's owner reaches it with stock `ssh`, using
-an SSH key registered on their account.
+`custom` declares an **application-container session root**: a platform SSH
+sidecar rides in the application pod, and the deployment's owner reaches it with
+stock `ssh`, using an SSH key registered on their account. What that grants, and
+why, is
+[ssh-chart-contract](../../openspec/specs/ssh-chart-contract/spec.md) and
+[ssh-session-dispatcher](../../openspec/specs/ssh-session-dispatcher/spec.md) ·
+Rationale:
+[unified-ssh-sidecar](../../openspec/changes/unified-ssh-sidecar/design.md).
 
 ```bash
-ssh <deployment>@dev.freepod.eu                      # a login shell IN the application container
-ssh <deployment>@dev.freepod.eu psql                 # the PostgreSQL toolbox, in the sidecar
-ssh <deployment>@dev.freepod.eu 'cat > /app/f' < f   # into the application's own filesystem
+ssh <deployment>@dev.freepod.eu                   # a login shell IN the application container
+ssh <deployment>@dev.freepod.eu psql              # the PostgreSQL toolbox, in the sidecar
+scp ./config.yml <deployment>@dev.freepod.eu:/app/  # a file, into the application container
+sftp <deployment>@dev.freepod.eu                  # or browse it
+freepod cp ./assets :/app/assets                  # or the client's own copy
 ```
 
 **The shell lands in the container the tenant built**, not in the sidecar. The
@@ -206,42 +213,25 @@ filesystem and environment and enters it; what a session can do there is a
 property of that image, and a distroless one with no shell ends the session
 saying so.
 
+**File transfer needs nothing in your image.** It is served by the sidecar's own
+`sftp-server`, chrooted into the application container — so `scp`, `sftp`,
+`freepod cp` and any client that speaks the protocol work against a stock
+deployment, whose Railpack base image carries no `sftp-server`, `scp` or `rsync`
+of its own. A session starts in the application's working directory, so a
+relative path means there what it means in `freepod shell`. Do not allocate a
+terminal for a piped command (no `-t`): a pty translates line endings and folds
+stderr into stdout, which corrupts the stream.
+
 **Debugging a broken deployment is the point.** A deployment in `error` state is
 still reachable — the Service publishes not-ready addresses and the edge's
 reachability allowlist admits `error` deliberately — because that is the state
 an owner most needs to get inside.
 
 **Attaching a debugger or profiler is not available yet.** `strace`, `gdb` and
-`py-spy` need `CAP_SYS_PTRACE`, and tenant namespaces enforce Pod Security
-`baseline`, which refuses every non-default capability at admission — a pod
-requesting one never schedules. Raising that is a change to what the platform
-guarantees about tenant pods, so it is tracked separately; see
-[`_dev.tpl`](../_lib/ssh-sidecar-chart/templates/_dev.tpl). Everything else on
-this profile — the shell, file transfer, the toolbox and forwarding — works
-without it.
-
-**File transfer needs no separate configuration, but it does need a helper in
-your image.** Every file-transfer tool runs a helper on the remote side, exactly
-as `kubectl cp` needs `tar`, and here that remote side is the tenant's own
-application container: `sftp-server` for `scp` and `sftp`, `rsync` for rsync.
-**The Railpack base image `custom` builds on carries none of those three.** It
-does carry `sh`, `tar`, `cat` and `gzip`, so pipe over the session path instead —
-that is the transport that works on a stock deployment:
-
-```bash
-# out
-ssh <deployment>@dev.freepod.eu cat /app/app.db > app.db
-ssh <deployment>@dev.freepod.eu tar -cf - -C /app data | tar -xf -
-
-# in
-ssh <deployment>@dev.freepod.eu 'cat > /app/config.yml' < config.yml
-tar -cf - data | ssh <deployment>@dev.freepod.eu 'tar -xf - -C /app'
-```
-
-Do not allocate a terminal for these (no `-t`): a pty translates line endings
-and folds stderr into stdout, which corrupts the stream. `scp`, `sftp` and rsync
-do work unchanged against an image that installs their helper, and the
-dispatcher names the missing one when it is absent.
+`py-spy` need `CAP_SYS_PTRACE`, which Pod Security `baseline` refuses at
+admission; raising that is a change to what the platform guarantees about tenant
+pods and is tracked separately. Everything else — the shell, file transfer, the
+toolbox and forwarding — works without it.
 
 ### Forwarding to the database
 

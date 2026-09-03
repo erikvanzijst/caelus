@@ -507,6 +507,29 @@ It needs a registered key (`freepod key add`) and `ssh` on the PATH, like the
 other SSH commands, and it reaches a container that is up even when the app
 inside it is not.
 
+### Copying files in and out
+
+`freepod cp` moves a file or a whole directory either way. Mark the
+deployment's side with a leading colon; the other side is local, and which one
+is marked decides the direction.
+
+```bash
+freepod cp :/app/app.log ./app.log     # out, to read locally
+freepod cp ./fixture.json :/app/       # in, for a one-off
+freepod cp :/app/uploads ./uploads     # a tree, no recursion flag
+```
+
+Nothing needs to be installed in the image — the platform serves the transfer —
+and a relative remote path means what it means in `freepod shell`. Directories
+keep their structure and their files' modes; owners and timestamps do not
+survive. Exactly one side must be marked: with neither or both it refuses
+before connecting rather than guessing.
+
+The same caveat as `freepod shell` applies with more force: **a file copied in
+is gone at the next restart and at every release.** Use it to get data out, or
+to try something for a moment, never to fix a deployment. Change the source and
+redeploy.
+
 ## Command reference
 
 | Command            | Purpose                                                                                                                                                              |
@@ -517,6 +540,7 @@ inside it is not.
 | `freepod deploy`   | Pack, build, release. Prints the URL on stdout.                                                                                                                      |
 | `freepod log`      | Read the application's output. `-f` follows, `-r N` pins one release, `-t` adds timestamps.                                                                          |
 | `freepod shell`    | Run a command in the application container: `freepod shell env`. Always pass one — with no command it is interactive. Needs a registered key and `ssh`.              |
+| `freepod cp`       | Copy a file or directory between here and the deployment: `freepod cp :/app/app.log ./app.log`. Mark the deployment's side with `:`; the direction follows. Needs a registered key and `sftp`. |
 | `freepod builds`   | List this account's builds, most recent first.                                                                                                                       |
 | `freepod releases` | List this project's rollouts, newest first, marking the live one. Where `log -r N` gets its N.                                                                       |
 | `freepod var`      | Read and change the app's environment: `var list`, `var get KEY`, `var set KEY=VALUE`, `var rm KEY`. `--secret` stores write-only; `--stage` defers the rollout.     |

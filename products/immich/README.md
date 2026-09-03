@@ -3,20 +3,20 @@
 A self-contained Helm chart for [Immich](https://immich.app/), a self-hosted
 photo and video library. The chart renders the entire deployment directly; its
 only dependency is Freepod's own `ssh-sidecar` library chart (which provides the
-read-only SFTP sidecar and its supporting objects).
+read-only file access to the photo library).
 
 ## What it deploys
 
 | Component | Object(s) |
 |-----------|-----------|
-| Server (web/API) | Deployment `<release>-server` (+ read-only SFTP sidecar), Service `:2283` |
+| Server (web/API) | Deployment `<release>-server` (+ SSH sidecar), Service `:2283` |
 | Machine learning | Deployment `<release>-machine-learning`, Service `:3003` |
 | Valkey (queue) | Deployment + PVC `<release>-valkey` + Service `:6379` |
 | PostgreSQL (vectorchord) | Secret + PVC `postgresql-data` + Service + Deployment |
 | Library | PVC `library` (plan-sized) |
 | Config | ConfigMap `<release>-config` (external URL + SMTP) |
 | Ingress | `<release>-ingress` (per-deployment TLS via `caelus.ingress.tls`) |
-| SFTP | Secret + ConfigMap + Service + sshpiper Pipe (`ssh-sidecar`) |
+| File access | Service `<release>-ssh` only (`ssh-sidecar`); session rooted at `volume:/library` |
 
 PostgreSQL uses Immich's own `ghcr.io/immich-app/postgres` image (the
 `vectorchord`/`pgvecto.rs` build); stock PostgreSQL will not work because Immich

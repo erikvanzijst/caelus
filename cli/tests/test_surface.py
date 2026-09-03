@@ -366,3 +366,18 @@ def test_styled_output_carries_no_escape_codes_when_piped(monkeypatch, capsys):
         cli.commands.pop("probe")
 
     assert capsys.readouterr().out == "hello\n"
+
+
+def test_every_command_appears_in_the_readme_table():
+    """The README is the package's PyPI landing page, so a command that is not
+    in its table is a command nobody browsing the project can discover."""
+    import pathlib
+
+    from freepod.cli import cli
+
+    table = (pathlib.Path(__file__).resolve().parents[1] / "README.md").read_text()
+    listed = {line.split("`")[1] for line in table.splitlines() if line.startswith("| `freepod ")}
+    documented = {name.split()[-1] for name in listed}
+    assert set(cli.commands) <= documented, (
+        f"undocumented commands: {sorted(set(cli.commands) - documented)}"
+    )

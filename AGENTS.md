@@ -206,6 +206,8 @@ For details, see `tf/README.md`, `tf/app/README.md`, `tf/deps/README.md`.
     phase (`runtime`, the only one so far) is a path segment because it is part
     of a var's identity, not a filter over a set — and it is a phase, never an
     environment: a staging app is its own deployment.
+- Git worktrees live at /workspace/trees/<branch-name>. Create with:
+  `git worktree add /workspace/trees/<name> -b <name>`.
 
 ## Documentation Layering
 
@@ -274,6 +276,11 @@ re-explaining it. The design document holds the argument.
   keeps the plain `{"detail": ...}` body.
 - Write tests for all new behavior.
 - No secrets in code.
+
+## Comments
+Do NOT add explanatory inline comments to code. Only comment on non-obvious 'why', never 'what'.
+Never duplicate a docstring or restate the line below it. If you find yourself writing a comment
+for a self-evident line, delete it.
 
 ## Commit Messages
 - Follow standard Git commit message style:

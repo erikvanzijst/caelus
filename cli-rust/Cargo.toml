@@ -1,0 +1,38 @@
+[package]
+name = "freepod"
+version = "0.11.0"
+edition = "2021"
+description = "Command-line client for Freepod — take a local project directory to a running deployment on freepod.eu."
+license = "MIT"
+
+[[bin]]
+name = "freepod"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "io-util", "process"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "multipart", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tar = "0.4"
+flate2 = "1"
+ignore = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"
+sha2 = "0.10"
+rand = "0.8"
+url = "2"
+webbrowser = "1"
+dialoguer = "0.11"
+futures-util = "0.3"
+thiserror = "1"
+async-trait = "0.1"
+regex = "1"
+hex = "0.4"
+percent-encoding = "2"
+libc = "0.2"
+
+[profile.release]
+strip = true
+lto = true

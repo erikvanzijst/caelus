@@ -104,3 +104,8 @@ Two independent statements of the same intent can disagree, and the one that wou
 #### Scenario: Ownership does not decide readability
 - **WHEN** the session root holds files owned by another user with restrictive modes
 - **THEN** the session reads them, without the container being told which user owns them
+
+## RENAMED Requirements
+
+- FROM: `### Requirement: Sessions are not chrooted`
+- TO: `### Requirement: The server itself does not chroot, and forwarding is unaffected by confinement`

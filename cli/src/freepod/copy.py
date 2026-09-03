@@ -1,7 +1,7 @@
 """Copying files between the local machine and a deployment.
 
-Spec: openspec/specs/cli-ssh-access/spec.md · Rationale:
-openspec/changes/unified-ssh-sidecar/design.md § D5.
+Spec: openspec/specs/cli-ssh-access/spec.md · Rationale: the archived
+`unified-ssh-sidecar` change under openspec/changes/archive/, design.md § D5.
 """
 
 from __future__ import annotations

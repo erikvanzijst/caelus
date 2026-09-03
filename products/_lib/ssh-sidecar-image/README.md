@@ -9,7 +9,7 @@ session at all.
 What a given deployment gets follows from **one declared input**,
 `FREEPOD_SESSION_ROOT`, and from nothing the container discovers about the pod it
 is in. See
-[`openspec/changes/unified-ssh-sidecar/design.md`](../../../openspec/changes/unified-ssh-sidecar/design.md)
+[`openspec/changes/archive/2026-09-03-unified-ssh-sidecar/design.md`](../../../openspec/changes/archive/2026-09-03-unified-ssh-sidecar/design.md)
 for the design, and [`var/ssh_access.md`](../../../var/ssh_access.md) D2–D4, D6,
 D14 and D17 for the access decisions it inherits.
 

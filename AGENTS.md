@@ -67,7 +67,7 @@ This repository is a monorepo with:
   [ssh-sidecar-image](openspec/specs/ssh-sidecar-image/spec.md),
   [ssh-session-dispatcher](openspec/specs/ssh-session-dispatcher/spec.md) ·
   Rationale:
-  [unified-ssh-sidecar](openspec/changes/unified-ssh-sidecar/design.md)
+  [unified-ssh-sidecar](openspec/changes/archive/2026-09-03-unified-ssh-sidecar/design.md)
 - **The `-ssh` Service naming convention is shared between the charts and the
   resolver, and neither may change it alone.** The edge derives a deployment's
   upstream address as `<release>-ssh.<namespace>.svc` by string convention; that

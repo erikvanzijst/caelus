@@ -3,7 +3,7 @@
 The transfer itself is `sftp`'s, so it is stubbed to capture the argv and the
 batch script it is fed; everything up to that call, including every refusal
 that needs no connection, is real. The copy running end to end against a live
-deployment is what `openspec/changes/unified-ssh-sidecar/tasks.md` § 6.2 covers.
+deployment is what `openspec/changes/archive/2026-09-03-unified-ssh-sidecar/tasks.md` § 6.2 covers.
 """
 
 from __future__ import annotations

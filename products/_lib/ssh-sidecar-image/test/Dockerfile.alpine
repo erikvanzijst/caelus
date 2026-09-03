@@ -1,0 +1,11 @@
+# A tenant image whose `/bin/sh` is an **absolute** symlink (`-> /bin/busybox`),
+# which is what every Alpine-based image looks like. Under /proc/<pid>/root an
+# absolute target resolves against the sidecar's root, so a probe that trusts
+# `-x` reports no shell where chroot runs one. Debian's relative `sh -> dash`
+# never shows it, which is why this fixture exists.
+FROM alpine:3.20
+RUN set -eux; \
+    echo "alpine-application-container" > /etc/app-marker; \
+    [ -L /bin/sh ] && [ "$(readlink /bin/sh)" = "/bin/busybox" ]
+WORKDIR /app
+CMD ["sleep", "infinity"]

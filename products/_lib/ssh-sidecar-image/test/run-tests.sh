@@ -22,6 +22,7 @@ readonly LOGIN_USER=custom-user-app-harness
 readonly NET=$PREFIX-net
 readonly APP_IMAGE=$PREFIX/app
 readonly NOSHELL_IMAGE=$PREFIX/noshell
+readonly ALPINE_IMAGE=$PREFIX/alpine
 readonly PG_IMAGE=postgres:18-alpine
 readonly BUSYBOX_IMAGE=busybox:latest
 # The path a volume-rooted session is started in, and the path the chart mounts
@@ -191,6 +192,7 @@ if [[ -z $IMAGE ]]; then
 fi
 docker build -q -f Dockerfile.app -t "$APP_IMAGE" . >/dev/null || exit 1
 docker build -q -f Dockerfile.noshell -t "$NOSHELL_IMAGE" . >/dev/null || exit 1
+docker build -q -f Dockerfile.alpine -t "$ALPINE_IMAGE" . >/dev/null || exit 1
 echo "testing image: $IMAGE"
 
 ssh-keygen -q -t ed25519 -N '' -C harness -f "$WORK/id"
@@ -219,6 +221,12 @@ run_container "$PREFIX-side" --pid="container:$PREFIX-app" --network "container:
 # state a developer meets when their pod is broken, and the one in which the
 # database toolbox and forwarding must still work.
 run_container "$PREFIX-lone" --network "$NET" "${PUBLISH[@]}" "${SIDE_ENV[@]}" "$IMAGE"
+
+# A tenant image whose shell is reached through an absolute symlink.
+run_container "$PREFIX-alpine-app" --network "$NET" "${PUBLISH[@]}" "$ALPINE_IMAGE"
+mapfile -t ALPINE_ENV < <(sidecar_env_nodb release-alpine-uuid 2)
+run_container "$PREFIX-alpine-side" --pid="container:$PREFIX-alpine-app" \
+    --network "container:$PREFIX-alpine-app" "${ALPINE_ENV[@]}" "$IMAGE"
 
 run_container "$PREFIX-noshell-app" --network "$NET" "${PUBLISH[@]}" "$NOSHELL_IMAGE"
 run_container "$PREFIX-noshell-side" --pid="container:$PREFIX-noshell-app" \
@@ -263,7 +271,7 @@ run_container "$PREFIX-volshared-side" --pid="container:$PREFIX-volshared-app" \
     --env PGPASSWORD=harness-secret --env PGDATABASE=appdb "$IMAGE"
 
 for owner in "$PREFIX-app" "$PREFIX-lone" "$PREFIX-noshell-app" "$PREFIX-nodb-app" \
-             "$PREFIX-vol-side" "$PREFIX-volshared-app"; do
+             "$PREFIX-alpine-app" "$PREFIX-vol-side" "$PREFIX-volshared-app"; do
     wait_for_port "$owner" || { echo "sidecar on $owner never opened its port" >&2; docker logs "${owner/-app/-side}" 2>&1 | tail -20; exit 1; }
 done
 
@@ -511,6 +519,16 @@ expect_contains "the failure names the cause" "provides no shell" "$out"
 expect_missing "no raw execution failure reaches the user" "No such file or directory" "$out"
 expect_missing "the session is not opened in the sidecar instead" "postgresql" \
     "$(ssh_to "$PREFIX-noshell-app" 'ls -d /usr/lib/postgresql' 2>&1)"
+
+# The shell is found through an absolute symlink, which `-x` alone cannot see
+# from the sidecar's root.
+expect_eq "a shell reached through an absolute symlink is found" \
+    "alpine-application-container" "$(ssh_to "$PREFIX-alpine-app" 'cat /etc/app-marker' 2>/dev/null)"
+expect_eq "and an interactive session opens in it" "/app" \
+    "$(ssh_to "$PREFIX-alpine-app" 'pwd' 2>/dev/null)"
+out=$(ssh_to "$PREFIX-alpine-app" 2>&1 </dev/null); rc=$?
+expect_zero "a session with no command opens too" "$rc"
+expect_missing "and is not refused as shell-less" "provides no shell" "$out"
 
 out=$(ssh_to "$PREFIX-app" 'definitely-not-a-command' 2>&1); rc=$?
 expect_eq "a command absent from the application container exits 127" "127" "$rc"
@@ -765,14 +783,16 @@ expect_missing "the sidecar's own filesystem is not reachable" "postgresql" "$ou
 out=$(printf "get /etc/shadow $WORK/stolen\nquit\n" | sftp "${SSH_OPTS[@]}" -i "$WORK/id" -P "$vport" "root@$vhost" 2>&1)
 expect_missing "and neither is anything outside the jail" "Fetching" "$out"
 
-out=$(vssh true 2>&1); rc=$?
+out=$(vssh 2>&1 </dev/null); rc=$?
 expect_nonzero "a shell is refused" "$rc"
 expect_contains "the refusal names the session root" "$VOLUME_SESSION_PATH" "$out"
+expect_contains "and says where to go instead" "scp" "$out"
 expect_missing "no raw execution failure reaches the user" "No such file or directory" "$out"
 
 out=$(vssh 'cat /data/marker.txt' 2>&1); rc=$?
 expect_nonzero "a remote command is refused" "$rc"
-expect_contains "the refusal names it" "cat" "$out"
+expect_contains "the refusal names the reason" "file transfer" "$out"
+expect_missing "and does not surface as an execution failure" "not found" "$out"
 
 out=$(vssh 'psql -Atc "select 1"' 2>&1); rc=$?
 expect_nonzero "the database tooling is refused" "$rc"
@@ -799,7 +819,7 @@ sssh() { ssh -n "${SSH_OPTS[@]}" -i "$WORK/id" -p "$sport" "root@$shost" "$@"; }
 expect_contains "an application container really is visible to this sidecar" "application-container" \
     "$(docker exec "$PREFIX-volshared-side" sh -c 'for p in /proc/[0-9]*; do cat $p/root/etc/app-marker 2>/dev/null; done' | head -1)"
 
-out=$(sssh true 2>&1); rc=$?
+out=$(sssh 2>&1 </dev/null); rc=$?
 expect_nonzero "a shell is still refused" "$rc"
 expect_contains "and refused for the declared reason" "$VOLUME_SESSION_PATH" "$out"
 expect_missing "not because no application process was found" "process namespace" "$out"

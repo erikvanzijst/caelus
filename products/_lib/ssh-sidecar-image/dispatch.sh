@@ -192,9 +192,25 @@ if $is_transfer; then
 fi
 
 # --- enter the application container ---------------------------------------
+# A symlink has to be resolved by hand, because an absolute target under
+# /proc/<pid>/root resolves against the SIDECAR's root rather than the app's:
+# `-x /proc/1/root/bin/sh` is false for Alpine's `/bin/sh -> /bin/busybox`,
+# which chroot then runs perfectly well. Debian's relative `sh -> dash` never
+# showed it.
+app_executable() {
+    local path=$1 target
+    for _ in 1 2 3 4 5 6 7 8; do
+        [[ -L $app_root$path ]] || { [[ -x $app_root$path ]]; return; }
+        target=$(readlink "$app_root$path") || return 1
+        [[ $target == /* ]] || target=${path%/*}/$target
+        path=$target
+    done
+    return 1
+}
+
 app_shell=""
 for candidate in "${SHELLS[@]}"; do
-    [[ -x $app_root$candidate ]] && { app_shell=$candidate; break; }
+    app_executable "$candidate" && { app_shell=$candidate; break; }
 done
 
 if [[ -z $app_shell ]]; then

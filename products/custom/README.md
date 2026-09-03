@@ -197,7 +197,7 @@ why, is
 [ssh-chart-contract](../../openspec/specs/ssh-chart-contract/spec.md) and
 [ssh-session-dispatcher](../../openspec/specs/ssh-session-dispatcher/spec.md) ·
 Rationale:
-[unified-ssh-sidecar](../../openspec/changes/unified-ssh-sidecar/design.md).
+[unified-ssh-sidecar](../../openspec/changes/archive/2026-09-03-unified-ssh-sidecar/design.md).
 
 ```bash
 ssh <deployment>@dev.freepod.eu                   # a login shell IN the application container

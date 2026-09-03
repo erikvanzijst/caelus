@@ -25,7 +25,7 @@ wrapper chart depends on it and calls its named templates.
 
 Spec: [ssh-chart-contract](../../../openspec/specs/ssh-chart-contract/spec.md),
 [sftp-edge-routing](../../../openspec/specs/sftp-edge-routing/spec.md) ·
-Rationale: [unified-ssh-sidecar](../../../openspec/changes/unified-ssh-sidecar/design.md),
+Rationale: [unified-ssh-sidecar](../../../openspec/changes/archive/2026-09-03-unified-ssh-sidecar/design.md),
 [ssh-grpc-auth-plugin](../../../openspec/changes/archive/2026-08-30-ssh-grpc-auth-plugin/design.md)
 
 ## One helper set

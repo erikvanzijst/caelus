@@ -8,7 +8,7 @@ application's processes at all, which is also why that pod sets
 `shareProcessNamespace: true`.
 
 See the ssh-sidecar library chart (products/_lib/ssh-sidecar-chart) for the
-contract, and openspec/changes/unified-ssh-sidecar/design.md for why the session
+contract, and openspec/changes/archive/2026-09-03-unified-ssh-sidecar/design.md for why the session
 root is the only thing a product declares.
 */}}
 {{ include "ssh-sidecar.resources" (dict "root" .) }}

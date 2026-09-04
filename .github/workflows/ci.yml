@@ -122,10 +122,11 @@ jobs:
       - name: Build and publish images
         run: ./scripts/build-images.sh --all
 
-      # The sidecar is on an immutable tag defined in products/_lib/ss-sidecar/VERSION
-      # and so it can only be pushed if the VERSION actually revved.
       - name: Publish the SSH sidecar when its version is new
         run: ./scripts/build-images.sh --ssh-sidecar --skip-if-published
+
+      - name: Publish the SSH auth resolver when its version is new
+        run: ./scripts/build-images.sh --ssh-resolver --skip-if-published
 
   api-test:
     runs-on: ubuntu-latest

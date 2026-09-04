@@ -100,9 +100,16 @@ proto's provenance is in `proto/UPSTREAM`.
 back means pointing Terraform at the previous version, which only works while
 that version is still the image it was.
 
+**CI publishes it on merge to master**, running the target below with
+`--skip-if-published`, which turns the refusal to overwrite into "nothing to
+do". So a push happens exactly when `VERSION` names a version the registry does
+not have, and every other merge is a no-op rather than a red build. Publishing
+by hand is still the right move when you want the image out ahead of a merge:
+
 ```sh
 ./scripts/build-images.sh --ssh-resolver
 ```
 
-Then repoint `tf/app/sshpiper` and apply. `scripts/rollout.sh` does not touch
-it — that is the point of it having its own version.
+Deploying it is a separate act either way: bump `ssh_resolver_image` in
+`tf/app/variables.tf` and apply. `scripts/rollout.sh` does not touch the edge —
+that is the point of it having its own version.

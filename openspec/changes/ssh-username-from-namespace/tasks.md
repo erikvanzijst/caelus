@@ -37,5 +37,5 @@
 
 ## 7. Cutover
 
-- [ ] 7.1 Announce the username change to existing deployment owners before deploying task groups 4 and 5, since the failure mode at the edge is an undiagnosable `Permission denied (publickey)` (see design.md — Risks)
-- [ ] 7.2 Deploy the API and resolver changes together as one cutover, then the CLI release; verify a live connection using the username the credentials endpoint reports succeeds, and that the old name-based username is refused
+- [x] 7.1 Announce the username change to existing deployment owners before deploying task groups 4 and 5, since the failure mode at the edge is an undiagnosable `Permission denied (publickey)` (see design.md — Risks)
+- [x] 7.2 Deploy the API and resolver changes together as one cutover, then the CLI release; verify a live connection using the username the credentials endpoint reports succeeds, and that the old name-based username is refused

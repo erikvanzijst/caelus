@@ -96,4 +96,4 @@ RUN curl -fsSL https://opencode.ai/install | bash
 RUN curl -fsSL https://ampcode.com/install.sh | bash
 
 EXPOSE 8000 5173
-CMD bash
+CMD ["sleep", "infinity"]

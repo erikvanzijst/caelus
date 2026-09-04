@@ -28,6 +28,7 @@ RUN apt-get update -y && \
       wget \
       jq \
       yq \
+      pv \
       ca-certificates \
       dnsutils \
       postgresql-client \

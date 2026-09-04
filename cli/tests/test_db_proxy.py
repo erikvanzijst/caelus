@@ -126,7 +126,7 @@ def capture_run(monkeypatch):
 def _stub_platform(stub_api, *, database=DATABASE):
     stub_api(
         Platform(
-            deployment={"name": DEPLOYMENT_NAME, "status": "ready"},
+            deployment={"id": DEPLOYMENT_ID, "name": DEPLOYMENT_NAME, "status": "ready"},
             database=database,
             keys=[key_entry()],
         )
@@ -160,7 +160,7 @@ def test_db_proxy_forwards_to_the_reported_destination_verbatim(
     # string the chart renders into PermitOpen, so the two readers agree.
     assert destination == f"{DATABASE['host']}:{DATABASE['port']}"
     # The edge, and the one key, as with every other connection.
-    assert f"{DEPLOYMENT_NAME}@{EDGE['host']}" in args
+    assert f"{DEPLOYMENT_ID}@{EDGE['host']}" in args
     assert args.count("-i") == 1
 
 
@@ -354,7 +354,7 @@ def test_db_proxy_refuses_a_deployment_without_a_database(
     keys_module.generate_keypair(keys_module.generated_key_path())
     stub_api(
         Platform(
-            deployment={"name": DEPLOYMENT_NAME, "status": "ready"},
+            deployment={"id": DEPLOYMENT_ID, "name": DEPLOYMENT_NAME, "status": "ready"},
             database=None,
             keys=[key_entry()],
         )
@@ -373,7 +373,7 @@ def test_db_proxy_refuses_a_deployment_that_is_not_settled(
     keys_module.generate_keypair(keys_module.generated_key_path())
     stub_api(
         Platform(
-            deployment={"name": DEPLOYMENT_NAME, "status": "provisioning"},
+            deployment={"id": DEPLOYMENT_ID, "name": DEPLOYMENT_NAME, "status": "provisioning"},
             database=DATABASE,
             keys=[key_entry()],
         )

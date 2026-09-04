@@ -28,7 +28,7 @@ export function SftpAccessDialog({ userId, deploymentId, hostname, onClose }: Sf
   const { data: creds } = useSftpCredentials(userId, deploymentId)
 
   return (
-    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         <Stack direction="row" spacing={1.5} alignItems="center">
           <FolderOutlinedIcon color="primary" />

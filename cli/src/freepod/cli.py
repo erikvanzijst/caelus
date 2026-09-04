@@ -615,6 +615,10 @@ def _refuse_unreachable(deployment, project_file, env_name) -> dict:
     return deployment
 
 
+def _ssh_username(deployment: dict) -> str:
+    return deployment["id"]
+
+
 def _connection_setup(
     context: Context,
     project_file: project.Project,
@@ -680,7 +684,7 @@ def _connection_args(
         context, project_file, require_database=require_database
     )
     return ssh_module.build_args(
-        user=deployment["name"],
+        user=_ssh_username(deployment),
         host=host,
         port=port,
         key_path=key_path,
@@ -708,7 +712,7 @@ def _forward(
     )
     local_forward = f"{local_port}:{database['host']}:{database['port']}"
     args = ssh_module.build_args(
-        user=deployment["name"],
+        user=_ssh_username(deployment),
         host=host,
         port=port,
         key_path=key_path,
@@ -1450,7 +1454,7 @@ def cp(context: Context, source: str, destination: str) -> None:
         context, project_file
     )
     args = ssh_module.build_sftp_args(
-        user=deployment["name"],
+        user=_ssh_username(deployment),
         host=host,
         port=port,
         key_path=key_path,

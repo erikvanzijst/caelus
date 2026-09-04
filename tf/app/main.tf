@@ -53,6 +53,7 @@ module "sshpiper" {
 module "caelus" {
   source             = "./caelus"
   namespace          = kubernetes_namespace.caelus.metadata[0].name
+  environment        = local.environment
   domain             = local.domain
   api_image          = local.api_image
   ui_image           = local.ui_image

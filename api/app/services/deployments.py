@@ -203,6 +203,24 @@ def normalize_and_return_hostname(
     return None
 
 
+NAMESPACE_ATTEMPTS = 5
+
+
+def _allocate_namespace(session: Session, *, product_name: str, user_email: str) -> str:
+    """A namespace no deployment holds, deleted ones included."""
+    for _ in range(NAMESPACE_ATTEMPTS):
+        candidate = generate_deployment_namespace(product_name, user_email)
+        taken = session.exec(
+            select(DeploymentORM.id).where(DeploymentORM.namespace == candidate)
+        ).first()
+        if taken is None:
+            return candidate
+        logger.warning("Generated namespace %s is already taken; regenerating", candidate)
+    raise CaelusException(
+        f"could not allocate a free deployment namespace in {NAMESPACE_ATTEMPTS} attempts"
+    )
+
+
 def create_deployment(
     session: Session,
     *,
@@ -274,7 +292,9 @@ def create_deployment(
     session.flush()  # ensure sub.id is available
 
     deployment_name = generate_deployment_name(template.product.name)
-    deployment_namespace = generate_deployment_namespace(user.email)
+    deployment_namespace = _allocate_namespace(
+        session, product_name=template.product.name, user_email=user.email
+    )
     deployment: DeploymentORM = DeploymentORM.model_validate(
         dict(
             id=deployment_id,
@@ -513,7 +533,7 @@ def get_sftp_credentials(
     return SftpCredentialsRead(
         host=settings.sftp_host,
         port=settings.sftp_port,
-        username=deployment.name,
+        username=str(deployment.id),
         account_has_ssh_key=ssh_keys_service.account_has_key(
             session, user_id=deployment.user_id
         ),

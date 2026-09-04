@@ -85,6 +85,17 @@ def test_tenant_db_settings_from_env(monkeypatch):
     assert settings.tenant_db_pooler_port == 6432
 
 
+def test_environment_defaults_to_dev(monkeypatch):
+    """An unconfigured platform is never production."""
+    monkeypatch.delenv("CAELUS_ENVIRONMENT", raising=False)
+    assert CaelusSettings(_env_file=None).environment == "dev"
+
+
+def test_environment_from_env(monkeypatch):
+    monkeypatch.setenv("CAELUS_ENVIRONMENT", "prod")
+    assert CaelusSettings(_env_file=None).environment == "prod"
+
+
 def test_static_path_from_env(monkeypatch, tmp_path):
     monkeypatch.setenv("CAELUS_STATIC_PATH", str(tmp_path))
     settings = CaelusSettings(_env_file=None)

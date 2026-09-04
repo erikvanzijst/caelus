@@ -4,11 +4,11 @@
 
 A developer with a `custom` deployment can already reach it over SSH, if they know four
 things the platform knows and they do not: the edge's address, that their username is the
-deployment name, which of their keys is registered, and the exact spelling of their
+deployment's id, which of their keys is registered, and the exact spelling of their
 database's in-cluster address. This capability is the client that supplies all four — a
-shell in the application container, a forwarded database port, and a server-side database
-session — and, because the edge deliberately refuses without saying why, the diagnosis a
-user gets when one of them fails.
+shell in the application container, a forwarded database port, a server-side database
+session, and a file copy — and, because the edge deliberately refuses without saying why,
+the diagnosis a user gets when one of them fails.
 
 ## Requirements
 

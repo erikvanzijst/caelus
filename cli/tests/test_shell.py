@@ -98,7 +98,16 @@ def test_shell_assembles_one_key_and_a_tty(
 ):
     project_at(tmp_path)
     keys_module.generate_keypair(keys_module.generated_key_path())
-    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[key_entry()]))
+    stub_api(
+        Platform(
+            deployment={
+                "id": DEPLOYMENT_ID,
+                "name": DEPLOYMENT_NAME,
+                "status": "ready",
+            },
+            keys=[key_entry()],
+        )
+    )
     monkeypatch.chdir(tmp_path)
 
     with pytest.raises(SystemExit) as exc:
@@ -106,9 +115,9 @@ def test_shell_assembles_one_key_and_a_tty(
     assert exc.value.code == EXIT_OK
 
     args = capture_interactive["args"]
-    # A forced tty, and the deployment's own name as the user.
+    # A forced tty, and the deployment's namespace as the user.
     assert "-tt" in args
-    assert f"{DEPLOYMENT_NAME}@{EDGE['host']}" in args
+    assert f"{DEPLOYMENT_ID}@{EDGE['host']}" in args
     # Exactly one identity, the private half of the key this machine holds.
     assert args.count("-i") == 1
     assert args[args.index("-i") + 1] == str(keys_module.generated_key_path())
@@ -125,7 +134,16 @@ def test_shell_runs_a_remote_command_without_a_terminal(
 ):
     project_at(tmp_path)
     keys_module.generate_keypair(keys_module.generated_key_path())
-    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[key_entry()]))
+    stub_api(
+        Platform(
+            deployment={
+                "id": DEPLOYMENT_ID,
+                "name": DEPLOYMENT_NAME,
+                "status": "ready",
+            },
+            keys=[key_entry()],
+        )
+    )
     monkeypatch.chdir(tmp_path)
 
     with pytest.raises(SystemExit) as exc:
@@ -135,7 +153,7 @@ def test_shell_runs_a_remote_command_without_a_terminal(
     args = capture_interactive["args"]
     # The command's own words, in order, after the destination -- ssh joins
     # them itself, so the remote shell sees what a plain `ssh host ls -la` would.
-    assert args[args.index(f"{DEPLOYMENT_NAME}@{EDGE['host']}") + 1 :] == ["ls", "-la", "/app"]
+    assert args[args.index(f"{DEPLOYMENT_ID}@{EDGE['host']}") + 1 :] == ["ls", "-la", "/app"]
     # No pty: it would translate line endings and fold stderr into stdout,
     # which is corruption for a command whose output is redirected.
     assert "-tt" not in args
@@ -146,7 +164,16 @@ def test_shell_forces_a_terminal_when_asked(
 ):
     project_at(tmp_path)
     keys_module.generate_keypair(keys_module.generated_key_path())
-    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[key_entry()]))
+    stub_api(
+        Platform(
+            deployment={
+                "id": DEPLOYMENT_ID,
+                "name": DEPLOYMENT_NAME,
+                "status": "ready",
+            },
+            keys=[key_entry()],
+        )
+    )
     monkeypatch.chdir(tmp_path)
 
     with pytest.raises(SystemExit) as exc:
@@ -164,7 +191,16 @@ def test_shell_does_not_parse_the_commands_own_options(
     """`-t` after the command is the command's, not this client's."""
     project_at(tmp_path)
     keys_module.generate_keypair(keys_module.generated_key_path())
-    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[key_entry()]))
+    stub_api(
+        Platform(
+            deployment={
+                "id": DEPLOYMENT_ID,
+                "name": DEPLOYMENT_NAME,
+                "status": "ready",
+            },
+            keys=[key_entry()],
+        )
+    )
     monkeypatch.chdir(tmp_path)
 
     with pytest.raises(SystemExit) as exc:
@@ -182,7 +218,16 @@ def test_shell_propagates_the_remote_exit_status(
 ):
     project_at(tmp_path)
     keys_module.generate_keypair(keys_module.generated_key_path())
-    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[key_entry()]))
+    stub_api(
+        Platform(
+            deployment={
+                "id": DEPLOYMENT_ID,
+                "name": DEPLOYMENT_NAME,
+                "status": "ready",
+            },
+            keys=[key_entry()],
+        )
+    )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("freepod.ssh.run_interactive", lambda args: 7)
 
@@ -197,7 +242,7 @@ def test_shell_refuses_a_deployment_that_is_not_settled(
     project_at(tmp_path)
     keys_module.generate_keypair(keys_module.generated_key_path())
     stub_api(
-        Platform(deployment={"name": DEPLOYMENT_NAME, "status": "provisioning"}, keys=[key_entry()])
+        Platform(deployment={"id": DEPLOYMENT_ID, "name": DEPLOYMENT_NAME, "status": "provisioning"}, keys=[key_entry()])
     )
     monkeypatch.chdir(tmp_path)
 
@@ -223,7 +268,16 @@ def test_shell_refuses_when_no_key_is_registered(
     stub_api, cached_credential, no_ssh, capture_interactive, tmp_path, monkeypatch, capsys
 ):
     project_at(tmp_path)
-    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[]))
+    stub_api(
+        Platform(
+            deployment={
+                "id": DEPLOYMENT_ID,
+                "name": DEPLOYMENT_NAME,
+                "status": "ready",
+            },
+            keys=[],
+        )
+    )
     monkeypatch.chdir(tmp_path)
 
     assert main(["shell"]) == EXIT_ERROR

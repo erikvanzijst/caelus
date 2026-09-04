@@ -88,7 +88,6 @@ def test_owner_gets_connection_details(client, db_session, stub_sftp, register_k
     user_id = client.get("/api/me").json()["id"]
     register_key(user_id)
     deployment_id = _create_deployment(client, db_session, user_id=user_id)
-    name = db_session.get(DeploymentORM, UUID(deployment_id)).name
     resp = client.get(f"/api/users/{user_id}/deployments/{deployment_id}/sftp")
 
     assert resp.status_code == 200
@@ -97,24 +96,25 @@ def test_owner_gets_connection_details(client, db_session, stub_sftp, register_k
     assert resp.json() == {
         "host": "dev.freepod.eu",
         "port": 23,
-        "username": name,
+        "username": deployment_id,
         "auth_method": "publickey",
         "account_has_ssh_key": True,
     }
     get_settings.cache_clear()
 
 
-def test_the_username_is_the_deployment_name(client, db_session, stub_sftp):
+def test_the_username_is_the_deployment_id(client, db_session, stub_sftp):
     """It comes from the row, not from the cluster -- so no Secret is read."""
     from app.models import DeploymentORM
 
     stub_sftp(True)
     user_id = client.get("/api/me").json()["id"]
     deployment_id = _create_deployment(client, db_session, user_id=user_id)
-    expected = db_session.get(DeploymentORM, UUID(deployment_id)).name
+    deployment = db_session.get(DeploymentORM, UUID(deployment_id))
 
     resp = client.get(f"/api/users/{user_id}/deployments/{deployment_id}/sftp")
-    assert resp.json()["username"] == expected
+    assert resp.json()["username"] == str(deployment.id)
+    assert resp.json()["username"] not in (deployment.name, deployment.namespace)
 
 
 def test_serving_the_response_reads_no_secret(client, db_session, stub_sftp, monkeypatch):

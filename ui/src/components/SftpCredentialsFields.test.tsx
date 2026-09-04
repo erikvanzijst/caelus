@@ -7,7 +7,7 @@ import type { SftpCredentials } from '../api/types'
 const creds: SftpCredentials = {
   host: 'dev.freepod.eu',
   port: 23,
-  username: 'hello-world-tyfim9',
+  username: '7214d804-7f9b-46d2-b1f4-1b911b8a339e',
   auth_method: 'publickey',
   account_has_ssh_key: true,
 }
@@ -25,7 +25,7 @@ describe('SftpCredentialsFields', () => {
     renderFields()
     expect(screen.getByText('dev.freepod.eu')).toBeInTheDocument()
     expect(screen.getByText('23')).toBeInTheDocument()
-    expect(screen.getByText('hello-world-tyfim9')).toBeInTheDocument()
+    expect(screen.getByText('7214d804-7f9b-46d2-b1f4-1b911b8a339e')).toBeInTheDocument()
   })
 
   it('shows no password field, masked or otherwise', () => {
@@ -65,7 +65,7 @@ describe('SftpCredentialsFields', () => {
 
     it('still shows the connection details, which are correct but unusable', () => {
       renderFields({ account_has_ssh_key: false })
-      expect(screen.getByText('hello-world-tyfim9')).toBeInTheDocument()
+      expect(screen.getByText('7214d804-7f9b-46d2-b1f4-1b911b8a339e')).toBeInTheDocument()
     })
 
     it('does not also claim the connection is key-authenticated as if ready', () => {

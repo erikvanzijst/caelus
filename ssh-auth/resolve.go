@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -43,9 +44,9 @@ const (
 // one holding email addresses -- into the grant of a service on the public SSH
 // port.
 //
-// `deployment.name` is treated as globally unique. The schema only guarantees
-// (namespace, name), which is a known wart being fixed at the source; LIMIT 1
-// keeps this deterministic rather than merely usually right in the meantime.
+// The username is the deployment's id: a primary key, so at most one row can
+// match and the lookup needs no tie-break. `d.name` is still read, but only as
+// the account to present upstream -- the two are deliberately different things.
 //
 // Reachability is an allowlist, and `error` is in it deliberately: access
 // matters most when the application is broken, and the sidecar's Service
@@ -60,9 +61,8 @@ SELECT d.name,
   LEFT JOIN user_ssh_key AS k
          ON k.user_id = d.user_id
         AND k.fingerprint = $2
- WHERE d.name = $1
-   AND d.status <> 'deleted'
- LIMIT 1`
+ WHERE d.id = $1::uuid
+   AND d.status <> 'deleted'`
 
 var reachable = map[string]bool{"ready": true, "error": true}
 
@@ -100,9 +100,17 @@ func resolve(ctx context.Context, db *pgxpool.Pool, username string, blob []byte
 	}
 	fp := fingerprint(blob)
 
+	// Parsed here rather than left to PostgreSQL: a username that is not a uuid
+	// is an unknown username, not a failed query, and must cost neither a round
+	// trip nor an error the operator has to read as a refusal.
+	id, err := uuid.Parse(username)
+	if err != nil {
+		return decision{cause: causeUnknownUsername, fingerprint: fp}, nil
+	}
+
 	var name, namespace, status, host string
 	var keyRegistered bool
-	err := db.QueryRow(ctx, resolveQuery, username, fp).
+	err = db.QueryRow(ctx, resolveQuery, id.String(), fp).
 		Scan(&name, &namespace, &status, &host, &keyRegistered)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

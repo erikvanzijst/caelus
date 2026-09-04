@@ -105,7 +105,7 @@ def test_db_shell_assembles_psql_and_a_tty(
     keys_module.generate_keypair(keys_module.generated_key_path())
     stub_api(
         Platform(
-            deployment={"name": DEPLOYMENT_NAME, "status": "ready"},
+            deployment={"id": DEPLOYMENT_ID, "name": DEPLOYMENT_NAME, "status": "ready"},
             database=DATABASE,
             keys=[key_entry()],
         )
@@ -120,7 +120,7 @@ def test_db_shell_assembles_psql_and_a_tty(
     # psql runs server-side, appended as the session's command, under a forced tty.
     assert "-tt" in args
     assert args[-1] == "psql"
-    assert f"{DEPLOYMENT_NAME}@{EDGE['host']}" in args
+    assert f"{DEPLOYMENT_ID}@{EDGE['host']}" in args
     # Exactly one identity, the private half of the key this machine holds.
     assert args.count("-i") == 1
     assert args[args.index("-i") + 1] == str(keys_module.generated_key_path())
@@ -136,7 +136,7 @@ def test_db_shell_refuses_a_deployment_without_a_database(
     project_at(tmp_path)
     stub_api(
         Platform(
-            deployment={"name": DEPLOYMENT_NAME, "status": "ready"},
+            deployment={"id": DEPLOYMENT_ID, "name": DEPLOYMENT_NAME, "status": "ready"},
             database=None,
             keys=[],
         )
@@ -154,7 +154,7 @@ def test_db_shell_refuses_a_deployment_that_is_not_settled(
     project_at(tmp_path)
     stub_api(
         Platform(
-            deployment={"name": DEPLOYMENT_NAME, "status": "provisioning"},
+            deployment={"id": DEPLOYMENT_ID, "name": DEPLOYMENT_NAME, "status": "provisioning"},
             database=DATABASE,
             keys=[],
         )
@@ -172,7 +172,7 @@ def test_db_shell_refuses_when_no_key_is_registered(
     project_at(tmp_path)
     stub_api(
         Platform(
-            deployment={"name": DEPLOYMENT_NAME, "status": "ready"},
+            deployment={"id": DEPLOYMENT_ID, "name": DEPLOYMENT_NAME, "status": "ready"},
             database=DATABASE,
             keys=[],
         )

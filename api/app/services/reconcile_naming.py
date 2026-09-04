@@ -20,11 +20,12 @@ MAX_NAME_LEN = 27
 NAME_BASE_MAX_LEN = MAX_NAME_LEN - (NAME_SUFFIX_LEN + 1)  # 20
 
 # --- Namespace constants ---
-# Formula: "{slugify(email)[:20]}-{random9}"
-# Max: 20 + 1 + 9 = 30 chars (well under 63-char DNS label limit).
+# Formula: "{slugify(product)[:20]}-{slugify(email_local_part)[:10]}-{random9}"
+# Max: 20 + 1 + 10 + 1 + 9 = 41 chars (well under the 63-char DNS label limit).
 NS_SUFFIX_LEN = 9
-MAX_NAMESPACE_LEN = 30
-NS_BASE_MAX_LEN = MAX_NAMESPACE_LEN - (NS_SUFFIX_LEN + 1)  # 20
+NS_PRODUCT_MAX_LEN = 20
+NS_EMAIL_MAX_LEN = 10
+MAX_NAMESPACE_LEN = NS_PRODUCT_MAX_LEN + 1 + NS_EMAIL_MAX_LEN + 1 + NS_SUFFIX_LEN  # 41
 
 _BASE36 = "0123456789abcdefghijklmnopqrstuvwxyz"
 
@@ -79,12 +80,19 @@ def generate_deployment_name(product_name: str, *, suffix: str | None = None) ->
     return name
 
 
-def generate_deployment_namespace(user_email: str, *, suffix: str | None = None) -> str:
-    base = slugify_token(user_email)
-    base = _trim_base(base, NS_BASE_MAX_LEN)
+def generate_deployment_namespace(
+    product_name: str,
+    user_email: str,
+    *,
+    suffix: str | None = None,
+) -> str:
+    product = _trim_base(slugify_token(product_name), NS_PRODUCT_MAX_LEN)
+    local_part = _trim_base(
+        slugify_token(user_email.split("@", 1)[0]), NS_EMAIL_MAX_LEN
+    )
 
     candidate_suffix = _normalize_suffix9(suffix) if suffix is not None else generate_suffix9()
-    namespace = f"{base}-{candidate_suffix}"
+    namespace = f"{product}-{local_part}-{candidate_suffix}"
 
     if len(namespace) > MAX_NAMESPACE_LEN or not is_valid_dns_label(namespace):
         raise ValueError("generated deployment namespace is not a valid DNS label")

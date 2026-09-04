@@ -3,7 +3,6 @@ from app.services.reconcile_naming import (
     MAX_NAME_LEN,
     MAX_NAMESPACE_LEN,
     NAME_BASE_MAX_LEN,
-    NS_BASE_MAX_LEN,
     generate_deployment_name,
     generate_deployment_namespace,
     is_valid_dns_label,
@@ -84,42 +83,60 @@ def test_generate_name_random_suffix_when_none() -> None:
 
 def test_generate_namespace_format_and_length() -> None:
     ns = generate_deployment_namespace(
-        "alice.smith@example.com", suffix="abc123def"
+        "Hello Static", "alice.smith@example.com", suffix="abc123def"
     )
-    assert ns.endswith("-abc123def")
+    assert ns == "hello-static-alice-smit-abc123def"
     assert len(ns) <= MAX_NAMESPACE_LEN
     assert is_valid_dns_label(ns)
 
 
-def test_generate_namespace_truncates_long_email() -> None:
-    long_email = "user." + ("x" * 200) + "@example.com"
-    ns = generate_deployment_namespace(long_email, suffix="zzzzzzzzz")
-    base, suffix = ns.rsplit("-", 1)
-    assert suffix == "zzzzzzzzz"
-    assert len(base) <= NS_BASE_MAX_LEN
-    assert len(ns) <= MAX_NAMESPACE_LEN
+def test_generate_namespace_omits_the_email_domain() -> None:
+    """The namespace is typed as an SSH username; it does not carry an address."""
+    ns = generate_deployment_namespace(
+        "Hello Static", "alice@corp.example.com", suffix="abc123def"
+    )
+    assert "corp" not in ns
+    assert "example" not in ns
+    assert "com" not in ns.rsplit("-", 1)[0]
+
+
+def test_generate_namespace_truncates_long_product_and_local_part() -> None:
+    ns = generate_deployment_namespace(
+        "A " + ("Very " * 20) + "Long Product",
+        "user." + ("x" * 200) + "@example.com",
+        suffix="zzzzzzzzz",
+    )
+    # Segments carry hyphens of their own, so the bound is asserted on the whole
+    # rather than by splitting it back apart.
+    assert ns == "a-very-very-very-ver-user-xxxxx-zzzzzzzzz"
+    assert len(ns) == MAX_NAMESPACE_LEN
     assert is_valid_dns_label(ns)
 
 
 def test_generate_namespace_special_email_characters() -> None:
     ns = generate_deployment_namespace(
-        "Alice.Smith+dev@example.com", suffix="abc123def"
+        "My App (v2.0)!!!",
+        "Alice.Smith+dev@example.com",
+        suffix="abc123def",
     )
-    assert ns.startswith("alice-smith-dev-exam")
-    assert ns.endswith("-abc123def")
+    assert ns == "my-app-v2-0-alice-smit-abc123def"
     assert is_valid_dns_label(ns)
 
 
 def test_generate_namespace_fallback_for_non_alnum() -> None:
-    ns = generate_deployment_namespace("@@@", suffix="000000000")
-    assert ns == "dep-000000000"
+    """Neither segment may come out empty, or the label doubles a hyphen."""
+    ns = generate_deployment_namespace(
+        "@@@", "@@@@example.com", suffix="000000000"
+    )
+    assert ns == "dep-dep-000000000"
     assert is_valid_dns_label(ns)
 
 
 def test_generate_namespace_random_suffix_when_none() -> None:
-    ns = generate_deployment_namespace("test@example.com")
+    ns = generate_deployment_namespace(
+        "Hello Static", "test@example.com"
+    )
     parts = ns.rsplit("-", 1)
-    assert len(parts) == 2
     assert len(parts[1]) == 9
     assert is_valid_dns_label(ns)
 

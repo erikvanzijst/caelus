@@ -3,6 +3,11 @@ variable "namespace" {
   type        = string
 }
 
+variable "environment" {
+  description = "This environment's name (prod / dev). The API derives the tenant namespace suffix from it, which is what keeps both environments' namespaces disjoint in the cluster they share."
+  type        = string
+}
+
 variable "ns_login" {
   description = "The namespace oauth2-login is deployed into"
   type        = string

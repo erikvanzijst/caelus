@@ -109,10 +109,10 @@ func TestTheRoleCannotReadOutsideItsGrant(t *testing.T) {
 func TestTheResolverWorksEndToEndAsTheReadOnlyRole(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	_, namespace := f.deployment(owner, "scoped-sss000", "ready")
+	id, namespace := f.deployment(owner, "scoped-sss000", "ready")
 	f.registerKey(owner, ownerKey)
 
-	up := newHarness(t, rolePool(t)).mustAdmit(t, "scoped-sss000", ownerKey)
+	up := newHarness(t, rolePool(t)).mustAdmit(t, id, ownerKey)
 	want := "tcp://scoped-sss000-ssh." + namespace + ".svc:2222"
 	if up.GetUri() != want {
 		t.Errorf("uri = %q, want %q", up.GetUri(), want)

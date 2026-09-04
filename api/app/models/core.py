@@ -399,11 +399,9 @@ class DeploymentORM(DeploymentBase, table=True):
             postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
         ),
         Index(
-            "uq_deployment_ns_name_active",
+            "uq_deployment_namespace",
             "namespace",
-            "name",
             unique=True,
-            postgresql_where=Column("status") != DEPLOYMENT_STATUS_DELETED,
         ),
     )
 
@@ -614,8 +612,8 @@ class SftpCredentialsRead(SQLModel):
     """SFTP connection details for a deployment with file access.
 
     host/port are the user-facing platform endpoint (from settings) and
-    `username` is the deployment's own name, so serving this reads nothing from
-    the deployment's namespace.
+    `username` is the deployment's id, which is what the SSH edge matches a
+    connection on. Serving this reads nothing from the deployment's namespace.
     """
 
     host: str

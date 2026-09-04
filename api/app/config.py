@@ -14,6 +14,11 @@ class CaelusSettings(BaseSettings):
     base_url: str = "http://localhost:5173"
     base_url_api: str = "http://localhost:8000/api"
 
+    # Which environment this platform is, supplied per environment by Terraform.
+    # Nothing derives behavior from it yet; it is here so that anything which
+    # needs the distinction has one source for it.
+    environment: str = "dev"
+
     # Current Terms of Service version (the ToS markdown's effective date). This
     # is a *release* constant, not per-environment config: it must match the ToS
     # document bundled in the same image, which is identical in dev and prod. It

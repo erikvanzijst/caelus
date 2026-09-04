@@ -8,9 +8,6 @@ deployment is what `openspec/changes/archive/2026-09-03-unified-ssh-sidecar/task
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import httpx
 import pytest
 
@@ -19,8 +16,14 @@ from freepod import copy as copy_module
 from freepod import keys as keys_module
 from freepod.cli import main
 
-from conftest import json_response
-from test_shell import DEPLOYMENT_ID, DEPLOYMENT_NAME, EDGE, Platform, key_entry, project_at
+from test_shell import (
+    DEPLOYMENT_ID,
+    DEPLOYMENT_NAME,
+    EDGE,
+    Platform,
+    key_entry,
+    project_at,
+)
 
 
 @pytest.fixture
@@ -45,7 +48,16 @@ def capture_transfer(monkeypatch):
 def ready(tmp_path, monkeypatch, stub_api):
     project_at(tmp_path)
     keys_module.generate_keypair(keys_module.generated_key_path())
-    stub_api(Platform(deployment={"name": DEPLOYMENT_NAME, "status": "ready"}, keys=[key_entry()]))
+    stub_api(
+        Platform(
+            deployment={
+                "id": DEPLOYMENT_ID,
+                "name": DEPLOYMENT_NAME,
+                "status": "ready",
+            },
+            keys=[key_entry()],
+        )
+    )
     monkeypatch.chdir(tmp_path)
 
 
@@ -63,7 +75,7 @@ def test_the_marked_side_decides_the_direction_and_the_connection_is_the_shells(
 
     args = capture_transfer["args"]
     assert args[0] == "sftp"
-    assert f"{DEPLOYMENT_NAME}@{EDGE['host']}" in args
+    assert f"{DEPLOYMENT_ID}@{EDGE['host']}" in args
     # sftp spells the port -P, and reads its script rather than taking a command.
     assert args[args.index("-P") + 1] == str(EDGE["port"])
     assert args[args.index("-b") + 1] == "-"

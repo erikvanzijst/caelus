@@ -155,10 +155,10 @@ func TestLogsIsImplementedButNotAdvertised(t *testing.T) {
 func TestOwnersRegisteredKeyIsAdmitted(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	_, namespace := f.deployment(owner, "hello-world-aaa111", "ready")
+	id, namespace := f.deployment(owner, "hello-world-aaa111", "ready")
 	f.registerKey(owner, ownerKey)
 
-	up := newHarness(t, f.pool).mustAdmit(t, "hello-world-aaa111", ownerKey)
+	up := newHarness(t, f.pool).mustAdmit(t, id, ownerKey)
 	want := "tcp://hello-world-aaa111-ssh." + namespace + ".svc:2222"
 	if up.GetUri() != want {
 		t.Errorf("uri = %q, want %q", up.GetUri(), want)
@@ -171,20 +171,20 @@ func TestOwnersRegisteredKeyIsAdmitted(t *testing.T) {
 func TestAnotherAccountsKeyIsRefused(t *testing.T) {
 	f := newFixture(t)
 	owner, stranger := f.user("owner"), f.user("stranger")
-	f.deployment(owner, "hello-world-bbb222", "ready")
+	id, _ := f.deployment(owner, "hello-world-bbb222", "ready")
 	f.registerKey(owner, ownerKey)
 	// Registered, valid, and on the wrong account -- the cross-tenant case.
 	f.registerKey(stranger, strangerKey)
 
-	newHarness(t, f.pool).mustRefuse(t, "hello-world-bbb222", strangerKey)
+	newHarness(t, f.pool).mustRefuse(t, id, strangerKey)
 }
 
 func TestUnregisteredKeyIsRefused(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	f.deployment(owner, "hello-world-ccc333", "ready")
+	id, _ := f.deployment(owner, "hello-world-ccc333", "ready")
 
-	newHarness(t, f.pool).mustRefuse(t, "hello-world-ccc333", ownerKey)
+	newHarness(t, f.pool).mustRefuse(t, id, ownerKey)
 }
 
 func TestUnknownUsernameIsRefused(t *testing.T) {
@@ -205,10 +205,10 @@ func TestOwnershipChangeMovesAccess(t *testing.T) {
 	f.registerKey(successor, strangerKey)
 	h := newHarness(t, f.pool)
 
-	h.mustAdmit(t, "hello-world-ddd444", ownerKey)
+	h.mustAdmit(t, id, ownerKey)
 	f.setOwner(id, successor)
-	h.mustAdmit(t, "hello-world-ddd444", strangerKey)
-	h.mustRefuse(t, "hello-world-ddd444", ownerKey)
+	h.mustAdmit(t, id, strangerKey)
+	h.mustRefuse(t, id, ownerKey)
 }
 
 // ── reachability is an allowlist that includes `error` ────────────────────
@@ -221,10 +221,10 @@ func TestOwnershipChangeMovesAccess(t *testing.T) {
 func TestACrashLoopingDeploymentIsStillReachable(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	f.deployment(owner, "broken-fff666", "error")
+	id, _ := f.deployment(owner, "broken-fff666", "error")
 	f.registerKey(owner, ownerKey)
 
-	up := newHarness(t, f.pool).mustAdmit(t, "broken-fff666", ownerKey)
+	up := newHarness(t, f.pool).mustAdmit(t, id, ownerKey)
 	if !strings.HasSuffix(up.GetUri(), ":2222") {
 		t.Errorf("uri = %q", up.GetUri())
 	}
@@ -235,10 +235,10 @@ func TestUnreachableStatusesAreRefused(t *testing.T) {
 		t.Run(st, func(t *testing.T) {
 			f := newFixture(t)
 			owner := f.user("owner")
-			f.deployment(owner, "gated-ggg777", st)
+			id, _ := f.deployment(owner, "gated-ggg777", st)
 			f.registerKey(owner, ownerKey)
 
-			newHarness(t, f.pool).mustRefuse(t, "gated-ggg777", ownerKey)
+			newHarness(t, f.pool).mustRefuse(t, id, ownerKey)
 		})
 	}
 }
@@ -251,9 +251,9 @@ func TestADeletedDeploymentIsNotRoutable(t *testing.T) {
 	f.registerKey(owner, ownerKey)
 	h := newHarness(t, f.pool)
 
-	h.mustAdmit(t, "reused-hhh888", ownerKey)
+	h.mustAdmit(t, id, ownerKey)
 	f.setStatus(id, "deleted")
-	h.mustRefuse(t, "reused-hhh888", ownerKey)
+	h.mustRefuse(t, id, ownerKey)
 }
 
 // ── the upstream is the platform's own credential ─────────────────────────
@@ -261,10 +261,10 @@ func TestADeletedDeploymentIsNotRoutable(t *testing.T) {
 func TestUpstreamCarriesTheMountedPrivateKey(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	f.deployment(owner, "hello-world-iii999", "ready")
+	id, _ := f.deployment(owner, "hello-world-iii999", "ready")
 	f.registerKey(owner, ownerKey)
 
-	up := newHarness(t, f.pool).mustAdmit(t, "hello-world-iii999", ownerKey)
+	up := newHarness(t, f.pool).mustAdmit(t, id, ownerKey)
 	if !bytes.Equal(up.GetPrivateKey().GetPrivateKey(), upstreamKey) {
 		t.Error("upstream does not carry the mounted key")
 	}
@@ -277,11 +277,11 @@ func TestUpstreamCarriesTheMountedPrivateKey(t *testing.T) {
 func TestNoClientSuppliedMaterialReachesTheUpstream(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	f.deployment(owner, "hello-world-jjj000", "ready")
+	id, _ := f.deployment(owner, "hello-world-jjj000", "ready")
 	f.registerKey(owner, ownerKey)
 
 	offered := blob(t, ownerKey)
-	up := newHarness(t, f.pool).mustAdmit(t, "hello-world-jjj000", ownerKey)
+	up := newHarness(t, f.pool).mustAdmit(t, id, ownerKey)
 	if bytes.Contains(up.GetPrivateKey().GetPrivateKey(), offered) {
 		t.Error("the offered key appears in the upstream credential")
 	}
@@ -296,10 +296,10 @@ func TestNoClientSuppliedMaterialReachesTheUpstream(t *testing.T) {
 func TestUpstreamHostKeyIsNotVerified(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	f.deployment(owner, "hello-world-kkk111", "ready")
+	id, _ := f.deployment(owner, "hello-world-kkk111", "ready")
 	f.registerKey(owner, ownerKey)
 
-	if !newHarness(t, f.pool).mustAdmit(t, "hello-world-kkk111", ownerKey).GetIgnoreHostKey() {
+	if !newHarness(t, f.pool).mustAdmit(t, id, ownerKey).GetIgnoreHostKey() {
 		t.Error("ignore_host_key is false; the handshake would fail on VerifyHostKey")
 	}
 }
@@ -308,10 +308,10 @@ func TestUpstreamHostKeyIsNotVerified(t *testing.T) {
 func TestUpstreamUriCarriesAScheme(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	_, namespace := f.deployment(owner, "hello-world-lll222", "ready")
+	id, namespace := f.deployment(owner, "hello-world-lll222", "ready")
 	f.registerKey(owner, ownerKey)
 
-	uri := newHarness(t, f.pool).mustAdmit(t, "hello-world-lll222", ownerKey).GetUri()
+	uri := newHarness(t, f.pool).mustAdmit(t, id, ownerKey).GetUri()
 	if !strings.HasPrefix(uri, "tcp://") || !strings.Contains(uri, namespace) {
 		t.Errorf("uri = %q", uri)
 	}
@@ -322,16 +322,17 @@ func TestUpstreamUriCarriesAScheme(t *testing.T) {
 func TestEveryRefusalLooksTheSameToTheClient(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	f.deployment(owner, "uniform-mmm333", "ready")
-	f.deployment(owner, "gated-mmm444", "pending")
+	reachableID, _ := f.deployment(owner, "uniform-mmm333", "ready")
+	gatedID, _ := f.deployment(owner, "gated-mmm444", "pending")
 	f.registerKey(owner, ownerKey)
 	h := newHarness(t, f.pool)
 
 	seen := map[string]bool{}
 	for _, tc := range []struct{ username, key string }{
-		{"no-such-deployment", ownerKey}, // unknown username
-		{"uniform-mmm333", strangerKey},  // key registered nowhere
-		{"gated-mmm444", ownerKey},       // not in a reachable state
+		{"no-such-deployment", ownerKey}, // not a uuid at all
+		{uuid.NewString(), ownerKey},     // a uuid naming nothing
+		{reachableID, strangerKey},       // key registered nowhere
+		{gatedID, ownerKey},              // not in a reachable state
 	} {
 		_, err := h.auth(t, tc.username, tc.key)
 		if err == nil {
@@ -350,11 +351,11 @@ func TestEveryRefusalLooksTheSameToTheClient(t *testing.T) {
 func TestTheLogDistinguishesWhatTheClientCannot(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	f.deployment(owner, "logged-nnn555", "ready")
+	id, _ := f.deployment(owner, "logged-nnn555", "ready")
 	h := newHarness(t, f.pool)
 
 	h.mustRefuse(t, "no-such-deployment", ownerKey)
-	h.mustRefuse(t, "logged-nnn555", ownerKey)
+	h.mustRefuse(t, id, ownerKey)
 
 	logged := h.logs.String()
 	for _, want := range []string{
@@ -373,24 +374,24 @@ func TestTheLogDistinguishesWhatTheClientCannot(t *testing.T) {
 func TestRevocationTakesEffectOnTheNextConnection(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	f.deployment(owner, "revoke-ooo666", "ready")
+	id, _ := f.deployment(owner, "revoke-ooo666", "ready")
 	f.registerKey(owner, ownerKey)
 	h := newHarness(t, f.pool)
 
-	h.mustAdmit(t, "revoke-ooo666", ownerKey)
+	h.mustAdmit(t, id, ownerKey)
 	f.revokeKey(owner, ownerKey)
-	h.mustRefuse(t, "revoke-ooo666", ownerKey)
+	h.mustRefuse(t, id, ownerKey)
 }
 
 func TestANewlyRegisteredKeyWorksOnTheNextConnection(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	f.deployment(owner, "fresh-ppp777", "ready")
+	id, _ := f.deployment(owner, "fresh-ppp777", "ready")
 	h := newHarness(t, f.pool)
 
-	h.mustRefuse(t, "fresh-ppp777", ownerKey)
+	h.mustRefuse(t, id, ownerKey)
 	f.registerKey(owner, ownerKey)
-	h.mustAdmit(t, "fresh-ppp777", ownerKey)
+	h.mustAdmit(t, id, ownerKey)
 }
 
 // A resolver that cannot read the store closes the door. Built against an
@@ -403,8 +404,10 @@ func TestAnUnreachableDatabaseRefusesRatherThanAdmits(t *testing.T) {
 	}
 	defer pool.Close()
 
+	// Well-formed on purpose: a username that is not a uuid is refused before
+	// the store is consulted, which would prove the opposite of this test.
 	h := newHarness(t, pool)
-	h.mustRefuse(t, "anything", ownerKey)
+	h.mustRefuse(t, uuid.NewString(), ownerKey)
 	if !strings.Contains(h.logs.String(), "resolution failed") {
 		t.Error("the failure was not logged as one")
 	}
@@ -450,11 +453,11 @@ func TestAnUnreachableDatabaseReportsNotServing(t *testing.T) {
 func TestRefusedConnectionsDoNotAffectHealth(t *testing.T) {
 	f := newFixture(t)
 	owner := f.user("owner")
-	f.deployment(owner, "healthy-ttt111", "ready")
+	id, _ := f.deployment(owner, "healthy-ttt111", "ready")
 	h := newHarness(t, f.pool)
 
 	for i := 0; i < 5; i++ {
-		h.mustRefuse(t, "healthy-ttt111", ownerKey)
+		h.mustRefuse(t, id, ownerKey)
 	}
 
 	resp, err := h.health.Check(context.Background(), &grpc_health_v1.HealthCheckRequest{})
@@ -463,5 +466,91 @@ func TestRefusedConnectionsDoNotAffectHealth(t *testing.T) {
 	}
 	if resp.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING {
 		t.Errorf("refusals moved the resolver to %v", resp.GetStatus())
+	}
+}
+
+// ── the username is the deployment's id, and only that ────────────────────
+
+// A primary key, so at most one row can match and the lookup needs no
+// tie-break.
+func TestTheDeploymentIdResolvesItsDeployment(t *testing.T) {
+	f := newFixture(t)
+	owner := f.user("owner")
+	id, namespace := f.deployment(owner, "addressed-uuu111", "ready")
+	f.registerKey(owner, ownerKey)
+
+	up := newHarness(t, f.pool).mustAdmit(t, id, ownerKey)
+	if up.GetUri() != "tcp://addressed-uuu111-ssh."+namespace+".svc:2222" {
+		t.Errorf("uri = %q", up.GetUri())
+	}
+}
+
+// Neither of the deployment's internal names addresses it at the edge, though
+// it carries both. Refused indistinguishably from anything else, by design.
+func TestNeitherTheReleaseNameNorTheNamespaceIsAUsername(t *testing.T) {
+	f := newFixture(t)
+	owner := f.user("owner")
+	_, namespace := f.deployment(owner, "not-a-username-vvv222", "ready")
+	f.registerKey(owner, ownerKey)
+	h := newHarness(t, f.pool)
+
+	h.mustRefuse(t, "not-a-username-vvv222", ownerKey)
+	h.mustRefuse(t, namespace, ownerKey)
+
+	if !strings.Contains(h.logs.String(), "cause="+string(causeUnknownUsername)) {
+		t.Errorf("refused for some other reason:\n%s", h.logs.String())
+	}
+}
+
+// A username that cannot be a deployment id is refused without a query. The
+// database must never be handed something it would reject as a cast error,
+// which an operator would then have to read as an outage rather than a
+// refusal.
+func TestAUsernameThatIsNotAUuidIsRefusedWithoutQuerying(t *testing.T) {
+	f := newFixture(t)
+	owner := f.user("owner")
+	f.registerKey(owner, ownerKey)
+
+	pool, err := newBrokenPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+
+	// The pool answers nothing, so admitting or erroring would both mean the
+	// username reached it.
+	h := newHarness(t, pool)
+	h.mustRefuse(t, "definitely-not-a-uuid", ownerKey)
+
+	if !strings.Contains(h.logs.String(), "cause="+string(causeUnknownUsername)) {
+		t.Errorf("a malformed username reached the store:\n%s", h.logs.String())
+	}
+}
+
+// The other half: well-formed, and naming nothing.
+func TestAWellFormedIdNamingNothingIsRefused(t *testing.T) {
+	f := newFixture(t)
+	owner := f.user("owner")
+	f.deployment(owner, "present-yyy555", "ready")
+	f.registerKey(owner, ownerKey)
+
+	newHarness(t, f.pool).mustRefuse(t, uuid.NewString(), ownerKey)
+}
+
+// The client-facing identifier and the account presented upstream are two
+// different things: the first is the deployment's id, the second is whatever
+// the chart rendered, which is the release name.
+func TestTheUpstreamAccountIsStillTheReleaseName(t *testing.T) {
+	f := newFixture(t)
+	owner := f.user("owner")
+	id, namespace := f.deployment(owner, "upstream-www333", "ready")
+	f.registerKey(owner, ownerKey)
+
+	up := newHarness(t, f.pool).mustAdmit(t, id, ownerKey)
+	if up.GetUserName() != "upstream-www333" {
+		t.Errorf("upstream user = %q, want the release name", up.GetUserName())
+	}
+	if up.GetUserName() == id || up.GetUserName() == namespace {
+		t.Error("the upstream account followed an identifier that is not the release name")
 	}
 }

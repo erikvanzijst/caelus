@@ -46,6 +46,9 @@ logger = logging.getLogger(__name__)
 # contract is greppable from both ends.
 RELEASE_LABEL = "release_id"
 
+CONTAINER_LABEL = "container"
+SIDECAR_CONTAINER = "ssh"
+
 NS_PER_SECOND = 1_000_000_000
 # A nanosecond timestamp is a uint64. The lower bound rejects a value in
 # seconds or milliseconds -- a plausible client mistake that would otherwise
@@ -106,6 +109,7 @@ def build_selector(target: LogTarget) -> str:
     matchers = [
         f"namespace={_quote(target.namespace)}",
         f"instance={_quote(target.name)}",
+        f"{CONTAINER_LABEL}!={_quote(SIDECAR_CONTAINER)}",
     ]
     if target.release_id is not None:
         matchers.append(f"{RELEASE_LABEL}={_quote(target.release_id)}")

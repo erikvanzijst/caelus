@@ -253,6 +253,22 @@ cross-tenant read and a platform-internal read.
 - **THEN** the response contains lines from the addressed deployment's pods and from no other
   workload
 
+### Requirement: The stream carries the application's output, not the platform's
+
+The query SHALL exclude the platform's SSH sidecar container, whose output belongs to the
+platform rather than to the tenant's application.
+
+#### Scenario: An idle deployment whose sidecar is being probed
+
+- **WHEN** a caller reads the log of a deployment whose SSH sidecar is receiving liveness probes
+- **THEN** no line written by the sidecar appears in the response
+
+#### Scenario: A product running several application containers
+
+- **WHEN** a caller reads the log of a deployment whose pods run more than one non-sidecar
+  container
+- **THEN** every one of those containers' output appears in the response
+
 ### Requirement: Access is scoped to the caller's own deployments
 
 The endpoint SHALL be authorized identically to the other user-scoped deployment routes:

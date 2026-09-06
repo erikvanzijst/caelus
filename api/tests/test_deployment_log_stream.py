@@ -312,7 +312,16 @@ def test_a_release_that_never_ran_ends_with_that_reason_not_silence():
 
 
 def test_the_selector_names_only_the_deployment():
-    assert log_service.build_selector(TARGET) == '{namespace="ns-abc", instance="app-abc"}'
+    assert log_service.build_selector(TARGET) == (
+        '{namespace="ns-abc", instance="app-abc", container!="ssh"}'
+    )
+
+
+def test_the_selector_excludes_the_platform_ssh_sidecar():
+    """sshd logs a line per connection and the edge's liveness probe connects
+    every few seconds, so without this an idle deployment's log is mostly
+    `Connection closed by ...` rather than the application's own output."""
+    assert 'container!="ssh"' in log_service.build_selector(TARGET)
 
 
 def test_a_pinned_selector_adds_the_release_label():
@@ -320,7 +329,7 @@ def test_a_pinned_selector_adds_the_release_label():
         deployment_id="d", namespace="ns-abc", name="app-abc", release_id=RELEASE
     )
     assert log_service.build_selector(target) == (
-        f'{{namespace="ns-abc", instance="app-abc", release_id="{RELEASE}"}}'
+        f'{{namespace="ns-abc", instance="app-abc", container!="ssh", release_id="{RELEASE}"}}'
     )
 
 
@@ -334,7 +343,7 @@ def test_label_values_are_quoted_so_a_stray_quote_cannot_escape_the_selector():
     # matcher and the injected `}` stays inside the string.
     assert '\\"' in selector
     assert selector.startswith('{namespace="')
-    assert selector.endswith('instance="app"}')
+    assert selector.endswith('instance="app", container!="ssh"}')
 
 
 # ---------------------------------------------------------------------------
